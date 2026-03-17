@@ -1,9 +1,8 @@
 pragma ComponentBehavior: Bound
 
-import qs.components
-import qs.services
-import qs.config
-import qs.utils
+import "../../components"
+import "../../services"
+import "../../config"
 import QtQuick
 import QtQuick.Layouts
 
@@ -11,7 +10,7 @@ StyledRect {
     id: root
 
     implicitWidth: Config.fileManager.sizes.sidebarWidth
-    color: Colours.tPalette.m3surfaceContainer
+    color: Theme.tPalette.m3surfaceContainer
 
     readonly property var _places: [
         { name: "Home",      icon: "home",             path: Paths.home },
@@ -29,16 +28,16 @@ StyledRect {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.margins: Appearance.padding.normal
+        anchors.margins: Theme.padding.normal
         spacing: 2
 
         StyledText {
             Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: Appearance.padding.small / 2
-            Layout.bottomMargin: Appearance.spacing.normal
+            Layout.topMargin: Theme.padding.small / 2
+            Layout.bottomMargin: Theme.spacing.normal
             text: qsTr("Files")
-            color: Colours.palette.m3onSurface
-            font.pointSize: Appearance.font.size.larger
+            color: Theme.palette.m3onSurface
+            font.pointSize: Theme.font.size.larger
             font.bold: true
         }
 
@@ -54,13 +53,13 @@ StyledRect {
                 readonly property bool selected: FileManagerService.currentPath === modelData.path
 
                 Layout.fillWidth: true
-                implicitHeight: placeInner.implicitHeight + Appearance.padding.small * 2
+                implicitHeight: placeInner.implicitHeight + Theme.padding.small * 2
 
-                radius: Appearance.rounding.full
-                color: Qt.alpha(Colours.palette.m3secondaryContainer, selected ? 1 : 0)
+                radius: Theme.rounding.full
+                color: Qt.alpha(Theme.palette.m3secondaryContainer, selected ? 1 : 0)
 
                 StateLayer {
-                    color: place.selected ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
+                    color: place.selected ? Theme.palette.m3onSecondaryContainer : Theme.palette.m3onSurface
 
                     function onClicked(): void {
                         FileManagerService.navigate(place.modelData.path);
@@ -71,15 +70,15 @@ StyledRect {
                     id: placeInner
 
                     anchors.fill: parent
-                    anchors.margins: Appearance.padding.small
-                    anchors.leftMargin: Appearance.padding.normal
-                    anchors.rightMargin: Appearance.padding.normal
-                    spacing: Appearance.spacing.normal
+                    anchors.margins: Theme.padding.small
+                    anchors.leftMargin: Theme.padding.normal
+                    anchors.rightMargin: Theme.padding.normal
+                    spacing: Theme.spacing.normal
 
                     MaterialIcon {
                         text: place.modelData.icon
-                        color: place.selected ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
-                        font.pointSize: Appearance.font.size.large
+                        color: place.selected ? Theme.palette.m3onSecondaryContainer : Theme.palette.m3onSurface
+                        font.pointSize: Theme.font.size.large
                         fill: place.selected ? 1 : 0
 
                         Behavior on fill {
@@ -90,8 +89,8 @@ StyledRect {
                     StyledText {
                         Layout.fillWidth: true
                         text: place.modelData.name
-                        color: place.selected ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
-                        font.pointSize: Appearance.font.size.normal
+                        color: place.selected ? Theme.palette.m3onSecondaryContainer : Theme.palette.m3onSurface
+                        font.pointSize: Theme.font.size.normal
                         elide: Text.ElideRight
                     }
                 }

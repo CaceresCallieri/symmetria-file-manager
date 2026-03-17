@@ -1,10 +1,9 @@
-import qs.components
-import qs.components.controls
-import qs.services
-import qs.config
-import qs.utils
+import "../../components"
+import "../../services"
+import "../../config"
 import Symmetria.Models
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 
 Item {
@@ -35,7 +34,7 @@ Item {
     // Background
     StyledRect {
         anchors.fill: parent
-        color: Colours.tPalette.m3surfaceContainerLow
+        color: Theme.tPalette.m3surfaceContainerLow
     }
 
     // Empty state
@@ -46,21 +45,21 @@ Item {
         asynchronous: true
 
         sourceComponent: ColumnLayout {
-            spacing: Appearance.spacing.normal
+            spacing: Theme.spacing.normal
 
             MaterialIcon {
                 Layout.alignment: Qt.AlignHCenter
                 text: "folder_open"
-                color: Colours.palette.m3outline
-                font.pointSize: Appearance.font.size.extraLarge * 2
+                color: Theme.palette.m3outline
+                font.pointSize: Theme.font.size.extraLarge * 2
                 font.weight: 500
             }
 
             StyledText {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("This folder is empty")
-                color: Colours.palette.m3outline
-                font.pointSize: Appearance.font.size.large
+                color: Theme.palette.m3outline
+                font.pointSize: Theme.font.size.large
                 font.weight: 500
             }
         }
@@ -74,15 +73,15 @@ Item {
         id: view
 
         anchors.fill: parent
-        anchors.margins: Appearance.padding.small
+        anchors.margins: Theme.padding.small
 
         clip: true
         focus: true
         boundsBehavior: Flickable.StopAtBounds
         Component.onCompleted: view.forceActiveFocus()
 
-        StyledScrollBar.vertical: StyledScrollBar {
-            flickable: view
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
         }
 
         model: FileSystemModel {

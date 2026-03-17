@@ -1,6 +1,6 @@
-import qs.components
-import qs.services
-import qs.config
+import "../../components"
+import "../../services"
+import "../../config"
 import Symmetria.Models
 import QtQuick
 import QtQuick.Layouts
@@ -19,8 +19,8 @@ Item {
     // which would cause visible stutter during rapid j/k navigation
     Rectangle {
         anchors.fill: parent
-        radius: Appearance.rounding.small
-        color: Colours.tPalette.m3surfaceContainerHighest
+        radius: Theme.rounding.small
+        color: Theme.tPalette.m3surfaceContainerHighest
         opacity: root.ListView.isCurrentItem ? 1 : 0
     }
 
@@ -34,9 +34,9 @@ Item {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: Appearance.padding.large
-        anchors.rightMargin: Appearance.padding.large
-        spacing: Appearance.spacing.normal
+        anchors.leftMargin: Theme.padding.large
+        anchors.rightMargin: Theme.padding.large
+        spacing: Theme.spacing.normal
 
         // File/folder icon
         MaterialIcon {
@@ -54,17 +54,17 @@ Item {
                     return "music_note";
                 return "description";
             }
-            color: root.modelData.isDir ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+            color: root.modelData.isDir ? Theme.palette.m3primary : Theme.palette.m3onSurfaceVariant
             fill: root.modelData.isDir ? 1 : 0
-            font.pointSize: Appearance.font.size.large
+            font.pointSize: Theme.font.size.large
         }
 
         // File name
         StyledText {
             Layout.fillWidth: true
             text: root.modelData.name
-            color: Colours.palette.m3onSurface
-            font.pointSize: Appearance.font.size.normal
+            color: Theme.palette.m3onSurface
+            font.pointSize: Theme.font.size.normal
             elide: Text.ElideRight
         }
 
@@ -72,9 +72,9 @@ Item {
         StyledText {
             visible: !root.modelData.isDir
             text: FileManagerService.formatSize(root.modelData.size)
-            color: Colours.palette.m3onSurfaceVariant
-            font.pointSize: Appearance.font.size.small
-            font.family: Appearance.font.family.mono
+            color: Theme.palette.m3onSurfaceVariant
+            font.pointSize: Theme.font.size.small
+            font.family: Theme.font.family.mono
             horizontalAlignment: Text.AlignRight
             Layout.minimumWidth: 60
         }

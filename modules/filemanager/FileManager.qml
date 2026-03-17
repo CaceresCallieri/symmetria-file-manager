@@ -1,6 +1,6 @@
-import qs.components
-import qs.services
-import qs.config
+import "../../components"
+import "../../services"
+import "../../config"
 import QtQuick
 import QtQuick.Layouts
 
@@ -30,7 +30,7 @@ Item {
             StyledRect {
                 Layout.fillHeight: true
                 implicitWidth: 1
-                color: Colours.tPalette.m3outlineVariant
+                color: Theme.tPalette.m3outlineVariant
             }
 
             FileList {

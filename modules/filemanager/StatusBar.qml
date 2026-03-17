@@ -1,7 +1,6 @@
-import qs.components
-import qs.services
-import qs.config
-import qs.utils
+import "../../components"
+import "../../services"
+import "../../config"
 import QtQuick
 import QtQuick.Layouts
 
@@ -12,25 +11,25 @@ StyledRect {
     required property var currentEntry
     required property string currentPath
 
-    implicitHeight: inner.implicitHeight + Appearance.padding.small * 2
-    color: Colours.tPalette.m3surfaceContainer
+    implicitHeight: inner.implicitHeight + Theme.padding.small * 2
+    color: Theme.tPalette.m3surfaceContainer
 
     RowLayout {
         id: inner
 
         anchors.fill: parent
-        anchors.leftMargin: Appearance.padding.large
-        anchors.rightMargin: Appearance.padding.large
-        anchors.topMargin: Appearance.padding.small
-        anchors.bottomMargin: Appearance.padding.small
+        anchors.leftMargin: Theme.padding.large
+        anchors.rightMargin: Theme.padding.large
+        anchors.topMargin: Theme.padding.small
+        anchors.bottomMargin: Theme.padding.small
 
-        spacing: Appearance.spacing.normal
+        spacing: Theme.spacing.normal
 
         // Left: file count
         StyledText {
             text: root.fileCount + (root.fileCount === 1 ? " item" : " items")
-            color: Colours.tPalette.m3onSurfaceVariant
-            font.pointSize: Appearance.font.size.small
+            color: Theme.tPalette.m3onSurfaceVariant
+            font.pointSize: Theme.font.size.small
         }
 
         Item { Layout.fillWidth: true }
@@ -43,9 +42,9 @@ StyledRect {
                     return root.currentEntry.name + "/";
                 return (root.currentEntry?.name ?? "") + "  " + FileManagerService.formatSize(root.currentEntry?.size ?? 0);
             }
-            color: Colours.tPalette.m3onSurface
-            font.pointSize: Appearance.font.size.small
-            font.family: Appearance.font.family.mono
+            color: Theme.tPalette.m3onSurface
+            font.pointSize: Theme.font.size.small
+            font.family: Theme.font.family.mono
         }
 
         Item { Layout.fillWidth: true }
@@ -53,8 +52,8 @@ StyledRect {
         // Right: abbreviated path
         StyledText {
             text: Paths.shortenHome(root.currentPath)
-            color: Colours.tPalette.m3onSurfaceVariant
-            font.pointSize: Appearance.font.size.small
+            color: Theme.tPalette.m3onSurfaceVariant
+            font.pointSize: Theme.font.size.small
             elide: Text.ElideMiddle
             Layout.maximumWidth: root.width * 0.3
         }

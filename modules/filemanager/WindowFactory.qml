@@ -1,8 +1,8 @@
 pragma Singleton
 
-import qs.components
-import qs.services
-import qs.config
+import "../../components"
+import "../../services"
+import "../../config"
 import Quickshell
 import QtQuick
 
@@ -12,7 +12,7 @@ Singleton {
     property var _activeWindow: null
 
     function create(initialPath: string): void {
-        if (_activeWindow || !Config.fileManager.enabled)
+        if (_activeWindow)
             return;
         if (initialPath)
             FileManagerService.navigate(initialPath);
@@ -29,7 +29,7 @@ Singleton {
         FloatingWindow {
             id: win
 
-            color: Colours.tPalette.m3surface
+            color: Theme.tPalette.m3surface
             title: qsTr("File Manager")
 
             implicitWidth: Config.fileManager.sizes.windowWidth
