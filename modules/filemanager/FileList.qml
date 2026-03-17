@@ -12,8 +12,6 @@ Item {
 
     readonly property var currentEntry: view.currentIndex >= 0 && view.currentIndex < view.count ? view.currentItem?.modelData ?? null : null
     readonly property int fileCount: view.count
-    property alias listView: view
-
     signal closeRequested()
 
     // gg chord state
@@ -31,7 +29,7 @@ Item {
         if (root.currentEntry.isDir)
             FileManagerService.navigate(root.currentEntry.path);
         else
-            Qt.openUrlExternally("file://" + root.currentEntry.path);
+            Qt.openUrlExternally(Qt.resolvedUrl(root.currentEntry.path));
     }
 
     // Background
@@ -80,8 +78,8 @@ Item {
 
         clip: true
         focus: true
-        currentIndex: 0
         boundsBehavior: Flickable.StopAtBounds
+        Component.onCompleted: view.forceActiveFocus()
 
         StyledScrollBar.vertical: StyledScrollBar {
             flickable: view
@@ -112,10 +110,10 @@ Item {
                 gTimer.stop();
                 if (key === Qt.Key_G && !(mods & Qt.ShiftModifier)) {
                     view.currentIndex = 0;
-                    event.accepted = true;
-                    return;
                 }
-                // Not g — fall through to normal handling
+                // Always consume the second keypress — it belongs to the chord sequence.
+                event.accepted = true;
+                return;
             }
 
             switch (key) {
@@ -150,7 +148,8 @@ Item {
             case Qt.Key_G:
                 if (mods & Qt.ShiftModifier) {
                     // G — jump to last
-                    view.currentIndex = view.count - 1;
+                    if (view.count > 0)
+                        view.currentIndex = view.count - 1;
                 } else {
                     // g — start gg chord
                     root._gPending = true;
@@ -160,7 +159,7 @@ Item {
                 break;
 
             case Qt.Key_D:
-                if (mods & Qt.ControlModifier) {
+                if ((mods & Qt.ControlModifier) && view.count > 0) {
                     const halfPage = Math.max(1, Math.floor(view.height / Config.fileManager.sizes.itemHeight / 2));
                     view.currentIndex = Math.min(view.currentIndex + halfPage, view.count - 1);
                     event.accepted = true;
@@ -168,7 +167,7 @@ Item {
                 break;
 
             case Qt.Key_U:
-                if (mods & Qt.ControlModifier) {
+                if ((mods & Qt.ControlModifier) && view.count > 0) {
                     const halfPage = Math.max(1, Math.floor(view.height / Config.fileManager.sizes.itemHeight / 2));
                     view.currentIndex = Math.max(view.currentIndex - halfPage, 0);
                     event.accepted = true;

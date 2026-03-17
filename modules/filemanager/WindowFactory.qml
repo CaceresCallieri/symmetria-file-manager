@@ -9,10 +9,14 @@ import QtQuick
 Singleton {
     id: root
 
+    property var _activeWindow: null
+
     function create(initialPath: string): void {
+        if (_activeWindow || !Config.fileManager.enabled)
+            return;
         if (initialPath)
             FileManagerService.navigate(initialPath);
-        fileManagerWindow.createObject(dummy);
+        _activeWindow = fileManagerWindow.createObject(dummy);
     }
 
     QtObject {
@@ -35,8 +39,10 @@ Singleton {
             minimumSize.height: 400
 
             onVisibleChanged: {
-                if (!visible)
+                if (!visible) {
+                    root._activeWindow = null;
                     destroy();
+                }
             }
 
             FileManager {

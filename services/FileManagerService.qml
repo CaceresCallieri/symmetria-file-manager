@@ -56,7 +56,7 @@ Singleton {
         if (!canGoUp)
             return;
 
-        const parentPath = currentPath.replace(/\/[^/]+\/?$/, "") || "/";
+        const parentPath = currentPath.replace(/\/[^/]+$/, "") || "/";
         navigate(parentPath);
     }
 }

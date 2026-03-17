@@ -9,8 +9,6 @@ Item {
 
     signal closeRequested()
 
-    Component.onCompleted: fileList.listView.forceActiveFocus()
-
     ColumnLayout {
         anchors.fill: parent
         spacing: 0

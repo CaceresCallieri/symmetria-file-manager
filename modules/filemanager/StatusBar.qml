@@ -39,12 +39,9 @@ StyledRect {
         StyledText {
             visible: root.currentEntry !== null
             text: {
-                if (!root.currentEntry)
-                    return "";
-                const entry = root.currentEntry;
-                if (entry.isDir)
-                    return entry.name + "/";
-                return entry.name + "  " + FileManagerService.formatSize(entry.size);
+                if (root.currentEntry?.isDir)
+                    return root.currentEntry.name + "/";
+                return (root.currentEntry?.name ?? "") + "  " + FileManagerService.formatSize(root.currentEntry?.size ?? 0);
             }
             color: Colours.tPalette.m3onSurface
             font.pointSize: Appearance.font.size.small

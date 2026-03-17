@@ -101,20 +101,17 @@ StyledRect {
                         spacing: 0
 
                         // Separator "/"
-                        Loader {
+                        StyledText {
                             Layout.rightMargin: Appearance.spacing.small
-                            active: segment.index > 0
-                            asynchronous: true
-                            sourceComponent: StyledText {
-                                text: "/"
-                                color: Colours.palette.m3onSurfaceVariant
-                                font.bold: true
-                            }
+                            visible: segment.index > 0
+                            text: "/"
+                            color: Colours.palette.m3onSurfaceVariant
+                            font.bold: true
                         }
 
                         // Clickable segment
                         Item {
-                            implicitWidth: homeIcon.implicitWidth + (homeIcon.active ? Appearance.padding.small : 0) + segmentName.implicitWidth + Appearance.padding.normal * 2
+                            implicitWidth: homeIcon.implicitWidth + (homeIcon.visible ? Appearance.padding.small : 0) + segmentName.implicitWidth + Appearance.padding.normal * 2
                             implicitHeight: segmentName.implicitHeight + Appearance.padding.small * 2
 
                             // Clickable only if not the last segment
@@ -131,20 +128,17 @@ StyledRect {
                             }
 
                             // Home icon
-                            Loader {
+                            MaterialIcon {
                                 id: homeIcon
 
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.leftMargin: Appearance.padding.normal
 
-                                active: segment.modelData.isHome
-                                asynchronous: true
-                                sourceComponent: MaterialIcon {
-                                    text: "home"
-                                    color: segment.index < root._segments.length - 1 ? Colours.palette.m3onSurfaceVariant : Colours.palette.m3onSurface
-                                    fill: 1
-                                }
+                                visible: segment.modelData.isHome
+                                text: "home"
+                                color: segment.index < root._segments.length - 1 ? Colours.palette.m3onSurfaceVariant : Colours.palette.m3onSurface
+                                fill: 1
                             }
 
                             StyledText {
@@ -152,7 +146,7 @@ StyledRect {
 
                                 anchors.left: homeIcon.right
                                 anchors.verticalCenter: parent.verticalCenter
-                                anchors.leftMargin: homeIcon.active ? Appearance.padding.small : 0
+                                anchors.leftMargin: homeIcon.visible ? Appearance.padding.small : 0
 
                                 text: segment.modelData.name
                                 color: segment.index < root._segments.length - 1 ? Colours.palette.m3onSurfaceVariant : Colours.palette.m3onSurface
