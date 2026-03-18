@@ -4,6 +4,7 @@ import "../../config"
 import Symmetria.Models
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 
 Item {
     id: root
