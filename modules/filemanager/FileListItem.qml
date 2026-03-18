@@ -39,6 +39,8 @@ Item {
         // File/folder icon
         MaterialIcon {
             text: {
+                if (!root.modelData)
+                    return "description";
                 if (root.modelData.isDir)
                     return "folder";
                 if (root.modelData.isImage)
@@ -52,15 +54,15 @@ Item {
                     return "music_note";
                 return "description";
             }
-            color: root.modelData.isDir ? Theme.palette.m3primary : Theme.palette.m3onSurfaceVariant
-            fill: root.modelData.isDir ? 1 : 0
+            color: root.modelData?.isDir ? Theme.palette.m3primary : Theme.palette.m3onSurfaceVariant
+            fill: root.modelData?.isDir ? 1 : 0
             font.pointSize: Theme.font.size.large
         }
 
         // File name
         StyledText {
             Layout.fillWidth: true
-            text: root.modelData.name
+            text: root.modelData?.name ?? ""
             color: Theme.palette.m3onSurface
             font.pointSize: Theme.font.size.normal
             elide: Text.ElideRight
@@ -68,8 +70,8 @@ Item {
 
         // File size (hidden for directories)
         StyledText {
-            visible: !root.modelData.isDir
-            text: FileManagerService.formatSize(root.modelData.size)
+            visible: !(root.modelData?.isDir ?? true)
+            text: root.modelData ? FileManagerService.formatSize(root.modelData.size) : ""
             color: Theme.palette.m3onSurfaceVariant
             font.pointSize: Theme.font.size.small
             font.family: Theme.font.family.mono
