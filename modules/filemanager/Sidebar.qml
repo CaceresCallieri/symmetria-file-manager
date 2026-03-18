@@ -25,7 +25,12 @@ StyledRect {
     ColumnLayout {
         id: inner
 
-        anchors.fill: parent
+        // NOTE: Do NOT use anchors.fill — ColumnLayout distributes extra
+        // vertical space between items, blowing up the spacing. Anchor to
+        // top/left/right only so the layout hugs its content.
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
         anchors.margins: Theme.padding.normal
         spacing: Theme.spacing.tiny
 
