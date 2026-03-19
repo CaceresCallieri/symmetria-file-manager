@@ -43,6 +43,13 @@ Item {
         ? videoLoader.item.naturalSize
         : Qt.size(0, 0)
 
+    // Unified media dimensions for the metadata strip — image or video, zero otherwise
+    readonly property size _mediaNaturalSize: _previewType === _typeImage
+        ? _imageNaturalSize
+        : _previewType === _typeVideo
+            ? _videoNaturalSize
+            : Qt.size(0, 0)
+
     // --- Debounce ---
 
     onPreviewEntryChanged: {
@@ -212,11 +219,7 @@ Item {
         PreviewMetadata {
             Layout.fillWidth: true
             entry: root._committedEntry
-            imageDimensions: _previewType === _typeImage
-                ? root._imageNaturalSize
-                : _previewType === _typeVideo
-                    ? root._videoNaturalSize
-                    : Qt.size(0, 0)
+            imageDimensions: root._mediaNaturalSize
         }
     }
 }

@@ -1,5 +1,4 @@
 import "../../components"
-import "../../services"
 import QtQuick
 import QtQuick.Layouts
 import QtMultimedia
@@ -9,20 +8,20 @@ Item {
 
     required property var entry
 
-    // Exposed for PreviewMetadata — reflects decoded video dimensions
+    // Exposed for PreviewMetadata — reflects native encoded video dimensions
     readonly property size naturalSize: {
-        if (!videoPlayer.hasVideo) return Qt.size(0, 0);
-        const r = videoOutput.sourceRect;
-        return r.width > 0 ? Qt.size(r.width, r.height) : Qt.size(0, 0);
+        // Re-evaluate when media status changes so the binding updates once metadata is ready
+        const _dep = videoPlayer.mediaStatus;
+        const res = videoPlayer.metaData.value(MediaMetaData.Resolution);
+        return (res && res.width > 0) ? Qt.size(res.width, res.height) : Qt.size(0, 0);
     }
 
     MediaPlayer {
         id: videoPlayer
-        source: root.entry ? "file://" + root.entry.path : ""
+        source: root.entry ? encodeURI("file://" + root.entry.path) : ""
         autoPlay: true
         loops: MediaPlayer.Infinite
 
-        audioOutput: AudioOutput { muted: true }
         videoOutput: videoOutput
     }
 
@@ -33,18 +32,19 @@ Item {
         anchors.margins: Theme.padding.normal
         fillMode: VideoOutput.PreserveAspectFit
 
-        opacity: videoPlayer.playbackState === MediaPlayer.PlayingState ? 1 : 0
+        opacity: videoPlayer.hasVideo && videoOutput.sourceRect.width > 0 ? 1 : 0
 
         Behavior on opacity {
             Anim {}
         }
     }
 
-    // Loading indicator — covers initial media loading and buffering
+    // Loading indicator — covers initial media loading, buffering, and stalls
     Loader {
         anchors.centerIn: parent
         active: videoPlayer.mediaStatus === MediaPlayer.LoadingMedia
             || videoPlayer.mediaStatus === MediaPlayer.BufferingMedia
+            || videoPlayer.mediaStatus === MediaPlayer.StalledMedia
         asynchronous: true
 
         sourceComponent: StyledText {
