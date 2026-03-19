@@ -45,11 +45,11 @@ Item {
         }
     }
 
-    // Loading indicator
+    // Loading indicator — covers both C++ PDF compositing (previewHelper.loading)
+    // and Qt image decode (Image.Loading). Either phase means content is not yet ready.
     Loader {
         anchors.centerIn: parent
-        opacity: preview.status === Image.Loading ? 1 : 0
-        active: preview.status === Image.Loading
+        active: previewHelper.loading || preview.status === Image.Loading
         asynchronous: true
 
         sourceComponent: ColumnLayout {
@@ -69,17 +69,12 @@ Item {
                 font.pointSize: Theme.font.size.normal
             }
         }
-
-        Behavior on opacity {
-            Anim {}
-        }
     }
 
     // Error state
     Loader {
         anchors.centerIn: parent
-        opacity: preview.status === Image.Error ? 1 : 0
-        active: preview.status === Image.Error
+        active: !previewHelper.loading && preview.status === Image.Error
         asynchronous: true
 
         sourceComponent: ColumnLayout {
@@ -100,10 +95,6 @@ Item {
                 font.pointSize: Theme.font.size.large
                 font.weight: 500
             }
-        }
-
-        Behavior on opacity {
-            Anim {}
         }
     }
 }

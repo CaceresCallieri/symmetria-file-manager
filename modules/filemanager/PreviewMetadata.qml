@@ -7,9 +7,9 @@ Item {
     id: root
 
     required property var entry
-    property size imageSize: Qt.size(0, 0)
+    property size imageDimensions: Qt.size(0, 0)
 
-    visible: entry != null
+    visible: !!entry
     implicitHeight: metaLayout.implicitHeight + Theme.padding.small * 2
 
     // Subtle top separator
@@ -42,8 +42,8 @@ Item {
 
         // Image dimensions (only shown when available)
         StyledText {
-            visible: root.imageSize.width > 0
-            text: root.imageSize.width + "\u00d7" + root.imageSize.height
+            visible: root.imageDimensions.width > 0
+            text: root.imageDimensions.width + "\u00d7" + root.imageDimensions.height
             color: Theme.palette.m3outline
             font.pointSize: Theme.font.size.small
             font.family: Theme.font.family.mono

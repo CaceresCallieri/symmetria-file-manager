@@ -13,7 +13,10 @@ Item {
         width: parent.width - Theme.padding.large * 2
         spacing: Theme.spacing.normal
 
-        // Mime-based icon (same logic as FileListItem)
+        // Mime-based icon — mirrors the mapping in FileListItem.qml
+        // application/pdf appears here only if isImage is false for PDFs in the
+        // C++ model (i.e. PDF compositing is disabled), otherwise PDFs are routed
+        // to ImagePreview instead.
         MaterialIcon {
             Layout.alignment: Qt.AlignHCenter
             text: {

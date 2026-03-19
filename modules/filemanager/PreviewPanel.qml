@@ -31,11 +31,6 @@ Item {
         return _typeFallback;
     }
 
-    readonly property bool _showNone: _previewType === _typeNone
-    readonly property bool _showDirectory: _previewType === _typeDirectory
-    readonly property bool _showImage: _previewType === _typeImage
-    readonly property bool _showFallback: _previewType === _typeFallback
-
     // Image natural dimensions — declarative binding so it updates reactively
     // as the Image decodes (implicitWidth/Height change on Image.Ready)
     readonly property size _imageNaturalSize: imageLoader.item
@@ -45,7 +40,7 @@ Item {
     // --- Debounce ---
 
     onPreviewEntryChanged: {
-        if (previewEntry === null) {
+        if (!previewEntry) {
             // Instant clear — "No preview" should appear without delay
             _previewDebounce.stop();
             _committedEntry = null;
@@ -81,7 +76,7 @@ Item {
             // Empty / no-selection state
             Loader {
                 anchors.centerIn: parent
-                active: root._showNone
+                active: _previewType === _typeNone
                 asynchronous: true
 
                 sourceComponent: ColumnLayout {
@@ -108,7 +103,7 @@ Item {
             // Directory listing
             Loader {
                 anchors.fill: parent
-                active: root._showDirectory
+                active: _previewType === _typeDirectory
                 asynchronous: true
 
                 sourceComponent: Item {
@@ -174,7 +169,7 @@ Item {
                 id: imageLoader
 
                 anchors.fill: parent
-                active: root._showImage
+                active: _previewType === _typeImage
                 asynchronous: true
 
                 sourceComponent: ImagePreview {
@@ -185,7 +180,7 @@ Item {
             // Fallback preview (non-image, non-directory files)
             Loader {
                 anchors.fill: parent
-                active: root._showFallback
+                active: _previewType === _typeFallback
                 asynchronous: true
 
                 sourceComponent: FallbackPreview {
@@ -198,7 +193,7 @@ Item {
         PreviewMetadata {
             Layout.fillWidth: true
             entry: root._committedEntry
-            imageSize: root._imageNaturalSize
+            imageDimensions: root._imageNaturalSize
         }
     }
 }
