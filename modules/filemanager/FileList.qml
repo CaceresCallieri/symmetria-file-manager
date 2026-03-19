@@ -125,6 +125,11 @@ Item {
         function onSearchConfirmed() {
             Qt.callLater(() => view.forceActiveFocus());
         }
+
+        function onDeleteConfirmPathChanged() {
+            if (FileManagerService.deleteConfirmPath === "")
+                Qt.callLater(() => view.forceActiveFocus());
+        }
     }
 
     // Background
@@ -199,6 +204,9 @@ Item {
                 // Re-compute matches if search is active (handles async model reload)
                 if (FileManagerService.searchQuery !== "")
                     root._computeMatches(true);
+                // Clamp cursor after file deletion or external changes
+                if (!root._pathJustChanged && view.currentIndex >= view.count && view.count > 0)
+                    view.currentIndex = view.count - 1;
             }
         }
 
@@ -211,6 +219,12 @@ Item {
 
         // Vim-style keyboard navigation
         Keys.onPressed: function(event) {
+            // Block all keys while delete confirmation is visible
+            if (FileManagerService.deleteConfirmPath !== "") {
+                event.accepted = true;
+                return;
+            }
+
             const key = event.key;
             const mods = event.modifiers;
 
@@ -271,11 +285,17 @@ Item {
                 break;
 
             case Qt.Key_D:
-                if ((mods & Qt.ControlModifier) && view.count > 0) {
-                    view.currentIndex = Math.min(view.currentIndex + root._halfPageCount(), view.count - 1);
-                    view.positionViewAtIndex(view.currentIndex, ListView.Contain);
-                    event.accepted = true;
+                if (mods & Qt.ControlModifier) {
+                    // Ctrl+D — half-page down
+                    if (view.count > 0) {
+                        view.currentIndex = Math.min(view.currentIndex + root._halfPageCount(), view.count - 1);
+                        view.positionViewAtIndex(view.currentIndex, ListView.Contain);
+                    }
+                } else if (root.currentEntry) {
+                    // D — trash file (request confirmation)
+                    FileManagerService.requestDelete(root.currentEntry.path);
                 }
+                event.accepted = true;
                 break;
 
             case Qt.Key_U:

@@ -16,6 +16,17 @@ Singleton {
     signal searchConfirmed()
     signal searchCancelled()
 
+    // === Delete confirmation ===
+    property string deleteConfirmPath: ""
+
+    function requestDelete(path: string): void {
+        deleteConfirmPath = path;
+    }
+
+    function cancelDelete(): void {
+        deleteConfirmPath = "";
+    }
+
     // === Chord / which-key state ===
     property string activeChordPrefix: ""
     readonly property bool chordActive: activeChordPrefix !== ""

@@ -30,4 +30,7 @@ Item {
             currentEntry: millerColumns.currentEntry
         }
     }
+
+    // Modal overlay — renders above the entire layout
+    DeleteConfirmPopup {}
 }
