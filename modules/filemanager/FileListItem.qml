@@ -85,18 +85,11 @@ Item {
             anchors.bottom: parent.bottom
             width: parent.width + Theme.rounding.small
             radius: Theme.rounding.small
-            color: {
-                const path = root.modelData?.path ?? "";
-                if (!FileManagerService._clipboardSet[path])
-                    return "transparent";
-                return FileManagerService.clipboardMode === "cut"
-                    ? "#e57373"
-                    : "#4caf7d";
-            }
-            opacity: FileManagerService._clipboardSet[root.modelData?.path ?? ""] ? 0.85 : 0
+            color: FileManagerService.clipboardMode === "cut" ? "#e57373" : "#4caf7d"
+            opacity: (root.modelData?.path ?? "") === FileManagerService.clipboardPath
+                     && FileManagerService.clipboardPath !== "" ? 0.85 : 0
 
             Behavior on opacity { Anim {} }
-            Behavior on color { CAnim {} }
         }
     }
 

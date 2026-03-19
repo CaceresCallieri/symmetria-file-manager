@@ -25,7 +25,6 @@ Item {
     // After paste: filename to focus once the model refreshes
     property string _pendingPasteFocus: ""
 
-
     function _saveCursorAndNavigate(navigateFn: var): void {
         FileManagerService.saveCursor(FileManagerService.currentPath, view.currentIndex);
         navigateFn();
@@ -64,21 +63,19 @@ Item {
     }
 
     function _executePaste(): void {
-        if (FileManagerService.clipboardPaths.length === 0
-            || FileManagerService.clipboardMode === ""
-            || pasteProcess.running)
+        if (FileManagerService.clipboardPath === "" || pasteProcess.running)
             return;
 
-        const sourcePath = FileManagerService.clipboardPaths[0];
+        const sourcePath = FileManagerService.clipboardPath;
         const destDir = FileManagerService.currentPath;
 
         // Extract basename to focus after model refreshes
         root._pendingPasteFocus = sourcePath.substring(sourcePath.lastIndexOf("/") + 1);
 
         if (FileManagerService.clipboardMode === "yank")
-            pasteProcess.command = ["cp", "-r", "--", sourcePath, destDir + "/"];
+            pasteProcess.command = ["cp", "-r", "--", sourcePath, destDir];
         else
-            pasteProcess.command = ["mv", "--", sourcePath, destDir + "/"];
+            pasteProcess.command = ["mv", "--", sourcePath, destDir];
 
         pasteProcess.running = true;
     }
@@ -228,18 +225,19 @@ Item {
                     // Clamp cursor after file deletion or external changes
                     if (view.currentIndex >= view.count && view.count > 0)
                         view.currentIndex = view.count - 1;
-                }
-                // Focus pasted file if pending
-                if (root._pendingPasteFocus !== "") {
-                    const entries = fsModel.entries;
-                    for (let i = 0; i < entries.length; i++) {
-                        if (entries[i].name === root._pendingPasteFocus) {
-                            view.currentIndex = i;
-                            view.positionViewAtIndex(i, ListView.Contain);
-                            break;
+                    // Focus pasted file if pending — only applies to same-directory refreshes,
+                    // never to path navigations (which handled cursor restore above)
+                    if (root._pendingPasteFocus !== "") {
+                        const entries = fsModel.entries;
+                        for (let i = 0; i < entries.length; i++) {
+                            if (entries[i].name === root._pendingPasteFocus) {
+                                view.currentIndex = i;
+                                view.positionViewAtIndex(i, ListView.Contain);
+                                break;
+                            }
                         }
+                        root._pendingPasteFocus = "";
                     }
-                    root._pendingPasteFocus = "";
                 }
                 // Re-compute matches if search is active (handles async model reload)
                 if (FileManagerService.searchQuery !== "")
@@ -397,6 +395,7 @@ Item {
                     root._executePaste();
                     event.accepted = true;
                 }
+                // bare V is unbound — let event propagate
                 break;
 
             case Qt.Key_N:
@@ -420,11 +419,11 @@ Item {
     Process {
         id: pasteProcess
         onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0) {
+            if (exitCode === 0 && exitStatus === Process.NormalExit) {
                 if (FileManagerService.clipboardMode === "cut")
                     FileManagerService.clearClipboard();
             } else {
-                console.warn("FileList: paste failed with exit code", exitCode);
+                console.warn("FileList: paste failed — exitCode:", exitCode, "exitStatus:", exitStatus);
                 root._pendingPasteFocus = "";
             }
         }

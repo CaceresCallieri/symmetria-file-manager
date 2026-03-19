@@ -17,28 +17,21 @@ Singleton {
     signal searchCancelled()
 
     // === Clipboard (yank/cut) ===
-    property var clipboardPaths: []       // Array of path strings
-    property string clipboardMode: ""     // "" | "yank" | "cut"
-
-    // O(1) lookup set — auto-updates when clipboardPaths changes
-    readonly property var _clipboardSet: {
-        let s = {};
-        for (const p of clipboardPaths) s[p] = true;
-        return s;
-    }
+    property string clipboardPath: ""    // Absolute path of yanked/cut file, "" when empty
+    property string clipboardMode: ""    // "" | "yank" | "cut"
 
     function yank(path: string): void {
-        clipboardPaths = [path];
+        clipboardPath = path;
         clipboardMode = "yank";
     }
 
     function cut(path: string): void {
-        clipboardPaths = [path];
+        clipboardPath = path;
         clipboardMode = "cut";
     }
 
     function clearClipboard(): void {
-        clipboardPaths = [];
+        clipboardPath = "";
         clipboardMode = "";
     }
 
