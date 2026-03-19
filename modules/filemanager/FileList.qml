@@ -73,6 +73,11 @@ Item {
         } else {
             FileManagerService.currentMatchIndex = 0;
         }
+
+        // Always jump after recomputing — the onChanged signal won't fire
+        // when currentMatchIndex stays at the same numeric value (e.g. 0→0)
+        // even though matchIndices changed and the target file is different.
+        _jumpToCurrentMatch();
     }
 
     function _jumpToCurrentMatch(): void {
