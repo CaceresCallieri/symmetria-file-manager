@@ -69,5 +69,84 @@ Item {
             font.pointSize: Theme.font.size.small
             font.family: Theme.font.family.mono
         }
+
+        // Separator
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.topMargin: Theme.padding.small
+            Layout.bottomMargin: Theme.padding.small
+            height: 1
+            color: Theme.palette.m3outlineVariant
+        }
+
+        // Metadata detail grid
+        GridLayout {
+            Layout.alignment: Qt.AlignHCenter
+            columns: 2
+            columnSpacing: Theme.spacing.normal
+            rowSpacing: Theme.spacing.small
+
+            // Modified
+            StyledText {
+                text: qsTr("Modified")
+                color: Theme.palette.m3outline
+                font.pointSize: Theme.font.size.small
+                font.family: Theme.font.family.mono
+            }
+            StyledText {
+                text: root.entry ? FileManagerService.formatDate(root.entry.modifiedDate) : ""
+                color: Theme.palette.m3onSurfaceVariant
+                font.pointSize: Theme.font.size.small
+                font.family: Theme.font.family.mono
+            }
+
+            // Permissions
+            StyledText {
+                text: qsTr("Permissions")
+                color: Theme.palette.m3outline
+                font.pointSize: Theme.font.size.small
+                font.family: Theme.font.family.mono
+            }
+            StyledText {
+                text: root.entry?.permissions ?? ""
+                color: Theme.palette.m3onSurfaceVariant
+                font.pointSize: Theme.font.size.small
+                font.family: Theme.font.family.mono
+            }
+
+            // Owner (hidden when empty)
+            StyledText {
+                visible: (root.entry?.owner ?? "") !== ""
+                text: qsTr("Owner")
+                color: Theme.palette.m3outline
+                font.pointSize: Theme.font.size.small
+                font.family: Theme.font.family.mono
+            }
+            StyledText {
+                visible: (root.entry?.owner ?? "") !== ""
+                text: root.entry?.owner ?? ""
+                color: Theme.palette.m3onSurfaceVariant
+                font.pointSize: Theme.font.size.small
+                font.family: Theme.font.family.mono
+            }
+
+            // Symlink target (only for symlinks)
+            StyledText {
+                visible: root.entry?.isSymlink ?? false
+                text: qsTr("Target")
+                color: Theme.palette.m3outline
+                font.pointSize: Theme.font.size.small
+                font.family: Theme.font.family.mono
+            }
+            StyledText {
+                visible: root.entry?.isSymlink ?? false
+                Layout.maximumWidth: root.width - Theme.padding.large * 4
+                text: root.entry?.symlinkTarget ?? ""
+                color: Theme.palette.m3onSurfaceVariant
+                font.pointSize: Theme.font.size.small
+                font.family: Theme.font.family.mono
+                elide: Text.ElideMiddle
+            }
+        }
     }
 }
