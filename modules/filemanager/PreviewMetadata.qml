@@ -8,6 +8,8 @@ Item {
 
     required property var entry
     property size imageDimensions: Qt.size(0, 0)
+    property string textLanguage: ""
+    property int textLineCount: 0
 
     visible: !!entry
     implicitHeight: metaLayout.implicitHeight + Theme.padding.small * 2
@@ -52,6 +54,24 @@ Item {
         StyledText {
             visible: root.imageDimensions.width > 0
             text: root.imageDimensions.width + "\u00d7" + root.imageDimensions.height
+            color: Theme.palette.m3outline
+            font.pointSize: Theme.font.size.small
+            font.family: Theme.font.family.mono
+        }
+
+        // Text language badge (only shown for text previews)
+        StyledText {
+            visible: root.textLanguage !== ""
+            text: root.textLanguage
+            color: Theme.palette.m3outline
+            font.pointSize: Theme.font.size.small
+            font.family: Theme.font.family.mono
+        }
+
+        // Text line count (only shown for text previews)
+        StyledText {
+            visible: root.textLineCount > 0
+            text: root.textLineCount + " lines"
             color: Theme.palette.m3outline
             font.pointSize: Theme.font.size.small
             font.family: Theme.font.family.mono

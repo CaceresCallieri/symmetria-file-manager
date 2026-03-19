@@ -1,4 +1,5 @@
 import "../../components"
+import "../../services"
 import QtQuick
 import QtQuick.Layouts
 import QtMultimedia

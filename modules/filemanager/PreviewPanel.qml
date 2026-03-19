@@ -20,7 +20,24 @@ Item {
     readonly property int _typeDirectory: 1
     readonly property int _typeImage: 2
     readonly property int _typeVideo: 3
-    readonly property int _typeFallback: 4
+    readonly property int _typeText: 4
+    readonly property int _typeFallback: 5
+
+    function _isTextFile(entry) {
+        if (!entry) return false;
+        const mime = entry.mimeType;
+        if (mime.startsWith("text/")) return true;
+        // application/* types that are actually text-based
+        return [
+            "application/json", "application/xml",
+            "application/x-shellscript", "application/x-yaml",
+            "application/toml", "application/javascript",
+            "application/typescript", "application/x-perl",
+            "application/x-ruby", "application/x-httpd-php",
+            "application/sql", "application/x-desktop",
+            "application/xhtml+xml",
+        ].includes(mime);
+    }
 
     readonly property int _previewType: {
         if (!_committedEntry)
@@ -31,6 +48,8 @@ Item {
             return _typeImage;
         if (_committedEntry.isVideo)
             return _typeVideo;
+        if (_isTextFile(_committedEntry))
+            return _typeText;
         return _typeFallback;
     }
 
@@ -49,6 +68,10 @@ Item {
         : _previewType === _typeVideo
             ? _videoNaturalSize
             : Qt.size(0, 0)
+
+    // Text preview metadata — language name and line count
+    readonly property int _textLineCount: textLoader.item?.lineCount ?? 0
+    readonly property string _textLanguage: textLoader.item?.language ?? ""
 
     // --- Debounce ---
 
@@ -203,7 +226,20 @@ Item {
                 }
             }
 
-            // Fallback preview (non-image, non-directory, non-video files)
+            // Text preview (source code, config files, etc.)
+            Loader {
+                id: textLoader
+
+                anchors.fill: parent
+                active: _previewType === _typeText
+                asynchronous: true
+
+                sourceComponent: TextPreview {
+                    entry: root._committedEntry
+                }
+            }
+
+            // Fallback preview (non-image, non-directory, non-video, non-text files)
             Loader {
                 anchors.fill: parent
                 active: _previewType === _typeFallback
@@ -220,6 +256,8 @@ Item {
             Layout.fillWidth: true
             entry: root._committedEntry
             imageDimensions: root._mediaNaturalSize
+            textLanguage: root._textLanguage
+            textLineCount: root._textLineCount
         }
     }
 }
