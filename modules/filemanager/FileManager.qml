@@ -17,28 +17,11 @@ Item {
             Layout.fillWidth: true
         }
 
-        RowLayout {
+        MillerColumns {
+            id: millerColumns
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 0
-
-            Sidebar {
-                Layout.fillHeight: true
-            }
-
-            // Thin separator
-            StyledRect {
-                Layout.fillHeight: true
-                implicitWidth: 1
-                color: Theme.palette.m3outlineVariant
-            }
-
-            MillerColumns {
-                id: millerColumns
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                onCloseRequested: root.closeRequested()
-            }
+            onCloseRequested: root.closeRequested()
         }
 
         StatusBar {

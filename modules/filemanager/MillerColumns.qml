@@ -14,12 +14,26 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        // Left: active file list (keyboard nav, cursor)
+        // Left: passive parent directory listing
+        ParentPanel {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.preferredWidth: 2
+        }
+
+        // Separator
+        StyledRect {
+            Layout.fillHeight: true
+            implicitWidth: 1
+            color: Theme.palette.m3outlineVariant
+        }
+
+        // Center: active file list (keyboard nav, cursor)
         FileList {
             id: currentPanel
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.preferredWidth: 1
+            Layout.preferredWidth: 5
             onCloseRequested: root.closeRequested()
         }
 
@@ -34,7 +48,7 @@ Item {
         PreviewPanel {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.preferredWidth: 1
+            Layout.preferredWidth: 3
             previewPath: currentPanel.currentEntry?.isDir ? currentPanel.currentEntry.path : ""
         }
     }
