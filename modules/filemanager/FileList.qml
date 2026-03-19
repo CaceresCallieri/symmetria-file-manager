@@ -220,7 +220,7 @@ Item {
                 FileManagerService.activeChordPrefix = "";
 
                 if (key !== Qt.Key_Escape) {
-                    const keyChar = String.fromCharCode(key).toLowerCase();
+                    const keyChar = event.text.toLowerCase();
                     root._executeChord(prefix, keyChar);
                 }
                 event.accepted = true;
@@ -266,7 +266,6 @@ Item {
                 } else {
                     // g — start "go to" chord, show which-key popup
                     FileManagerService.activeChordPrefix = "g";
-
                 }
                 event.accepted = true;
                 break;
@@ -331,5 +330,9 @@ Item {
             }
         }
 
+        onActiveFocusChanged: {
+            if (!activeFocus && FileManagerService.activeChordPrefix !== "")
+                FileManagerService.activeChordPrefix = "";
+        }
     }
 }

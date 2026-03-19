@@ -6,18 +6,16 @@ import QtQuick.Layouts
 Item {
     id: root
 
-    readonly property bool _active: FileManagerService.activeChordPrefix !== ""
-    readonly property var _group: {
+    readonly property var _binds: {
         const prefix = FileManagerService.activeChordPrefix;
         if (prefix === "")
-            return null;
+            return [];
         const bindings = FileManagerService.chordBindings;
-        return bindings.hasOwnProperty(prefix) ? bindings[prefix] : null;
+        return bindings.hasOwnProperty(prefix) ? bindings[prefix].binds : [];
     }
-    readonly property var _binds: root._group ? root._group.binds : []
 
     visible: opacity > 0
-    opacity: _active ? 1 : 0
+    opacity: FileManagerService.chordActive ? 1 : 0
 
     Behavior on opacity {
         Anim {}
@@ -59,7 +57,12 @@ Item {
             }
 
             StyledText {
-                text: root._group ? root._group.label : ""
+                text: {
+                    const prefix = FileManagerService.activeChordPrefix;
+                    if (prefix === "") return "";
+                    const bindings = FileManagerService.chordBindings;
+                    return bindings.hasOwnProperty(prefix) ? bindings[prefix].label : "";
+                }
                 color: Theme.palette.m3onSurfaceVariant
                 font.pointSize: Theme.font.size.smaller
                 font.weight: 500
@@ -74,49 +77,44 @@ Item {
         }
 
         // Binding rows
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: Theme.spacing.tiny
+        Repeater {
+            model: root._binds
 
-            Repeater {
-                model: root._binds
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacing.small
+                // Keycap badge
+                Rectangle {
+                    width: 22
+                    height: 22
+                    radius: 6
+                    color: Qt.alpha("#ffffff", 0.06)
+                    border.color: Qt.alpha("#ffffff", 0.10)
+                    border.width: 1
 
-                    // Keycap badge
-                    Rectangle {
-                        width: 22
-                        height: 22
-                        radius: 6
-                        color: Qt.alpha("#ffffff", 0.06)
-                        border.color: Qt.alpha("#ffffff", 0.10)
-                        border.width: 1
-
-                        StyledText {
-                            anchors.centerIn: parent
-                            text: modelData.key
-                            color: Theme.palette.m3onSurface
-                            font.family: Theme.font.family.mono
-                            font.pointSize: Theme.font.size.small
-                            font.weight: 600
-                        }
-                    }
-
-                    // Icon
-                    MaterialIcon {
-                        text: modelData.icon
-                        color: Theme.palette.m3onSurfaceVariant
-                        font.pointSize: Theme.font.size.normal
-                    }
-
-                    // Label
                     StyledText {
-                        text: modelData.label
+                        anchors.centerIn: parent
+                        text: modelData.key
                         color: Theme.palette.m3onSurface
-                        font.pointSize: Theme.font.size.smaller
+                        font.family: Theme.font.family.mono
+                        font.pointSize: Theme.font.size.small
+                        font.weight: 600
                     }
+                }
+
+                // Icon
+                MaterialIcon {
+                    text: modelData.icon
+                    color: Theme.palette.m3onSurfaceVariant
+                    font.pointSize: Theme.font.size.normal
+                }
+
+                // Label
+                StyledText {
+                    text: modelData.label
+                    color: Theme.palette.m3onSurface
+                    font.pointSize: Theme.font.size.smaller
                 }
             }
         }

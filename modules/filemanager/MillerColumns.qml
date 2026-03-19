@@ -22,7 +22,7 @@ Item {
 
             ParentPanel {
                 anchors.fill: parent
-                opacity: FileManagerService.activeChordPrefix !== "" ? 0 : 1
+                opacity: FileManagerService.chordActive ? 0 : 1
 
                 Behavior on opacity {
                     Anim {}

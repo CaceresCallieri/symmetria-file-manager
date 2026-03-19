@@ -18,6 +18,7 @@ Singleton {
 
     // === Chord / which-key state ===
     property string activeChordPrefix: ""
+    readonly property bool chordActive: activeChordPrefix !== ""
 
     readonly property var chordBindings: ({
         "g": {
