@@ -62,7 +62,7 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.preferredWidth: 3
-            previewPath: currentPanel.currentEntry?.isDir ? currentPanel.currentEntry.path : ""
+            previewEntry: currentPanel.currentEntry ?? null
         }
     }
 }
