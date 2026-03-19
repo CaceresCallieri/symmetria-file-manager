@@ -16,6 +16,32 @@ Singleton {
     signal searchConfirmed()
     signal searchCancelled()
 
+    // === Clipboard (yank/cut) ===
+    property var clipboardPaths: []       // Array of path strings
+    property string clipboardMode: ""     // "" | "yank" | "cut"
+
+    // O(1) lookup set — auto-updates when clipboardPaths changes
+    readonly property var _clipboardSet: {
+        let s = {};
+        for (const p of clipboardPaths) s[p] = true;
+        return s;
+    }
+
+    function yank(path: string): void {
+        clipboardPaths = [path];
+        clipboardMode = "yank";
+    }
+
+    function cut(path: string): void {
+        clipboardPaths = [path];
+        clipboardMode = "cut";
+    }
+
+    function clearClipboard(): void {
+        clipboardPaths = [];
+        clipboardMode = "";
+    }
+
     // === Delete confirmation ===
     // Empty string means no pending deletion
     property string deleteConfirmPath: ""

@@ -2,6 +2,7 @@ import "../../components"
 import "../../services"
 import "../../config"
 import Symmetria.Models
+import Quickshell.Io
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -20,6 +21,9 @@ Item {
 
     // Search: cursor position saved before entering search mode
     property int _preSearchIndex: 0
+
+    // After paste: filename to focus once the model refreshes
+    property string _pendingPasteFocus: ""
 
 
     function _saveCursorAndNavigate(navigateFn: var): void {
@@ -57,6 +61,26 @@ Item {
                 break;
             }
         }
+    }
+
+    function _executePaste(): void {
+        if (FileManagerService.clipboardPaths.length === 0
+            || FileManagerService.clipboardMode === ""
+            || pasteProcess.running)
+            return;
+
+        const sourcePath = FileManagerService.clipboardPaths[0];
+        const destDir = FileManagerService.currentPath;
+
+        // Extract basename to focus after model refreshes
+        root._pendingPasteFocus = sourcePath.substring(sourcePath.lastIndexOf("/") + 1);
+
+        if (FileManagerService.clipboardMode === "yank")
+            pasteProcess.command = ["cp", "-r", "--", sourcePath, destDir + "/"];
+        else
+            pasteProcess.command = ["mv", "--", sourcePath, destDir + "/"];
+
+        pasteProcess.running = true;
     }
 
     function _halfPageCount(): int {
@@ -205,6 +229,18 @@ Item {
                     if (view.currentIndex >= view.count && view.count > 0)
                         view.currentIndex = view.count - 1;
                 }
+                // Focus pasted file if pending
+                if (root._pendingPasteFocus !== "") {
+                    const entries = fsModel.entries;
+                    for (let i = 0; i < entries.length; i++) {
+                        if (entries[i].name === root._pendingPasteFocus) {
+                            view.currentIndex = i;
+                            view.positionViewAtIndex(i, ListView.Contain);
+                            break;
+                        }
+                    }
+                    root._pendingPasteFocus = "";
+                }
                 // Re-compute matches if search is active (handles async model reload)
                 if (FileManagerService.searchQuery !== "")
                     root._computeMatches(true);
@@ -339,6 +375,30 @@ Item {
                 event.accepted = true;
                 break;
 
+            case Qt.Key_Y:
+                if (root.currentEntry)
+                    FileManagerService.yank(root.currentEntry.path);
+                event.accepted = true;
+                break;
+
+            case Qt.Key_X:
+                if (root.currentEntry)
+                    FileManagerService.cut(root.currentEntry.path);
+                event.accepted = true;
+                break;
+
+            case Qt.Key_P:
+                root._executePaste();
+                event.accepted = true;
+                break;
+
+            case Qt.Key_V:
+                if (mods & Qt.ControlModifier) {
+                    root._executePaste();
+                    event.accepted = true;
+                }
+                break;
+
             case Qt.Key_N:
                 if (!FileManagerService.searchActive && FileManagerService.matchIndices.length > 0) {
                     if (mods & Qt.ShiftModifier)
@@ -354,6 +414,19 @@ Item {
         onActiveFocusChanged: {
             if (!activeFocus && FileManagerService.activeChordPrefix !== "")
                 FileManagerService.activeChordPrefix = "";
+        }
+    }
+
+    Process {
+        id: pasteProcess
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode === 0) {
+                if (FileManagerService.clipboardMode === "cut")
+                    FileManagerService.clearClipboard();
+            } else {
+                console.warn("FileList: paste failed with exit code", exitCode);
+                root._pendingPasteFocus = "";
+            }
         }
     }
 }

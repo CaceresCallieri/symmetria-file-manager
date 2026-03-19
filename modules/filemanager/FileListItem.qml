@@ -68,6 +68,38 @@ Item {
         opacity: root.ListView.isCurrentItem ? 1 : 0
     }
 
+    // Clipboard indicator strip — left edge, above selection highlight.
+    // Colors are hardcoded instead of using Theme palette tokens because
+    // Symmetria's _applyTheme IPC loop overwrites any m3* property with
+    // wallpaper-derived values, clobbering our chosen indicator colors.
+    Item {
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: 5
+        clip: true
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: parent.width + Theme.rounding.small
+            radius: Theme.rounding.small
+            color: {
+                const path = root.modelData?.path ?? "";
+                if (!FileManagerService._clipboardSet[path])
+                    return "transparent";
+                return FileManagerService.clipboardMode === "cut"
+                    ? "#e57373"
+                    : "#4caf7d";
+            }
+            opacity: FileManagerService._clipboardSet[root.modelData?.path ?? ""] ? 0.85 : 0
+
+            Behavior on opacity { Anim {} }
+            Behavior on color { CAnim {} }
+        }
+    }
+
     StateLayer {
         onClicked: root.ListView.view.currentIndex = root.index
 
