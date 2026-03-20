@@ -32,10 +32,11 @@ echo "Installing D-Bus service file..."
 sudo -A cp "$SCRIPT_DIR/org.freedesktop.impl.portal.desktop.symmetria.service" \
     /usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.symmetria.service
 
-# 5. Install systemd user service
-echo "Installing systemd user service..."
+# 5. Install systemd user services
+echo "Installing systemd user services..."
 mkdir -p ~/.config/systemd/user
 cp "$SCRIPT_DIR/xdg-desktop-portal-symmetria.service" ~/.config/systemd/user/
+cp "$SCRIPT_DIR/../yazi-fm.service" ~/.config/systemd/user/
 
 # 6. Update portals.conf to route FileChooser to our backend
 PORTALS_CONF="$HOME/.config/xdg-desktop-portal/portals.conf"
@@ -54,8 +55,9 @@ org.freedesktop.impl.portal.Settings=gtk
 EOF
 
 # 7. Reload and restart
-echo "Reloading systemd and restarting portal..."
+echo "Reloading systemd and restarting services..."
 systemctl --user daemon-reload
+systemctl --user enable --now yazi-fm.service
 systemctl --user restart xdg-desktop-portal
 
 echo ""
