@@ -10,6 +10,8 @@ Item {
     property size imageDimensions: Qt.size(0, 0)
     property string textLanguage: ""
     property int textLineCount: 0
+    property int archiveFileCount: 0
+    property int archiveDirCount: 0
 
     visible: !!entry
     implicitHeight: metaLayout.implicitHeight + Theme.padding.small * 2
@@ -72,6 +74,22 @@ Item {
         StyledText {
             visible: root.textLineCount > 0
             text: qsTr("%1 lines").arg(root.textLineCount)
+            color: Theme.palette.m3outline
+            font.pointSize: Theme.font.size.small
+            font.family: Theme.font.family.mono
+        }
+
+        // Archive contents summary (only shown for archive previews)
+        StyledText {
+            visible: root.archiveFileCount > 0 || root.archiveDirCount > 0
+            text: {
+                let parts = [];
+                if (root.archiveDirCount > 0)
+                    parts.push(qsTr("%1 dirs").arg(root.archiveDirCount));
+                if (root.archiveFileCount > 0)
+                    parts.push(qsTr("%1 files").arg(root.archiveFileCount));
+                return parts.join(", ");
+            }
             color: Theme.palette.m3outline
             font.pointSize: Theme.font.size.small
             font.family: Theme.font.family.mono

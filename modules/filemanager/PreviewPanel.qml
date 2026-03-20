@@ -22,6 +22,7 @@ Item {
     readonly property int _typeVideo: 3
     readonly property int _typeText: 4
     readonly property int _typeFallback: 5
+    readonly property int _typeArchive: 6
 
     function _isTextFile(entry) {
         if (!entry) return false;
@@ -39,6 +40,38 @@ Item {
         ].includes(mime);
     }
 
+    function _isArchiveFile(entry) {
+        if (!entry) return false;
+        const mime = entry.mimeType;
+        return [
+            // Standard archives
+            "application/zip",
+            "application/x-tar",
+            "application/x-7z-compressed",
+            "application/x-rar", "application/x-rar-compressed", "application/vnd.rar",
+            "application/x-cpio",
+            "application/vnd.ms-cab-compressed",
+            "application/x-xar",
+            // Compressed tars
+            "application/x-compressed-tar",
+            "application/x-bzip-compressed-tar",
+            "application/x-xz-compressed-tar",
+            "application/x-zstd-compressed-tar",
+            "application/x-lzma-compressed-tar",
+            // Standalone compression (may contain tar inside)
+            "application/gzip", "application/x-gzip",
+            "application/x-bzip2",
+            "application/x-xz",
+            "application/zstd", "application/x-zstd",
+            // Disc/package formats
+            "application/x-iso9660-image",
+            "application/x-debian-package",
+            // Zip-based formats
+            "application/java-archive",
+            "application/epub+zip",
+        ].includes(mime);
+    }
+
     readonly property int _previewType: {
         if (!_committedEntry)
             return _typeNone;
@@ -50,6 +83,8 @@ Item {
             return _typeVideo;
         if (_isTextFile(_committedEntry))
             return _typeText;
+        if (_isArchiveFile(_committedEntry))
+            return _typeArchive;
         return _typeFallback;
     }
 
@@ -72,6 +107,10 @@ Item {
     // Text preview metadata — language name and line count
     readonly property int _textLineCount: textLoader.item?.lineCount ?? 0
     readonly property string _textLanguage: textLoader.item?.language ?? ""
+
+    // Archive preview metadata — file and directory counts
+    readonly property int _archiveFileCount: archiveLoader.item?.fileCount ?? 0
+    readonly property int _archiveDirCount: archiveLoader.item?.dirCount ?? 0
 
     // --- Debounce ---
 
@@ -239,6 +278,19 @@ Item {
                 }
             }
 
+            // Archive preview (zip, tar, 7z, rar, deb, iso, etc.)
+            Loader {
+                id: archiveLoader
+
+                anchors.fill: parent
+                active: _previewType === _typeArchive
+                asynchronous: true
+
+                sourceComponent: ArchivePreview {
+                    entry: root._committedEntry
+                }
+            }
+
             // Fallback preview (non-image, non-directory, non-video, non-text files)
             Loader {
                 anchors.fill: parent
@@ -258,6 +310,8 @@ Item {
             imageDimensions: root._mediaNaturalSize
             textLanguage: root._textLanguage
             textLineCount: root._textLineCount
+            archiveFileCount: root._archiveFileCount
+            archiveDirCount: root._archiveDirCount
         }
     }
 }
