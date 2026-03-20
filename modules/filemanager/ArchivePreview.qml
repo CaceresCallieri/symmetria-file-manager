@@ -12,7 +12,6 @@ Item {
     // Exposed for PreviewMetadata
     readonly property int fileCount: archiveModel.fileCount
     readonly property int dirCount: archiveModel.dirCount
-    readonly property real totalSize: archiveModel.totalSize
 
     ArchivePreviewModel {
         id: archiveModel
@@ -160,8 +159,7 @@ Item {
         anchors.centerIn: parent
         active: !archiveModel.loading
             && archiveModel.error === ""
-            && archiveModel.fileCount === 0
-            && archiveModel.dirCount === 0
+            && archiveModel.totalEntries === 0
             && archiveModel.filePath !== ""
         asynchronous: true
 
