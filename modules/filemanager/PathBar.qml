@@ -48,23 +48,44 @@ Item {
         anchors.margins: Theme.padding.md
         spacing: Theme.spacing.sm
 
-        // Up button
+        // Back button
         Item {
             implicitWidth: implicitHeight
-            implicitHeight: upIcon.implicitHeight + Theme.padding.sm * 2
+            implicitHeight: backIcon.implicitHeight + Theme.padding.sm * 2
 
             StateLayer {
                 radius: Theme.rounding.sm
-                disabled: !FileManagerService.canGoUp
-                onClicked: FileManagerService.goUp()
+                disabled: !FileManagerService.canGoBack
+                onClicked: FileManagerService.back()
             }
 
             MaterialIcon {
-                id: upIcon
+                id: backIcon
 
                 anchors.centerIn: parent
-                text: "drive_folder_upload"
-                color: !FileManagerService.canGoUp ? Theme.palette.m3outline : Theme.palette.m3onSurface
+                text: "arrow_back"
+                color: !FileManagerService.canGoBack ? Theme.palette.m3outline : Theme.palette.m3onSurface
+                grade: 200
+            }
+        }
+
+        // Forward button
+        Item {
+            implicitWidth: implicitHeight
+            implicitHeight: forwardIcon.implicitHeight + Theme.padding.sm * 2
+
+            StateLayer {
+                radius: Theme.rounding.sm
+                disabled: !FileManagerService.canGoForward
+                onClicked: FileManagerService.forward()
+            }
+
+            MaterialIcon {
+                id: forwardIcon
+
+                anchors.centerIn: parent
+                text: "arrow_forward"
+                color: !FileManagerService.canGoForward ? Theme.palette.m3outline : Theme.palette.m3onSurface
                 grade: 200
             }
         }
