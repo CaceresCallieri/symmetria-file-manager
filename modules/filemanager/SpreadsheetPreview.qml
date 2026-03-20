@@ -23,7 +23,7 @@ Item {
 
     // Imperative update avoids binding loops — QML re-enters declarative bindings
     // when the C++ model emits multiple NOTIFY signals in the same batch
-    property bool _isEmpty: false
+    property bool _isEmpty: false  // non-readonly: written imperatively by _updateEmpty to avoid binding loop re-entry
 
     function _updateEmpty() {
         _isEmpty = !spreadsheetModel.loading
@@ -32,6 +32,7 @@ Item {
             && spreadsheetModel.filePath !== "";
     }
 
+    // Each signal triggers re-evaluation of the empty-state condition
     Connections {
         target: spreadsheetModel
         function onLoadingChanged() { root._updateEmpty(); }
@@ -41,6 +42,9 @@ Item {
     }
 
     Component.onCompleted: root._updateEmpty()
+
+    readonly property int _colWidth: 120
+    readonly property int _rowHeight: 28
 
     // Use explicit x/y/width/height to fill parent — this component is loaded as a
     // Loader sourceComponent, so anchors.margins on the root would be silently ignored
@@ -83,7 +87,7 @@ Item {
                         text: modelData
                         color: (index === spreadsheetModel.activeSheet
                             ? Theme.palette.m3onPrimaryContainer
-                            : Theme.palette.m3onSurfaceVariant) ?? "transparent"
+                            : Theme.palette.m3onSurfaceVariant) ?? Theme.palette.m3onSurface
                         font.pointSize: Theme.font.size.sm
                         font.family: Theme.font.family.mono
                         font.weight: index === spreadsheetModel.activeSheet ? 600 : 400
@@ -112,7 +116,7 @@ Item {
                 clip: true
 
                 delegate: Rectangle {
-                    implicitWidth: 120
+                    implicitWidth: root._colWidth
                     implicitHeight: 24
                     color: Theme.palette.m3surfaceContainerHigh
 
@@ -147,17 +151,12 @@ Item {
 
                 model: spreadsheetModel
 
-                columnWidthProvider: function(column) {
-                    return 120;
-                }
-
-                rowHeightProvider: function(row) {
-                    return 28;
-                }
+                columnWidthProvider: function(column) { return root._colWidth; }
+                rowHeightProvider: function(row) { return root._rowHeight; }
 
                 delegate: Rectangle {
-                    implicitWidth: 120
-                    implicitHeight: 28
+                    implicitWidth: root._colWidth
+                    implicitHeight: root._rowHeight
                     color: row % 2 === 0
                         ? Theme.palette.m3surfaceContainerLowest
                         : Theme.palette.m3surfaceContainer

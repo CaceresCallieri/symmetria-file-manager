@@ -18,6 +18,29 @@ Item {
         filePath: root.entry ? root.entry.path : ""
     }
 
+    // Imperative update avoids binding loops — QML re-enters declarative bindings
+    // when the C++ model emits multiple NOTIFY signals in the same batch.
+    // Non-readonly: written imperatively by _updateEmpty to avoid binding loop re-entry.
+    property bool _isEmpty: false
+
+    function _updateEmpty() {
+        _isEmpty = !archiveModel.loading
+            && archiveModel.error === ""
+            && archiveModel.totalEntries === 0
+            && archiveModel.filePath !== "";
+    }
+
+    // Each signal triggers re-evaluation of the empty-state condition
+    Connections {
+        target: archiveModel
+        function onLoadingChanged() { root._updateEmpty(); }
+        function onErrorChanged() { root._updateEmpty(); }
+        function onTotalEntriesChanged() { root._updateEmpty(); }
+        function onFilePathChanged() { root._updateEmpty(); }
+    }
+
+    Component.onCompleted: root._updateEmpty()
+
     // QUIRK: explicit x/y/width/height required — anchors.margins silently ignored inside
     // Loader sourceComponent. See QUIRKS.md §1 for full explanation.
     ListView {
@@ -153,27 +176,6 @@ Item {
             }
         }
     }
-
-    // Imperative update avoids binding loops — QML re-enters declarative bindings
-    // when the C++ model emits multiple NOTIFY signals in the same batch
-    property bool _isEmpty: false
-
-    function _updateEmpty() {
-        _isEmpty = !archiveModel.loading
-            && archiveModel.error === ""
-            && archiveModel.totalEntries === 0
-            && archiveModel.filePath !== "";
-    }
-
-    Connections {
-        target: archiveModel
-        function onLoadingChanged() { root._updateEmpty(); }
-        function onErrorChanged() { root._updateEmpty(); }
-        function onTotalEntriesChanged() { root._updateEmpty(); }
-        function onFilePathChanged() { root._updateEmpty(); }
-    }
-
-    Component.onCompleted: root._updateEmpty()
 
     // Empty archive indicator
     Loader {
