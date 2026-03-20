@@ -140,6 +140,8 @@ TextEdit {
 }
 ```
 
+See §5 for how to extract format data from the temp document after highlighting.
+
 **DO NOT:**
 ```cpp
 // Never attach a QSyntaxHighlighter to the QML TextEdit's document:
@@ -162,8 +164,8 @@ The highlighting appears to not have worked.
 
 **Root cause:** `QTextDocument` has **two separate formatting layers**:
 
-| Layer | Written by | Read via |
-|-------|-----------|----------|
+| Layer | Populated by | Read via |
+|-------|------------|----------|
 | Document fragments | `QTextCursor::setCharFormat()` | `QTextBlock::begin()` → `QTextFragment::charFormat()` |
 | Layout additional formats | `QSyntaxHighlighter::setFormat()` | `QTextBlock::layout()->formats()` |
 
@@ -227,7 +229,7 @@ highlighter.setDefinition(def);    // rehighlight with NO theme → #000000
 highlighter.setTheme(theme);       // rehighlight, but stale black persists
 ```
 
-**Verified via standalone test** — `test_highlight.cpp` confirmed that
+**Verified via a standalone offline test (not committed to this repo)** — confirmed that
 definition-first produces `#000000` for all ranges, while theme-first produces
 correct colors (`#8e44ad` headings, `#2980b9` keywords, `#f44f4f` strings).
 

@@ -12,7 +12,6 @@ Item {
     // Exposed for PreviewMetadata
     readonly property int lineCount: helper.lineCount
     readonly property string language: helper.language
-    readonly property bool truncated: helper.truncated
 
     SyntaxHighlightHelper {
         id: helper
@@ -46,7 +45,8 @@ Item {
             font.family: Theme.font.family.mono
             font.pointSize: Theme.font.size.small
             wrapMode: TextEdit.NoWrap
-            color: Theme.palette.m3onSurface
+            // Text color is set by the <pre style="color:..."> injected in SyntaxHighlightHelper.
+            // The QML color property has no effect in RichText mode when the HTML provides its own color.
             renderType: TextEdit.QtRendering
         }
 
