@@ -50,7 +50,7 @@ Singleton {
     // === Create file/folder ===
     property bool createInputActive: false
 
-    signal createCompleted(string filename)
+    signal createCompleted(filename: string)
 
     function requestCreate(): void {
         createInputActive = true;

@@ -18,7 +18,15 @@ Loader {
     sourceComponent: FocusScope {
         id: popupScope
 
+        // Snapshot path on creation — this component is destroyed/recreated each
+        // time the Loader reactivates (active flips false→true), so onCompleted
+        // always captures the correct path even though currentPath may change
+        // while the popup is visible.
         property string basePath
+
+        // Internal state: populated by _attemptCreate, consumed by _runCreate
+        property string _currentInput: ""
+        property bool _isDirectory: false
 
         Component.onCompleted: basePath = FileManagerService.currentPath
 
@@ -40,10 +48,9 @@ Loader {
             width: Math.min(parent.width - Theme.padding.lg * 4, 360)
             implicitHeight: createLayout.implicitHeight + Theme.padding.lg * 3
 
-            scale: 0.1
-            Component.onCompleted: scale = Qt.binding(
-                () => FileManagerService.createInputActive ? 1 : 0
-            )
+            // Component is always created with createInputActive === true (Loader
+            // active is driven by it), so the initial scale is always 1.
+            scale: 1
 
             Behavior on scale {
                 NumberAnimation {
@@ -137,27 +144,23 @@ Loader {
             }
         }
 
-        // Internal state for focus-after-create
-        property string _pendingFocusName: ""
-        property string _currentInput: ""
-
-        function _shellQuote(s: string): string {
-            return "'" + s.replace(/'/g, "'\\''") + "'";
-        }
-
         function _attemptCreate(): void {
             const rawInput = createInput.text.trim();
-            if (rawInput === "" || checkProcess.running || createProcess.running)
+
+            // Reject empty input or input that is only slashes (e.g. "/", "///")
+            if (rawInput === "" || rawInput.replace(/\//g, "") === "")
+                return;
+            if (checkProcess.running || mkdirProcess.running || createProcess.running)
                 return;
 
             errorLabel.text = "";
 
-            const isDirectory = rawInput.endsWith("/");
-            const topLevelName = rawInput.split("/")[0];
-            _pendingFocusName = topLevelName;
+            _isDirectory = rawInput.endsWith("/");
             _currentInput = rawInput;
 
-            // Check if the top-level entry already exists
+            const topLevelName = rawInput.split("/")[0];
+
+            // Check if the top-level entry already exists.
             // No -- needed: basePath is always absolute, so the path can never
             // be mistaken for a flag.  test(1) does not support -- anyway.
             checkProcess.command = ["test", "-e", basePath + "/" + topLevelName];
@@ -165,26 +168,34 @@ Loader {
         }
 
         function _runCreate(): void {
-            const rawInput = _currentInput;
-            const isDirectory = rawInput.endsWith("/");
-            const cleanedInput = rawInput.replace(/\/+$/, "");
+            const cleanedInput = _currentInput.replace(/\/+$/, "");
             const fullPath = basePath + "/" + cleanedInput;
-
-            if (isDirectory) {
-                createProcess.command = ["mkdir", "-p", "--", fullPath];
-            } else {
-                // Create file — always mkdir -p the parent dir first
-                const lastSlash = fullPath.lastIndexOf("/");
-                const parentDir = fullPath.substring(0, lastSlash);
-                createProcess.command = ["sh", "-c",
-                    "mkdir -p -- " + _shellQuote(parentDir) + " && touch -- " + _shellQuote(fullPath)];
-            }
+            const topLevelName = cleanedInput.split("/")[0];
 
             // Emit focus signal BEFORE starting the process — mkdir -p triggers
-            // QFileSystemWatcher immediately, so _pendingFocusName must already
-            // be set when onEntriesChanged fires.
-            FileManagerService.createCompleted(_pendingFocusName);
-            createProcess.running = true;
+            // QFileSystemWatcher immediately, so the pending focus name must already
+            // be set in FileList when onEntriesChanged fires.
+            FileManagerService.createCompleted(topLevelName);
+
+            if (_isDirectory) {
+                // Directory: single mkdir -p suffices; pass args as array (no shell).
+                createProcess.command = ["mkdir", "-p", "--", fullPath];
+                createProcess.running = true;
+            } else {
+                const lastSlash = fullPath.lastIndexOf("/");
+                const parentDir = fullPath.substring(0, lastSlash);
+                if (parentDir !== basePath) {
+                    // Nested file: first create intermediate dirs, then touch the file
+                    // in mkdirProcess.onExited. Two separate Process objects avoid sh -c.
+                    mkdirProcess.pendingTouchPath = fullPath;
+                    mkdirProcess.command = ["mkdir", "-p", "--", parentDir];
+                    mkdirProcess.running = true;
+                } else {
+                    // Top-level file: no intermediate dirs needed — touch directly.
+                    createProcess.command = ["touch", "--", fullPath];
+                    createProcess.running = true;
+                }
+            }
         }
 
         // Existence check process
@@ -195,10 +206,27 @@ Loader {
                     // Already exists — show inline error and move the cursor to
                     // the conflicting entry in the background so the user sees
                     // what they're colliding with while the popup stays open.
-                    errorLabel.text = qsTr("'%1' already exists").arg(popupScope._pendingFocusName);
-                    FileManagerService.createCompleted(popupScope._pendingFocusName);
+                    const topLevelName = _currentInput.split("/")[0];
+                    errorLabel.text = qsTr("'%1' already exists").arg(topLevelName);
+                    FileManagerService.createCompleted(topLevelName);
                 } else {
-                    popupScope._runCreate();
+                    _runCreate();
+                }
+            }
+        }
+
+        // Intermediate directory creation process (nested file paths only)
+        Process {
+            id: mkdirProcess
+
+            property string pendingTouchPath: ""
+
+            onExited: (exitCode, exitStatus) => {
+                if (exitCode === 0) {
+                    createProcess.command = ["touch", "--", pendingTouchPath];
+                    createProcess.running = true;
+                } else {
+                    errorLabel.text = qsTr("Creation failed (exit code %1)").arg(exitCode);
                 }
             }
         }
