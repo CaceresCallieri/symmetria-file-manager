@@ -30,20 +30,19 @@ Item {
         navigateFn();
     }
 
+    function _navigateIntoCurrentItem(): void {
+        if (!root.currentEntry || !root.currentEntry.isDir)
+            return;
+        _saveCursorAndNavigate(() => FileManagerService.navigate(root.currentEntry.path));
+    }
+
     function _activateCurrentItem(): void {
         if (!root.currentEntry)
             return;
         if (root.currentEntry.isDir)
-            _saveCursorAndNavigate(() => FileManagerService.navigate(root.currentEntry.path));
+            _navigateIntoCurrentItem();
         else
             Qt.openUrlExternally("file://" + root.currentEntry.path);
-    }
-
-    function _navigateIntoCurrentItem(): void {
-        if (!root.currentEntry)
-            return;
-        if (root.currentEntry.isDir)
-            _saveCursorAndNavigate(() => FileManagerService.navigate(root.currentEntry.path));
     }
 
     function _executeChord(prefix: string, keyChar: string): void {
@@ -357,8 +356,8 @@ Item {
                 if ((mods & Qt.ControlModifier) && view.count > 0) {
                     view.currentIndex = Math.max(view.currentIndex - root._halfPageCount(), 0);
                     view.positionViewAtIndex(view.currentIndex, ListView.Contain);
-                    event.accepted = true;
                 }
+                event.accepted = true;
                 break;
 
             case Qt.Key_Period:
