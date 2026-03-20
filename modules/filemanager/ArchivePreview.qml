@@ -154,13 +154,31 @@ Item {
         }
     }
 
+    // Imperative update avoids binding loops — QML re-enters declarative bindings
+    // when the C++ model emits multiple NOTIFY signals in the same batch
+    property bool _isEmpty: false
+
+    function _updateEmpty() {
+        _isEmpty = !archiveModel.loading
+            && archiveModel.error === ""
+            && archiveModel.totalEntries === 0
+            && archiveModel.filePath !== "";
+    }
+
+    Connections {
+        target: archiveModel
+        function onLoadingChanged() { root._updateEmpty(); }
+        function onErrorChanged() { root._updateEmpty(); }
+        function onTotalEntriesChanged() { root._updateEmpty(); }
+        function onFilePathChanged() { root._updateEmpty(); }
+    }
+
+    Component.onCompleted: root._updateEmpty()
+
     // Empty archive indicator
     Loader {
         anchors.centerIn: parent
-        active: !archiveModel.loading
-            && archiveModel.error === ""
-            && archiveModel.totalEntries === 0
-            && archiveModel.filePath !== ""
+        active: root._isEmpty
         asynchronous: true
 
         sourceComponent: ColumnLayout {

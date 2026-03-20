@@ -21,12 +21,26 @@ Item {
         filePath: root.entry ? root.entry.path : ""
     }
 
-    // Track empty state separately to avoid binding loops between Loader active
-    // and model properties that change during async load cycles
-    readonly property bool _isEmpty: !spreadsheetModel.loading
-        && spreadsheetModel.error === ""
-        && spreadsheetModel.totalRows === 0
-        && spreadsheetModel.filePath !== ""
+    // Imperative update avoids binding loops — QML re-enters declarative bindings
+    // when the C++ model emits multiple NOTIFY signals in the same batch
+    property bool _isEmpty: false
+
+    function _updateEmpty() {
+        _isEmpty = !spreadsheetModel.loading
+            && spreadsheetModel.error === ""
+            && spreadsheetModel.totalRows === 0
+            && spreadsheetModel.filePath !== "";
+    }
+
+    Connections {
+        target: spreadsheetModel
+        function onLoadingChanged() { root._updateEmpty(); }
+        function onErrorChanged() { root._updateEmpty(); }
+        function onTotalRowsChanged() { root._updateEmpty(); }
+        function onFilePathChanged() { root._updateEmpty(); }
+    }
+
+    Component.onCompleted: root._updateEmpty()
 
     // Use explicit x/y/width/height to fill parent — this component is loaded as a
     // Loader sourceComponent, so anchors.margins on the root would be silently ignored
@@ -58,18 +72,18 @@ Item {
                     width: tabLabel.implicitWidth + Theme.padding.md * 2
                     height: tabLabel.implicitHeight + Theme.padding.sm * 2
                     radius: Theme.rounding.sm
-                    color: index === spreadsheetModel.activeSheet
+                    color: (index === spreadsheetModel.activeSheet
                         ? Theme.palette.m3primaryContainer
-                        : Theme.palette.m3surfaceContainer
+                        : Theme.palette.m3surfaceContainer) ?? "transparent"
 
                     StyledText {
                         id: tabLabel
 
                         anchors.centerIn: parent
                         text: modelData
-                        color: index === spreadsheetModel.activeSheet
+                        color: (index === spreadsheetModel.activeSheet
                             ? Theme.palette.m3onPrimaryContainer
-                            : Theme.palette.m3onSurfaceVariant
+                            : Theme.palette.m3onSurfaceVariant) ?? "transparent"
                         font.pointSize: Theme.font.size.sm
                         font.family: Theme.font.family.mono
                         font.weight: index === spreadsheetModel.activeSheet ? 600 : 400
