@@ -110,7 +110,7 @@ Item {
 
                         // Clickable segment
                         Item {
-                            implicitWidth: (homeIcon.visible ? homeIcon.implicitWidth + Theme.padding.sm : 0) + segmentName.implicitWidth + Theme.padding.sm * 2
+                            implicitWidth: ((homeIcon.visible ? homeIcon.implicitWidth + Theme.padding.sm : 0) + segmentName.implicitWidth + Theme.padding.sm * 2) || 0
                             implicitHeight: segmentName.implicitHeight + Theme.padding.sm * 2
 
                             // Clickable only if not the last segment
