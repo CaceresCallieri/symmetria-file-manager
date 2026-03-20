@@ -43,11 +43,11 @@ Loader {
             id: dialog
 
             anchors.centerIn: parent
-            radius: Theme.rounding.large
+            radius: Theme.rounding.lg
             color: Theme.palette.m3surfaceContainerHigh
 
-            width: Math.min(parent.width - Theme.padding.large * 4, dialogLayout.implicitWidth + Theme.padding.large * 3)
-            implicitHeight: dialogLayout.implicitHeight + Theme.padding.large * 3
+            width: Math.min(parent.width - Theme.padding.lg * 4, dialogLayout.implicitWidth + Theme.padding.lg * 3)
+            implicitHeight: dialogLayout.implicitHeight + Theme.padding.lg * 3
 
             scale: 0.1
             Component.onCompleted: scale = Qt.binding(
@@ -111,21 +111,21 @@ Loader {
                 id: dialogLayout
 
                 anchors.fill: parent
-                anchors.margins: Theme.padding.large * 1.5
-                spacing: Theme.spacing.normal
+                anchors.margins: Theme.padding.lg * 1.5
+                spacing: Theme.spacing.md
 
                 MaterialIcon {
                     Layout.alignment: Qt.AlignHCenter
                     text: "delete"
                     color: Theme.palette.m3error
-                    font.pointSize: Theme.font.size.extraLarge
+                    font.pointSize: Theme.font.size.xxl
                     font.weight: 500
                 }
 
                 StyledText {
                     Layout.alignment: Qt.AlignHCenter
                     text: qsTr("Trash this file?")
-                    font.pointSize: Theme.font.size.large
+                    font.pointSize: Theme.font.size.xl
                     font.weight: 600
                 }
 
@@ -134,27 +134,27 @@ Loader {
                     Layout.maximumWidth: 280
                     text: popupScope.targetPath.split("/").pop()
                     color: Theme.palette.m3onSurfaceVariant
-                    font.pointSize: Theme.font.size.smaller
+                    font.pointSize: Theme.font.size.sm
                     font.family: Theme.font.family.mono
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                 }
 
                 RowLayout {
-                    Layout.topMargin: Theme.spacing.normal
+                    Layout.topMargin: Theme.spacing.md
                     Layout.alignment: Qt.AlignHCenter
-                    spacing: Theme.spacing.normal
+                    spacing: Theme.spacing.md
 
                     // Yes button — focused by default
                     StyledRect {
                         id: yesButton
 
-                        radius: Theme.rounding.small
+                        radius: Theme.rounding.sm
                         color: yesButton.activeFocus
                             ? Qt.alpha(Theme.palette.m3error, 0.25)
                             : Qt.alpha(Theme.palette.m3error, 0.12)
-                        implicitWidth: yesRow.implicitWidth + Theme.padding.large * 2
-                        implicitHeight: yesRow.implicitHeight + Theme.padding.normal * 2
+                        implicitWidth: yesRow.implicitWidth + Theme.padding.lg * 2
+                        implicitHeight: yesRow.implicitHeight + Theme.padding.md * 2
                         focus: true
                         Component.onCompleted: forceActiveFocus()
 
@@ -165,19 +165,19 @@ Loader {
                         RowLayout {
                             id: yesRow
                             anchors.centerIn: parent
-                            spacing: Theme.spacing.small
+                            spacing: Theme.spacing.sm
 
                             StyledText {
                                 text: qsTr("Yes")
                                 color: Theme.palette.m3error
-                                font.pointSize: Theme.font.size.smaller
+                                font.pointSize: Theme.font.size.sm
                                 font.weight: 600
                             }
 
                             StyledText {
                                 text: "(Y)"
                                 color: Qt.alpha(Theme.palette.m3error, 0.6)
-                                font.pointSize: Theme.font.size.small
+                                font.pointSize: Theme.font.size.xs
                                 font.family: Theme.font.family.mono
                             }
                         }
@@ -195,12 +195,12 @@ Loader {
                     StyledRect {
                         id: noButton
 
-                        radius: Theme.rounding.small
+                        radius: Theme.rounding.sm
                         color: noButton.activeFocus
                             ? Qt.alpha(Theme.palette.m3onSurface, 0.12)
                             : Qt.alpha(Theme.palette.m3onSurface, 0.06)
-                        implicitWidth: noRow.implicitWidth + Theme.padding.large * 2
-                        implicitHeight: noRow.implicitHeight + Theme.padding.normal * 2
+                        implicitWidth: noRow.implicitWidth + Theme.padding.lg * 2
+                        implicitHeight: noRow.implicitHeight + Theme.padding.md * 2
 
                         Behavior on color {
                             CAnim {}
@@ -209,18 +209,18 @@ Loader {
                         RowLayout {
                             id: noRow
                             anchors.centerIn: parent
-                            spacing: Theme.spacing.small
+                            spacing: Theme.spacing.sm
 
                             StyledText {
                                 text: qsTr("No")
-                                font.pointSize: Theme.font.size.smaller
+                                font.pointSize: Theme.font.size.sm
                                 font.weight: 600
                             }
 
                             StyledText {
                                 text: "(N)"
                                 color: Theme.palette.m3onSurfaceVariant
-                                font.pointSize: Theme.font.size.small
+                                font.pointSize: Theme.font.size.xs
                                 font.family: Theme.font.family.mono
                             }
                         }

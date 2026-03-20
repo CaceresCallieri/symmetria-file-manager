@@ -5,7 +5,7 @@ StyledText {
     property int grade: Theme.light ? 0 : -25
 
     font.family: Theme.font.family.material
-    font.pointSize: Theme.font.size.larger
+    font.pointSize: Theme.font.size.lg
     font.variableAxes: ({
             FILL: fill.toFixed(1),
             GRAD: grade,

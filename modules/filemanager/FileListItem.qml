@@ -48,7 +48,7 @@ Item {
     // Search match highlight — subtle gray tint behind matching rows
     Rectangle {
         anchors.fill: parent
-        radius: Theme.rounding.small
+        radius: Theme.rounding.sm
         color: Theme.palette.m3onSurface
         opacity: root.isSearchMatch ? 0.06 : 0
         Behavior on opacity { Anim {} }
@@ -61,7 +61,7 @@ Item {
         id: selectionHighlight
 
         anchors.fill: parent
-        radius: Theme.rounding.small
+        radius: Theme.rounding.sm
         color: Theme.pillStrong.background
         border.color: Theme.pillStrong.border
         border.width: root.ListView.isCurrentItem ? 1 : 0
@@ -83,8 +83,8 @@ Item {
             anchors.left: parent.left
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            width: parent.width + Theme.rounding.small
-            radius: Theme.rounding.small
+            width: parent.width + Theme.rounding.sm
+            radius: Theme.rounding.sm
             color: FileManagerService.clipboardMode === "cut" ? "#e57373" : "#4caf7d"
             opacity: (root.modelData?.path ?? "") === FileManagerService.clipboardPath
                      && FileManagerService.clipboardPath !== "" ? 0.85 : 0
@@ -101,9 +101,9 @@ Item {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: Theme.padding.large
-        anchors.rightMargin: Theme.padding.large
-        spacing: Theme.spacing.normal
+        anchors.leftMargin: Theme.padding.lg
+        anchors.rightMargin: Theme.padding.lg
+        spacing: Theme.spacing.md
 
         // File/folder icon
         MaterialIcon {
@@ -125,7 +125,7 @@ Item {
             }
             color: root.modelData?.isDir ? Theme.palette.m3primary : Theme.palette.m3onSurfaceVariant
             fill: root.modelData?.isDir ? 1 : 0
-            font.pointSize: Theme.font.size.large
+            font.pointSize: Theme.font.size.xl
         }
 
         // File name
@@ -141,7 +141,7 @@ Item {
                 return name;
             }
             color: Theme.palette.m3onSurface
-            font.pointSize: Theme.font.size.normal
+            font.pointSize: Theme.font.size.md
         }
 
         // File size (hidden for directories)
@@ -149,7 +149,7 @@ Item {
             visible: !(root.modelData?.isDir ?? true)
             text: root.modelData ? FileManagerService.formatSize(root.modelData.size) : ""
             color: Theme.palette.m3onSurfaceVariant
-            font.pointSize: Theme.font.size.small
+            font.pointSize: Theme.font.size.xs
             font.family: Theme.font.family.mono
             horizontalAlignment: Text.AlignRight
             Layout.minimumWidth: 60

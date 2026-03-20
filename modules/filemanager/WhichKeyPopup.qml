@@ -24,7 +24,7 @@ Item {
     // Matte pill background
     Rectangle {
         anchors.fill: parent
-        radius: Theme.rounding.small
+        radius: Theme.rounding.sm
         color: Theme.pillMedium.background
         border.color: Theme.pillMedium.border
         border.width: 1
@@ -32,13 +32,13 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: Theme.padding.normal
-        spacing: Theme.spacing.small
+        anchors.margins: Theme.padding.md
+        spacing: Theme.spacing.sm
 
         // Header: prefix key badge + group label
         RowLayout {
             Layout.fillWidth: true
-            spacing: Theme.spacing.small
+            spacing: Theme.spacing.sm
 
             Rectangle {
                 width: 22
@@ -51,7 +51,7 @@ Item {
                     text: FileManagerService.activeChordPrefix
                     color: Theme.palette.m3primary
                     font.family: Theme.font.family.mono
-                    font.pointSize: Theme.font.size.smaller
+                    font.pointSize: Theme.font.size.sm
                     font.weight: 700
                 }
             }
@@ -64,7 +64,7 @@ Item {
                     return bindings.hasOwnProperty(prefix) ? bindings[prefix].label : "";
                 }
                 color: Theme.palette.m3onSurfaceVariant
-                font.pointSize: Theme.font.size.smaller
+                font.pointSize: Theme.font.size.sm
                 font.weight: 500
             }
         }
@@ -82,7 +82,7 @@ Item {
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: Theme.spacing.small
+                spacing: Theme.spacing.sm
 
                 // Keycap badge
                 Rectangle {
@@ -98,7 +98,7 @@ Item {
                         text: modelData.key
                         color: Theme.palette.m3onSurface
                         font.family: Theme.font.family.mono
-                        font.pointSize: Theme.font.size.small
+                        font.pointSize: Theme.font.size.xs
                         font.weight: 600
                     }
                 }
@@ -107,14 +107,14 @@ Item {
                 MaterialIcon {
                     text: modelData.icon
                     color: Theme.palette.m3onSurfaceVariant
-                    font.pointSize: Theme.font.size.normal
+                    font.pointSize: Theme.font.size.md
                 }
 
                 // Label
                 StyledText {
                     text: modelData.label
                     color: Theme.palette.m3onSurface
-                    font.pointSize: Theme.font.size.smaller
+                    font.pointSize: Theme.font.size.sm
                 }
             }
         }

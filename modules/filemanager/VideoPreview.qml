@@ -30,7 +30,7 @@ Item {
         id: videoOutput
 
         anchors.fill: parent
-        anchors.margins: Theme.padding.normal
+        anchors.margins: Theme.padding.md
         fillMode: VideoOutput.PreserveAspectFit
 
         opacity: videoPlayer.hasVideo && videoOutput.sourceRect.width > 0 ? 1 : 0
@@ -51,7 +51,7 @@ Item {
         sourceComponent: StyledText {
             text: qsTr("Loading\u2026")
             color: Theme.palette.m3outline
-            font.pointSize: Theme.font.size.normal
+            font.pointSize: Theme.font.size.md
         }
     }
 
@@ -62,13 +62,13 @@ Item {
         asynchronous: true
 
         sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.normal
+            spacing: Theme.spacing.md
 
             MaterialIcon {
                 Layout.alignment: Qt.AlignHCenter
                 text: "videocam_off"
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.extraLarge * 2
+                font.pointSize: Theme.font.size.xxl * 2
                 font.weight: 500
             }
 
@@ -76,7 +76,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("Cannot preview")
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.large
+                font.pointSize: Theme.font.size.xl
                 font.weight: 500
             }
         }

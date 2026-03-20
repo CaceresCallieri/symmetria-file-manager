@@ -167,13 +167,13 @@ Item {
         asynchronous: true
 
         sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.normal
+            spacing: Theme.spacing.md
 
             MaterialIcon {
                 Layout.alignment: Qt.AlignHCenter
                 text: "folder_open"
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.extraLarge * 2
+                font.pointSize: Theme.font.size.xxl * 2
                 font.weight: 500
             }
 
@@ -181,7 +181,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("This folder is empty")
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.large
+                font.pointSize: Theme.font.size.xl
                 font.weight: 500
             }
         }
@@ -195,7 +195,7 @@ Item {
         id: view
 
         anchors.fill: parent
-        anchors.margins: Theme.padding.small
+        anchors.margins: Theme.padding.sm
 
         clip: true
         focus: true

@@ -8,7 +8,7 @@ Text {
     textFormat: Text.PlainText
     color: Theme.palette.m3onSurface
     font.family: Theme.font.family.sans
-    font.pointSize: Theme.font.size.smaller
+    font.pointSize: Theme.font.size.sm
 
     Behavior on color {
         CAnim {}

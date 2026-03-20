@@ -44,8 +44,8 @@ Item {
 
             visible: spreadsheetModel.sheetCount > 1
             Layout.fillWidth: true
-            Layout.leftMargin: Theme.padding.small
-            Layout.topMargin: Theme.padding.small
+            Layout.leftMargin: Theme.padding.sm
+            Layout.topMargin: Theme.padding.sm
             spacing: 2
 
             Repeater {
@@ -55,9 +55,9 @@ Item {
                     required property int index
                     required property string modelData
 
-                    width: tabLabel.implicitWidth + Theme.padding.normal * 2
-                    height: tabLabel.implicitHeight + Theme.padding.small * 2
-                    radius: Theme.rounding.small
+                    width: tabLabel.implicitWidth + Theme.padding.md * 2
+                    height: tabLabel.implicitHeight + Theme.padding.sm * 2
+                    radius: Theme.rounding.sm
                     color: index === spreadsheetModel.activeSheet
                         ? Theme.palette.m3primaryContainer
                         : Theme.palette.m3surfaceContainer
@@ -70,7 +70,7 @@ Item {
                         color: index === spreadsheetModel.activeSheet
                             ? Theme.palette.m3onPrimaryContainer
                             : Theme.palette.m3onSurfaceVariant
-                        font.pointSize: Theme.font.size.smaller
+                        font.pointSize: Theme.font.size.sm
                         font.family: Theme.font.family.mono
                         font.weight: index === spreadsheetModel.activeSheet ? 600 : 400
                     }
@@ -106,7 +106,7 @@ Item {
                         anchors.centerIn: parent
                         text: display ?? ""
                         color: Theme.palette.m3onSurfaceVariant
-                        font.pointSize: Theme.font.size.smaller
+                        font.pointSize: Theme.font.size.sm
                         font.family: Theme.font.family.mono
                         font.weight: 600
                     }
@@ -120,9 +120,9 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                anchors.leftMargin: Theme.padding.small
-                anchors.rightMargin: Theme.padding.small
-                anchors.bottomMargin: Theme.padding.small
+                anchors.leftMargin: Theme.padding.sm
+                anchors.rightMargin: Theme.padding.sm
+                anchors.bottomMargin: Theme.padding.sm
                 clip: true
                 focus: false
                 interactive: false
@@ -156,7 +156,7 @@ Item {
                         elide: Text.ElideRight
                         verticalAlignment: Text.AlignVCenter
                         color: Theme.palette.m3onSurface
-                        font.pointSize: Theme.font.size.small
+                        font.pointSize: Theme.font.size.xs
                         font.family: Theme.font.family.mono
                     }
                 }
@@ -173,7 +173,7 @@ Item {
         StyledText {
             visible: spreadsheetModel.truncatedRows || spreadsheetModel.truncatedCols
             Layout.alignment: Qt.AlignHCenter
-            Layout.bottomMargin: Theme.padding.small
+            Layout.bottomMargin: Theme.padding.sm
             text: {
                 // rowCount()/columnCount() are method calls and are not tracked by the
                 // QML binding engine on their own. They are safe here because this
@@ -188,7 +188,7 @@ Item {
                 return parts.join(", ");
             }
             color: Theme.palette.m3outline
-            font.pointSize: Theme.font.size.smaller
+            font.pointSize: Theme.font.size.sm
             font.family: Theme.font.family.mono
         }
     }
@@ -200,20 +200,20 @@ Item {
         asynchronous: true
 
         sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.small
+            spacing: Theme.spacing.sm
 
             MaterialIcon {
                 Layout.alignment: Qt.AlignHCenter
                 text: "hourglass_empty"
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.extraLarge
+                font.pointSize: Theme.font.size.xxl
             }
 
             StyledText {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("Loading\u2026")
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.normal
+                font.pointSize: Theme.font.size.md
             }
         }
     }
@@ -225,13 +225,13 @@ Item {
         asynchronous: true
 
         sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.normal
+            spacing: Theme.spacing.md
 
             MaterialIcon {
                 Layout.alignment: Qt.AlignHCenter
                 text: "block"
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.extraLarge * 2
+                font.pointSize: Theme.font.size.xxl * 2
                 font.weight: 500
             }
 
@@ -239,7 +239,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("Cannot preview")
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.large
+                font.pointSize: Theme.font.size.xl
                 font.weight: 500
             }
         }
@@ -252,13 +252,13 @@ Item {
         asynchronous: true
 
         sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.normal
+            spacing: Theme.spacing.md
 
             MaterialIcon {
                 Layout.alignment: Qt.AlignHCenter
                 text: "grid_off"
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.extraLarge * 2
+                font.pointSize: Theme.font.size.xxl * 2
                 font.weight: 500
             }
 
@@ -266,7 +266,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("Empty spreadsheet")
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.large
+                font.pointSize: Theme.font.size.xl
                 font.weight: 500
             }
         }

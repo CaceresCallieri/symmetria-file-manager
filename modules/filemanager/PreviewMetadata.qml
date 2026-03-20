@@ -18,7 +18,7 @@ Item {
     property int spreadsheetTotalCols: 0
 
     visible: !!entry
-    implicitHeight: metaLayout.implicitHeight + Theme.padding.small * 2
+    implicitHeight: metaLayout.implicitHeight + Theme.padding.sm * 2
 
     // Subtle top separator
     Rectangle {
@@ -33,17 +33,17 @@ Item {
         id: metaLayout
 
         anchors.fill: parent
-        anchors.margins: Theme.padding.small
-        anchors.leftMargin: Theme.padding.normal
-        anchors.rightMargin: Theme.padding.normal
-        spacing: Theme.spacing.small
+        anchors.margins: Theme.padding.sm
+        anchors.leftMargin: Theme.padding.md
+        anchors.rightMargin: Theme.padding.md
+        spacing: Theme.spacing.sm
 
         // Symlink indicator
         MaterialIcon {
             visible: root.entry?.isSymlink ?? false
             text: "link"
             color: Theme.palette.m3outline
-            font.pointSize: Theme.font.size.small
+            font.pointSize: Theme.font.size.xs
         }
 
         // Filename (takes remaining space)
@@ -52,7 +52,7 @@ Item {
             text: root.entry?.name ?? ""
             elide: Text.ElideMiddle
             color: Theme.palette.m3onSurfaceVariant
-            font.pointSize: Theme.font.size.small
+            font.pointSize: Theme.font.size.xs
             font.family: Theme.font.family.mono
         }
 
@@ -61,7 +61,7 @@ Item {
             visible: root.imageDimensions.width > 0
             text: root.imageDimensions.width + "\u00d7" + root.imageDimensions.height
             color: Theme.palette.m3outline
-            font.pointSize: Theme.font.size.small
+            font.pointSize: Theme.font.size.xs
             font.family: Theme.font.family.mono
         }
 
@@ -70,7 +70,7 @@ Item {
             visible: root.textLanguage !== ""
             text: root.textLanguage
             color: Theme.palette.m3outline
-            font.pointSize: Theme.font.size.small
+            font.pointSize: Theme.font.size.xs
             font.family: Theme.font.family.mono
         }
 
@@ -79,7 +79,7 @@ Item {
             visible: root.textLineCount > 0
             text: qsTr("%1 lines").arg(root.textLineCount)
             color: Theme.palette.m3outline
-            font.pointSize: Theme.font.size.small
+            font.pointSize: Theme.font.size.xs
             font.family: Theme.font.family.mono
         }
 
@@ -93,7 +93,7 @@ Item {
                 return info;
             }
             color: Theme.palette.m3outline
-            font.pointSize: Theme.font.size.small
+            font.pointSize: Theme.font.size.xs
             font.family: Theme.font.family.mono
         }
 
@@ -109,7 +109,7 @@ Item {
                 return parts.join(", ");
             }
             color: Theme.palette.m3outline
-            font.pointSize: Theme.font.size.small
+            font.pointSize: Theme.font.size.xs
             font.family: Theme.font.family.mono
         }
 
@@ -118,7 +118,7 @@ Item {
             visible: !!root.entry
             text: root.entry ? FileManagerService.formatDate(root.entry.modifiedDate) : ""
             color: Theme.palette.m3outline
-            font.pointSize: Theme.font.size.small
+            font.pointSize: Theme.font.size.xs
             font.family: Theme.font.family.mono
         }
 
@@ -126,7 +126,7 @@ Item {
         StyledText {
             text: root.entry ? FileManagerService.formatSize(root.entry.size) : ""
             color: Theme.palette.m3outline
-            font.pointSize: Theme.font.size.small
+            font.pointSize: Theme.font.size.xs
             font.family: Theme.font.family.mono
         }
     }

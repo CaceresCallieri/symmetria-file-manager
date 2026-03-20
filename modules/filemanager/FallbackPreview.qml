@@ -15,8 +15,8 @@ Item {
 
     ColumnLayout {
         anchors.centerIn: parent
-        width: parent.width - Theme.padding.large * 2
-        spacing: Theme.spacing.normal
+        width: parent.width - Theme.padding.lg * 2
+        spacing: Theme.spacing.md
 
         // Mime-based icon — mirrors the mapping in FileListItem.qml
         // application/pdf appears here only if isImage is false for PDFs in the
@@ -39,7 +39,7 @@ Item {
                 return "description";
             }
             color: Theme.palette.m3outline
-            font.pointSize: Theme.font.size.extraLarge * 2
+            font.pointSize: Theme.font.size.xxl * 2
             font.weight: 500
         }
 
@@ -49,7 +49,7 @@ Item {
             Layout.maximumWidth: parent.width
             text: root.entry?.name ?? ""
             color: Theme.palette.m3onSurface
-            font.pointSize: Theme.font.size.larger
+            font.pointSize: Theme.font.size.lg
             font.weight: 500
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
@@ -62,7 +62,7 @@ Item {
             Layout.alignment: Qt.AlignHCenter
             text: root.entry ? FileManagerService.formatSize(root.entry.size) : ""
             color: Theme.palette.m3onSurfaceVariant
-            font.pointSize: Theme.font.size.smaller
+            font.pointSize: Theme.font.size.sm
             font.family: Theme.font.family.mono
         }
 
@@ -71,15 +71,15 @@ Item {
             Layout.alignment: Qt.AlignHCenter
             text: root.entry?.mimeType ?? ""
             color: Theme.palette.m3outline
-            font.pointSize: Theme.font.size.small
+            font.pointSize: Theme.font.size.xs
             font.family: Theme.font.family.mono
         }
 
         // Separator
         Rectangle {
             Layout.fillWidth: true
-            Layout.topMargin: Theme.padding.small
-            Layout.bottomMargin: Theme.padding.small
+            Layout.topMargin: Theme.padding.sm
+            Layout.bottomMargin: Theme.padding.sm
             height: 1
             color: Theme.palette.m3outlineVariant
         }
@@ -88,20 +88,20 @@ Item {
         GridLayout {
             Layout.alignment: Qt.AlignHCenter
             columns: 2
-            columnSpacing: Theme.spacing.normal
-            rowSpacing: Theme.spacing.small
+            columnSpacing: Theme.spacing.md
+            rowSpacing: Theme.spacing.sm
 
             // Modified
             StyledText {
                 text: qsTr("Modified")
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.small
+                font.pointSize: Theme.font.size.xs
                 font.family: Theme.font.family.mono
             }
             StyledText {
                 text: root.entry ? FileManagerService.formatDate(root.entry.modifiedDate) : ""
                 color: Theme.palette.m3onSurfaceVariant
-                font.pointSize: Theme.font.size.small
+                font.pointSize: Theme.font.size.xs
                 font.family: Theme.font.family.mono
             }
 
@@ -109,13 +109,13 @@ Item {
             StyledText {
                 text: qsTr("Permissions")
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.small
+                font.pointSize: Theme.font.size.xs
                 font.family: Theme.font.family.mono
             }
             StyledText {
                 text: root.entry?.permissions ?? ""
                 color: Theme.palette.m3onSurfaceVariant
-                font.pointSize: Theme.font.size.small
+                font.pointSize: Theme.font.size.xs
                 font.family: Theme.font.family.mono
             }
 
@@ -124,14 +124,14 @@ Item {
                 visible: root._showOwner
                 text: qsTr("Owner")
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.small
+                font.pointSize: Theme.font.size.xs
                 font.family: Theme.font.family.mono
             }
             StyledText {
                 visible: root._showOwner
                 text: root.entry?.owner ?? ""
                 color: Theme.palette.m3onSurfaceVariant
-                font.pointSize: Theme.font.size.small
+                font.pointSize: Theme.font.size.xs
                 font.family: Theme.font.family.mono
             }
 
@@ -140,16 +140,16 @@ Item {
                 visible: root._showSymlinkTarget
                 text: qsTr("Target")
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.small
+                font.pointSize: Theme.font.size.xs
                 font.family: Theme.font.family.mono
             }
             StyledText {
                 visible: root._showSymlinkTarget
                 // Constrain width: two sides × two levels of padding (column + outer item)
-                Layout.maximumWidth: root.width - Theme.padding.large * 4
+                Layout.maximumWidth: root.width - Theme.padding.lg * 4
                 text: root.entry?.symlinkTarget ?? ""
                 color: Theme.palette.m3onSurfaceVariant
-                font.pointSize: Theme.font.size.small
+                font.pointSize: Theme.font.size.xs
                 font.family: Theme.font.family.mono
                 elide: Text.ElideMiddle
             }

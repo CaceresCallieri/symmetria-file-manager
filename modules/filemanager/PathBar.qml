@@ -9,7 +9,7 @@ import QtQuick.Layouts
 Item {
     id: root
 
-    implicitHeight: inner.implicitHeight + Theme.padding.normal * 2
+    implicitHeight: inner.implicitHeight + Theme.padding.md * 2
 
     // Build breadcrumb segments: [{name, path, isHome}]
     readonly property var _segments: {
@@ -45,16 +45,16 @@ Item {
         id: inner
 
         anchors.fill: parent
-        anchors.margins: Theme.padding.normal
-        spacing: Theme.spacing.small
+        anchors.margins: Theme.padding.md
+        spacing: Theme.spacing.sm
 
         // Up button
         Item {
             implicitWidth: implicitHeight
-            implicitHeight: upIcon.implicitHeight + Theme.padding.small * 2
+            implicitHeight: upIcon.implicitHeight + Theme.padding.sm * 2
 
             StateLayer {
-                radius: Theme.rounding.small
+                radius: Theme.rounding.sm
                 disabled: !FileManagerService.canGoUp
                 onClicked: FileManagerService.goUp()
             }
@@ -74,7 +74,7 @@ Item {
             id: breadcrumbContainer
 
             Layout.fillWidth: true
-            radius: Theme.rounding.small
+            radius: Theme.rounding.sm
             color: Theme.pillMedium.background
             border.color: Theme.pillMedium.border
             border.width: 1
@@ -84,7 +84,7 @@ Item {
                 id: breadcrumbs
 
                 anchors.fill: parent
-                anchors.margins: Math.round(Theme.padding.small / 2)
+                anchors.margins: Math.round(Theme.padding.sm / 2)
                 anchors.leftMargin: 0
                 spacing: 0
 
@@ -110,15 +110,15 @@ Item {
 
                         // Clickable segment
                         Item {
-                            implicitWidth: (homeIcon.visible ? homeIcon.implicitWidth + Theme.padding.small : 0) + segmentName.implicitWidth + Theme.padding.small * 2
-                            implicitHeight: segmentName.implicitHeight + Theme.padding.small * 2
+                            implicitWidth: (homeIcon.visible ? homeIcon.implicitWidth + Theme.padding.sm : 0) + segmentName.implicitWidth + Theme.padding.sm * 2
+                            implicitHeight: segmentName.implicitHeight + Theme.padding.sm * 2
 
                             // Clickable only if not the last segment
                             Loader {
                                 anchors.fill: parent
                                 active: segment.index < root._segments.length - 1
                                 sourceComponent: StateLayer {
-                                    radius: Theme.rounding.small
+                                    radius: Theme.rounding.sm
                                     onClicked: FileManagerService.navigate(segment.modelData.path)
                                 }
                             }
@@ -131,7 +131,7 @@ Item {
 
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
-                                anchors.leftMargin: Theme.padding.small
+                                anchors.leftMargin: Theme.padding.sm
 
                                 visible: segment.modelData.isHome
                                 width: visible ? implicitWidth : 0
@@ -145,7 +145,7 @@ Item {
 
                                 anchors.left: homeIcon.visible ? homeIcon.right : parent.left
                                 anchors.verticalCenter: parent.verticalCenter
-                                anchors.leftMargin: Theme.padding.small
+                                anchors.leftMargin: Theme.padding.sm
 
                                 text: segment.modelData.name
                                 color: segment.index < root._segments.length - 1 ? Theme.palette.m3onSurfaceVariant : Theme.palette.m3onSurface

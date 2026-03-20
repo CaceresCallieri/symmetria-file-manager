@@ -23,10 +23,10 @@ Item {
     Flickable {
         id: textFlickable
 
-        x: Theme.padding.large
-        y: Theme.padding.normal
-        width: parent.width - Theme.padding.large * 2
-        height: parent.height - Theme.padding.normal * 2
+        x: Theme.padding.lg
+        y: Theme.padding.md
+        width: parent.width - Theme.padding.lg * 2
+        height: parent.height - Theme.padding.md * 2
         clip: true
         contentWidth: Math.max(textEdit.implicitWidth, textFlickable.width)
         contentHeight: textEdit.implicitHeight
@@ -43,7 +43,7 @@ Item {
             text: helper.highlightedContent
             textFormat: TextEdit.RichText
             font.family: Theme.font.family.mono
-            font.pointSize: Theme.font.size.small
+            font.pointSize: Theme.font.size.xs
             wrapMode: TextEdit.NoWrap
             // Text color is set by the <pre style="color:..."> injected in SyntaxHighlightHelper.
             // The QML color property has no effect in RichText mode when the HTML provides its own color.
@@ -64,20 +64,20 @@ Item {
         asynchronous: true
 
         sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.small
+            spacing: Theme.spacing.sm
 
             MaterialIcon {
                 Layout.alignment: Qt.AlignHCenter
                 text: "hourglass_empty"
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.extraLarge
+                font.pointSize: Theme.font.size.xxl
             }
 
             StyledText {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("Loading\u2026")
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.normal
+                font.pointSize: Theme.font.size.md
             }
         }
     }
@@ -89,13 +89,13 @@ Item {
         asynchronous: true
 
         sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.normal
+            spacing: Theme.spacing.md
 
             MaterialIcon {
                 Layout.alignment: Qt.AlignHCenter
                 text: "block"
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.extraLarge * 2
+                font.pointSize: Theme.font.size.xxl * 2
                 font.weight: 500
             }
 
@@ -103,7 +103,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("Cannot preview")
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.large
+                font.pointSize: Theme.font.size.xl
                 font.weight: 500
             }
         }

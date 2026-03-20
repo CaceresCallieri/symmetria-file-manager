@@ -23,10 +23,10 @@ Item {
     ListView {
         id: archiveListView
 
-        x: Theme.padding.small
-        y: Theme.padding.small
-        width: parent.width - Theme.padding.small * 2
-        height: parent.height - Theme.padding.small * 2
+        x: Theme.padding.sm
+        y: Theme.padding.sm
+        width: parent.width - Theme.padding.sm * 2
+        height: parent.height - Theme.padding.sm * 2
         clip: true
         focus: false
         interactive: false
@@ -52,16 +52,16 @@ Item {
                 id: delegateLayout
 
                 anchors.fill: parent
-                anchors.leftMargin: Theme.padding.normal + (delegateRoot.depth * 18)
-                anchors.rightMargin: Theme.padding.normal
-                spacing: Theme.spacing.small
+                anchors.leftMargin: Theme.padding.md + (delegateRoot.depth * 18)
+                anchors.rightMargin: Theme.padding.md
+                spacing: Theme.spacing.sm
 
                 MaterialIcon {
                     text: delegateRoot.isDir ? "folder" : "description"
                     color: delegateRoot.isDir
                         ? Theme.palette.m3primary
                         : Theme.palette.m3onSurfaceVariant
-                    font.pointSize: Theme.font.size.small
+                    font.pointSize: Theme.font.size.xs
                     font.weight: delegateRoot.isDir ? 600 : 400
                 }
 
@@ -70,14 +70,14 @@ Item {
                     text: delegateRoot.name
                     elide: Text.ElideRight
                     color: Theme.palette.m3onSurface
-                    font.pointSize: Theme.font.size.small
+                    font.pointSize: Theme.font.size.xs
                 }
 
                 StyledText {
                     visible: !delegateRoot.isDir
                     text: FileManagerService.formatSize(delegateRoot.size)
                     color: Theme.palette.m3outline
-                    font.pointSize: Theme.font.size.smaller
+                    font.pointSize: Theme.font.size.sm
                     font.family: Theme.font.family.mono
                 }
             }
@@ -95,10 +95,10 @@ Item {
         visible: archiveModel.truncated
         anchors.bottom: parent.bottom
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottomMargin: Theme.padding.small
+        anchors.bottomMargin: Theme.padding.sm
         text: qsTr("Showing %1 of %2 entries").arg(archiveListView.count).arg(archiveModel.totalEntries)
         color: Theme.palette.m3outline
-        font.pointSize: Theme.font.size.smaller
+        font.pointSize: Theme.font.size.sm
         font.family: Theme.font.family.mono
     }
 
@@ -109,20 +109,20 @@ Item {
         asynchronous: true
 
         sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.small
+            spacing: Theme.spacing.sm
 
             MaterialIcon {
                 Layout.alignment: Qt.AlignHCenter
                 text: "hourglass_empty"
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.extraLarge
+                font.pointSize: Theme.font.size.xxl
             }
 
             StyledText {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("Loading\u2026")
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.normal
+                font.pointSize: Theme.font.size.md
             }
         }
     }
@@ -134,13 +134,13 @@ Item {
         asynchronous: true
 
         sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.normal
+            spacing: Theme.spacing.md
 
             MaterialIcon {
                 Layout.alignment: Qt.AlignHCenter
                 text: "block"
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.extraLarge * 2
+                font.pointSize: Theme.font.size.xxl * 2
                 font.weight: 500
             }
 
@@ -148,7 +148,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("Cannot preview")
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.large
+                font.pointSize: Theme.font.size.xl
                 font.weight: 500
             }
         }
@@ -164,13 +164,13 @@ Item {
         asynchronous: true
 
         sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.normal
+            spacing: Theme.spacing.md
 
             MaterialIcon {
                 Layout.alignment: Qt.AlignHCenter
                 text: "inventory_2"
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.extraLarge * 2
+                font.pointSize: Theme.font.size.xxl * 2
                 font.weight: 500
             }
 
@@ -178,7 +178,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("Empty archive")
                 color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.large
+                font.pointSize: Theme.font.size.xl
                 font.weight: 500
             }
         }

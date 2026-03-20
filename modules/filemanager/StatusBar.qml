@@ -10,17 +10,17 @@ Item {
     required property int fileCount
     required property var currentEntry
 
-    implicitHeight: inner.implicitHeight + Theme.padding.small * 4
+    implicitHeight: inner.implicitHeight + Theme.padding.sm * 4
 
     // Matte pill container with fully rounded corners
     StyledRect {
         id: pill
 
         anchors.fill: parent
-        anchors.topMargin: Theme.padding.small
-        anchors.bottomMargin: Theme.padding.small
-        anchors.leftMargin: Theme.padding.normal
-        anchors.rightMargin: Theme.padding.normal
+        anchors.topMargin: Theme.padding.sm
+        anchors.bottomMargin: Theme.padding.sm
+        anchors.leftMargin: Theme.padding.md
+        anchors.rightMargin: Theme.padding.md
         radius: Theme.rounding.full
         color: Theme.pillMedium.background
         border.color: Theme.pillMedium.border
@@ -30,19 +30,19 @@ Item {
             id: inner
 
             anchors.fill: parent
-            anchors.leftMargin: Theme.padding.large
-            anchors.rightMargin: Theme.padding.large
-            anchors.topMargin: Theme.padding.small
-            anchors.bottomMargin: Theme.padding.small
+            anchors.leftMargin: Theme.padding.lg
+            anchors.rightMargin: Theme.padding.lg
+            anchors.topMargin: Theme.padding.sm
+            anchors.bottomMargin: Theme.padding.sm
 
-            spacing: Theme.spacing.normal
+            spacing: Theme.spacing.md
 
             // Left: file count (hidden during search)
             StyledText {
                 visible: !FileManagerService.searchActive
                 text: root.fileCount + (root.fileCount === 1 ? " item" : " items")
                 color: Theme.palette.m3onSurfaceVariant
-                font.pointSize: Theme.font.size.small
+                font.pointSize: Theme.font.size.xs
             }
 
             Item {
@@ -59,7 +59,7 @@ Item {
                     return (root.currentEntry?.name ?? "") + "  " + FileManagerService.formatSize(root.currentEntry?.size ?? 0);
                 }
                 color: Theme.palette.m3onSurface
-                font.pointSize: Theme.font.size.small
+                font.pointSize: Theme.font.size.xs
                 font.family: Theme.font.family.mono
             }
 
@@ -73,7 +73,7 @@ Item {
                 visible: FileManagerService.searchActive
                 text: "/"
                 color: Theme.palette.m3primary
-                font.pointSize: Theme.font.size.small
+                font.pointSize: Theme.font.size.xs
                 font.family: Theme.font.family.mono
             }
 
@@ -85,7 +85,7 @@ Item {
                 visible: FileManagerService.searchActive
                 Layout.fillWidth: true
                 color: Theme.palette.m3onSurface
-                font.pointSize: Theme.font.size.small
+                font.pointSize: Theme.font.size.xs
                 font.family: Theme.font.family.mono
                 selectionColor: Theme.palette.m3primary
                 selectedTextColor: Theme.palette.m3onPrimary
@@ -145,7 +145,7 @@ Item {
                         return Theme.palette.m3error;
                     return Theme.palette.m3onSurfaceVariant;
                 }
-                font.pointSize: Theme.font.size.small
+                font.pointSize: Theme.font.size.xs
                 font.family: Theme.font.family.mono
             }
 
@@ -153,7 +153,7 @@ Item {
             StyledText {
                 text: Paths.shortenHome(FileManagerService.currentPath)
                 color: Theme.palette.m3onSurfaceVariant
-                font.pointSize: Theme.font.size.small
+                font.pointSize: Theme.font.size.xs
                 elide: Text.ElideMiddle
                 Layout.maximumWidth: root.width * 0.3
             }
