@@ -31,6 +31,7 @@ Item {
         }
     }
 
-    // Modal overlay — renders above the entire layout
+    // Modal overlays — render above the entire layout
     DeleteConfirmPopup {}
+    CreateFilePopup {}
 }

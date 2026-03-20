@@ -22,8 +22,8 @@ Item {
     // Search: cursor position saved before entering search mode
     property int _preSearchIndex: 0
 
-    // After paste: filename to focus once the model refreshes
-    property string _pendingPasteFocus: ""
+    // Filename to focus once the model refreshes (set by paste, create, etc.)
+    property string _pendingFocusName: ""
 
     function _saveCursorAndNavigate(navigateFn: var): void {
         FileManagerService.saveCursor(FileManagerService.currentPath, view.currentIndex);
@@ -70,7 +70,7 @@ Item {
         const destDir = FileManagerService.currentPath;
 
         // Extract basename to focus after model refreshes
-        root._pendingPasteFocus = sourcePath.substring(sourcePath.lastIndexOf("/") + 1);
+        root._pendingFocusName = sourcePath.substring(sourcePath.lastIndexOf("/") + 1);
 
         if (FileManagerService.clipboardMode === "yank")
             pasteProcess.command = ["cp", "-r", "--", sourcePath, destDir];
@@ -151,6 +151,15 @@ Item {
             if (FileManagerService.deleteConfirmPath === "")
                 Qt.callLater(() => view.forceActiveFocus());
         }
+
+        function onCreateInputActiveChanged() {
+            if (!FileManagerService.createInputActive)
+                Qt.callLater(() => view.forceActiveFocus());
+        }
+
+        function onCreateCompleted(filename: string) {
+            root._pendingFocusName = filename;
+        }
     }
 
     // Background
@@ -225,18 +234,18 @@ Item {
                     // Clamp cursor after file deletion or external changes
                     if (view.currentIndex >= view.count && view.count > 0)
                         view.currentIndex = view.count - 1;
-                    // Focus pasted file if pending — only applies to same-directory refreshes,
-                    // never to path navigations (which handled cursor restore above)
-                    if (root._pendingPasteFocus !== "") {
+                    // Focus a specific file if pending (set by paste, create, etc.) —
+                    // only applies to same-directory refreshes, never to path navigations
+                    if (root._pendingFocusName !== "") {
                         const entries = fsModel.entries;
                         for (let i = 0; i < entries.length; i++) {
-                            if (entries[i].name === root._pendingPasteFocus) {
+                            if (entries[i].name === root._pendingFocusName) {
                                 view.currentIndex = i;
                                 view.positionViewAtIndex(i, ListView.Contain);
                                 break;
                             }
                         }
-                        root._pendingPasteFocus = "";
+                        root._pendingFocusName = "";
                     }
                 }
                 // Re-compute matches if search is active (handles async model reload)
@@ -254,8 +263,8 @@ Item {
 
         // Vim-style keyboard navigation
         Keys.onPressed: function(event) {
-            // Block all keys while delete confirmation is visible
-            if (FileManagerService.deleteConfirmPath !== "") {
+            // Block all keys while a modal popup is visible
+            if (FileManagerService.deleteConfirmPath !== "" || FileManagerService.createInputActive) {
                 event.accepted = true;
                 return;
             }
@@ -407,6 +416,11 @@ Item {
                     event.accepted = true;
                 }
                 break;
+
+            case Qt.Key_A:
+                FileManagerService.requestCreate();
+                event.accepted = true;
+                break;
             }
         }
 
@@ -424,7 +438,7 @@ Item {
                     FileManagerService.clearClipboard();
             } else {
                 console.warn("FileList: paste failed — exitCode:", exitCode, "exitStatus:", exitStatus);
-                root._pendingPasteFocus = "";
+                root._pendingFocusName = "";
             }
         }
     }

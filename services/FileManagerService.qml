@@ -47,6 +47,19 @@ Singleton {
         deleteConfirmPath = "";
     }
 
+    // === Create file/folder ===
+    property bool createInputActive: false
+
+    signal createCompleted(string filename)
+
+    function requestCreate(): void {
+        createInputActive = true;
+    }
+
+    function cancelCreate(): void {
+        createInputActive = false;
+    }
+
     // === Chord / which-key state ===
     property string activeChordPrefix: ""
     readonly property bool chordActive: activeChordPrefix !== ""
