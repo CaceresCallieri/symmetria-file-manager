@@ -3,6 +3,10 @@ qmlcache/
 
 # Build artifacts
 build/
+build_test/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
 *.o
 *.so
 
