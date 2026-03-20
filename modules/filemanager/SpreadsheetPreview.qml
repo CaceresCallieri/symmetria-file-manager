@@ -28,8 +28,9 @@ Item {
         && spreadsheetModel.totalRows === 0
         && spreadsheetModel.filePath !== ""
 
-    // QUIRK §1: explicit x/y/width/height — anchors.margins silently ignored inside
-    // Loader sourceComponent. See QUIRKS.md for full explanation.
+    // Use explicit x/y/width/height to fill parent — this component is loaded as a
+    // Loader sourceComponent, so anchors.margins on the root would be silently ignored
+    // (QUIRKS.md §1). Explicit geometry bindings are not affected by that quirk.
     ColumnLayout {
         x: 0
         y: 0
@@ -92,7 +93,7 @@ Item {
                 id: headerView
 
                 syncView: tableView
-                anchors.left: tableView.left
+                anchors.left: parent.left
                 anchors.top: parent.top
                 clip: true
 
@@ -119,8 +120,9 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                anchors.margins: Theme.padding.small
-                anchors.topMargin: 0
+                anchors.leftMargin: Theme.padding.small
+                anchors.rightMargin: Theme.padding.small
+                anchors.bottomMargin: Theme.padding.small
                 clip: true
                 focus: false
                 interactive: false
@@ -173,6 +175,11 @@ Item {
             Layout.alignment: Qt.AlignHCenter
             Layout.bottomMargin: Theme.padding.small
             text: {
+                // rowCount()/columnCount() are method calls and are not tracked by the
+                // QML binding engine on their own. They are safe here because this
+                // binding already depends on truncatedRows/truncatedCols, which change
+                // on the same dataReady signal that also updates the row/column counts.
+                // The binding always re-evaluates with correct values.
                 let parts = [];
                 if (spreadsheetModel.truncatedRows)
                     parts.push(qsTr("Showing %1 of %2 rows").arg(spreadsheetModel.rowCount()).arg(spreadsheetModel.totalRows));
