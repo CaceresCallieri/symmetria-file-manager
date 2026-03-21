@@ -103,7 +103,9 @@ Item {
         } else if (prefix === "c") {
             if (!root.currentEntry)
                 return;
-            let textToCopy = "";
+            if (clipboardCopyProcess.running)
+                return;
+            let textToCopy;
             switch (keyChar) {
             case "c":
                 textToCopy = root.currentEntry.path;
@@ -111,20 +113,21 @@ Item {
             case "f":
                 textToCopy = root.currentEntry.name;
                 break;
-            case "n":
+            case "n": {
                 // Strip extension (last dot onwards), but keep names that start with a dot
                 const name = root.currentEntry.name;
                 const dotIndex = name.lastIndexOf(".");
                 textToCopy = dotIndex > 0 ? name.substring(0, dotIndex) : name;
                 break;
+            }
             case "d":
                 textToCopy = windowState.currentPath;
                 break;
+            default:
+                return;
             }
-            if (textToCopy !== "") {
-                clipboardCopyProcess.command = ["wl-copy", "--", textToCopy];
-                clipboardCopyProcess.running = true;
-            }
+            clipboardCopyProcess.command = ["wl-copy", "--", textToCopy];
+            clipboardCopyProcess.running = true;
         }
     }
 
@@ -370,8 +373,8 @@ Item {
             if (windowState.activeChordPrefix !== "") {
                 const prefix = windowState.activeChordPrefix;
                 windowState.activeChordPrefix = "";
-
-                if (key !== Qt.Key_Escape) {
+                // In picker mode, cancel the chord without executing it
+                if (!FileManagerService.pickerMode && key !== Qt.Key_Escape) {
                     const keyChar = event.text.toLowerCase();
                     root._executeChord(prefix, keyChar);
                 }
@@ -577,5 +580,9 @@ Item {
 
     Process {
         id: clipboardCopyProcess
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0 || exitStatus !== Process.NormalExit)
+                console.warn("FileList: wl-copy failed — exitCode:", exitCode, "exitStatus:", exitStatus);
+        }
     }
 }
