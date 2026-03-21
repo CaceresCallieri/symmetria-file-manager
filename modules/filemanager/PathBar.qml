@@ -9,11 +9,14 @@ import QtQuick.Layouts
 Item {
     id: root
 
+    property WindowState windowState
+
     implicitHeight: inner.implicitHeight + Theme.padding.md * 2
 
     // Build breadcrumb segments: [{name, path, isHome}]
     readonly property var _segments: {
-        const path = FileManagerService.currentPath;
+        if (!windowState) return [];
+        const path = windowState.currentPath;
         const home = Paths.home;
 
         if (path === home)
@@ -55,8 +58,8 @@ Item {
 
             StateLayer {
                 radius: Theme.rounding.sm
-                disabled: !FileManagerService.canGoBack
-                onClicked: FileManagerService.back()
+                disabled: !root.windowState || !root.windowState.canGoBack
+                onClicked: root.windowState.back()
             }
 
             MaterialIcon {
@@ -64,7 +67,7 @@ Item {
 
                 anchors.centerIn: parent
                 text: "arrow_back"
-                color: FileManagerService.canGoBack ? Theme.palette.m3onSurface : Theme.palette.m3outline
+                color: root.windowState && root.windowState.canGoBack ? Theme.palette.m3onSurface : Theme.palette.m3outline
                 grade: 200
             }
         }
@@ -76,8 +79,8 @@ Item {
 
             StateLayer {
                 radius: Theme.rounding.sm
-                disabled: !FileManagerService.canGoForward
-                onClicked: FileManagerService.forward()
+                disabled: !root.windowState || !root.windowState.canGoForward
+                onClicked: root.windowState.forward()
             }
 
             MaterialIcon {
@@ -85,7 +88,7 @@ Item {
 
                 anchors.centerIn: parent
                 text: "arrow_forward"
-                color: FileManagerService.canGoForward ? Theme.palette.m3onSurface : Theme.palette.m3outline
+                color: root.windowState && root.windowState.canGoForward ? Theme.palette.m3onSurface : Theme.palette.m3outline
                 grade: 200
             }
         }
@@ -140,7 +143,7 @@ Item {
                                 active: segment.index < root._segments.length - 1
                                 sourceComponent: StateLayer {
                                     radius: Theme.rounding.sm
-                                    onClicked: FileManagerService.navigate(segment.modelData.path)
+                                    onClicked: root.windowState.navigate(segment.modelData.path)
                                 }
                             }
 

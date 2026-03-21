@@ -10,6 +10,8 @@ import QtQuick.Layouts
 Item {
     id: root
 
+    property WindowState windowState
+
     readonly property var currentEntry: view.currentIndex >= 0 && view.currentIndex < view.count ? fsModel.entries[view.currentIndex] : null
     readonly property int fileCount: view.count
     signal closeRequested()
@@ -29,14 +31,14 @@ Item {
     property string _pendingFocusName: ""
 
     function _saveCursorAndNavigate(navigateFn: var): void {
-        FileManagerService.saveCursor(FileManagerService.currentPath, view.currentIndex);
+        windowState.saveCursor(windowState.currentPath, view.currentIndex);
         navigateFn();
     }
 
     function _navigateIntoCurrentItem(): void {
         if (!root.currentEntry || !root.currentEntry.isDir)
             return;
-        _saveCursorAndNavigate(() => FileManagerService.navigate(root.currentEntry.path));
+        _saveCursorAndNavigate(() => windowState.navigate(root.currentEntry.path));
     }
 
     function _activateCurrentItem(): void {
@@ -51,19 +53,14 @@ Item {
         //    saveMode=true → a directory picker where Enter selects the dir)
         if (FileManagerService.pickerMode) {
             if (FileManagerService.pickerSaveMode) {
-                // Save mode: Enter on a dir navigates into it so the user can
-                // choose a target directory. Enter on a file selects it as the
-                // overwrite target (returns that file's path to the caller).
                 if (root.currentEntry.isDir)
                     _navigateIntoCurrentItem();
                 else
                     FileManagerService.completePickerMode([root.currentEntry.path]);
             } else if (FileManagerService.pickerDirectory) {
-                // Directory picker: only dirs are selectable; ignore Enter on files.
                 if (root.currentEntry.isDir)
                     FileManagerService.completePickerMode([root.currentEntry.path]);
             } else {
-                // Open file picker: navigate into dirs, select files.
                 if (root.currentEntry.isDir)
                     _navigateIntoCurrentItem();
                 else
@@ -86,16 +83,16 @@ Item {
                 view.positionViewAtIndex(0, ListView.Beginning);
                 break;
             case "h":
-                _saveCursorAndNavigate(() => FileManagerService.navigate(Paths.home));
+                _saveCursorAndNavigate(() => windowState.navigate(Paths.home));
                 break;
             case "d":
-                _saveCursorAndNavigate(() => FileManagerService.navigate(Paths.home + "/Downloads"));
+                _saveCursorAndNavigate(() => windowState.navigate(Paths.home + "/Downloads"));
                 break;
             case "s":
-                _saveCursorAndNavigate(() => FileManagerService.navigate(Paths.home + "/Pictures/Screenshots"));
+                _saveCursorAndNavigate(() => windowState.navigate(Paths.home + "/Pictures/Screenshots"));
                 break;
             case "v":
-                _saveCursorAndNavigate(() => FileManagerService.navigate(Paths.home + "/Videos"));
+                _saveCursorAndNavigate(() => windowState.navigate(Paths.home + "/Videos"));
                 break;
             }
         }
@@ -106,7 +103,7 @@ Item {
             return;
 
         const sourcePath = FileManagerService.clipboardPath;
-        const destDir = FileManagerService.currentPath;
+        const destDir = windowState.currentPath;
 
         // Extract basename to focus after model refreshes
         root._pendingFocusName = sourcePath.substring(sourcePath.lastIndexOf("/") + 1);
@@ -124,10 +121,10 @@ Item {
     }
 
     function _computeMatches(preservePosition: bool): void {
-        const query = FileManagerService.searchQuery.toLowerCase();
+        const query = windowState.searchQuery.toLowerCase();
         if (query === "") {
-            FileManagerService.matchIndices = [];
-            FileManagerService.currentMatchIndex = -1;
+            windowState.matchIndices = [];
+            windowState.currentMatchIndex = -1;
             return;
         }
 
@@ -138,16 +135,16 @@ Item {
                 indices.push(i);
         }
 
-        FileManagerService.matchIndices = indices;
+        windowState.matchIndices = indices;
 
         if (indices.length === 0) {
-            FileManagerService.currentMatchIndex = -1;
+            windowState.currentMatchIndex = -1;
         } else if (preservePosition) {
             const previousTarget = view.currentIndex;
             const newPos = indices.indexOf(previousTarget);
-            FileManagerService.currentMatchIndex = newPos >= 0 ? newPos : 0;
+            windowState.currentMatchIndex = newPos >= 0 ? newPos : 0;
         } else {
-            FileManagerService.currentMatchIndex = 0;
+            windowState.currentMatchIndex = 0;
         }
 
         // Always jump after recomputing — the onChanged signal won't fire
@@ -157,8 +154,8 @@ Item {
     }
 
     function _jumpToCurrentMatch(): void {
-        const idx = FileManagerService.currentMatchIndex;
-        const matches = FileManagerService.matchIndices;
+        const idx = windowState.currentMatchIndex;
+        const matches = windowState.matchIndices;
         if (idx >= 0 && idx < matches.length) {
             view.currentIndex = matches[idx];
             view.positionViewAtIndex(view.currentIndex, ListView.Contain);
@@ -166,7 +163,7 @@ Item {
     }
 
     Connections {
-        target: FileManagerService
+        target: windowState
 
         function onSearchQueryChanged() {
             root._computeMatches(false);
@@ -187,12 +184,12 @@ Item {
         }
 
         function onDeleteConfirmPathChanged() {
-            if (FileManagerService.deleteConfirmPath === "")
+            if (windowState.deleteConfirmPath === "")
                 Qt.callLater(() => view.forceActiveFocus());
         }
 
         function onCreateInputActiveChanged() {
-            if (!FileManagerService.createInputActive)
+            if (!windowState.createInputActive)
                 Qt.callLater(() => view.forceActiveFocus());
         }
 
@@ -257,7 +254,7 @@ Item {
 
         model: FileSystemModel {
             id: fsModel
-            path: FileManagerService.currentPath
+            path: root.windowState ? root.windowState.currentPath : Paths.home
             showHidden: Config.fileManager.showHidden
             sortReverse: Config.fileManager.sortReverse
             watchChanges: true
@@ -265,7 +262,7 @@ Item {
             onEntriesChanged: {
                 if (root._pathJustChanged) {
                     root._pathJustChanged = false;
-                    const restored = FileManagerService.restoreCursor(fsModel.path);
+                    const restored = root.windowState.restoreCursor(fsModel.path);
                     const safeIndex = Math.min(restored, Math.max(view.count - 1, 0));
                     view.currentIndex = safeIndex;
                     view.positionViewAtIndex(safeIndex, ListView.Beginning);
@@ -288,22 +285,22 @@ Item {
                     }
                 }
                 // Re-compute matches if search is active (handles async model reload)
-                if (FileManagerService.searchQuery !== "")
+                if (root.windowState && root.windowState.searchQuery !== "")
                     root._computeMatches(true);
             }
         }
 
         delegate: FileListItem {
             width: view.width
-            searchQuery: FileManagerService.searchQuery
-            isSearchMatch: FileManagerService.matchIndices.indexOf(index) !== -1
+            searchQuery: root.windowState ? root.windowState.searchQuery : ""
+            isSearchMatch: root.windowState ? root.windowState.matchIndices.indexOf(index) !== -1 : false
             onActivated: root._activateCurrentItem()
         }
 
         // Vim-style keyboard navigation
         Keys.onPressed: function(event) {
             // Block all keys while a modal popup is visible
-            if (FileManagerService.deleteConfirmPath !== "" || FileManagerService.createInputActive) {
+            if (windowState.deleteConfirmPath !== "" || windowState.createInputActive) {
                 event.accepted = true;
                 return;
             }
@@ -333,9 +330,9 @@ Item {
             const mods = event.modifiers;
 
             // Resolve active chord — any keypress completes or cancels it
-            if (FileManagerService.activeChordPrefix !== "") {
-                const prefix = FileManagerService.activeChordPrefix;
-                FileManagerService.activeChordPrefix = "";
+            if (windowState.activeChordPrefix !== "") {
+                const prefix = windowState.activeChordPrefix;
+                windowState.activeChordPrefix = "";
 
                 if (key !== Qt.Key_Escape) {
                     const keyChar = event.text.toLowerCase();
@@ -362,7 +359,7 @@ Item {
 
             case Qt.Key_H:
             case Qt.Key_Left:
-                root._saveCursorAndNavigate(() => FileManagerService.goUp());
+                root._saveCursorAndNavigate(() => windowState.goUp());
                 event.accepted = true;
                 break;
 
@@ -387,7 +384,7 @@ Item {
                     }
                 } else {
                     // g — start "go to" chord, show which-key popup
-                    FileManagerService.activeChordPrefix = "g";
+                    windowState.activeChordPrefix = "g";
                 }
                 event.accepted = true;
                 break;
@@ -401,7 +398,7 @@ Item {
                     }
                 } else if (root.currentEntry) {
                     // D — trash file (request confirmation)
-                    FileManagerService.requestDelete(root.currentEntry.path);
+                    windowState.requestDelete(root.currentEntry.path);
                 }
                 event.accepted = true;
                 break;
@@ -426,23 +423,23 @@ Item {
                 break;
 
             case Qt.Key_AsciiTilde:
-                root._saveCursorAndNavigate(() => FileManagerService.navigate(Paths.home));
+                root._saveCursorAndNavigate(() => windowState.navigate(Paths.home));
                 event.accepted = true;
                 break;
 
             case Qt.Key_Minus:
-                root._saveCursorAndNavigate(() => FileManagerService.back());
+                root._saveCursorAndNavigate(() => windowState.back());
                 event.accepted = true;
                 break;
 
             case Qt.Key_Equal:
-                root._saveCursorAndNavigate(() => FileManagerService.forward());
+                root._saveCursorAndNavigate(() => windowState.forward());
                 event.accepted = true;
                 break;
 
             case Qt.Key_Slash:
                 root._preSearchIndex = view.currentIndex;
-                FileManagerService.startSearch();
+                windowState.startSearch();
                 event.accepted = true;
                 break;
 
@@ -472,25 +469,25 @@ Item {
                 break;
 
             case Qt.Key_N:
-                if (!FileManagerService.searchActive && FileManagerService.matchIndices.length > 0) {
+                if (!windowState.searchActive && windowState.matchIndices.length > 0) {
                     if (mods & Qt.ShiftModifier)
-                        FileManagerService.previousMatch();
+                        windowState.previousMatch();
                     else
-                        FileManagerService.nextMatch();
+                        windowState.nextMatch();
                     event.accepted = true;
                 }
                 break;
 
             case Qt.Key_A:
-                FileManagerService.requestCreate();
+                windowState.requestCreate();
                 event.accepted = true;
                 break;
             }
         }
 
         onActiveFocusChanged: {
-            if (!activeFocus && FileManagerService.activeChordPrefix !== "")
-                FileManagerService.activeChordPrefix = "";
+            if (!activeFocus && windowState.activeChordPrefix !== "")
+                windowState.activeChordPrefix = "";
         }
     }
 

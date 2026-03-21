@@ -11,13 +11,17 @@ import QtQuick.Layouts
 Item {
     id: root
 
+    property WindowState windowState
+
     readonly property string _parentPath: {
-        const path = FileManagerService.currentPath;
+        if (!windowState) return "";
+        const path = windowState.currentPath;
         return path === "/" ? "" : path.replace(/\/[^/]+$/, "") || "/";
     }
 
     readonly property string _currentDirName: {
-        const path = FileManagerService.currentPath;
+        if (!windowState) return "";
+        const path = windowState.currentPath;
         return path === "/" ? "" : path.substring(path.lastIndexOf("/") + 1);
     }
 
@@ -86,7 +90,7 @@ Item {
             width: parentView.width
             onActivated: {
                 if (modelData.isDir)
-                    FileManagerService.navigate(modelData.path);
+                    root.windowState.navigate(modelData.path);
                 else
                     Qt.openUrlExternally("file://" + modelData.path);
             }
@@ -122,7 +126,7 @@ Item {
     // Re-sync when the current path changes (parent path may stay the same
     // but the highlighted entry needs to update, e.g. navigating between siblings)
     Connections {
-        target: FileManagerService
+        target: windowState
         function onCurrentPathChanged() {
             root._syncHighlight();
         }

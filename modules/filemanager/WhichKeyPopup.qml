@@ -6,16 +6,19 @@ import QtQuick.Layouts
 Item {
     id: root
 
+    property WindowState windowState
+
     readonly property var _binds: {
-        const prefix = FileManagerService.activeChordPrefix;
+        if (!windowState) return [];
+        const prefix = windowState.activeChordPrefix;
         if (prefix === "")
             return [];
-        const bindings = FileManagerService.chordBindings;
+        const bindings = windowState.chordBindings;
         return bindings.hasOwnProperty(prefix) ? bindings[prefix].binds : [];
     }
 
     visible: opacity > 0
-    opacity: FileManagerService.chordActive ? 1 : 0
+    opacity: windowState && windowState.chordActive ? 1 : 0
 
     Behavior on opacity {
         Anim {}
@@ -48,7 +51,7 @@ Item {
 
                 StyledText {
                     anchors.centerIn: parent
-                    text: FileManagerService.activeChordPrefix
+                    text: root.windowState ? root.windowState.activeChordPrefix : ""
                     color: Theme.palette.m3primary
                     font.family: Theme.font.family.mono
                     font.pointSize: Theme.font.size.sm
@@ -58,9 +61,10 @@ Item {
 
             StyledText {
                 text: {
-                    const prefix = FileManagerService.activeChordPrefix;
+                    if (!root.windowState) return "";
+                    const prefix = root.windowState.activeChordPrefix;
                     if (prefix === "") return "";
-                    const bindings = FileManagerService.chordBindings;
+                    const bindings = root.windowState.chordBindings;
                     return bindings.hasOwnProperty(prefix) ? bindings[prefix].label : "";
                 }
                 color: Theme.palette.m3onSurfaceVariant

@@ -7,12 +7,16 @@ import QtQuick.Layouts
 Loader {
     id: root
 
+    property WindowState windowState
+
     anchors.fill: parent
 
-    opacity: FileManagerService.createInputActive ? 1 : 0
+    opacity: windowState && windowState.createInputActive ? 1 : 0
     // Drive active from the source property, not from animated opacity — avoids
     // a race where the Loader activates mid-fade-out with an already-closed state.
-    active: FileManagerService.createInputActive
+    // Also suppressed in picker mode (file ops not allowed).
+    active: windowState && !FileManagerService.pickerMode
+        && windowState.createInputActive
     asynchronous: true
 
     sourceComponent: FocusScope {
@@ -28,12 +32,12 @@ Loader {
         property string _currentInput: ""
         property bool _isDirectory: false
 
-        Component.onCompleted: basePath = FileManagerService.currentPath
+        Component.onCompleted: basePath = root.windowState.currentPath
 
         // Click outside the card to dismiss — NO dark scrim
         MouseArea {
             anchors.fill: parent
-            onClicked: FileManagerService.cancelCreate()
+            onClicked: root.windowState.cancelCreate()
         }
 
         // Dialog card — positioned at top-third of file list area
@@ -121,7 +125,7 @@ Loader {
                                 popupScope._attemptCreate();
                                 event.accepted = true;
                             } else if (event.key === Qt.Key_Escape) {
-                                FileManagerService.cancelCreate();
+                                root.windowState.cancelCreate();
                                 event.accepted = true;
                             }
                         }
@@ -175,7 +179,7 @@ Loader {
             // Emit focus signal BEFORE starting the process — mkdir -p triggers
             // QFileSystemWatcher immediately, so the pending focus name must already
             // be set in FileList when onEntriesChanged fires.
-            FileManagerService.createCompleted(topLevelName);
+            root.windowState.createCompleted(topLevelName);
 
             if (_isDirectory) {
                 // Directory: single mkdir -p suffices; pass args as array (no shell).
@@ -208,7 +212,7 @@ Loader {
                     // what they're colliding with while the popup stays open.
                     const topLevelName = _currentInput.split("/")[0];
                     errorLabel.text = qsTr("'%1' already exists").arg(topLevelName);
-                    FileManagerService.createCompleted(topLevelName);
+                    root.windowState.createCompleted(topLevelName);
                 } else {
                     _runCreate();
                 }
@@ -236,7 +240,7 @@ Loader {
             id: createProcess
             onExited: (exitCode, exitStatus) => {
                 if (exitCode === 0) {
-                    FileManagerService.cancelCreate();
+                    root.windowState.cancelCreate();
                 } else {
                     errorLabel.text = qsTr("Creation failed (exit code %1)").arg(exitCode);
                 }

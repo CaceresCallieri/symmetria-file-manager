@@ -7,12 +7,16 @@ import QtQuick.Layouts
 Loader {
     id: root
 
+    property WindowState windowState
+
     anchors.fill: parent
 
-    opacity: FileManagerService.deleteConfirmPath !== "" ? 1 : 0
+    opacity: windowState && windowState.deleteConfirmPath !== "" ? 1 : 0
     // Drive active from the source property, not from animated opacity — avoids
     // a race where the Loader activates mid-fade-out with an already-empty path.
-    active: FileManagerService.deleteConfirmPath !== ""
+    // Also suppressed in picker mode (file ops not allowed).
+    active: windowState && !FileManagerService.pickerMode
+        && windowState.deleteConfirmPath !== ""
     asynchronous: true
 
     sourceComponent: FocusScope {
@@ -24,13 +28,13 @@ Loader {
         // cleared before the component is destroyed.
         property string targetPath
 
-        Component.onCompleted: targetPath = FileManagerService.deleteConfirmPath
+        Component.onCompleted: targetPath = root.windowState.deleteConfirmPath
 
         // Scrim backdrop — click to cancel
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true
-            onClicked: FileManagerService.cancelDelete()
+            onClicked: root.windowState.cancelDelete()
         }
 
         StyledRect {
@@ -51,7 +55,7 @@ Loader {
 
             scale: 0.1
             Component.onCompleted: scale = Qt.binding(
-                () => FileManagerService.deleteConfirmPath !== "" ? 1 : 0
+                () => root.windowState && root.windowState.deleteConfirmPath !== "" ? 1 : 0
             )
 
             Behavior on scale {
@@ -80,14 +84,14 @@ Loader {
                 case Qt.Key_Enter:
                     // Return/Enter is focus-aware: confirms on Yes, cancels on No
                     if (noButton.activeFocus)
-                        FileManagerService.cancelDelete();
+                        root.windowState.cancelDelete();
                     else if (!trashProcess.running)
                         trashProcess.running = true;
                     event.accepted = true;
                     break;
                 case Qt.Key_N:
                 case Qt.Key_Escape:
-                    FileManagerService.cancelDelete();
+                    root.windowState.cancelDelete();
                     event.accepted = true;
                     break;
                 case Qt.Key_Tab:
@@ -226,7 +230,7 @@ Loader {
                         }
 
                         StateLayer {
-                            onClicked: FileManagerService.cancelDelete()
+                            onClicked: root.windowState.cancelDelete()
                         }
                     }
                 }
@@ -239,11 +243,11 @@ Loader {
             command: ["gio", "trash", popupScope.targetPath]
             onExited: (exitCode, exitStatus) => {
                 if (exitCode === 0) {
-                    FileManagerService.cancelDelete();
+                    root.windowState.cancelDelete();
                 } else {
                     console.warn("DeleteConfirmPopup: gio trash failed with exit code", exitCode);
                     // Dismiss the popup even on failure — user can retry via D again
-                    FileManagerService.cancelDelete();
+                    root.windowState.cancelDelete();
                 }
             }
         }

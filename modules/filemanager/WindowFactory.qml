@@ -14,9 +14,9 @@ Singleton {
     property var _activePickerWindow: null
 
     function create(initialPath: string): void {
-        // Always navigate — default to home so each new window starts fresh
-        FileManagerService.navigate(initialPath || Paths.home);
-        const win = fileManagerWindow.createObject(dummy);
+        const win = fileManagerWindow.createObject(dummy, {
+            "initialPath": initialPath || Paths.home
+        });
         _activeWindows = _activeWindows.concat([win]);
     }
 
@@ -84,7 +84,9 @@ Singleton {
             }
 
             FileManagerService.startPickerMode(options);
-            root._activePickerWindow = pickerWindow.createObject(dummy);
+            root._activePickerWindow = pickerWindow.createObject(dummy, {
+                "initialPath": options.currentFolder || Paths.home
+            });
         }
     }
 
@@ -195,6 +197,8 @@ Singleton {
         FloatingWindow {
             id: win
 
+            property string initialPath: Paths.home
+
             color: Theme.layer(Theme.palette.m3surface, 0)
             title: qsTr("File Manager")
 
@@ -215,6 +219,7 @@ Singleton {
                 id: fm
 
                 anchors.fill: parent
+                initialPath: win.initialPath
 
                 onCloseRequested: win.visible = false
             }
@@ -231,6 +236,8 @@ Singleton {
 
         FloatingWindow {
             id: pickerWin
+
+            property string initialPath: Paths.home
 
             color: Theme.layer(Theme.palette.m3surface, 0)
             title: FileManagerService.pickerTitle || qsTr("Select a File")
@@ -255,6 +262,7 @@ Singleton {
                 id: pickerFm
 
                 anchors.fill: parent
+                initialPath: pickerWin.initialPath
 
                 onCloseRequested: {
                     // Always route through visible=false so onVisibleChanged is

@@ -6,6 +6,8 @@ import QtQuick.Layouts
 Item {
     id: root
 
+    property WindowState windowState
+
     readonly property var currentEntry: currentPanel.currentEntry
     readonly property int fileCount: currentPanel.fileCount
     signal closeRequested()
@@ -22,7 +24,8 @@ Item {
 
             ParentPanel {
                 anchors.fill: parent
-                opacity: FileManagerService.chordActive ? 0 : 1
+                windowState: root.windowState
+                opacity: root.windowState ? root.windowState.chordActive ? 0 : 1 : 1
 
                 Behavior on opacity {
                     Anim {}
@@ -31,6 +34,7 @@ Item {
 
             WhichKeyPopup {
                 anchors.fill: parent
+                windowState: root.windowState
             }
         }
 
@@ -47,6 +51,7 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.preferredWidth: 5
+            windowState: root.windowState
             onCloseRequested: root.closeRequested()
         }
 

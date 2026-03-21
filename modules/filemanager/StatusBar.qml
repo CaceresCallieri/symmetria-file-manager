@@ -7,6 +7,7 @@ import QtQuick.Layouts
 Item {
     id: root
 
+    property WindowState windowState
     required property int fileCount
     required property var currentEntry
 
@@ -41,7 +42,7 @@ Item {
             // — hidden during search in both modes
             StyledRect {
                 id: acceptBtn
-                visible: FileManagerService.pickerMode && !FileManagerService.searchActive
+                visible: FileManagerService.pickerMode && !(root.windowState && root.windowState.searchActive)
                 color: _acceptEnabled ? Theme.palette.m3primary : Theme.palette.m3surfaceVariant
                 radius: Theme.rounding.full
                 implicitWidth: acceptLabel.implicitWidth + Theme.padding.lg * 2
@@ -74,7 +75,7 @@ Item {
                             return;
                         if (FileManagerService.pickerSaveMode) {
                             // Save mode: return current directory path
-                            FileManagerService.completePickerMode([FileManagerService.currentPath]);
+                            FileManagerService.completePickerMode([root.windowState.currentPath]);
                         } else if (root.currentEntry) {
                             FileManagerService.completePickerMode([root.currentEntry.path]);
                         }
@@ -85,20 +86,20 @@ Item {
             }
 
             StyledText {
-                visible: !FileManagerService.searchActive && !FileManagerService.pickerMode
+                visible: !(root.windowState && root.windowState.searchActive) && !FileManagerService.pickerMode
                 text: root.fileCount + (root.fileCount === 1 ? " item" : " items")
                 color: Theme.palette.m3onSurfaceVariant
                 font.pointSize: Theme.font.size.xs
             }
 
             Item {
-                visible: !FileManagerService.searchActive
+                visible: !(root.windowState && root.windowState.searchActive)
                 Layout.fillWidth: true
             }
 
             // Center: save filename (save mode) or current entry info (normal/open picker)
             StyledText {
-                visible: !FileManagerService.searchActive && FileManagerService.pickerSaveMode
+                visible: !(root.windowState && root.windowState.searchActive) && FileManagerService.pickerSaveMode
                     && FileManagerService.pickerSuggestedName !== ""
                 text: "Save as: " + FileManagerService.pickerSuggestedName
                 color: Theme.palette.m3primary
@@ -107,7 +108,7 @@ Item {
             }
 
             StyledText {
-                visible: !FileManagerService.searchActive && !FileManagerService.pickerSaveMode
+                visible: !(root.windowState && root.windowState.searchActive) && !FileManagerService.pickerSaveMode
                     && root.currentEntry !== null
                 text: {
                     if (root.currentEntry?.isDir)
@@ -120,13 +121,13 @@ Item {
             }
 
             Item {
-                visible: !FileManagerService.searchActive
+                visible: !(root.windowState && root.windowState.searchActive)
                 Layout.fillWidth: true
             }
 
             // Cancel button (picker mode only)
             StyledRect {
-                visible: FileManagerService.pickerMode && !FileManagerService.searchActive
+                visible: FileManagerService.pickerMode && !(root.windowState && root.windowState.searchActive)
                 color: Theme.palette.m3surfaceVariant
                 radius: Theme.rounding.full
                 implicitWidth: cancelLabel.implicitWidth + Theme.padding.lg * 2
@@ -152,7 +153,7 @@ Item {
 
             // Search input (visible during search)
             StyledText {
-                visible: FileManagerService.searchActive
+                visible: root.windowState && root.windowState.searchActive
                 text: "/"
                 color: Theme.palette.m3primary
                 font.pointSize: Theme.font.size.xs
@@ -164,7 +165,7 @@ Item {
 
                 property bool _suppressTextSync: false
 
-                visible: FileManagerService.searchActive
+                visible: root.windowState && root.windowState.searchActive
                 Layout.fillWidth: true
                 color: Theme.palette.m3onSurface
                 font.pointSize: Theme.font.size.xs
@@ -174,34 +175,34 @@ Item {
                 clip: true
 
                 onTextChanged: {
-                    if (!_suppressTextSync)
-                        FileManagerService.searchQuery = text;
+                    if (!_suppressTextSync && root.windowState)
+                        root.windowState.searchQuery = text;
                 }
 
                 Keys.onPressed: function(event) {
                     if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                        FileManagerService.searchActive = false;
-                        FileManagerService.searchConfirmed();
+                        root.windowState.searchActive = false;
+                        root.windowState.searchConfirmed();
                         event.accepted = true;
                     } else if (event.key === Qt.Key_Escape) {
-                        FileManagerService.searchCancelled();
-                        FileManagerService.clearSearch();
+                        root.windowState.searchCancelled();
+                        root.windowState.clearSearch();
                         event.accepted = true;
                     } else if (event.key === Qt.Key_Down) {
-                        FileManagerService.nextMatch();
+                        root.windowState.nextMatch();
                         event.accepted = true;
                     } else if (event.key === Qt.Key_Up) {
-                        FileManagerService.previousMatch();
+                        root.windowState.previousMatch();
                         event.accepted = true;
                     }
                 }
 
                 // Grab focus when search activates
                 Connections {
-                    target: FileManagerService
+                    target: root.windowState
 
                     function onSearchActiveChanged() {
-                        if (FileManagerService.searchActive) {
+                        if (root.windowState.searchActive) {
                             searchInput._suppressTextSync = true;
                             searchInput.text = "";
                             searchInput._suppressTextSync = false;
@@ -213,17 +214,18 @@ Item {
 
             // Match count indicator (visible during search)
             StyledText {
-                visible: FileManagerService.searchActive
+                visible: root.windowState && root.windowState.searchActive
                 text: {
-                    const matches = FileManagerService.matchIndices;
-                    if (FileManagerService.searchQuery === "")
+                    if (!root.windowState) return "";
+                    const matches = root.windowState.matchIndices;
+                    if (root.windowState.searchQuery === "")
                         return "";
                     if (matches.length === 0)
                         return "No matches";
-                    return (FileManagerService.currentMatchIndex + 1) + "/" + matches.length;
+                    return (root.windowState.currentMatchIndex + 1) + "/" + matches.length;
                 }
                 color: {
-                    if (FileManagerService.searchQuery !== "" && FileManagerService.matchIndices.length === 0)
+                    if (root.windowState && root.windowState.searchQuery !== "" && root.windowState.matchIndices.length === 0)
                         return Theme.palette.m3error;
                     return Theme.palette.m3onSurfaceVariant;
                 }
@@ -233,7 +235,7 @@ Item {
 
             // Right: abbreviated path (always visible)
             StyledText {
-                text: Paths.shortenHome(FileManagerService.currentPath)
+                text: root.windowState ? Paths.shortenHome(root.windowState.currentPath) : ""
                 color: Theme.palette.m3onSurfaceVariant
                 font.pointSize: Theme.font.size.xs
                 elide: Text.ElideMiddle
