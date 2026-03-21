@@ -11,6 +11,9 @@ Item {
     required property int fileCount
     required property var currentEntry
 
+    // Collapses the repeated null-guard pattern used throughout this file.
+    readonly property bool _searchActive: windowState ? windowState.searchActive : false
+
     implicitHeight: inner.implicitHeight + Theme.padding.sm * 4
 
     // Matte pill container with fully rounded corners
@@ -42,7 +45,7 @@ Item {
             // — hidden during search in both modes
             StyledRect {
                 id: acceptBtn
-                visible: FileManagerService.pickerMode && !(root.windowState && root.windowState.searchActive)
+                visible: FileManagerService.pickerMode && !root._searchActive
                 color: _acceptEnabled ? Theme.palette.m3primary : Theme.palette.m3surfaceVariant
                 radius: Theme.rounding.full
                 implicitWidth: acceptLabel.implicitWidth + Theme.padding.lg * 2
@@ -86,20 +89,20 @@ Item {
             }
 
             StyledText {
-                visible: !(root.windowState && root.windowState.searchActive) && !FileManagerService.pickerMode
+                visible: !root._searchActive && !FileManagerService.pickerMode
                 text: root.fileCount + (root.fileCount === 1 ? " item" : " items")
                 color: Theme.palette.m3onSurfaceVariant
                 font.pointSize: Theme.font.size.xs
             }
 
             Item {
-                visible: !(root.windowState && root.windowState.searchActive)
+                visible: !root._searchActive
                 Layout.fillWidth: true
             }
 
             // Center: save filename (save mode) or current entry info (normal/open picker)
             StyledText {
-                visible: !(root.windowState && root.windowState.searchActive) && FileManagerService.pickerSaveMode
+                visible: !root._searchActive && FileManagerService.pickerSaveMode
                     && FileManagerService.pickerSuggestedName !== ""
                 text: "Save as: " + FileManagerService.pickerSuggestedName
                 color: Theme.palette.m3primary
@@ -108,7 +111,7 @@ Item {
             }
 
             StyledText {
-                visible: !(root.windowState && root.windowState.searchActive) && !FileManagerService.pickerSaveMode
+                visible: !root._searchActive && !FileManagerService.pickerSaveMode
                     && root.currentEntry !== null
                 text: {
                     if (root.currentEntry?.isDir)
@@ -121,13 +124,13 @@ Item {
             }
 
             Item {
-                visible: !(root.windowState && root.windowState.searchActive)
+                visible: !root._searchActive
                 Layout.fillWidth: true
             }
 
             // Cancel button (picker mode only)
             StyledRect {
-                visible: FileManagerService.pickerMode && !(root.windowState && root.windowState.searchActive)
+                visible: FileManagerService.pickerMode && !root._searchActive
                 color: Theme.palette.m3surfaceVariant
                 radius: Theme.rounding.full
                 implicitWidth: cancelLabel.implicitWidth + Theme.padding.lg * 2
@@ -153,7 +156,7 @@ Item {
 
             // Search input (visible during search)
             StyledText {
-                visible: root.windowState && root.windowState.searchActive
+                visible: root._searchActive
                 text: "/"
                 color: Theme.palette.m3primary
                 font.pointSize: Theme.font.size.xs
@@ -165,7 +168,7 @@ Item {
 
                 property bool _suppressTextSync: false
 
-                visible: root.windowState && root.windowState.searchActive
+                visible: root._searchActive
                 Layout.fillWidth: true
                 color: Theme.palette.m3onSurface
                 font.pointSize: Theme.font.size.xs
@@ -214,7 +217,7 @@ Item {
 
             // Match count indicator (visible during search)
             StyledText {
-                visible: root.windowState && root.windowState.searchActive
+                visible: root._searchActive
                 text: {
                     if (!root.windowState) return "";
                     const matches = root.windowState.matchIndices;

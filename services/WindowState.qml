@@ -83,9 +83,7 @@ QtObject {
     }
 
     function startSearch(): void {
-        searchQuery = "";
-        matchIndices = [];
-        currentMatchIndex = -1;
+        clearSearch();
         searchActive = true;
     }
 
@@ -105,6 +103,8 @@ QtObject {
     property string activeChordPrefix: ""
     readonly property bool chordActive: activeChordPrefix !== ""
 
+    // Static chord configuration — never mutated at runtime.
+    // chordBindings[prefix].binds lists the keys available after that prefix is pressed.
     readonly property var chordBindings: ({
         "g": {
             label: "go to",
@@ -113,7 +113,7 @@ QtObject {
                 { key: "h", label: "Home", icon: "home" },
                 { key: "d", label: "Downloads", icon: "download" },
                 { key: "s", label: "Screenshots", icon: "screenshot_monitor" },
-                { key: "v", label: "Videos", icon: "video_library" },
+                { key: "v", label: "Videos", icon: "video_library" }
             ]
         }
     })

@@ -53,14 +53,19 @@ Item {
         //    saveMode=true → a directory picker where Enter selects the dir)
         if (FileManagerService.pickerMode) {
             if (FileManagerService.pickerSaveMode) {
+                // Save mode: Enter on a dir navigates into it so the user can
+                // choose a target directory. Enter on a file selects it as the
+                // overwrite target (returns that file's path to the caller).
                 if (root.currentEntry.isDir)
                     _navigateIntoCurrentItem();
                 else
                     FileManagerService.completePickerMode([root.currentEntry.path]);
             } else if (FileManagerService.pickerDirectory) {
+                // Directory picker: only dirs are selectable; ignore Enter on files.
                 if (root.currentEntry.isDir)
                     FileManagerService.completePickerMode([root.currentEntry.path]);
             } else {
+                // Open file picker: navigate into dirs, select files.
                 if (root.currentEntry.isDir)
                     _navigateIntoCurrentItem();
                 else
@@ -262,7 +267,7 @@ Item {
             onEntriesChanged: {
                 if (root._pathJustChanged) {
                     root._pathJustChanged = false;
-                    const restored = root.windowState.restoreCursor(fsModel.path);
+                    const restored = root.windowState ? root.windowState.restoreCursor(fsModel.path) : 0;
                     const safeIndex = Math.min(restored, Math.max(view.count - 1, 0));
                     view.currentIndex = safeIndex;
                     view.positionViewAtIndex(safeIndex, ListView.Beginning);

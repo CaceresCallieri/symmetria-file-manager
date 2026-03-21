@@ -18,28 +18,26 @@ Item {
         initialPath: root.initialPath
     }
 
-    readonly property WindowState state: windowState
-
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
 
         PathBar {
             Layout.fillWidth: true
-            windowState: root.state
+            windowState: windowState
         }
 
         MillerColumns {
             id: millerColumns
             Layout.fillWidth: true
             Layout.fillHeight: true
-            windowState: root.state
+            windowState: windowState
             onCloseRequested: root.closeRequested()
         }
 
         StatusBar {
             Layout.fillWidth: true
-            windowState: root.state
+            windowState: windowState
             fileCount: millerColumns.fileCount
             currentEntry: millerColumns.currentEntry
         }
@@ -50,10 +48,10 @@ Item {
     // picker guard is folded into the popup's active binding.
     DeleteConfirmPopup {
         anchors.fill: parent
-        windowState: root.state
+        windowState: windowState
     }
     CreateFilePopup {
         anchors.fill: parent
-        windowState: root.state
+        windowState: windowState
     }
 }

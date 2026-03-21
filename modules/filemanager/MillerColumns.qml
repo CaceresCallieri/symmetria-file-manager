@@ -25,7 +25,7 @@ Item {
             ParentPanel {
                 anchors.fill: parent
                 windowState: root.windowState
-                opacity: root.windowState ? root.windowState.chordActive ? 0 : 1 : 1
+                opacity: (root.windowState && root.windowState.chordActive) ? 0 : 1
 
                 Behavior on opacity {
                     Anim {}

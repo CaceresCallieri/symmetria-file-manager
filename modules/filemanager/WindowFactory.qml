@@ -156,7 +156,7 @@ Singleton {
         property string fifoPath: ""
 
         // Use python3 directly — avoids sh surface and handles paths with special characters
-        command: ["python3", "-c", "open(sys.argv[1], 'w').write('__PICKER_CANCELLED__')", fifoPath]
+        command: ["python3", "-c", "import sys; open(sys.argv[1], 'w').write('__PICKER_CANCELLED__')", fifoPath]
 
         onRunningChanged: {
             if (running) fifoCancelTimeout.start();
