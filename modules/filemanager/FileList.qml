@@ -25,7 +25,7 @@ Item {
     property int _preSearchIndex: 0
 
     // Keys suppressed in picker mode (file operations have no meaning in a file chooser)
-    readonly property var _pickerSuppressedKeys: [Qt.Key_D, Qt.Key_Y, Qt.Key_X, Qt.Key_P, Qt.Key_A, Qt.Key_Space]
+    readonly property var _pickerSuppressedKeys: [Qt.Key_D, Qt.Key_Y, Qt.Key_X, Qt.Key_P, Qt.Key_A, Qt.Key_Space, Qt.Key_C]
 
     // Filename to focus once the model refreshes (set by paste, create, etc.)
     property string _pendingFocusName: ""
@@ -99,6 +99,31 @@ Item {
             case "v":
                 _saveCursorAndNavigate(() => windowState.navigate(Paths.home + "/Videos"));
                 break;
+            }
+        } else if (prefix === "c") {
+            if (!root.currentEntry)
+                return;
+            let textToCopy = "";
+            switch (keyChar) {
+            case "c":
+                textToCopy = root.currentEntry.path;
+                break;
+            case "f":
+                textToCopy = root.currentEntry.name;
+                break;
+            case "n":
+                // Strip extension (last dot onwards), but keep names that start with a dot
+                const name = root.currentEntry.name;
+                const dotIndex = name.lastIndexOf(".");
+                textToCopy = dotIndex > 0 ? name.substring(0, dotIndex) : name;
+                break;
+            case "d":
+                textToCopy = windowState.currentPath;
+                break;
+            }
+            if (textToCopy !== "") {
+                clipboardCopyProcess.command = ["wl-copy", "--", textToCopy];
+                clipboardCopyProcess.running = true;
             }
         }
     }
@@ -401,6 +426,12 @@ Item {
                 event.accepted = true;
                 break;
 
+            case Qt.Key_C:
+                // c — start "copy to clipboard" chord
+                windowState.activeChordPrefix = "c";
+                event.accepted = true;
+                break;
+
             case Qt.Key_D:
                 if (mods & Qt.ControlModifier) {
                     // Ctrl+D — half-page down
@@ -542,5 +573,9 @@ Item {
                 root._pendingFocusName = "";
             }
         }
+    }
+
+    Process {
+        id: clipboardCopyProcess
     }
 }

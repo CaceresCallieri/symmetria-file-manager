@@ -115,6 +115,15 @@ QtObject {
                 { key: "s", label: "Screenshots", icon: "screenshot_monitor" },
                 { key: "v", label: "Videos", icon: "video_library" }
             ]
+        },
+        "c": {
+            label: "copy to clipboard",
+            binds: [
+                { key: "c", label: "File path", icon: "link" },
+                { key: "f", label: "Filename", icon: "description" },
+                { key: "n", label: "Name without extension", icon: "label" },
+                { key: "d", label: "Directory path", icon: "folder" }
+            ]
         }
     })
 
