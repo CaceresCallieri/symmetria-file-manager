@@ -53,30 +53,23 @@ Item {
         if (!root.currentEntry)
             return;
 
-        // Picker mode — four behavioural cases based on mode flags:
-        //   saveMode=true  → navigate dirs, select file as "overwrite" target
+        // Picker mode — Enter always means "confirm/select", never navigate.
+        // Use l/→ to navigate into directories instead.
+        //   saveMode=true  → select dir as save location, or file as overwrite target
         //   directory=true → select dirs only, ignore files
-        //   (default)      → navigate dirs, select files
-        //   (saveMode+dir is handled by SaveFiles in the portal: directory=true,
-        //    saveMode=true → a directory picker where Enter selects the dir)
+        //   (default)      → select files only, ignore dirs
         if (FileManagerService.pickerMode) {
             if (FileManagerService.pickerSaveMode) {
-                // Save mode: Enter on a dir navigates into it so the user can
-                // choose a target directory. Enter on a file selects it as the
-                // overwrite target (returns that file's path to the caller).
-                if (root.currentEntry.isDir)
-                    _navigateIntoCurrentItem();
-                else
-                    FileManagerService.completePickerMode([root.currentEntry.path]);
+                // Save mode: Enter = Save button — returns current directory
+                // as the save location (same as StatusBar's accept button).
+                FileManagerService.completePickerMode([windowState.currentPath]);
             } else if (FileManagerService.pickerDirectory) {
                 // Directory picker: only dirs are selectable; ignore Enter on files.
                 if (root.currentEntry.isDir)
                     FileManagerService.completePickerMode([root.currentEntry.path]);
             } else {
-                // Open file picker: navigate into dirs, select files.
-                if (root.currentEntry.isDir)
-                    _navigateIntoCurrentItem();
-                else
+                // Open file picker: Enter selects files only; use l/→ for dirs.
+                if (!root.currentEntry.isDir)
                     FileManagerService.completePickerMode([root.currentEntry.path]);
             }
             return;
