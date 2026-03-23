@@ -55,7 +55,7 @@ Item {
 
         // Picker mode — Enter always means "confirm/select", never navigate.
         // Use l/→ to navigate into directories instead.
-        //   saveMode=true  → select dir as save location, or file as overwrite target
+        //   saveMode=true  → return current browsing directory as save location (mirrors Save button)
         //   directory=true → select dirs only, ignore files
         //   (default)      → select files only, ignore dirs
         if (FileManagerService.pickerMode) {
