@@ -385,8 +385,9 @@ Item {
                 }
                 const prefix = windowState.activeChordPrefix;
                 windowState.activeChordPrefix = "";
-                // In picker mode, allow navigation (g) and sort (,) chords but
-                // suppress destructive ones. Copy-path (c) is also harmless.
+                // All current chord prefixes (g=navigate, c=copy-path, ,=sort)
+                // are safe in picker mode — no destructive chords exist yet.
+                // Escape cancels the chord without executing it.
                 if (key !== Qt.Key_Escape) {
                     const keyChar = prefix === "," ? event.text : event.text.toLowerCase();
                     root._executeChord(prefix, keyChar);

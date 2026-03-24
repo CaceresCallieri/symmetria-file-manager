@@ -29,8 +29,10 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-HOME_DIR = os.path.expanduser("~")
-DOWNLOADS_DIR = os.path.join(HOME_DIR, "Downloads")
+HOME_DIR = os.path.normpath(os.path.expanduser("~"))
+_downloads_candidate = os.path.join(HOME_DIR, "Downloads")
+# Use ~/Downloads as save-dialog default only if the directory actually exists.
+DOWNLOADS_DIR = _downloads_candidate if os.path.isdir(_downloads_candidate) else HOME_DIR
 FIFO_PREFIX = "/tmp/symmetria-picker-"
 FIFO_TIMEOUT_SECONDS = 300  # 5 minutes max wait for user interaction
 CANCELLED_SENTINEL = "__PICKER_CANCELLED__"
@@ -128,6 +130,9 @@ class FileChooserBackend(ServiceInterface):
         accept_label = get_option(options, "accept_label", "")
         current_folder_raw = get_option(options, "current_folder", None)
         current_folder = decode_byte_array_path(current_folder_raw)
+        # Open-file dialogs intentionally do not default to ~/Downloads — the
+        # calling app's folder hint is meaningful (e.g. "open an image from where
+        # you last looked"), so we honour it or fall back to empty (home dir).
 
         fifo_path = create_fifo()
         log.info("Created FIFO: %s", fifo_path)
@@ -196,7 +201,7 @@ class FileChooserBackend(ServiceInterface):
 
         # Default to ~/Downloads for save dialogs when the app doesn't
         # provide a specific folder (empty or just home directory).
-        if not current_folder or current_folder == HOME_DIR:
+        if not current_folder or os.path.normpath(current_folder) == HOME_DIR:
             current_folder = DOWNLOADS_DIR
 
         log.info("SaveFile: name=%r, folder=%r", current_name, current_folder)
@@ -266,10 +271,11 @@ class FileChooserBackend(ServiceInterface):
         current_folder = decode_byte_array_path(current_folder_raw)
 
         # Default to ~/Downloads (same rationale as save_file).
-        if not current_folder or current_folder == HOME_DIR:
+        if not current_folder or os.path.normpath(current_folder) == HOME_DIR:
             current_folder = DOWNLOADS_DIR
 
         fifo_path = create_fifo()
+        log.info("Created FIFO: %s", fifo_path)
 
         try:
             picker_options = json.dumps({
@@ -298,6 +304,7 @@ class FileChooserBackend(ServiceInterface):
             return [0, {"uris": Variant("as", [uri])}]
 
         except asyncio.TimeoutError:
+            log.warning("SaveFiles picker timed out after %ds", FIFO_TIMEOUT_SECONDS)
             return [1, {}]
         except Exception as exc:
             log.error("SaveFiles error: %s", exc)
