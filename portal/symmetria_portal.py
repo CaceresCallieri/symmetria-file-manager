@@ -29,6 +29,8 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+HOME_DIR = os.path.expanduser("~")
+DOWNLOADS_DIR = os.path.join(HOME_DIR, "Downloads")
 FIFO_PREFIX = "/tmp/symmetria-picker-"
 FIFO_TIMEOUT_SECONDS = 300  # 5 minutes max wait for user interaction
 CANCELLED_SENTINEL = "__PICKER_CANCELLED__"
@@ -192,6 +194,11 @@ class FileChooserBackend(ServiceInterface):
         if current_file and not current_name:
             current_name = os.path.basename(current_file)
 
+        # Default to ~/Downloads for save dialogs when the app doesn't
+        # provide a specific folder (empty or just home directory).
+        if not current_folder or current_folder == HOME_DIR:
+            current_folder = DOWNLOADS_DIR
+
         log.info("SaveFile: name=%r, folder=%r", current_name, current_folder)
 
         fifo_path = create_fifo()
@@ -257,6 +264,10 @@ class FileChooserBackend(ServiceInterface):
         accept_label = get_option(options, "accept_label", "")
         current_folder_raw = get_option(options, "current_folder", None)
         current_folder = decode_byte_array_path(current_folder_raw)
+
+        # Default to ~/Downloads (same rationale as save_file).
+        if not current_folder or current_folder == HOME_DIR:
+            current_folder = DOWNLOADS_DIR
 
         fifo_path = create_fifo()
 

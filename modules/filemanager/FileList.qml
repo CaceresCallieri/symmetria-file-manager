@@ -24,8 +24,9 @@ Item {
     // Search: cursor position saved before entering search mode
     property int _preSearchIndex: 0
 
-    // Keys suppressed in picker mode (file operations have no meaning in a file chooser)
-    readonly property var _pickerSuppressedKeys: [Qt.Key_D, Qt.Key_Y, Qt.Key_X, Qt.Key_P, Qt.Key_A, Qt.Key_R, Qt.Key_Space, Qt.Key_C]
+    // Keys suppressed in picker mode (file operations have no meaning in a file chooser).
+    // Note: Key_C is intentionally absent — it starts the harmless "copy path" chord.
+    readonly property var _pickerSuppressedKeys: [Qt.Key_D, Qt.Key_Y, Qt.Key_X, Qt.Key_P, Qt.Key_A, Qt.Key_R, Qt.Key_Space]
 
     // Filename to focus once the model refreshes (set by paste, create, rename, etc.)
     property string _pendingFocusName: ""
@@ -368,31 +369,12 @@ Item {
                 return;
             }
 
-            // Picker mode: Escape cancels, suppress file-op keys
-            if (FileManagerService.pickerMode) {
-                if (event.key === Qt.Key_Escape) {
-                    FileManagerService.cancelPickerMode();
-                    event.accepted = true;
-                    return;
-                }
-                // Suppress file operations — they don't belong in a picker.
-                // Ctrl+D (half-page down) is allowed; bare D (delete) is suppressed.
-                const isCtrlD = event.key === Qt.Key_D && (event.modifiers & Qt.ControlModifier);
-                if (!isCtrlD && root._pickerSuppressedKeys.indexOf(event.key) !== -1) {
-                    event.accepted = true;
-                    return;
-                }
-                // Suppress Ctrl+V (paste) in picker mode
-                if (event.key === Qt.Key_V && (event.modifiers & Qt.ControlModifier)) {
-                    event.accepted = true;
-                    return;
-                }
-            }
-
             const key = event.key;
             const mods = event.modifiers;
 
-            // Resolve active chord — any keypress completes or cancels it
+            // Resolve active chord BEFORE picker suppression — otherwise a
+            // chord like g,d is broken because 'd' gets suppressed before
+            // the chord resolver can see it.
             if (windowState.activeChordPrefix !== "") {
                 // Ignore bare modifier keys (Shift, Ctrl, Alt, Meta) — they don't
                 // resolve a chord, they're just held to modify the next real key.
@@ -403,13 +385,35 @@ Item {
                 }
                 const prefix = windowState.activeChordPrefix;
                 windowState.activeChordPrefix = "";
-                // In picker mode, cancel the chord without executing it
-                if (!FileManagerService.pickerMode && key !== Qt.Key_Escape) {
+                // In picker mode, allow navigation (g) and sort (,) chords but
+                // suppress destructive ones. Copy-path (c) is also harmless.
+                if (key !== Qt.Key_Escape) {
                     const keyChar = prefix === "," ? event.text : event.text.toLowerCase();
                     root._executeChord(prefix, keyChar);
                 }
                 event.accepted = true;
                 return;
+            }
+
+            // Picker mode: Escape cancels, suppress file-op keys
+            if (FileManagerService.pickerMode) {
+                if (key === Qt.Key_Escape) {
+                    FileManagerService.cancelPickerMode();
+                    event.accepted = true;
+                    return;
+                }
+                // Suppress file operations — they don't belong in a picker.
+                // Ctrl+D (half-page down) is allowed; bare D (delete) is suppressed.
+                const isCtrlD = key === Qt.Key_D && (mods & Qt.ControlModifier);
+                if (!isCtrlD && root._pickerSuppressedKeys.indexOf(key) !== -1) {
+                    event.accepted = true;
+                    return;
+                }
+                // Suppress Ctrl+V (paste) in picker mode
+                if (key === Qt.Key_V && (mods & Qt.ControlModifier)) {
+                    event.accepted = true;
+                    return;
+                }
             }
 
             switch (key) {
