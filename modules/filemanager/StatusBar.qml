@@ -11,6 +11,9 @@ Item {
     required property int fileCount
     required property var currentEntry
 
+    // Horizontal inset matching PathBar pill spacing in PathBar and StatusBar
+    readonly property real _barHorizontalMargin: Theme.padding.lg + Theme.padding.md
+
     // Collapses the repeated null-guard pattern used throughout this file.
     readonly property bool _searchActive: windowState ? windowState.searchActive : false
     readonly property bool _flashActive: windowState ? windowState.flashActive : false
@@ -25,8 +28,8 @@ Item {
         anchors.fill: parent
         anchors.topMargin: Theme.padding.sm
         anchors.bottomMargin: Theme.padding.sm
-        anchors.leftMargin: Theme.padding.lg + Theme.padding.md
-        anchors.rightMargin: Theme.padding.lg + Theme.padding.md
+        anchors.leftMargin: root._barHorizontalMargin
+        anchors.rightMargin: root._barHorizontalMargin
         radius: Theme.rounding.full
         color: Theme.pillMedium.background
         border.color: Theme.pillMedium.border

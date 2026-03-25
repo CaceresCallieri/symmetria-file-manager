@@ -11,6 +11,9 @@ Item {
 
     property WindowState windowState
 
+    // Horizontal inset matching PathBar pill spacing in PathBar and StatusBar
+    readonly property real _barHorizontalMargin: Theme.padding.lg + Theme.padding.md
+
     implicitHeight: inner.implicitHeight + Theme.padding.md * 2
 
     // Build breadcrumb segments: [{name, path, isHome}]
@@ -48,9 +51,10 @@ Item {
         id: inner
 
         anchors.fill: parent
-        anchors.margins: Theme.padding.md
-        anchors.leftMargin: Theme.padding.lg + Theme.padding.md
-        anchors.rightMargin: Theme.padding.lg + Theme.padding.md
+        anchors.topMargin: Theme.padding.md
+        anchors.bottomMargin: Theme.padding.md
+        anchors.leftMargin: root._barHorizontalMargin
+        anchors.rightMargin: root._barHorizontalMargin
         spacing: Theme.spacing.sm
 
         // Back button
@@ -104,7 +108,7 @@ Item {
             color: Theme.pillMedium.background
             border.color: Theme.pillMedium.border
             border.width: 1
-            implicitHeight: breadcrumbs.implicitHeight + breadcrumbs.anchors.margins * 2
+            implicitHeight: breadcrumbs.implicitHeight + Math.round(Theme.padding.sm / 2) * 2
 
             RowLayout {
                 id: breadcrumbs
@@ -113,7 +117,7 @@ Item {
                 anchors.margins: Math.round(Theme.padding.sm / 2)
                 spacing: 0
 
-                Item { Layout.fillWidth: true }
+                Item { Layout.fillWidth: true } // Left spacer — centers breadcrumbs
 
                 Repeater {
                     model: root._segments
@@ -182,7 +186,7 @@ Item {
                     }
                 }
 
-                Item { Layout.fillWidth: true }
+                Item { Layout.fillWidth: true } // Right spacer — centers breadcrumbs
             }
         }
 
