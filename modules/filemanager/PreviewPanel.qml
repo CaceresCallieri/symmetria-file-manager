@@ -229,10 +229,8 @@ Item {
                         model: FileSystemModel {
                             path: root._committedEntry?.path ?? ""
                             showHidden: Config.fileManager.showHidden
-                            sortReverse: Config.fileManager.sortReverse
-                            // sortBy intentionally omitted — defaults to Natural. The directory
-                            // preview is read-only context and does not need to mirror the
-                            // active panel's sort order (which lives on WindowState, not Config).
+                            sortBy: root.windowState ? root.windowState.sortBy : 1
+                            sortReverse: root.windowState ? root.windowState.sortReverse : false
                             watchChanges: false
                             onEntriesChanged: root._directoryEntries = entries
                         }
