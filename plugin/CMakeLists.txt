@@ -4,13 +4,12 @@ project(yazifm-plugin VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_INSTALL_PREFIX "/" CACHE STRING "Install prefix")
+set(CMAKE_INSTALL_PREFIX "/usr" CACHE STRING "Install prefix")
 
-set(INSTALL_QMLDIR "usr/lib/qt6/qml" CACHE STRING "QML module install directory")
+set(INSTALL_QMLDIR "lib/qt6/qml" CACHE STRING "QML module install directory (relative to CMAKE_INSTALL_PREFIX)")
 
-find_package(Qt6 REQUIRED COMPONENTS Core Qml Gui Concurrent)
-# QXlsx links against Qt6::GuiPrivate
-find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
+# GuiPrivate needed because QXlsx links against Qt6::GuiPrivate
+find_package(Qt6 REQUIRED COMPONENTS Core Qml Gui Concurrent GuiPrivate)
 find_package(KF6SyntaxHighlighting REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LibArchive IMPORTED_TARGET libarchive REQUIRED)

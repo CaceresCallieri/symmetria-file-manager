@@ -1,6 +1,5 @@
 [Unit]
 Description=Yazi File Manager IPC Service
-Documentation=https://github.com/user/yazi-frontend
 PartOf=graphical-session.target
 After=graphical-session.target
 

@@ -516,7 +516,9 @@ void FileSystemModel::applyChanges(const QSet<QString>& removedPaths, const QSet
         endRemoveRows();
     }
 
-    // Create and insert new entries, then resort for correct ordering
+    // Create and insert new entries, then resort for correct ordering.
+    // resort() emits entriesChanged() after sorting; emit it here only when
+    // there are no adds (remove-only path) so the signal fires exactly once.
     if (!addedPaths.isEmpty()) {
         QList<FileSystemEntry*> newEntries;
         for (const auto& path : addedPaths) {
@@ -529,10 +531,10 @@ void FileSystemModel::applyChanges(const QSet<QString>& removedPaths, const QSet
         m_entries.append(newEntries);
         endInsertRows();
 
-        resort();
+        resort(); // emits entriesChanged()
+    } else if (!removedPaths.isEmpty()) {
+        emit entriesChanged();
     }
-
-    emit entriesChanged();
 }
 
 bool FileSystemModel::compareEntries(const FileSystemEntry* a, const FileSystemEntry* b) const {

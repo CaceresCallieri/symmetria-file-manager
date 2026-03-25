@@ -26,7 +26,7 @@ qt_query_qml_module(yazifm-models
 )
 
 set(module_dir "${INSTALL_QMLDIR}/${module_target_path}")
-install(TARGETS yazifm-models LIBRARY DESTINATION "${module_dir}" RUNTIME DESTINATION "${module_dir}")
-install(TARGETS "${module_plugin_target}" LIBRARY DESTINATION "${module_dir}" RUNTIME DESTINATION "${module_dir}")
-install(FILES "${module_qmldir}" DESTINATION "${module_dir}")
-install(FILES "${module_typeinfo}" DESTINATION "${module_dir}")
+install(TARGETS yazifm-models LIBRARY DESTINATION "${module_dir}" RUNTIME DESTINATION "${module_dir}" COMPONENT runtime)
+install(TARGETS "${module_plugin_target}" LIBRARY DESTINATION "${module_dir}" RUNTIME DESTINATION "${module_dir}" COMPONENT runtime)
+install(FILES "${module_qmldir}" DESTINATION "${module_dir}" COMPONENT runtime)
+install(FILES "${module_typeinfo}" DESTINATION "${module_dir}" COMPONENT dev)
