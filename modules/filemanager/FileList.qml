@@ -306,6 +306,7 @@ Item {
 
         anchors.fill: parent
         anchors.margins: Theme.padding.sm
+        anchors.rightMargin: Theme.padding.sm + 12
 
         clip: true
         focus: true
@@ -313,7 +314,23 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         Component.onCompleted: view.forceActiveFocus()
 
-        ScrollBar.vertical: StyledScrollBar {}
+        ScrollBar.vertical: ScrollBar {
+            id: fileListScrollBar
+            policy: ScrollBar.AlwaysOn
+            parent: view.parent
+            anchors.top: view.top
+            anchors.bottom: view.bottom
+            anchors.right: parent.right
+            anchors.rightMargin: Theme.padding.sm + 3
+            width: 8
+
+            contentItem: Rectangle {
+                implicitWidth: 8
+                radius: width / 2
+                color: Theme.palette.m3onSurfaceVariant
+                opacity: 0.4
+            }
+        }
 
         model: FileSystemModel {
             id: fsModel

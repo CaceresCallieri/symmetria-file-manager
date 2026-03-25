@@ -74,8 +74,8 @@ Item {
         keyNavigationEnabled: false
         boundsBehavior: Flickable.StopAtBounds
 
-        ScrollBar.vertical: StyledScrollBar {
-            visible: parentView.visible
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
         }
 
         model: FileSystemModel {
