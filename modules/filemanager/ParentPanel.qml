@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import "../../components"
 import "../../services"
 import "../../config"
-import Symmetria.Models
+import YaziFM.Models
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
