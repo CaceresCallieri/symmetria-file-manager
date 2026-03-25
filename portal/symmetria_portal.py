@@ -14,7 +14,6 @@ import asyncio
 import json
 import logging
 import os
-import signal
 import subprocess
 import threading
 import uuid
@@ -330,16 +329,9 @@ async def main():
 
 
 if __name__ == "__main__":
-    # Handle graceful shutdown
-    loop = asyncio.new_event_loop()
-
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, loop.stop)
-
     try:
-        loop.run_until_complete(main())
+        asyncio.run(main())
     except KeyboardInterrupt:
         pass
     finally:
-        loop.close()
         log.info("Portal backend stopped")

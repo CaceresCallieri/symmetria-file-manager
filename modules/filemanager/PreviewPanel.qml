@@ -251,6 +251,9 @@ Item {
                             path: root._committedEntry?.path ?? ""
                             showHidden: Config.fileManager.showHidden
                             sortReverse: Config.fileManager.sortReverse
+                            // sortBy intentionally omitted — defaults to Natural. The directory
+                            // preview is read-only context and does not need to mirror the
+                            // active panel's sort order (which lives on WindowState, not Config).
                             watchChanges: false
                         }
 

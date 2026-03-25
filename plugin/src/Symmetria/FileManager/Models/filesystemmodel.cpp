@@ -156,7 +156,7 @@ int FileSystemModel::rowCount(const QModelIndex& parent) const {
 }
 
 QVariant FileSystemModel::data(const QModelIndex& index, int role) const {
-    if (role != Qt::UserRole || !index.isValid() || index.row() >= m_entries.size()) {
+    if (role != Qt::UserRole || !index.isValid() || index.row() >= static_cast<int>(m_entries.size())) {
         return QVariant();
     }
     return QVariant::fromValue(m_entries.at(index.row()));

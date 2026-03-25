@@ -23,7 +23,7 @@ Item {
 
     // Imperative update avoids binding loops — QML re-enters declarative bindings
     // when the C++ model emits multiple NOTIFY signals in the same batch
-    property bool _isEmpty: false  // non-readonly: written imperatively by _updateEmpty to avoid binding loop re-entry
+    property bool _isEmpty: false
 
     function _updateEmpty() {
         _isEmpty = !spreadsheetModel.loading

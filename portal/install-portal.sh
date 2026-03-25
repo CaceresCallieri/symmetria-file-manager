@@ -13,7 +13,7 @@ echo ""
 # 1. Check dbus-fast is available for python3.12 (matches service ExecStart)
 if ! python3.12 -c "import dbus_fast" 2>/dev/null; then
     echo "Installing dbus-fast for python3.12..."
-    python3.12 -m pip install dbus-fast
+    python3.12 -m pip install --break-system-packages dbus-fast
 fi
 
 # 2. Install portal Python backend to a fixed system path (not dev repo path)
@@ -58,6 +58,7 @@ EOF
 echo "Reloading systemd and restarting services..."
 systemctl --user daemon-reload
 systemctl --user enable --now symmetria-fm.service
+systemctl --user enable --now xdg-desktop-portal-symmetria.service
 systemctl --user restart xdg-desktop-portal
 
 echo ""

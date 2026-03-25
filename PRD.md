@@ -206,7 +206,7 @@ keyboard-navigable style.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  PathBar: 🏠 / home / jc / projects / yazi-frontend   [:]      │
+│  PathBar: 🏠 / home / jc / projects / symmetria-file-manager   [:]      │
 ├────────────┬────────────────────────────────────────────────────┤
 │            │  Name              Size      Modified     Perms    │
 │  Bookmarks │  ─────────────────────────────────────────────────  │
@@ -574,7 +574,7 @@ to persist.
 ### Repository Layout
 
 ```
-~/projects/yazi-frontend/
+~/projects/symmetria-file-manager/
 ├── PRD.md                            # This document
 ├── RESEARCH.md                       # Feasibility research
 ├── install.sh                        # Symlink into Symmetria
@@ -628,7 +628,7 @@ echo "  4. Clear QML cache: rm -rf ~/.cache/quickshell/qmlcache"
 
 ### Why Symlinks?
 
-- **Live reload**: Edit files in `~/projects/yazi-frontend/`, changes are immediately
+- **Live reload**: Edit files in `~/projects/symmetria-file-manager/`, changes are immediately
   visible after clearing QML cache
 - **Clean separation**: `git log` in Symmetria stays clean; this project has its own
   history

@@ -47,7 +47,7 @@ The service's `ExecStartPre` automatically clears the QML cache before each star
 ### Opening the File Manager
 
 ```bash
-qs ipc -c symmetria-fm call filemanager open ""    # From terminal
+qs ipc --any-display -c symmetria-fm call filemanager open ""    # From terminal
 # Or via Super+E keybinding (configured in Symmetria's Shortcuts.qml)
 ```
 
