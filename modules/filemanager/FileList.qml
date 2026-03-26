@@ -741,11 +741,6 @@ Item {
                 event.accepted = true;
                 break;
 
-            case Qt.Key_Q:
-                root.closeRequested();
-                event.accepted = true;
-                break;
-
             case Qt.Key_AsciiTilde:
                 root._saveCursorAndNavigate(() => windowState.navigate(Paths.home));
                 event.accepted = true;
