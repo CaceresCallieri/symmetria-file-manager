@@ -117,9 +117,17 @@ Item {
             const hasSelection = windowState.selectedCount > 0;
             if (!hasSelection && !root.currentEntry)
                 return;
+            // "d" copies the current directory regardless of selection state
+            if (keyChar === "d") {
+                clipboardCopyProcess.command = ["wl-copy", "--", windowState.currentPath];
+                clipboardCopyProcess.running = true;
+                return;
+            }
             let textToCopy;
             if (hasSelection) {
                 const paths = windowState.getSelectedPathsArray();
+                if (paths.length === 0)
+                    return;
                 switch (keyChar) {
                 case "c":
                     textToCopy = paths.join("\n");
@@ -129,9 +137,6 @@ Item {
                     break;
                 case "n":
                     textToCopy = paths.map(p => _stripExtension(_basename(p))).join("\n");
-                    break;
-                case "d":
-                    textToCopy = windowState.currentPath;
                     break;
                 default:
                     return;
@@ -146,9 +151,6 @@ Item {
                     break;
                 case "n":
                     textToCopy = _stripExtension(root.currentEntry.name);
-                    break;
-                case "d":
-                    textToCopy = windowState.currentPath;
                     break;
                 default:
                     return;
@@ -171,6 +173,7 @@ Item {
         }
     }
 
+    // String helpers used by the clipboard chord
     function _basename(path: string): string {
         return path.substring(path.lastIndexOf("/") + 1);
     }
