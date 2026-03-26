@@ -2,6 +2,7 @@ import QtQuick
 
 QtObject {
     property bool showHidden: true
+    property string iconMode: "system" // "material" | "system"
     property Sizes sizes: Sizes {}
 
     component Sizes: QtObject {

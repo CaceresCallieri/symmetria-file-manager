@@ -1,4 +1,5 @@
 #include "filesystemmodel.hpp"
+#include "iconthemeresolver.hpp"
 
 #include <qdiriterator.h>
 #include <qfuturewatcher.h>
@@ -17,6 +18,7 @@ FileSystemEntry::FileSystemEntry(const QString& path, const QString& relativePat
     , m_isImageInitialised(false)
     , m_isVideoInitialised(false)
     , m_mimeTypeInitialised(false)
+    , m_iconPathInitialised(false)
     , m_permissions(buildPermissions(m_fileInfo))
     , m_owner(m_fileInfo.owner()) {}
 
@@ -126,6 +128,36 @@ QString FileSystemEntry::mimeType() const {
         m_mimeTypeInitialised = true;
     }
     return m_mimeType;
+}
+
+QString FileSystemEntry::iconPath() const {
+    if (!m_iconPathInitialised) {
+        if (m_fileInfo.isDir()) {
+            m_iconPath = IconThemeResolver::resolve(QStringLiteral("folder"));
+        } else {
+            static const QMimeDatabase db;
+            const auto mime = db.mimeTypeForFile(m_path);
+
+            // Try the exact MIME icon name (e.g. "application-pdf")
+            m_iconPath = IconThemeResolver::resolve(mime.iconName());
+
+            // Then try the generic icon name (e.g. "audio-x-generic")
+            if (m_iconPath.isEmpty())
+                m_iconPath = IconThemeResolver::resolve(mime.genericIconName());
+
+            // Then walk parent MIME types
+            if (m_iconPath.isEmpty()) {
+                for (const auto& parentName : mime.parentMimeTypes()) {
+                    const auto parentMime = db.mimeTypeForName(parentName);
+                    m_iconPath = IconThemeResolver::resolve(parentMime.iconName());
+                    if (!m_iconPath.isEmpty())
+                        break;
+                }
+            }
+        }
+        m_iconPathInitialised = true;
+    }
+    return m_iconPath;
 }
 
 void FileSystemEntry::updateRelativePath(const QDir& dir) {

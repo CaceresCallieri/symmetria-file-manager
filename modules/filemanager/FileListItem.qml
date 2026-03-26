@@ -169,8 +169,9 @@ Item {
         Behavior on opacity { Anim {} }
 
         // File/folder icon
-        MaterialIcon {
-            text: {
+        FileIcon {
+            entry: root.modelData
+            materialIconName: {
                 if (!root.modelData)
                     return "description";
                 if (root.modelData.isDir)
@@ -186,9 +187,10 @@ Item {
                     return "music_note";
                 return "description";
             }
-            color: root.modelData?.isDir ? Theme.palette.m3primary : Theme.palette.m3onSurfaceVariant
-            fill: root.modelData?.isDir ? 1 : 0
-            font.pointSize: Theme.font.size.xl
+            materialColor: root.modelData?.isDir ? Theme.palette.m3primary : Theme.palette.m3onSurfaceVariant
+            materialFill: root.modelData?.isDir ? 1 : 0
+            Layout.preferredWidth: implicitWidth
+            Layout.preferredHeight: implicitHeight
         }
 
         // File name

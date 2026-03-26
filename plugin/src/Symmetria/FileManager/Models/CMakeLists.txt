@@ -3,6 +3,7 @@ qt_add_qml_module(symmetria-filemanager-models
     VERSION ${PROJECT_VERSION}
     SOURCES
         filesystemmodel.hpp filesystemmodel.cpp
+        iconthemeresolver.hpp iconthemeresolver.cpp
         previewimagehelper.hpp previewimagehelper.cpp
         syntaxhighlighthelper.hpp syntaxhighlighthelper.cpp
         archivepreviewmodel.hpp archivepreviewmodel.cpp

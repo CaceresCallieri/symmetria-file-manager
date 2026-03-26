@@ -1,4 +1,5 @@
 import "../../components"
+import "../../config"
 import "../../services"
 import QtQuick
 import QtQuick.Layouts
@@ -22,9 +23,12 @@ Item {
         // application/pdf appears here only if isImage is false for PDFs in the
         // C++ model (i.e. PDF compositing is disabled), otherwise PDFs are routed
         // to ImagePreview instead.
-        MaterialIcon {
+        FileIcon {
             Layout.alignment: Qt.AlignHCenter
-            text: {
+            entry: root.entry
+            implicitWidth: Theme.font.size.xxl * 4
+            implicitHeight: Theme.font.size.xxl * 4
+            materialIconName: {
                 if (!root.entry)
                     return "description";
                 const mime = root.entry.mimeType;
@@ -38,9 +42,9 @@ Item {
                     return "picture_as_pdf";
                 return "description";
             }
-            color: Theme.palette.m3outline
-            font.pointSize: Theme.font.size.xxl * 2
-            font.weight: 500
+            materialColor: Theme.palette.m3outline
+            materialPointSize: Theme.font.size.xxl * 2
+            materialWeight: 500
         }
 
         // Filename

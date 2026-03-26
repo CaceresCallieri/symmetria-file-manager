@@ -36,6 +36,7 @@ class FileSystemEntry : public QObject {
     Q_PROPERTY(QString symlinkTarget READ symlinkTarget CONSTANT)
     Q_PROPERTY(QString owner READ owner CONSTANT)
     Q_PROPERTY(QString mimeType READ mimeType CONSTANT)
+    Q_PROPERTY(QString iconPath READ iconPath CONSTANT)
 
 public:
     explicit FileSystemEntry(const QString& path, const QString& relativePath, QObject* parent = nullptr);
@@ -57,6 +58,7 @@ public:
     [[nodiscard]] QString symlinkTarget() const;
     [[nodiscard]] QString owner() const;
     [[nodiscard]] QString mimeType() const;
+    [[nodiscard]] QString iconPath() const;
 
     void updateRelativePath(const QDir& dir);
 
@@ -77,6 +79,9 @@ private:
 
     mutable QString m_mimeType;
     mutable bool m_mimeTypeInitialised;
+
+    mutable QString m_iconPath;
+    mutable bool m_iconPathInitialised;
 
     const QString m_permissions; // Pre-computed Unix-style permission string (e.g. drwxr-xr-x)
     const QString m_owner;       // Pre-computed at construction; owner() is a blocking syscall
