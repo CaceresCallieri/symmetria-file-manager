@@ -15,10 +15,6 @@ public:
     /// or an empty string if not found in any theme in the inheritance chain.
     static QString resolve(const QString& iconName);
 
-    /// Override the auto-detected theme. Clears the icon cache so subsequent
-    /// resolve() calls use the new theme. Pass empty string to revert to auto-detection.
-    static void setThemeOverride(const QString& themeName);
-
 private:
     struct ThemeInfo {
         QString basePath;

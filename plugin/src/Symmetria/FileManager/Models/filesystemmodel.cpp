@@ -135,8 +135,10 @@ QString FileSystemEntry::iconPath() const {
         if (m_fileInfo.isDir()) {
             m_iconPath = IconThemeResolver::resolve(QStringLiteral("folder"));
         } else {
+            // Reuse the already-resolved MIME type string rather than calling
+            // mimeTypeForFile() again — that avoids a second stat/magic-byte read.
             static const QMimeDatabase db;
-            const auto mime = db.mimeTypeForFile(m_path);
+            const auto mime = db.mimeTypeForName(mimeType());
 
             // Try the exact MIME icon name (e.g. "application-pdf")
             m_iconPath = IconThemeResolver::resolve(mime.iconName());

@@ -13,34 +13,36 @@ Q_LOGGING_CATEGORY(lcIconTheme, "symmetria.filemanager.icontheme", QtWarningMsg)
 
 namespace symmetria::filemanager::models {
 
-// XDG standard search paths for icon themes.
-static QStringList iconSearchPaths()
+// XDG standard search paths for icon themes. Built once and shared across all call sites.
+static const QStringList& iconSearchPaths()
 {
-    QStringList paths;
+    static const QStringList paths = []() {
+        QStringList result;
 
-    // User-local icons
-    const QString dataHome = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-    if (!dataHome.isEmpty())
-        paths.append(dataHome + QStringLiteral("/icons"));
+        // User-local icons
+        const QString dataHome = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+        if (!dataHome.isEmpty())
+            result.append(dataHome + QStringLiteral("/icons"));
 
-    // System-wide icon directories
-    const auto dataDirs = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
-    for (const auto& dir : dataDirs) {
-        const QString iconDir = dir + QStringLiteral("/icons");
-        if (!paths.contains(iconDir))
-            paths.append(iconDir);
-    }
+        // System-wide icon directories
+        const auto dataDirs = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+        for (const auto& dir : dataDirs) {
+            const QString iconDir = dir + QStringLiteral("/icons");
+            if (!result.contains(iconDir))
+                result.append(iconDir);
+        }
 
-    // Pixmaps fallback
-    paths.append(QStringLiteral("/usr/share/pixmaps"));
+        // Pixmaps fallback
+        result.append(QStringLiteral("/usr/share/pixmaps"));
 
+        return result;
+    }();
     return paths;
 }
 
 QString IconThemeResolver::locateThemeDir(const QString& themeName)
 {
-    static const auto paths = iconSearchPaths();
-    for (const auto& searchPath : paths) {
+    for (const auto& searchPath : iconSearchPaths()) {
         const QString candidate = searchPath + QLatin1Char('/') + themeName;
         if (QDir(candidate).exists())
             return candidate;
@@ -172,8 +174,7 @@ void IconThemeResolver::ensureInitialised()
     } else {
         // Fallback: scan for first theme with scalable MIME icons.
         qCDebug(lcIconTheme) << "Theme" << themeName << "not found on disk, scanning for alternatives";
-        static const auto paths = iconSearchPaths();
-        for (const auto& searchPath : paths) {
+        for (const auto& searchPath : iconSearchPaths()) {
             QDir dir(searchPath);
             if (!dir.exists())
                 continue;
@@ -196,29 +197,6 @@ void IconThemeResolver::ensureInitialised()
     }
 
     qCDebug(lcIconTheme) << "Active icon theme:" << s_activeTheme;
-}
-
-void IconThemeResolver::setThemeOverride(const QString& themeName)
-{
-    const QString resolved = themeName.isEmpty() ? QString() : themeName;
-
-    if (resolved == s_activeTheme)
-        return;
-
-    qCDebug(lcIconTheme) << "Theme override:" << resolved;
-
-    // Clear all caches so resolve() uses the new theme.
-    s_cache.clear();
-    s_themes.clear();
-
-    if (resolved.isEmpty()) {
-        // Revert to auto-detection on next resolve().
-        s_initialised = false;
-        s_activeTheme.clear();
-    } else {
-        s_activeTheme = resolved;
-        s_initialised = true;
-    }
 }
 
 QString IconThemeResolver::findIcon(const ThemeInfo& theme, const QString& iconName)
