@@ -14,9 +14,7 @@ Loader {
     opacity: windowState && windowState.createInputActive ? 1 : 0
     // Drive active from the source property, not from animated opacity — avoids
     // a race where the Loader activates mid-fade-out with an already-closed state.
-    // Also suppressed in picker mode (file ops not allowed).
-    active: windowState && !FileManagerService.pickerMode
-        && windowState.createInputActive
+    active: windowState && windowState.createInputActive
     asynchronous: true
 
     sourceComponent: FocusScope {

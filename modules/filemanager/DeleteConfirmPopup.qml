@@ -14,9 +14,7 @@ Loader {
     opacity: windowState && windowState.deleteConfirmPaths.length > 0 ? 1 : 0
     // Drive active from the source property, not from animated opacity — avoids
     // a race where the Loader activates mid-fade-out with an already-empty path.
-    // Also suppressed in picker mode (file ops not allowed).
-    active: windowState && !FileManagerService.pickerMode
-        && windowState.deleteConfirmPaths.length > 0
+    active: windowState && windowState.deleteConfirmPaths.length > 0
     asynchronous: true
 
     sourceComponent: FocusScope {

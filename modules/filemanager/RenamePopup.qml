@@ -17,8 +17,7 @@ Loader {
     anchors.fill: parent
 
     opacity: windowState && windowState.renameTargetPath !== "" ? 1 : 0
-    active: windowState && !FileManagerService.pickerMode
-        && windowState.renameTargetPath !== ""
+    active: windowState && windowState.renameTargetPath !== ""
     asynchronous: true
 
     sourceComponent: FocusScope {

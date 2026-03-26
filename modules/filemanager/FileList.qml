@@ -27,9 +27,10 @@ Item {
     // Search: cursor position saved before entering search mode
     property int _preSearchIndex: 0
 
-    // Keys suppressed in picker mode (file operations have no meaning in a file chooser).
+    // Keys suppressed in picker mode (clipboard operations don't belong in a file chooser).
     // Note: Key_C is intentionally absent — it starts the harmless "copy path" chord.
-    readonly property var _pickerSuppressedKeys: [Qt.Key_D, Qt.Key_Y, Qt.Key_X, Qt.Key_P, Qt.Key_A, Qt.Key_R, Qt.Key_Space]
+    // Create (A), Rename (R), and Delete (D) are allowed — common workflows in file dialogs.
+    readonly property var _pickerSuppressedKeys: [Qt.Key_Y, Qt.Key_X, Qt.Key_P, Qt.Key_Space]
 
     // Filename to focus once the model refreshes (set by paste, create, rename, etc.)
     property string _pendingFocusName: ""
@@ -660,10 +661,8 @@ Item {
                     event.accepted = true;
                     return;
                 }
-                // Suppress file operations — they don't belong in a picker.
-                // Ctrl+D (half-page down) is allowed; bare D (delete) is suppressed.
-                const isCtrlD = key === Qt.Key_D && (mods & Qt.ControlModifier);
-                if (!isCtrlD && root._pickerSuppressedKeys.indexOf(key) !== -1) {
+                // Suppress clipboard operations — they don't belong in a picker.
+                if (root._pickerSuppressedKeys.indexOf(key) !== -1) {
                     event.accepted = true;
                     return;
                 }
