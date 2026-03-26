@@ -112,30 +112,47 @@ Item {
                 break;
             }
         } else if (prefix === "c") {
-            if (!root.currentEntry)
-                return;
             if (clipboardCopyProcess.running)
                 return;
-            let textToCopy;
-            switch (keyChar) {
-            case "c":
-                textToCopy = root.currentEntry.path;
-                break;
-            case "f":
-                textToCopy = root.currentEntry.name;
-                break;
-            case "n": {
-                // Strip extension (last dot onwards), but keep names that start with a dot
-                const name = root.currentEntry.name;
-                const dotIndex = name.lastIndexOf(".");
-                textToCopy = dotIndex > 0 ? name.substring(0, dotIndex) : name;
-                break;
-            }
-            case "d":
-                textToCopy = windowState.currentPath;
-                break;
-            default:
+            const hasSelection = windowState.selectedCount > 0;
+            if (!hasSelection && !root.currentEntry)
                 return;
+            let textToCopy;
+            if (hasSelection) {
+                const paths = windowState.getSelectedPathsArray();
+                switch (keyChar) {
+                case "c":
+                    textToCopy = paths.join("\n");
+                    break;
+                case "f":
+                    textToCopy = paths.map(p => _basename(p)).join("\n");
+                    break;
+                case "n":
+                    textToCopy = paths.map(p => _stripExtension(_basename(p))).join("\n");
+                    break;
+                case "d":
+                    textToCopy = windowState.currentPath;
+                    break;
+                default:
+                    return;
+                }
+            } else {
+                switch (keyChar) {
+                case "c":
+                    textToCopy = root.currentEntry.path;
+                    break;
+                case "f":
+                    textToCopy = root.currentEntry.name;
+                    break;
+                case "n":
+                    textToCopy = _stripExtension(root.currentEntry.name);
+                    break;
+                case "d":
+                    textToCopy = windowState.currentPath;
+                    break;
+                default:
+                    return;
+                }
             }
             clipboardCopyProcess.command = ["wl-copy", "--", textToCopy];
             clipboardCopyProcess.running = true;
@@ -152,6 +169,15 @@ Item {
                 windowState.sortReverse = isReverse;
             }
         }
+    }
+
+    function _basename(path: string): string {
+        return path.substring(path.lastIndexOf("/") + 1);
+    }
+
+    function _stripExtension(name: string): string {
+        const dotIndex = name.lastIndexOf(".");
+        return dotIndex > 0 ? name.substring(0, dotIndex) : name;
     }
 
     function _executePaste(): void {
