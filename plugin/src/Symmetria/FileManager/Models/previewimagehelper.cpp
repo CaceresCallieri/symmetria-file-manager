@@ -162,25 +162,26 @@ QString PreviewImageHelper::decryptRpgmvp(const QString& sourcePath, const QStri
     if (!input.open(QIODevice::ReadOnly))
         return {};
 
-    // RPGMV files: 16-byte signature header + 16-byte encrypted PNG header + rest of PNG
+    // File layout: [16-byte RPGMV signature] [16-byte XOR-encrypted PNG header] [rest of PNG]
+    // The first 16 plaintext bytes of any PNG are always identical:
+    //   PNG magic (8 bytes) + IHDR chunk length (4 bytes) + "IHDR" tag (4 bytes).
+    // We restore them directly — no XOR key needed.
     if (input.size() < 32)
         return {};
 
-    // Skip the 16-byte RPGMV signature header
-    input.seek(16);
-
-    // The first 16 bytes of every valid PNG are always the same:
-    // PNG magic (8 bytes) + IHDR chunk length (4 bytes) + "IHDR" (4 bytes).
-    // Since we know the plaintext, we write it directly — no XOR key needed.
     static constexpr char pngMagic[16] = {
         '\x89', '\x50', '\x4E', '\x47', '\x0D', '\x0A', '\x1A', '\x0A',
         '\x00', '\x00', '\x00', '\x0D', '\x49', '\x48', '\x44', '\x52'
     };
 
-    // Skip the 16 encrypted bytes, read the unencrypted remainder (offset 32+)
+    // Skip both the 16-byte RPGMV signature and the 16 encrypted PNG header bytes;
+    // the unencrypted remainder starts at offset 32.
     input.seek(32);
     const QByteArray remainder = input.readAll();
     input.close();
+
+    if (remainder.isEmpty())
+        return {};
 
     QDir().mkpath(QFileInfo(cachePath).absolutePath());
 
@@ -188,10 +189,16 @@ QString PreviewImageHelper::decryptRpgmvp(const QString& sourcePath, const QStri
     if (!output.open(QIODevice::WriteOnly))
         return {};
 
+    auto cleanupPartial = [&]() -> QString {
+        output.close();
+        QFile::remove(cachePath);
+        return {};
+    };
+
     if (output.write(pngMagic, 16) != 16)
-        return {};
+        return cleanupPartial();
     if (output.write(remainder) != remainder.size())
-        return {};
+        return cleanupPartial();
 
     output.close();
     return cachePath;
