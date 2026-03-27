@@ -63,9 +63,6 @@ Item {
     }
 
     function _activateCurrentItem(): void {
-        if (!root.currentEntry)
-            return;
-
         // Picker mode — Enter always means "confirm/select", never navigate.
         // Use l/→ to navigate into directories instead.
         //   saveMode=true  → return current browsing directory as save location (mirrors Save button)
@@ -75,18 +72,24 @@ Item {
             if (FileManagerService.pickerSaveMode) {
                 // Save mode: Enter = Save button — returns current directory
                 // as the save location (same as StatusBar's accept button).
+                // No currentEntry needed — works even in empty folders.
                 FileManagerService.completePickerMode([windowState.currentPath]);
-            } else if (FileManagerService.pickerDirectory) {
-                // Directory picker: only dirs are selectable; ignore Enter on files.
-                if (root.currentEntry.isDir)
-                    FileManagerService.completePickerMode([root.currentEntry.path]);
-            } else {
-                // Open file picker: Enter selects files only; use l/→ for dirs.
-                if (!root.currentEntry.isDir)
-                    FileManagerService.completePickerMode([root.currentEntry.path]);
+            } else if (root.currentEntry) {
+                if (FileManagerService.pickerDirectory) {
+                    // Directory picker: only dirs are selectable; ignore Enter on files.
+                    if (root.currentEntry.isDir)
+                        FileManagerService.completePickerMode([root.currentEntry.path]);
+                } else {
+                    // Open file picker: Enter selects files only; use l/→ for dirs.
+                    if (!root.currentEntry.isDir)
+                        FileManagerService.completePickerMode([root.currentEntry.path]);
+                }
             }
             return;
         }
+
+        if (!root.currentEntry)
+            return;
 
         if (root.currentEntry.isDir)
             _navigateIntoCurrentItem();
