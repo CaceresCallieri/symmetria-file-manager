@@ -210,19 +210,19 @@ Item {
         return Math.max(1, Math.floor(view.height / Config.fileManager.sizes.itemHeight / 2));
     }
 
-    function _findFirstEntryOfType(isDir: bool): int {
+    // Returns the index of the first entry matching targetIsDir, or -1 if none exists.
+    function _findFirstEntryOfType(targetIsDir: bool): int {
         const entries = fsModel.entries;
         for (let i = 0; i < entries.length; i++) {
-            if (entries[i].isDir === isDir)
+            if (entries[i].isDir === targetIsDir)
                 return i;
         }
         return -1;
     }
 
-    function _jumpToOppositeType(): void {
+    function _jumpToDirFileBoundary(): void {
         if (!root.currentEntry) return;
-        const currentIsDir = root.currentEntry.isDir;
-        let target = root._findFirstEntryOfType(!currentIsDir);
+        const target = root._findFirstEntryOfType(!root.currentEntry.isDir);
         if (target < 0) return;
 
         view.currentIndex = target;
@@ -806,7 +806,8 @@ Item {
                 break;
 
             case Qt.Key_Tab:
-                root._jumpToOppositeType();
+                // Jump between the dirs block and files block — useful in picker mode too.
+                root._jumpToDirFileBoundary();
                 event.accepted = true;
                 break;
 
