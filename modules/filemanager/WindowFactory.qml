@@ -313,6 +313,8 @@ Singleton {
 
             WlrLayershell.namespace: "symmetria-fm-overlay"
             WlrLayershell.layer: WlrLayer.Overlay
+            // Release keyboard focus during close animation so the compositor
+            // can refocus the previous surface before the window disappears.
             WlrLayershell.keyboardFocus: _closing
                 ? WlrKeyboardFocus.None
                 : WlrKeyboardFocus.Exclusive
@@ -323,32 +325,15 @@ Singleton {
             anchors.left: true
             anchors.right: true
 
-            // --- Animated properties ---
-            property real overlayScale: 0.0
-            property real overlayOpacity: 0.0
-
-            Behavior on overlayScale {
-                NumberAnimation {
-                    duration: Theme.animDuration
-                    easing.type: Easing.OutBack
-                    easing.overshoot: 1.2
-                }
-            }
-
-            Behavior on overlayOpacity {
-                Anim {}
-            }
-
             Component.onCompleted: {
-                overlayScale = 1.0;
-                overlayOpacity = 1.0;
+                overlayContentWrapper.scale = 1.0;
+                overlayContentWrapper.opacity = 1.0;
             }
 
             // Delay destroy until close animation finishes
             Timer {
                 id: destroyTimer
                 interval: Theme.animDuration + 50
-                running: overlayWin._closing
                 onTriggered: overlayWin.visible = false
             }
 
@@ -365,8 +350,9 @@ Singleton {
                 if (_closing)
                     return;
                 _closing = true;
-                overlayScale = 0.0;
-                overlayOpacity = 0.0;
+                overlayContentWrapper.scale = 0.0;
+                overlayContentWrapper.opacity = 0.0;
+                destroyTimer.start();
             }
 
             // --- Click-outside-to-close area ---
@@ -383,13 +369,31 @@ Singleton {
                 width: parent.width * Config.fileManager.sizes.overlayViewportFraction
                 height: parent.height * Config.fileManager.sizes.overlayViewportFraction
 
-                scale: overlayWin.overlayScale
-                opacity: overlayWin.overlayOpacity
+                scale: 0.0
+                opacity: 0.0
+
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: Theme.animDuration
+                        easing.type: Easing.OutBack
+                        easing.overshoot: 1.2
+                    }
+                }
+
+                Behavior on opacity {
+                    Anim {}
+                }
 
                 ClippingRect {
                     anchors.fill: parent
                     radius: Theme.rounding.lg
                     color: Theme.layer(Theme.palette.m3surface, 0)
+
+                    // Absorb clicks on the card to prevent them reaching
+                    // the click-outside MouseArea and triggering close.
+                    MouseArea {
+                        anchors.fill: parent
+                    }
 
                     FileManager {
                         anchors.fill: parent

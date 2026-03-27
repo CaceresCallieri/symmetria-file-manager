@@ -9,6 +9,6 @@ QtObject {
         property int windowWidth: 820
         property int windowHeight: 520
         property int itemHeight: 20
-        property real overlayViewportFraction: 0.85
+        property real overlayViewportFraction: 0.85 // ratio 0–1: fraction of viewport covered by the overlay
     }
 }

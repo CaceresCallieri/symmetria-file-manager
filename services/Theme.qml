@@ -31,7 +31,6 @@ Singleton {
         property color m3onSecondaryContainer: "#ffd9e3"
         property color m3error: "#ffb4ab"
         property color m3shadow: "#000000"
-        property color m3scrim: "#000000"
     }
 
     // === Typography ===
