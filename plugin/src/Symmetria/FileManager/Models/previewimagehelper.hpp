@@ -32,8 +32,9 @@ signals:
 private:
     void processSource();
     void applyResolvedUrl(const QString& url);
-    static bool needsBackgroundCompositing(const QString& path);
+    static bool needsCachedDecode(const QString& path);
     static QString generateCachedPreview(const QString& sourcePath, const QString& cachePath);
+    static QString decryptRpgmvp(const QString& sourcePath, const QString& cachePath);
     static const QString& cacheDir();
 
     QString m_source;

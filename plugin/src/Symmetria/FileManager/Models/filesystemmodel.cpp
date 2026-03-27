@@ -56,8 +56,12 @@ bool FileSystemEntry::isDir() const {
 
 bool FileSystemEntry::isImage() const {
     if (!m_isImageInitialised) {
-        QImageReader reader(m_path);
-        m_isImage = reader.canRead();
+        if (m_path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)) {
+            m_isImage = true;
+        } else {
+            QImageReader reader(m_path);
+            m_isImage = reader.canRead();
+        }
         m_isImageInitialised = true;
     }
     return m_isImage;
@@ -435,6 +439,7 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
             for (const auto& format : formats) {
                 extraNameFilters << "*." + format;
             }
+            extraNameFilters << QStringLiteral("*.rpgmvp");
 
             QDir::Filters filters = QDir::Files;
             if (showHidden) {
@@ -473,9 +478,11 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
             QString path = iter->next();
 
             if (filter == Images) {
-                QImageReader reader(path);
-                if (!reader.canRead()) {
-                    continue;
+                if (!path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)) {
+                    QImageReader reader(path);
+                    if (!reader.canRead()) {
+                        continue;
+                    }
                 }
             }
 

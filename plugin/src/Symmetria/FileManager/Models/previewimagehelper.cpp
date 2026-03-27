@@ -2,6 +2,7 @@
 
 #include <qcryptographichash.h>
 #include <qdir.h>
+#include <qfile.h>
 #include <qfileinfo.h>
 #include <qimage.h>
 #include <qimagereader.h>
@@ -74,13 +75,13 @@ void PreviewImageHelper::processSource() {
         return;
     }
 
-    // Non-PDF files — passthrough, no compositing needed
-    if (!needsBackgroundCompositing(m_source)) {
+    // Files that don't need cached decoding — passthrough
+    if (!needsCachedDecode(m_source)) {
         applyResolvedUrl(QStringLiteral("file://") + m_source);
         return;
     }
 
-    // PDF — check cache first, then generate asynchronously
+    // PDF / RPGMV — check cache first, then generate asynchronously
     const QFileInfo info(m_source);
     const auto cacheKey = QCryptographicHash::hash(
         (m_source + QStringLiteral(":") + QString::number(info.lastModified().toSecsSinceEpoch())).toUtf8(),
@@ -130,13 +131,18 @@ void PreviewImageHelper::processSource() {
     m_watcher->setFuture(QtConcurrent::run(generateCachedPreview, m_source, cachePath));
 }
 
-bool PreviewImageHelper::needsBackgroundCompositing(const QString& path) {
+bool PreviewImageHelper::needsCachedDecode(const QString& path) {
     // Use a fast suffix check to avoid opening the file on the GUI thread.
     // The reader-based format detection would perform synchronous I/O here.
-    return path.endsWith(QStringLiteral(".pdf"), Qt::CaseInsensitive);
+    return path.endsWith(QStringLiteral(".pdf"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive);
 }
 
 QString PreviewImageHelper::generateCachedPreview(const QString& sourcePath, const QString& cachePath) {
+    if (sourcePath.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive))
+        return decryptRpgmvp(sourcePath, cachePath);
+
+    // PDF — render first page with white background compositing
     QImageReader reader(sourcePath);
     reader.setBackgroundColor(Qt::white);
 
@@ -148,6 +154,46 @@ QString PreviewImageHelper::generateCachedPreview(const QString& sourcePath, con
 
     if (!image.save(cachePath, "PNG")) return {};
 
+    return cachePath;
+}
+
+QString PreviewImageHelper::decryptRpgmvp(const QString& sourcePath, const QString& cachePath) {
+    QFile input(sourcePath);
+    if (!input.open(QIODevice::ReadOnly))
+        return {};
+
+    // RPGMV files: 16-byte signature header + 16-byte encrypted PNG header + rest of PNG
+    if (input.size() < 32)
+        return {};
+
+    // Skip the 16-byte RPGMV signature header
+    input.seek(16);
+
+    // The first 16 bytes of every valid PNG are always the same:
+    // PNG magic (8 bytes) + IHDR chunk length (4 bytes) + "IHDR" (4 bytes).
+    // Since we know the plaintext, we write it directly — no XOR key needed.
+    static constexpr char pngMagic[16] = {
+        '\x89', '\x50', '\x4E', '\x47', '\x0D', '\x0A', '\x1A', '\x0A',
+        '\x00', '\x00', '\x00', '\x0D', '\x49', '\x48', '\x44', '\x52'
+    };
+
+    // Skip the 16 encrypted bytes, read the unencrypted remainder (offset 32+)
+    input.seek(32);
+    const QByteArray remainder = input.readAll();
+    input.close();
+
+    QDir().mkpath(QFileInfo(cachePath).absolutePath());
+
+    QFile output(cachePath);
+    if (!output.open(QIODevice::WriteOnly))
+        return {};
+
+    if (output.write(pngMagic, 16) != 16)
+        return {};
+    if (output.write(remainder) != remainder.size())
+        return {};
+
+    output.close();
     return cachePath;
 }
 
