@@ -880,8 +880,6 @@ Item {
             case Qt.Key_Escape:
                 if (windowState.selectedCount > 0)
                     windowState.clearSelection();
-                else
-                    root.closeRequested();
                 event.accepted = true;
                 break;
 
