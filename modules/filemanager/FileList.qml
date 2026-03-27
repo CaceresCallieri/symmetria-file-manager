@@ -210,6 +210,25 @@ Item {
         return Math.max(1, Math.floor(view.height / Config.fileManager.sizes.itemHeight / 2));
     }
 
+    function _findFirstEntryOfType(isDir: bool): int {
+        const entries = fsModel.entries;
+        for (let i = 0; i < entries.length; i++) {
+            if (entries[i].isDir === isDir)
+                return i;
+        }
+        return -1;
+    }
+
+    function _jumpToOppositeType(): void {
+        if (!root.currentEntry) return;
+        const currentIsDir = root.currentEntry.isDir;
+        let target = root._findFirstEntryOfType(!currentIsDir);
+        if (target < 0) return;
+
+        view.currentIndex = target;
+        view.positionViewAtIndex(target, ListView.Contain);
+    }
+
     function _computeMatches(preservePosition: bool): void {
         const query = windowState.searchQuery.toLowerCase();
         if (query === "") {
@@ -783,6 +802,11 @@ Item {
 
             case Qt.Key_Equal:
                 root._saveCursorAndNavigate(() => windowState.forward());
+                event.accepted = true;
+                break;
+
+            case Qt.Key_Tab:
+                root._jumpToOppositeType();
                 event.accepted = true;
                 break;
 
