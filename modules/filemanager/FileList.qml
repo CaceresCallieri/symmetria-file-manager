@@ -94,6 +94,32 @@ Item {
             Qt.openUrlExternally("file://" + root.currentEntry.path);
     }
 
+    // Copy the path that would be confirmed in picker mode to the system clipboard.
+    // Mirrors _activateCurrentItem()'s picker branching so the copied path always
+    // matches what gets sent to the portal FIFO.
+    function _copyPickerPathToClipboard(): void {
+        if (clipboardCopyProcess.running)
+            return;
+        let pathToCopy;
+        if (FileManagerService.pickerSaveMode) {
+            // Append the suggested filename so the clipboard contains the full
+            // destination path, matching what the portal actually writes to disk.
+            const dir = windowState.currentPath;
+            const name = FileManagerService.pickerSuggestedName;
+            pathToCopy = name ? dir + "/" + name : dir;
+        } else if (FileManagerService.pickerDirectory) {
+            if (root.currentEntry && root.currentEntry.isDir)
+                pathToCopy = root.currentEntry.path;
+        } else {
+            if (root.currentEntry && !root.currentEntry.isDir)
+                pathToCopy = root.currentEntry.path;
+        }
+        if (pathToCopy) {
+            clipboardCopyProcess.command = ["wl-copy", "--", pathToCopy];
+            clipboardCopyProcess.running = true;
+        }
+    }
+
     function _executeChord(prefix: string, keyChar: string): void {
         if (prefix === "g") {
             switch (keyChar) {
@@ -731,6 +757,10 @@ Item {
                             root.currentEntry.mimeType
                         );
                     }
+                } else if ((mods & Qt.ShiftModifier) && FileManagerService.pickerMode) {
+                    // Shift+Enter in picker: copy path to clipboard, then confirm + close
+                    root._copyPickerPathToClipboard();
+                    root._activateCurrentItem();
                 } else {
                     root._activateCurrentItem();
                 }
