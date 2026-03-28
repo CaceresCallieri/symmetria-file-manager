@@ -82,7 +82,7 @@ void PreviewImageHelper::processSource() {
         return;
     }
 
-    // PDF / RPGMV — check cache first, then generate asynchronously
+    // PDF / RPGMV / .icns — check cache first, then generate asynchronously
     const QFileInfo info(m_source);
     const auto cacheKey = QCryptographicHash::hash(
         (m_source + QStringLiteral(":") + QString::number(info.lastModified().toSecsSinceEpoch())).toUtf8(),

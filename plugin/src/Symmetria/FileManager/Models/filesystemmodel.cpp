@@ -437,7 +437,8 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
 
         if (filter == Images) {
             QStringList extraNameFilters = nameFilters;
-            const auto formats = QImageReader::supportedImageFormats();
+            // supportedImageFormats() is a static list that never changes at runtime — cache it.
+            static const auto formats = QImageReader::supportedImageFormats();
             for (const auto& format : formats) {
                 extraNameFilters << "*." + format;
             }
@@ -480,6 +481,8 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
             QString path = iter->next();
 
             if (filter == Images) {
+                // These formats use custom decoders (not QImageReader) — skip the
+                // canRead() check which would incorrectly reject them.
                 if (!path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)
                     && !path.endsWith(QStringLiteral(".png_"), Qt::CaseInsensitive)
                     && !path.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive)) {

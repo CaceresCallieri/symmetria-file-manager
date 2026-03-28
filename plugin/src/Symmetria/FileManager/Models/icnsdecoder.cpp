@@ -1,6 +1,7 @@
 #include "icnsdecoder.hpp"
 
 #include <qdir.h>
+#include <qendian.h>
 #include <qfile.h>
 #include <qfileinfo.h>
 
@@ -32,7 +33,9 @@ static int chunkPriority(quint32 tag) {
     return -1;
 }
 
-QString IcnsDecoder::extractLargestPng(const QString& sourcePath, const QString& cachePath) {
+namespace IcnsDecoder {
+
+QString extractLargestPng(const QString& sourcePath, const QString& cachePath) {
     QFile file(sourcePath);
     if (!file.open(QIODevice::ReadOnly))
         return {};
@@ -42,22 +45,17 @@ QString IcnsDecoder::extractLargestPng(const QString& sourcePath, const QString&
         return {};
 
     // Read and validate header: 4-byte magic "icns" + 4-byte total size (big-endian)
-    QByteArray header = file.read(8);
+    const QByteArray header = file.read(8);
     if (header.size() < 8)
         return {};
 
-    if (header[0] != 'i' || header[1] != 'c' || header[2] != 'n' || header[3] != 's')
+    if (!header.startsWith("icns"))
         return {};
 
-    const auto totalSize = static_cast<quint32>(
-        (static_cast<quint8>(header[4]) << 24) |
-        (static_cast<quint8>(header[5]) << 16) |
-        (static_cast<quint8>(header[6]) << 8)  |
-         static_cast<quint8>(header[7])
-    );
+    const auto totalSize = static_cast<qint64>(qFromBigEndian<quint32>(header.constData() + 4));
 
     // Use the smaller of declared size and actual file size to handle truncation
-    const qint64 endOffset = qMin(static_cast<qint64>(totalSize), fileSize);
+    const qint64 endOffset = qMin(totalSize, fileSize);
 
     // Iterate chunks and find the best PNG-containing one
     int bestPriority = static_cast<int>(kPngChunkTypes.size()); // lower is better
@@ -67,33 +65,26 @@ QString IcnsDecoder::extractLargestPng(const QString& sourcePath, const QString&
     qint64 offset = 8;
     while (offset + 8 <= endOffset) {
         file.seek(offset);
-        QByteArray chunkHeader = file.read(8);
+        const QByteArray chunkHeader = file.read(8);
         if (chunkHeader.size() < 8)
             break;
 
-        const auto tag = static_cast<quint32>(
-            (static_cast<quint8>(chunkHeader[0]) << 24) |
-            (static_cast<quint8>(chunkHeader[1]) << 16) |
-            (static_cast<quint8>(chunkHeader[2]) << 8)  |
-             static_cast<quint8>(chunkHeader[3])
-        );
+        const auto tag       = qFromBigEndian<quint32>(chunkHeader.constData());
+        const auto chunkSize = static_cast<qint64>(qFromBigEndian<quint32>(chunkHeader.constData() + 4));
 
-        const auto chunkSize = static_cast<quint32>(
-            (static_cast<quint8>(chunkHeader[4]) << 24) |
-            (static_cast<quint8>(chunkHeader[5]) << 16) |
-            (static_cast<quint8>(chunkHeader[6]) << 8)  |
-             static_cast<quint8>(chunkHeader[7])
-        );
-
-        // Chunk size includes the 8-byte header; must be at least 8
-        if (chunkSize < 8 || offset + chunkSize > endOffset)
-            break;
+        // Chunk size includes the 8-byte header; must be at least 8.
+        // Use continue (not break) so a single malformed chunk doesn't abort
+        // scanning — subsequent chunks may still be valid.
+        if (chunkSize < 8 || offset + chunkSize > endOffset) {
+            if (chunkSize == 0) break; // zero-size would loop forever
+            continue;
+        }
 
         const int priority = chunkPriority(tag);
         if (priority >= 0 && priority < bestPriority) {
             bestPriority = priority;
             bestDataOffset = offset + 8;
-            bestDataSize = chunkSize - 8;
+            bestDataSize = static_cast<quint32>(chunkSize - 8);
 
             // Can't do better than priority 0
             if (priority == 0) break;
@@ -113,9 +104,11 @@ QString IcnsDecoder::extractLargestPng(const QString& sourcePath, const QString&
     if (pngData.size() < 8)
         return {};
 
-    // Validate PNG signature: \x89PNG\r\n\x1a\n
-    if (static_cast<quint8>(pngData[0]) != 0x89 || pngData[1] != 'P'
-        || pngData[2] != 'N' || pngData[3] != 'G')
+    // Validate full 8-byte PNG signature: \x89PNG\r\n\x1a\n
+    static constexpr char kPngSignature[8] = {
+        '\x89', 'P', 'N', 'G', '\r', '\n', '\x1a', '\n'
+    };
+    if (!pngData.startsWith(QByteArray::fromRawData(kPngSignature, 8)))
         return {};
 
     // Write extracted PNG to cache
@@ -134,5 +127,7 @@ QString IcnsDecoder::extractLargestPng(const QString& sourcePath, const QString&
     output.close();
     return cachePath;
 }
+
+} // namespace IcnsDecoder
 
 } // namespace symmetria::filemanager::models
