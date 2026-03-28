@@ -152,9 +152,27 @@ QtObject {
     property string activeChordPrefix: ""
     readonly property bool chordActive: activeChordPrefix !== ""
 
-    // Static chord configuration — never mutated at runtime.
-    // chordBindings[prefix].binds lists the keys available after that prefix is pressed.
-    readonly property var chordBindings: ({
+    // === Bookmark sub-mode (entered via gn / gx) ===
+    property string bookmarkSubMode: ""        // "" | "create" | "delete"
+    readonly property bool bookmarkSubModeActive: bookmarkSubMode !== ""
+
+    // === Transient status message (auto-clears after 2s) ===
+    property string transientMessage: ""
+
+    property Timer _transientTimer: Qt.createQmlObject(
+        'import QtQuick; Timer { interval: 2000 }', root, "transientTimer")
+
+    function showTransientMessage(msg: string): void {
+        transientMessage = msg;
+        _transientTimer.restart();
+    }
+
+    Component.onCompleted: {
+        _transientTimer.triggered.connect(() => { root.transientMessage = ""; });
+    }
+
+    // Static chord configuration — the built-in binds that never change.
+    readonly property var _staticChordBindings: ({
         "g": {
             label: "go to",
             binds: [
@@ -185,6 +203,35 @@ QtObject {
             ]
         }
     })
+
+    // Merged view: static binds + user bookmarks. Re-evaluated when bookmarks change.
+    readonly property var chordBindings: {
+        const base = JSON.parse(JSON.stringify(_staticChordBindings));
+        const userBookmarks = BookmarkService.bookmarks;
+        const gBinds = base["g"].binds;
+
+        // Track which keys are reserved (static nav + action keys)
+        const usedKeys = { "n": true, "x": true };
+        for (const b of gBinds)
+            usedKeys[b.key] = true;
+
+        for (const [key, bm] of Object.entries(userBookmarks)) {
+            if (usedKeys[key]) {
+                const idx = gBinds.findIndex(b => b.key === key);
+                if (idx >= 0)
+                    gBinds[idx] = { key: key, label: bm.label, icon: "bookmark", isUser: true };
+            } else {
+                gBinds.push({ key: key, label: bm.label, icon: "bookmark", isUser: true });
+            }
+        }
+
+        // Separator + bookmark management actions — always last
+        gBinds.push({ isSeparator: true });
+        gBinds.push({ key: "n", label: "New bookmark", icon: "bookmark_add", isAction: true });
+        gBinds.push({ key: "x", label: "Delete bookmark", icon: "bookmark_remove", isAction: true });
+
+        return base;
+    }
 
     // === Selection (Space-toggled marks) ===
     // Stores absolute paths as keys: { "/home/user/file.txt": true, ... }

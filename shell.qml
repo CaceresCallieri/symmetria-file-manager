@@ -22,6 +22,7 @@ ShellRoot {
         // this registers the IpcHandler. Without this, the Singleton
         // is lazily created and the IPC target never appears.
         void WindowFactory;
+        void BookmarkService;
         void Logger;
         console.log("symmetria-fm: IPC service ready (target: filemanager)");
     }

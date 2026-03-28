@@ -197,6 +197,18 @@ Item {
             case "v":
                 _saveCursorAndNavigate(() => windowState.navigate(Paths.home + "/Videos"));
                 break;
+            case "n":
+                windowState.bookmarkSubMode = "create";
+                break;
+            case "x":
+                windowState.bookmarkSubMode = "delete";
+                break;
+            default: {
+                const bmPath = BookmarkService.getBookmarkPath(keyChar);
+                if (bmPath !== "")
+                    _saveCursorAndNavigate(() => windowState.navigate(bmPath));
+                break;
+            }
             }
         } else if (prefix === "c") {
             if (clipboardCopyProcess.running)
@@ -634,6 +646,47 @@ Item {
             const key = event.key;
             const mods = event.modifiers;
 
+            // Bookmark sub-mode: capture a single letter for create/delete
+            if (windowState.bookmarkSubModeActive) {
+                if (key === Qt.Key_Shift || key === Qt.Key_Control
+                    || key === Qt.Key_Alt || key === Qt.Key_Meta) {
+                    event.accepted = true;
+                    return;
+                }
+                if (key === Qt.Key_Escape) {
+                    windowState.bookmarkSubMode = "";
+                    event.accepted = true;
+                    return;
+                }
+                const letter = event.text.toLowerCase();
+                if (letter.length === 1 && /^[a-z]$/.test(letter)) {
+                    if (windowState.bookmarkSubMode === "create") {
+                        if (BookmarkService.isReservedKey(letter)) {
+                            windowState.showTransientMessage("'" + letter + "' is reserved");
+                        } else {
+                            if (BookmarkService.isBuiltinKey(letter))
+                                windowState.showTransientMessage("Bookmark '" + letter + "' overrides built-in");
+                            else
+                                windowState.showTransientMessage("Bookmark '" + letter + "' → " + Paths.shortenHome(windowState.currentPath));
+                            BookmarkService.addBookmark(letter, windowState.currentPath);
+                        }
+                    } else if (windowState.bookmarkSubMode === "delete") {
+                        if (BookmarkService.hasBookmark(letter)) {
+                            BookmarkService.removeBookmark(letter);
+                            windowState.showTransientMessage("Bookmark '" + letter + "' deleted");
+                        } else {
+                            windowState.showTransientMessage("No bookmark on '" + letter + "'");
+                        }
+                    }
+                    windowState.bookmarkSubMode = "";
+                } else {
+                    // Non-letter key (digit, Return, etc.) — cancel sub-mode
+                    windowState.bookmarkSubMode = "";
+                }
+                event.accepted = true;
+                return;
+            }
+
             // Resolve active chord BEFORE picker suppression — otherwise a
             // chord like g,d is broken because 'd' gets suppressed before
             // the chord resolver can see it.
@@ -1046,8 +1099,12 @@ Item {
         }
 
         onActiveFocusChanged: {
-            if (!activeFocus && windowState.activeChordPrefix !== "")
-                windowState.activeChordPrefix = "";
+            if (!activeFocus) {
+                if (windowState.activeChordPrefix !== "")
+                    windowState.activeChordPrefix = "";
+                if (windowState.bookmarkSubModeActive)
+                    windowState.bookmarkSubMode = "";
+            }
         }
     }
 
