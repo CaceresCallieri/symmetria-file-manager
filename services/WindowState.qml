@@ -176,11 +176,7 @@ QtObject {
         "g": {
             label: "go to",
             binds: [
-                { key: "g", label: "Top", icon: "vertical_align_top" },
-                { key: "h", label: "Home", icon: "home" },
-                { key: "d", label: "Downloads", icon: "download" },
-                { key: "s", label: "Screenshots", icon: "screenshot_monitor" },
-                { key: "v", label: "Videos", icon: "video_library" }
+                { key: "g", label: "Top", icon: "vertical_align_top" }
             ]
         },
         "c": {
@@ -222,12 +218,13 @@ QtObject {
             usedKeys[b.key] = true;
 
         for (const [key, bm] of Object.entries(userBookmarks)) {
+            const icon = BookmarkService.iconForPath(bm.path);
             if (usedKeys[key]) {
                 const idx = gBinds.findIndex(b => b.key === key);
                 if (idx >= 0)
-                    gBinds[idx] = { key: key, label: bm.label, icon: "bookmark", isUser: true };
+                    gBinds[idx] = { key: key, label: bm.label, icon: icon, isUser: true };
             } else {
-                gBinds.push({ key: key, label: bm.label, icon: "bookmark", isUser: true });
+                gBinds.push({ key: key, label: bm.label, icon: icon, isUser: true });
             }
         }
 

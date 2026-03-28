@@ -13,10 +13,14 @@ Singleton {
     readonly property string _configPath: Paths.home + "/.config/symmetria-fm/bookmarks.json"
     property bool _loaded: false
 
-    // Built-in G-chord keys that the user can override (with a warning)
-    readonly property var _builtinKeys: ["g", "h", "d", "s", "v"]
-    // Reserved keys that can never be assigned to bookmarks
-    readonly property var _reservedKeys: ["n", "x"]
+    // Reserved keys that can never be assigned to bookmarks (g = Top, n = New, x = Delete)
+    readonly property var _reservedKeys: ["g", "n", "x"]
+
+    // Default bookmarks seeded on first run — deletable by the user
+    readonly property var _defaultBookmarks: ({
+        "h": { path: Paths.home, label: "Home" },
+        "d": { path: Paths.home + "/Downloads", label: "Downloads" }
+    })
 
     // ── Public API ──────────────────────────────────────────────
 
@@ -43,12 +47,35 @@ Singleton {
         return bookmarks.hasOwnProperty(key) ? bookmarks[key].path : "";
     }
 
-    function isBuiltinKey(key: string): bool {
-        return _builtinKeys.indexOf(key) >= 0;
-    }
-
     function isReservedKey(key: string): bool {
         return _reservedKeys.indexOf(key) >= 0;
+    }
+
+    // Well-known directory → icon mapping (matched by trailing path segment)
+    readonly property var _knownDirectoryIcons: ({
+        "": "home",                       // exact home directory
+        "Downloads": "download",
+        "Documents": "description",
+        "Pictures": "image",
+        "Pictures/Screenshots": "screenshot_monitor",
+        "Videos": "video_library",
+        "Music": "library_music",
+        "Desktop": "desktop_windows",
+        ".config": "settings",
+    })
+
+    function iconForPath(path: string): string {
+        // Strip trailing slash and compute path relative to home
+        const clean = path.endsWith("/") ? path.slice(0, -1) : path;
+        const home = Paths.home;
+        if (clean === home || clean + "/" === home)
+            return _knownDirectoryIcons[""];
+        if (clean.startsWith(home + "/")) {
+            const relative = clean.substring(home.length + 1);
+            if (_knownDirectoryIcons.hasOwnProperty(relative))
+                return _knownDirectoryIcons[relative];
+        }
+        return "bookmark";
     }
 
     // ── Persistence ─────────────────────────────────────────────
@@ -94,10 +121,14 @@ Singleton {
         }
 
         onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0 && readCollector.text.trim() !== "")
+            if (exitCode === 0 && readCollector.text.trim() !== "") {
                 root._applyBookmarks(readCollector.text);
-            else
-                root._loaded = true;  // Missing or empty file — start with no bookmarks
+            } else {
+                // First run — seed with default bookmarks and persist
+                bookmarks = JSON.parse(JSON.stringify(_defaultBookmarks));
+                _loaded = true;
+                _save();
+            }
         }
     }
 

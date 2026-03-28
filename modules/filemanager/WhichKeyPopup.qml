@@ -15,7 +15,7 @@ Item {
         if (windowState.bookmarkSubMode === "delete") {
             const bms = BookmarkService.bookmarks;
             return Object.entries(bms).map(([key, bm]) => ({
-                key: key, label: bm.label, icon: "bookmark", isUser: true
+                key: key, label: bm.label, icon: BookmarkService.iconForPath(bm.path), isUser: true
             })).sort((a, b) => a.key.localeCompare(b.key));
         }
 

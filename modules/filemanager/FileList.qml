@@ -187,18 +187,6 @@ Item {
                 view.currentIndex = 0;
                 view.positionViewAtIndex(0, ListView.Beginning);
                 break;
-            case "h":
-                _saveCursorAndNavigate(() => windowState.navigate(Paths.home));
-                break;
-            case "d":
-                _saveCursorAndNavigate(() => windowState.navigate(Paths.home + "/Downloads"));
-                break;
-            case "s":
-                _saveCursorAndNavigate(() => windowState.navigate(Paths.home + "/Pictures/Screenshots"));
-                break;
-            case "v":
-                _saveCursorAndNavigate(() => windowState.navigate(Paths.home + "/Videos"));
-                break;
             case "n":
                 windowState.bookmarkSubMode = "create";
                 break;
@@ -666,10 +654,7 @@ Item {
                         if (BookmarkService.isReservedKey(letter)) {
                             windowState.showTransientMessage("'" + letter + "' is reserved");
                         } else {
-                            if (BookmarkService.isBuiltinKey(letter))
-                                windowState.showTransientMessage("Bookmark '" + letter + "' overrides built-in");
-                            else
-                                windowState.showTransientMessage("Bookmark '" + letter + "' → " + Paths.shortenHome(windowState.currentPath));
+                            windowState.showTransientMessage("Bookmark '" + letter + "' → " + Paths.shortenHome(windowState.currentPath));
                             BookmarkService.addBookmark(letter, windowState.currentPath);
                         }
                     } else if (windowState.bookmarkSubMode === "delete") {
