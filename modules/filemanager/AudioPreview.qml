@@ -265,7 +265,7 @@ Item {
         StyledText {
             Layout.alignment: Qt.AlignHCenter
             visible: !root.isPlaying && mediaPlayer.playbackState === MediaPlayer.StoppedState
-            text: qsTr("Ctrl+Enter \u2192 Play")
+            text: qsTr("P \u2192 Play / Pause")
             color: Qt.alpha(Theme.palette.m3outline, 0.6)
             font.pointSize: Theme.font.size.xs
         }

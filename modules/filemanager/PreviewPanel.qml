@@ -124,9 +124,7 @@ Item {
     readonly property int _spreadsheetTotalRows: spreadsheetLoader.item?.totalRows ?? 0
     readonly property int _spreadsheetTotalCols: spreadsheetLoader.item?.totalCols ?? 0
 
-    // Audio preview metadata — title, artist, duration
-    readonly property string _audioTitle: audioLoader.item?.audioTitle ?? ""
-    readonly property string _audioArtist: audioLoader.item?.audioArtist ?? ""
+    // Audio preview metadata
     readonly property string _audioDuration: audioLoader.item?.audioDuration ?? ""
 
     // --- Debounce ---
@@ -366,8 +364,6 @@ Item {
             spreadsheetActiveSheet: root._spreadsheetActiveSheet
             spreadsheetTotalRows: root._spreadsheetTotalRows
             spreadsheetTotalCols: root._spreadsheetTotalCols
-            audioTitle: root._audioTitle
-            audioArtist: root._audioArtist
             audioDuration: root._audioDuration
         }
     }

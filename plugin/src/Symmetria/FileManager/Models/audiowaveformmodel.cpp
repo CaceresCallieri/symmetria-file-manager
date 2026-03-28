@@ -1,7 +1,6 @@
 #include "audiowaveformmodel.hpp"
 
 #include <qaudiobuffer.h>
-#include <qmediametadata.h>
 #include <qurl.h>
 
 #include <algorithm>
@@ -269,10 +268,17 @@ void AudioWaveformModel::finalizePeaks() {
         const auto rawStart = static_cast<qsizetype>(i) * rawCount / TargetBinCount;
         const auto rawEnd = static_cast<qsizetype>(i + 1) * rawCount / TargetBinCount;
 
-        // Take max within the mapped range for visual fidelity
+        // Take max within the mapped range for visual fidelity.
+        // When rawCount < TargetBinCount (e.g. short files), rawStart == rawEnd
+        // for most target bins — the loop body would never execute, producing
+        // silent bars. Fall back to nearest-neighbor in that case.
         float binMax = 0.0f;
-        for (auto r = rawStart; r < rawEnd && r < rawCount; ++r) {
-            binMax = std::max(binMax, m_rawPeaks[r]);
+        if (rawStart < rawEnd) {
+            for (auto r = rawStart; r < rawEnd && r < rawCount; ++r) {
+                binMax = std::max(binMax, m_rawPeaks[r]);
+            }
+        } else if (rawStart < rawCount) {
+            binMax = m_rawPeaks[rawStart];
         }
 
         normalized.append(static_cast<qreal>(binMax / globalMax));

@@ -16,8 +16,6 @@ Item {
     property int spreadsheetActiveSheet: 0
     property int spreadsheetTotalRows: 0
     property int spreadsheetTotalCols: 0
-    property string audioTitle: ""
-    property string audioArtist: ""
     property string audioDuration: ""
 
     visible: !!entry
