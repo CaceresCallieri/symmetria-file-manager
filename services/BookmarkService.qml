@@ -54,7 +54,12 @@ Singleton {
     // ── Persistence ─────────────────────────────────────────────
 
     function _save(): void {
-        writeProcess.payload = JSON.stringify(bookmarks, null, 2);
+        const json = JSON.stringify(bookmarks, null, 2);
+        if (writeProcess.running) {
+            writeProcess._pendingPayload = json;
+            return;
+        }
+        writeProcess.payload = json;
         writeProcess.running = true;
     }
 
@@ -69,12 +74,13 @@ Singleton {
         _loaded = true;
     }
 
+    Component.onCompleted: readProcess.running = true
+
     // Watch for external edits to the bookmarks file
     FileView {
         path: "file://" + root._configPath
         watchChanges: true
         onFileChanged: readProcess.running = true
-        onLoaded: readProcess.running = true
     }
 
     // Read the bookmarks file via cat — gracefully handles missing file
@@ -99,6 +105,7 @@ Singleton {
     Process {
         id: writeProcess
         property string payload: ""
+        property string _pendingPayload: ""
 
         command: [
             "sh", "-c",
@@ -111,6 +118,11 @@ Singleton {
         onExited: (exitCode, exitStatus) => {
             if (exitCode !== 0)
                 console.error("[BookmarkService] Write failed, exitCode:", exitCode);
+            if (_pendingPayload !== "") {
+                payload = _pendingPayload;
+                _pendingPayload = "";
+                running = true;
+            }
         }
     }
 }

@@ -60,6 +60,8 @@ Item {
                 root.windowState.clearFlash();
             if (root.windowState.activeChordPrefix !== "")
                 root.windowState.activeChordPrefix = "";
+            if (root.windowState.bookmarkSubModeActive)
+                root.windowState.bookmarkSubMode = "";
         }
     }
 

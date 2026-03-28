@@ -19,6 +19,8 @@ Item {
     readonly property bool _flashActive: windowState ? windowState.flashActive : false
     readonly property int _selectedCount: windowState ? windowState.selectedCount : 0
     readonly property string _transientMessage: windowState ? windowState.transientMessage : ""
+    // True when normal status bar content should be visible (no search, flash, or transient message)
+    readonly property bool _normalVisible: !_searchActive && !_flashActive && _transientMessage === ""
 
     implicitHeight: inner.implicitHeight + Theme.padding.sm * 4
 
@@ -61,8 +63,7 @@ Item {
             // — hidden during search in both modes
             StyledRect {
                 id: acceptBtn
-                visible: FileManagerService.pickerMode && !root._searchActive && !root._flashActive
-                    && root._transientMessage === ""
+                visible: FileManagerService.pickerMode && root._normalVisible
                 color: _acceptEnabled ? Theme.palette.m3primary : Theme.palette.m3surfaceVariant
                 radius: Theme.rounding.full
                 implicitWidth: acceptLabel.implicitWidth + Theme.padding.lg * 2
@@ -106,8 +107,7 @@ Item {
             }
 
             StyledText {
-                visible: !root._searchActive && !root._flashActive && !FileManagerService.pickerMode
-                    && root._transientMessage === ""
+                visible: root._normalVisible && !FileManagerService.pickerMode
                 text: {
                     const count = root.fileCount + (root.fileCount === 1 ? " item" : " items");
                     if (root._selectedCount > 0)
@@ -124,8 +124,7 @@ Item {
 
             // Sort mode indicator
             StyledText {
-                visible: !root._searchActive && !root._flashActive && !FileManagerService.pickerMode
-                    && root._transientMessage === ""
+                visible: root._normalVisible && !FileManagerService.pickerMode
                 text: {
                     if (!root.windowState) return "";
                     const arrow = root.windowState.sortReverse ? " ↓" : " ↑";
@@ -137,14 +136,14 @@ Item {
             }
 
             Item {
-                visible: !root._searchActive && !root._flashActive && root._transientMessage === ""
+                visible: root._normalVisible
                 Layout.fillWidth: true
             }
 
             // Center: save filename (save mode) or current entry info (normal/open picker)
             StyledText {
-                visible: !root._searchActive && !root._flashActive && FileManagerService.pickerSaveMode
-                    && FileManagerService.pickerSuggestedName !== "" && root._transientMessage === ""
+                visible: root._normalVisible && FileManagerService.pickerSaveMode
+                    && FileManagerService.pickerSuggestedName !== ""
                 text: "Save as: " + FileManagerService.pickerSuggestedName
                 color: Theme.palette.m3primary
                 font.pointSize: Theme.font.size.xs
@@ -152,8 +151,8 @@ Item {
             }
 
             StyledText {
-                visible: !root._searchActive && !root._flashActive && !FileManagerService.pickerSaveMode
-                    && root.currentEntry !== null && root._transientMessage === ""
+                visible: root._normalVisible && !FileManagerService.pickerSaveMode
+                    && root.currentEntry !== null
                 text: {
                     if (root.currentEntry?.isDir)
                         return root.currentEntry.name + "/";
@@ -165,14 +164,13 @@ Item {
             }
 
             Item {
-                visible: !root._searchActive && !root._flashActive && root._transientMessage === ""
+                visible: root._normalVisible
                 Layout.fillWidth: true
             }
 
             // Cancel button (picker mode only)
             StyledRect {
-                visible: FileManagerService.pickerMode && !root._searchActive && !root._flashActive
-                    && root._transientMessage === ""
+                visible: FileManagerService.pickerMode && root._normalVisible
                 color: Theme.palette.m3surfaceVariant
                 radius: Theme.rounding.full
                 implicitWidth: cancelLabel.implicitWidth + Theme.padding.lg * 2

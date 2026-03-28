@@ -116,14 +116,14 @@ Item {
                 Rectangle {
                     Layout.fillWidth: true
                     height: 1
-                    visible: !!modelData.isSeparator
+                    visible: modelData.isSeparator === true
                     color: Qt.alpha("#ffffff", 0.06)
                 }
 
                 // Keybind row (hidden for separator entries)
                 RowLayout {
                     Layout.fillWidth: true
-                    visible: !modelData.isSeparator
+                    visible: modelData.isSeparator !== true
                     spacing: Theme.spacing.sm
 
                     // Keycap badge — user bookmarks get a primary tint

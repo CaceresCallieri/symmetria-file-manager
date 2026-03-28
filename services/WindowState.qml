@@ -206,12 +206,18 @@ QtObject {
 
     // Merged view: static binds + user bookmarks. Re-evaluated when bookmarks change.
     readonly property var chordBindings: {
-        const base = JSON.parse(JSON.stringify(_staticChordBindings));
+        // Shallow-clone: copy top-level map + slice the "g" binds array so mutations
+        // don't affect _staticChordBindings. Other chord groups are read-only here.
+        const gBinds = _staticChordBindings["g"].binds.slice();
+        const base = Object.assign({}, _staticChordBindings, {
+            "g": Object.assign({}, _staticChordBindings["g"], { binds: gBinds })
+        });
         const userBookmarks = BookmarkService.bookmarks;
-        const gBinds = base["g"].binds;
 
-        // Track which keys are reserved (static nav + action keys)
-        const usedKeys = { "n": true, "x": true };
+        // Track which keys are reserved — seed from BookmarkService to avoid duplication
+        const usedKeys = {};
+        for (const k of BookmarkService._reservedKeys)
+            usedKeys[k] = true;
         for (const b of gBinds)
             usedKeys[b.key] = true;
 
