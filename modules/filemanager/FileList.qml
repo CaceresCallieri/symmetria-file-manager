@@ -590,7 +590,7 @@ Item {
 
         model: FileSystemModel {
             id: fsModel
-            path: root.windowState ? root.windowState.currentPath : Paths.home
+            path: root.windowState ? root.windowState.currentPath : ""
             showHidden: Config.fileManager.showHidden
             sortBy: root.windowState ? root.windowState.sortBy : 1
             sortReverse: root.windowState ? root.windowState.sortReverse : true
