@@ -109,6 +109,8 @@ Item {
                             FileManagerService.completePickerMode([root.windowState.currentPath]);
                         } else if (FileManagerService.pickerMultiple && root._selectedCount > 0) {
                             const paths = root.windowState.getSelectedPathsArray();
+                            // Clear before completing so the selection count binding resets
+                            // before pickerMode becomes false — prevents a stale count flash.
                             root.windowState.clearSelection();
                             FileManagerService.completePickerMode(paths);
                         } else if (root.currentEntry) {

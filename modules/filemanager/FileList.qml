@@ -111,8 +111,11 @@ Item {
         if (FileManagerService.pickerMode) {
             // Multi-select: if items are marked, confirm all marked items.
             // Falls back to single-item behavior when nothing is marked.
+            // Note: pickerSaveMode and pickerMultiple are orthogonal — save mode ignores marks.
             if (FileManagerService.pickerMultiple && windowState.selectedCount > 0) {
                 const paths = windowState.getSelectedPathsArray();
+                // Clear before completing so the selection count binding resets
+                // before pickerMode becomes false — prevents a stale count flash.
                 windowState.clearSelection();
                 FileManagerService.completePickerMode(paths);
                 return;
@@ -172,19 +175,28 @@ Item {
         return "";
     }
 
-    // Copies the picker-confirmed path to the system clipboard, then invokes
+    // Copies the picker-confirmed path(s) to the system clipboard, then invokes
     // onDone() once wl-copy exits (success or failure).  The callback ensures
     // callers don't proceed (e.g. close the picker window) before the clipboard
     // write completes — wl-copy is asynchronous.
+    // Multi-select: when items are marked, all selected paths are joined with
+    // newlines so the clipboard mirrors what the portal receives.
     // No-ops if wl-copy is already running or no selectable path exists.
     function _copyPickerPathToClipboard(onDone: var): void {
         if (clipboardCopyProcess.running)
             return;
-        const path = root._resolvePickerPath();
-        if (!path)
+        let text;
+        if (FileManagerService.pickerMultiple && windowState.selectedCount > 0) {
+            // Multi-select: clipboard gets all marked paths, one per line —
+            // matches the array sent to completePickerMode() in _activateCurrentItem.
+            text = windowState.getSelectedPathsArray().join("\n");
+        } else {
+            text = root._resolvePickerPath();
+        }
+        if (!text)
             return;
         clipboardCopyProcess._pendingCallback = onDone;
-        clipboardCopyProcess.command = ["wl-copy", "--", path];
+        clipboardCopyProcess.command = ["wl-copy", "--", text];
         clipboardCopyProcess.running = true;
     }
 
@@ -825,11 +837,9 @@ Item {
                     return;
                 }
                 // Suppress clipboard operations — they don't belong in a picker.
-                // Exception: Space is allowed when multi-select is active so the
-                // user can mark files before confirming.
-                if (key === Qt.Key_Space && FileManagerService.pickerMultiple) {
-                    // Fall through — allow multi-select marking
-                } else if (root._pickerSuppressedKeys.indexOf(key) !== -1) {
+                // Space is exempt when multi-select is active (marking files before confirm).
+                if (root._pickerSuppressedKeys.indexOf(key) !== -1
+                        && !(key === Qt.Key_Space && FileManagerService.pickerMultiple)) {
                     event.accepted = true;
                     return;
                 }
