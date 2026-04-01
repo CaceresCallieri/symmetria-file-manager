@@ -839,7 +839,8 @@ Item {
                 // Suppress clipboard operations — they don't belong in a picker.
                 // Space is exempt when multi-select is active (marking files before confirm).
                 if (root._pickerSuppressedKeys.indexOf(key) !== -1
-                        && !(key === Qt.Key_Space && FileManagerService.pickerMultiple)) {
+                        && !(key === Qt.Key_Space && FileManagerService.pickerMultiple)
+                        && !(key === Qt.Key_P && (mods & Qt.ControlModifier))) {
                     event.accepted = true;
                     return;
                 }
@@ -1018,7 +1019,11 @@ Item {
                 break;
 
             case Qt.Key_P:
-                root._executePaste();
+                if (mods & Qt.ControlModifier) {
+                    windowState.audioPlaybackToggle();
+                } else {
+                    root._executePaste();
+                }
                 event.accepted = true;
                 break;
 
