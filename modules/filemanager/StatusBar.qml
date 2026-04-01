@@ -72,6 +72,8 @@ Item {
                 readonly property bool _acceptEnabled: {
                     if (FileManagerService.pickerSaveMode)
                         return true;  // In save mode, always enabled (saves to current dir)
+                    if (FileManagerService.pickerMultiple && root._selectedCount > 0)
+                        return true;  // Multi-select with marks is always valid (type-filtered at mark time)
                     if (root.currentEntry === null)
                         return false;
                     if (FileManagerService.pickerDirectory)
@@ -82,7 +84,15 @@ Item {
                 StyledText {
                     id: acceptLabel
                     anchors.centerIn: parent
-                    text: FileManagerService.pickerAcceptLabel || (FileManagerService.pickerSaveMode ? "Save" : "Select")
+                    text: {
+                        if (FileManagerService.pickerAcceptLabel)
+                            return FileManagerService.pickerAcceptLabel;
+                        if (FileManagerService.pickerSaveMode)
+                            return "Save";
+                        if (FileManagerService.pickerMultiple && root._selectedCount > 0)
+                            return "Select (" + root._selectedCount + ")";
+                        return "Select";
+                    }
                     color: acceptBtn._acceptEnabled ? Theme.palette.m3onPrimary : Theme.palette.m3onSurfaceVariant
                     font.pointSize: Theme.font.size.xs
                     font.weight: Font.Medium
@@ -97,6 +107,10 @@ Item {
                         if (FileManagerService.pickerSaveMode) {
                             // Save mode: return current directory path
                             FileManagerService.completePickerMode([root.windowState.currentPath]);
+                        } else if (FileManagerService.pickerMultiple && root._selectedCount > 0) {
+                            const paths = root.windowState.getSelectedPathsArray();
+                            root.windowState.clearSelection();
+                            FileManagerService.completePickerMode(paths);
                         } else if (root.currentEntry) {
                             FileManagerService.completePickerMode([root.currentEntry.path]);
                         }
@@ -107,7 +121,7 @@ Item {
             }
 
             StyledText {
-                visible: root._normalVisible && !FileManagerService.pickerMode
+                visible: root._normalVisible && (!FileManagerService.pickerMode || FileManagerService.pickerMultiple)
                 text: {
                     const count = root.fileCount + (root.fileCount === 1 ? " item" : " items");
                     if (root._selectedCount > 0)

@@ -109,6 +109,14 @@ Item {
         //   directory=true → select dirs only, ignore files
         //   (default)      → select files only, ignore dirs
         if (FileManagerService.pickerMode) {
+            // Multi-select: if items are marked, confirm all marked items.
+            // Falls back to single-item behavior when nothing is marked.
+            if (FileManagerService.pickerMultiple && windowState.selectedCount > 0) {
+                const paths = windowState.getSelectedPathsArray();
+                windowState.clearSelection();
+                FileManagerService.completePickerMode(paths);
+                return;
+            }
             if (FileManagerService.pickerSaveMode) {
                 // Save mode: Enter = Save button — returns current directory
                 // as the save location (same as StatusBar's accept button).
@@ -808,12 +816,20 @@ Item {
             // Picker mode: Escape cancels, suppress clipboard operations
             if (FileManagerService.pickerMode) {
                 if (key === Qt.Key_Escape) {
-                    FileManagerService.cancelPickerMode();
+                    // Multi-select: first Escape clears marks, second cancels picker
+                    if (FileManagerService.pickerMultiple && windowState.selectedCount > 0)
+                        windowState.clearSelection();
+                    else
+                        FileManagerService.cancelPickerMode();
                     event.accepted = true;
                     return;
                 }
                 // Suppress clipboard operations — they don't belong in a picker.
-                if (root._pickerSuppressedKeys.indexOf(key) !== -1) {
+                // Exception: Space is allowed when multi-select is active so the
+                // user can mark files before confirming.
+                if (key === Qt.Key_Space && FileManagerService.pickerMultiple) {
+                    // Fall through — allow multi-select marking
+                } else if (root._pickerSuppressedKeys.indexOf(key) !== -1) {
                     event.accepted = true;
                     return;
                 }
@@ -1016,6 +1032,14 @@ Item {
 
             case Qt.Key_Space:
                 if (root.currentEntry) {
+                    // In picker mode, only allow selecting the correct type:
+                    // directory picker → dirs only, file picker → files only.
+                    if (FileManagerService.pickerMode && !FileManagerService.pickerSaveMode) {
+                        if (FileManagerService.pickerDirectory && !root.currentEntry.isDir)
+                            break;
+                        if (!FileManagerService.pickerDirectory && root.currentEntry.isDir)
+                            break;
+                    }
                     windowState.toggleSelection(root.currentEntry.path);
                     // Advance cursor after toggling, like Yazi
                     if (view.currentIndex < view.count - 1)
