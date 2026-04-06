@@ -179,7 +179,7 @@ Loader {
 
             errorLabel.text = "";
 
-            const parentDir = originalPath.substring(0, originalPath.lastIndexOf("/"));
+            const parentDir = Paths.parentDir(originalPath);
             const newPath = parentDir + "/" + newName;
 
             checkProcess.pendingNewPath = newPath;

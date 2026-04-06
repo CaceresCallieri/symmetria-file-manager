@@ -119,6 +119,22 @@ Singleton {
     readonly property var pillMedium: _mattePill(palette.m3surfaceContainerHigh, matte.medium)
     readonly property var pillStrong: _mattePill(palette.m3surfaceContainerHigh, matte.strong)
 
+    // === Fixed indicator colors ===
+    // Hardcoded deliberately: Symmetria's _applyTheme IPC overwrites m3*
+    // palette tokens with wallpaper-derived values, so indicators must
+    // stay fixed to remain visually distinguishable.
+    property QtObject indicator: QtObject {
+        property color cut: "#e57373"
+        property color yank: "#4caf7d"
+        property color selection: "#f0c674"
+    }
+
+    // === Overlay tokens ===
+    property QtObject overlay: QtObject {
+        property color subtle: Qt.alpha("#ffffff", 0.06)
+        property color emphasis: Qt.alpha("#ffffff", 0.10)
+    }
+
     // === Misc ===
     property bool light: false
 

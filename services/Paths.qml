@@ -21,4 +21,12 @@ Singleton {
             return "~/" + path.slice(_homeSlash.length);
         return path;
     }
+
+    function basename(path: string): string {
+        return path.substring(path.lastIndexOf("/") + 1);
+    }
+
+    function parentDir(path: string): string {
+        return path.replace(/\/[^/]+$/, "") || "/";
+    }
 }

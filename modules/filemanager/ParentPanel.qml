@@ -19,13 +19,13 @@ Item {
     readonly property string _parentPath: {
         if (!windowState) return "";
         const path = windowState.currentPath;
-        return path === "/" ? "" : path.replace(/\/[^/]+$/, "") || "/";
+        return path === "/" ? "" : Paths.parentDir(path);
     }
 
     readonly property string _currentDirName: {
         if (!windowState) return "";
         const path = windowState.currentPath;
-        return path === "/" ? "" : path.substring(path.lastIndexOf("/") + 1);
+        return path === "/" ? "" : Paths.basename(path);
     }
 
     // Background — match PreviewPanel shade
@@ -85,7 +85,7 @@ Item {
             id: parentModel
             path: root._parentPath
             showHidden: Config.fileManager.showHidden
-            sortBy: root.windowState ? root.windowState.sortBy : 1
+            sortBy: root.windowState ? root.windowState.sortBy : FileSystemModel.Modified
             sortReverse: root.windowState ? root.windowState.sortReverse : true
             watchChanges: true
         }
@@ -101,6 +101,7 @@ Item {
                     root.windowState.navigate(modelData.path);
                 else {
                     const openPath = parentOpenFileHelper.resolvePathForOpen(modelData.path);
+                    // xdg-open does NOT support "--" — see FileList.qml comment
                     parentXdgOpenProcess.command = ["xdg-open", openPath];
                     parentXdgOpenProcess.running = true;
                 }
@@ -125,6 +126,11 @@ Item {
             parentView.currentIndex = -1;
             return;
         }
+        // Skip O(n) scan if already pointing at the correct entry
+        if (parentView.currentIndex >= 0
+            && parentView.currentIndex < parentModel.entries.length
+            && parentModel.entries[parentView.currentIndex].name === _currentDirName)
+            return;
         for (let i = 0; i < parentModel.entries.length; i++) {
             if (parentModel.entries[i].name === _currentDirName) {
                 parentView.currentIndex = i;

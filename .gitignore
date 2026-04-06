@@ -16,3 +16,20 @@ cmake_install.cmake
 *~
 .idea/
 .vscode/
+
+# Secrets / credentials
+.env
+.env.*
+*.pem
+*.key
+*.p12
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Build metadata
+compile_commands.json
+
+# macOS
+.DS_Store

@@ -276,7 +276,7 @@ Item {
                         model: FileSystemModel {
                             path: root._committedEntry?.path ?? ""
                             showHidden: Config.fileManager.showHidden
-                            sortBy: root.windowState ? root.windowState.sortBy : 1
+                            sortBy: root.windowState ? root.windowState.sortBy : FileSystemModel.Modified
                             sortReverse: root.windowState ? root.windowState.sortReverse : true
                             watchChanges: false
                             onEntriesChanged: root._directoryEntries = entries

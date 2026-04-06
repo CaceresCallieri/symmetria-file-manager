@@ -60,7 +60,7 @@ Loader {
         Component.onCompleted: {
             targetPath = root.windowState.contextMenuTargetPath;
             targetMimeType = root.windowState.contextMenuTargetMimeType;
-            targetName = targetPath.substring(targetPath.lastIndexOf("/") + 1);
+            targetName = Paths.basename(targetPath);
             isArchive = FileManagerService.isArchiveFile(targetMimeType);
             isAudio = targetMimeType.startsWith("audio/") || targetMimeType === "application/ogg";
         }
@@ -134,7 +134,7 @@ Loader {
             const stripIndex = tarMatch ? tarMatch.index : (dotIndex > 0 ? dotIndex : -1);
             const baseName = stripIndex >= 0 ? targetName.substring(0, stripIndex) : "";
             const folderName = baseName !== "" ? baseName : targetName;
-            const parentDir = targetPath.substring(0, targetPath.lastIndexOf("/"));
+            const parentDir = Paths.parentDir(targetPath);
             const destDir = parentDir + "/" + folderName;
 
             mkdirProcess.destDir = destDir;
@@ -315,7 +315,7 @@ Loader {
                 Rectangle {
                     Layout.fillWidth: true
                     height: 1
-                    color: Qt.alpha("#ffffff", 0.06)
+                    color: Theme.overlay.subtle
                 }
 
                 // === View: Actions list ===
@@ -358,8 +358,8 @@ Loader {
                                         Layout.preferredHeight: 24
                                         Layout.alignment: Qt.AlignVCenter
                                         radius: 6
-                                        color: Qt.alpha("#ffffff", 0.06)
-                                        border.color: Qt.alpha("#ffffff", 0.10)
+                                        color: Theme.overlay.subtle
+                                        border.color: Theme.overlay.emphasis
                                         border.width: 1
 
                                         StyledText {

@@ -119,7 +119,7 @@ Item {
             anchors.bottom: parent.bottom
             width: parent.width + Theme.rounding.sm
             radius: Theme.rounding.sm
-            color: FileManagerService.clipboardMode === "cut" ? "#e57373" : "#4caf7d"
+            color: FileManagerService.clipboardMode === "cut" ? Theme.indicator.cut : Theme.indicator.yank
             // Read _clipboardSet directly so QML tracks the dependency and
             // re-evaluates when the set object reference changes.
             opacity: FileManagerService._clipboardSet[root.modelData?.path ?? ""]
@@ -147,7 +147,7 @@ Item {
             anchors.bottom: parent.bottom
             width: parent.width + Theme.rounding.sm
             radius: Theme.rounding.sm
-            color: "#f0c674"
+            color: Theme.indicator.selection
             opacity: root.isSelected ? 0.85 : 0
 
             Behavior on opacity { Anim {} }

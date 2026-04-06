@@ -288,3 +288,30 @@ but the animated value is wrong.
 **Discovered in:** `TabBar.qml` — tab pill backgrounds were permanently stuck at
 black because `Behavior on color { Anim {} }` overrode StyledRect's internal
 `CAnim` with a broken `NumberAnimation`.
+
+---
+
+## 8. `xdg-open` Does NOT Support `--` End-of-Options
+
+**Symptom:** Files fail to open silently when `xdg-open` is invoked with `["xdg-open", "--", path]`.
+
+**Root cause:** `xdg-open` is a shell dispatcher script (not a C program using `getopt`).
+It only accepts a single positional argument and `--help`/`--version`. Passing `--` causes
+`"xdg-open: unexpected option '--'"` and exit code 1. Because the QML `Process` component
+does not surface stderr by default, this failure is silent.
+
+**Rule:** Do NOT add `--` to `xdg-open` calls, even though it is standard practice for
+other tools (`mv`, `cp`, `mkdir`, `gio trash`, `bsdtar`, etc.). File paths from
+`FileSystemEntry` are always absolute (starting with `/`), so option injection is not a
+concern here.
+
+```qml
+// CORRECT — no "--":
+xdgOpenProcess.command = ["xdg-open", openPath];
+
+// WRONG — silent failure:
+xdgOpenProcess.command = ["xdg-open", "--", openPath];
+```
+
+**Discovered in:** Tech debt audit attempted to add `--` for consistency with other
+Process commands. Files stopped opening with no visible error.

@@ -132,7 +132,7 @@ Item {
                 }
                 color: {
                     if (root._selectedCount > 0)
-                        return "#f0c674";
+                        return Theme.indicator.selection;
                     return Theme.palette.m3onSurfaceVariant;
                 }
                 font.pointSize: Theme.font.size.xs

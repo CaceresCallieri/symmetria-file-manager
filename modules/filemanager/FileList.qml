@@ -147,6 +147,8 @@ Item {
             _navigateIntoCurrentItem();
         else {
             const openPath = openFileHelper.resolvePathForOpen(root.currentEntry.path);
+            // NOTE: xdg-open does NOT support "--" (it's a shell dispatcher, not
+            // a getopt tool). Passing "--" causes "unexpected option" and silent failure.
             xdgOpenProcess.command = ["xdg-open", openPath];
             xdgOpenProcess.running = true;
         }
@@ -276,8 +278,13 @@ Item {
             // Lowercase = ascending, Uppercase = descending
             const isReverse = keyChar === keyChar.toUpperCase();
             const sortKey = keyChar.toLowerCase();
-            // Integer values MUST match C++ FileSystemModel::SortBy enum order
-            const sortMap = { a: 0, m: 1, s: 2, e: 3, n: 4 };
+            const sortMap = {
+                a: FileSystemModel.Alphabetical,
+                m: FileSystemModel.Modified,
+                s: FileSystemModel.Size,
+                e: FileSystemModel.Extension,
+                n: FileSystemModel.Natural
+            };
             if (sortMap[sortKey] !== undefined) {
                 windowState.sortBy = sortMap[sortKey];
                 windowState.sortReverse = isReverse;
@@ -287,7 +294,7 @@ Item {
 
     // String helpers used by the clipboard chord
     function _basename(path: string): string {
-        return path.substring(path.lastIndexOf("/") + 1);
+        return Paths.basename(path);
     }
 
     function _stripExtension(name: string): string {
@@ -595,7 +602,7 @@ Item {
             id: fsModel
             path: root.windowState ? root.windowState.currentPath : ""
             showHidden: Config.fileManager.showHidden
-            sortBy: root.windowState ? root.windowState.sortBy : 1
+            sortBy: root.windowState ? root.windowState.sortBy : FileSystemModel.Modified
             sortReverse: root.windowState ? root.windowState.sortReverse : true
             watchChanges: true
             onPathChanged: root._pathJustChanged = true
@@ -633,7 +640,7 @@ Item {
         delegate: FileListItem {
             width: view.width
             searchQuery: root.windowState ? root.windowState.searchQuery : ""
-            isSearchMatch: root.windowState ? root.windowState.matchIndices.indexOf(index) !== -1 : false
+            isSearchMatch: root.windowState ? !!root.windowState._matchIndexSet[index] : false
             // Reading selectedPaths in the expression makes QML re-evaluate
             // this binding whenever the object reference changes (toggleSelection
             // assigns a new object each time, triggering the notify signal).

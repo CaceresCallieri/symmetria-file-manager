@@ -69,8 +69,7 @@ QtObject {
 
         clearSearch();
         clearFlash();
-        const parentPath = currentPath.replace(/\/[^/]+$/, "") || "/";
-        navigate(parentPath);
+        navigate(Paths.parentDir(currentPath));
     }
 
     // === Search ===
@@ -78,6 +77,13 @@ QtObject {
     property string searchQuery: ""
     property var matchIndices: []
     property int currentMatchIndex: -1
+    // O(1) lookup for delegate isSearchMatch bindings (avoids O(n) indexOf per delegate)
+    readonly property var _matchIndexSet: {
+        const s = {};
+        for (let i = 0; i < matchIndices.length; i++)
+            s[matchIndices[i]] = true;
+        return s;
+    }
 
     signal searchConfirmed()
     signal searchCancelled()
@@ -142,7 +148,9 @@ QtObject {
     }
 
     // === Sort (per-window, ephemeral) ===
-    property int sortBy: 1          // Default: Modified (matches C++ SortBy::Modified = 1)
+    // Default: FileSystemModel.Modified — stored as int because WindowState
+    // intentionally does not depend on the C++ plugin's QML module.
+    property int sortBy: 1
     property bool sortReverse: true
 
     readonly property var _sortLabels: ["Alphabetical", "Modified", "Size", "Extension", "Natural"]

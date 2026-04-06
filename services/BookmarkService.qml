@@ -25,7 +25,7 @@ Singleton {
     // ── Public API ──────────────────────────────────────────────
 
     function addBookmark(key: string, path: string): void {
-        const label = path.substring(path.lastIndexOf("/") + 1) || path;
+        const label = Paths.basename(path) || path;
         const updated = Object.assign({}, bookmarks);
         updated[key] = { path: path, label: label };
         bookmarks = updated;

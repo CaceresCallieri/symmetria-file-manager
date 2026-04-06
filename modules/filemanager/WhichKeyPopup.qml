@@ -100,7 +100,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             height: 1
-            color: Qt.alpha("#ffffff", 0.06)
+            color: Theme.overlay.subtle
         }
 
         // Binding rows
@@ -117,7 +117,7 @@ Item {
                     Layout.fillWidth: true
                     height: 1
                     visible: modelData.isSeparator === true
-                    color: Qt.alpha("#ffffff", 0.06)
+                    color: Theme.overlay.subtle
                 }
 
                 // Keybind row (hidden for separator entries)
@@ -134,7 +134,7 @@ Item {
                         color: modelData.isUser ? Qt.alpha(Theme.palette.m3primary, 0.15)
                                                 : Qt.alpha("#ffffff", 0.06)
                         border.color: modelData.isUser ? Qt.alpha(Theme.palette.m3primary, 0.30)
-                                                       : Qt.alpha("#ffffff", 0.10)
+                                                       : Theme.overlay.emphasis
                         border.width: 1
 
                         StyledText {
