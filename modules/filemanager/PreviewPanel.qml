@@ -33,6 +33,7 @@ Item {
     readonly property int _typeArchive: 6
     readonly property int _typeSpreadsheet: 7
     readonly property int _typeAudio: 8
+    readonly property int _typeRemoteDir: 9
 
     function _isTextFile(entry) {
         if (!entry) return false;
@@ -77,8 +78,11 @@ Item {
     readonly property int _previewType: {
         if (!_committedEntry)
             return _typeNone;
-        if (_committedEntry.isDir)
+        if (_committedEntry.isDir) {
+            if (_committedEntry.isRemoteMount)
+                return _typeRemoteDir;
             return _typeDirectory;
+        }
         if (_committedEntry.isImage)
             return _typeImage;
         if (_committedEntry.isVideo)
@@ -197,11 +201,11 @@ Item {
                 asynchronous: true
 
                 sourceComponent: Item {
-                    // Empty folder indicator
+                    // Empty folder indicator — only when not loading
                     Loader {
                         anchors.centerIn: parent
-                        opacity: directoryView.count === 0 ? 1 : 0
-                        active: directoryView.count === 0
+                        opacity: directoryView.count === 0 && !directoryView.model.loading ? 1 : 0
+                        active: directoryView.count === 0 && !directoryView.model.loading
 
                         sourceComponent: ColumnLayout {
                             spacing: Theme.spacing.md
@@ -220,6 +224,35 @@ Item {
                                 color: Theme.palette.m3outline
                                 font.pointSize: Theme.font.size.xl
                                 font.weight: 500
+                            }
+                        }
+
+                        Behavior on opacity {
+                            Anim {}
+                        }
+                    }
+
+                    // Loading indicator — visible while directory is being scanned
+                    Loader {
+                        anchors.centerIn: parent
+                        active: directoryView.model.loading
+                        opacity: active ? 1 : 0
+
+                        sourceComponent: ColumnLayout {
+                            spacing: Theme.spacing.sm
+
+                            MaterialIcon {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: "hourglass_empty"
+                                color: Theme.palette.m3outline
+                                font.pointSize: Theme.font.size.xxl
+                            }
+
+                            StyledText {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: qsTr("Loading\u2026")
+                                color: Theme.palette.m3outline
+                                font.pointSize: Theme.font.size.md
                             }
                         }
 
@@ -256,6 +289,40 @@ Item {
                             flashLabel: root.windowState?.flashMatchMap["preview:" + index]?.label ?? ""
                             flashMatchStart: root.windowState?.flashMatchMap["preview:" + index]?.matchStart ?? -1
                         }
+                    }
+                }
+            }
+
+            // Remote directory — static indicator, no I/O
+            Loader {
+                anchors.centerIn: parent
+                active: _previewType === _typeRemoteDir
+                asynchronous: true
+
+                sourceComponent: ColumnLayout {
+                    spacing: Theme.spacing.md
+
+                    MaterialIcon {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "lan"
+                        color: Theme.palette.m3outline
+                        font.pointSize: Theme.font.size.xxl * 2
+                        font.weight: 500
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: qsTr("Remote directory")
+                        color: Theme.palette.m3outline
+                        font.pointSize: Theme.font.size.xl
+                        font.weight: 500
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: qsTr("Press Enter to browse")
+                        color: Theme.palette.m3outlineVariant
+                        font.pointSize: Theme.font.size.sm
                     }
                 }
             }

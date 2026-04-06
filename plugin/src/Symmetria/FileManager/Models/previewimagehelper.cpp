@@ -211,6 +211,24 @@ QString PreviewImageHelper::decryptRpgmvp(const QString& sourcePath, const QStri
     return cachePath;
 }
 
+QString PreviewImageHelper::resolvePathForOpen(const QString& path) {
+    if (!needsCachedDecode(path))
+        return path;
+
+    const QFileInfo info(path);
+    const auto cacheKey = QCryptographicHash::hash(
+        (path + QStringLiteral(":") + QString::number(info.lastModified().toSecsSinceEpoch())).toUtf8(),
+        QCryptographicHash::Sha1
+    ).toHex();
+    const auto cachePath = cacheDir() + QStringLiteral("/") + cacheKey + QStringLiteral(".png");
+
+    if (QFileInfo::exists(cachePath))
+        return cachePath;
+
+    // Cache miss — generate synchronously (fast for RPGMV: skip header + copy)
+    return generateCachedPreview(path, cachePath);
+}
+
 const QString& PreviewImageHelper::cacheDir() {
     // Compute once per process lifetime — QStandardPaths does not change at runtime.
     static const QString dir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)

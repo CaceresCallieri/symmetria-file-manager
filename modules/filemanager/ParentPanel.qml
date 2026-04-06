@@ -4,6 +4,7 @@ import "../../components"
 import "../../services"
 import "../../config"
 import Symmetria.FileManager.Models
+import Quickshell.Io
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -98,8 +99,10 @@ Item {
             onActivated: {
                 if (modelData.isDir)
                     root.windowState.navigate(modelData.path);
-                else
-                    Qt.openUrlExternally("file://" + modelData.path);
+                else {
+                    parentXdgOpenProcess.command = ["xdg-open", modelData.path];
+                    parentXdgOpenProcess.running = true;
+                }
             }
         }
 
@@ -128,6 +131,10 @@ Item {
             }
         }
         parentView.currentIndex = -1;
+    }
+
+    Process {
+        id: parentXdgOpenProcess
     }
 
     // Re-sync when the current path changes (parent path may stay the same

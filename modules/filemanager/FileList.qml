@@ -145,8 +145,11 @@ Item {
 
         if (root.currentEntry.isDir)
             _navigateIntoCurrentItem();
-        else
-            Qt.openUrlExternally("file://" + root.currentEntry.path);
+        else {
+            const openPath = openFileHelper.resolvePathForOpen(root.currentEntry.path);
+            xdgOpenProcess.command = ["xdg-open", openPath];
+            xdgOpenProcess.running = true;
+        }
     }
 
     // Returns the path that _activateCurrentItem() would confirm, or "" if the
@@ -635,7 +638,7 @@ Item {
             // this binding whenever the object reference changes (toggleSelection
             // assigns a new object each time, triggering the notify signal).
             isSelected: root.windowState && root.windowState.selectedPaths
-                        ? !!root.windowState.selectedPaths[modelData.path] : false
+                        ? !!root.windowState.selectedPaths[modelData?.path ?? ""] : false
             flashActive: root.windowState ? root.windowState.flashActive : false
             flashQuery: root.windowState ? root.windowState.flashQuery : ""
             flashLabel: root.windowState?.flashMatchMap["current:" + index]?.label ?? ""
@@ -1132,6 +1135,14 @@ Item {
                     windowState.bookmarkSubMode = "";
             }
         }
+    }
+
+    PreviewImageHelper {
+        id: openFileHelper
+    }
+
+    Process {
+        id: xdgOpenProcess
     }
 
     Process {

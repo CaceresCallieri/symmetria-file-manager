@@ -193,6 +193,14 @@ Item {
             Layout.preferredHeight: implicitHeight
         }
 
+        // Remote mount indicator — inline network icon for SSHFS/NFS/FUSE mount points
+        MaterialIcon {
+            visible: root.modelData?.isRemoteMount ?? false
+            text: "lan"
+            color: Theme.palette.m3primary
+            font.pointSize: Theme.font.size.xs
+        }
+
         // File name
         StyledText {
             Layout.fillWidth: !(root.modelData?.isSymlink ?? false)

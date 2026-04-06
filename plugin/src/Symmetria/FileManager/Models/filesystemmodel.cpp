@@ -4,11 +4,46 @@
 #include <qdiriterator.h>
 #include <qfuturewatcher.h>
 #include <qtconcurrentrun.h>
+#include <sys/vfs.h>
+
+#ifndef FUSE_SUPER_MAGIC
+#define FUSE_SUPER_MAGIC 0x65735546
+#endif
+#ifndef NFS_SUPER_MAGIC
+#define NFS_SUPER_MAGIC 0x6969
+#endif
+#ifndef SMB_SUPER_MAGIC
+#define SMB_SUPER_MAGIC 0x517B
+#endif
+#ifndef CIFS_SUPER_MAGIC
+#define CIFS_SUPER_MAGIC 0xFF534D42
+#endif
 
 namespace symmetria::filemanager::models {
 
 // Forward declaration — defined after isVideo() to keep related accessors together.
 static QString buildPermissions(const QFileInfo& info);
+
+// Detect FUSE/NFS/CIFS mount points by comparing the filesystem type of a
+// directory entry against its parent.  A directory is a remote mount point when
+// its own statfs returns a network/FUSE magic number AND that differs from the
+// parent directory's filesystem (so we don't flag every subdirectory inside the
+// mount — only the mount root).
+static bool isRemoteFsType(unsigned long type) {
+    return type == FUSE_SUPER_MAGIC
+        || type == NFS_SUPER_MAGIC
+        || type == SMB_SUPER_MAGIC
+        || type == CIFS_SUPER_MAGIC;
+}
+
+static bool detectRemoteMount(const QString& path, unsigned long parentFsType) {
+    struct statfs sfs;
+    if (::statfs(path.toUtf8().constData(), &sfs) != 0)
+        return false;
+    // Only flag the mount root: the entry's fs type differs from its parent's
+    return isRemoteFsType(static_cast<unsigned long>(sfs.f_type))
+        && static_cast<unsigned long>(sfs.f_type) != parentFsType;
+}
 
 FileSystemEntry::FileSystemEntry(const QString& path, const QString& relativePath, QObject* parent)
     : QObject(parent)
@@ -20,7 +55,21 @@ FileSystemEntry::FileSystemEntry(const QString& path, const QString& relativePat
     , m_mimeTypeInitialised(false)
     , m_iconPathInitialised(false)
     , m_permissions(buildPermissions(m_fileInfo))
-    , m_owner(m_fileInfo.owner()) {}
+    , m_owner(m_fileInfo.owner())
+    , m_isRemoteMount(false) {}
+
+FileSystemEntry::FileSystemEntry(CachedEntryData&& data, QObject* parent)
+    : QObject(parent)
+    , m_fileInfo(std::move(data.fileInfo))
+    , m_path(std::move(data.path))
+    , m_relativePath(std::move(data.relativePath))
+    , m_isImageInitialised(false)
+    , m_isVideoInitialised(false)
+    , m_mimeTypeInitialised(false)
+    , m_iconPathInitialised(false)
+    , m_permissions(std::move(data.permissions))
+    , m_owner(std::move(data.owner))
+    , m_isRemoteMount(data.isRemoteMount) {}
 
 QString FileSystemEntry::path() const {
     return m_path;
@@ -125,6 +174,10 @@ QString FileSystemEntry::owner() const {
     // m_owner is pre-computed in the constructor; owner() is a blocking syscall
     // (getpwuid) on Linux and must not be called on the UI thread at render time.
     return m_owner;
+}
+
+bool FileSystemEntry::isRemoteMount() const {
+    return m_isRemoteMount;
 }
 
 QString FileSystemEntry::mimeType() const {
@@ -336,6 +389,10 @@ QQmlListProperty<FileSystemEntry> FileSystemModel::entries() {
     return QQmlListProperty<FileSystemEntry>(this, &m_entries);
 }
 
+bool FileSystemModel::loading() const {
+    return m_loading;
+}
+
 void FileSystemModel::watchDirIfRecursive(const QString& path) {
     if (m_recursive && m_watchChanges) {
         const auto currentDir = m_dir;
@@ -400,6 +457,10 @@ void FileSystemModel::updateWatcher() {
 
 void FileSystemModel::updateEntries() {
     if (m_path.isEmpty()) {
+        if (m_loading) {
+            m_loading = false;
+            emit loadingChanged();
+        }
         if (!m_entries.isEmpty()) {
             beginResetModel();
             qDeleteAll(m_entries);
@@ -416,21 +477,43 @@ void FileSystemModel::updateEntries() {
     }
     m_futures.clear();
 
+    // Clear stale entries from the previous directory before starting the async scan.
+    // For local directories the new entries arrive within one frame (~50ms), so the
+    // empty state is invisible.  For remote mounts, the loading indicator fills the gap.
+    if (!m_entries.isEmpty()) {
+        beginResetModel();
+        qDeleteAll(m_entries);
+        m_entries.clear();
+        endResetModel();
+        emit entriesChanged();
+    }
+
     updateEntriesForDir(m_path);
 }
 
 void FileSystemModel::updateEntriesForDir(const QString& dir) {
+    if (!m_loading) {
+        m_loading = true;
+        emit loadingChanged();
+    }
+
     const auto recursive = m_recursive;
     const auto showHidden = m_showHidden;
     const auto filter = m_filter;
     const auto nameFilters = m_nameFilters;
+    const QDir currentDir = m_dir;
 
     QSet<QString> oldPaths;
     for (const auto& entry : std::as_const(m_entries)) {
         oldPaths << entry->path();
     }
 
-    const auto future = QtConcurrent::run([=](QPromise<QPair<QSet<QString>, QSet<QString>>>& promise) {
+    const auto future = QtConcurrent::run([=](QPromise<QPair<QSet<QString>, QList<CachedEntryData>>>& promise) {
+        // Get the parent directory's filesystem type so we can detect mount boundaries
+        struct statfs parentSfs;
+        const unsigned long parentFsType = (::statfs(dir.toUtf8().constData(), &parentSfs) == 0)
+            ? static_cast<unsigned long>(parentSfs.f_type) : 0;
+
         const auto flags = recursive ? QDirIterator::Subdirectories : QDirIterator::NoIteratorFlags;
 
         std::optional<QDirIterator> iter;
@@ -500,7 +583,26 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
             return;
         }
 
-        promise.addResult(qMakePair(oldPaths - newPaths, newPaths - oldPaths));
+        const QSet<QString> removed = oldPaths - newPaths;
+        const QSet<QString> added = newPaths - oldPaths;
+
+        // Build CachedEntryData in the background thread so that stat() calls
+        // (which block on SSHFS/FUSE) never run on the main/GUI thread.
+        QList<CachedEntryData> cachedEntries;
+        cachedEntries.reserve(added.size());
+        for (const auto& entryPath : added) {
+            if (promise.isCanceled()) return;
+            CachedEntryData data;
+            data.path = entryPath;
+            data.relativePath = currentDir.relativeFilePath(entryPath);
+            data.fileInfo = QFileInfo(entryPath);
+            data.permissions = buildPermissions(data.fileInfo);
+            data.owner = data.fileInfo.owner();
+            data.isRemoteMount = data.fileInfo.isDir() && detectRemoteMount(data.path, parentFsType);
+            cachedEntries.append(std::move(data));
+        }
+
+        promise.addResult(qMakePair(std::move(removed), std::move(cachedEntries)));
     });
 
     if (m_futures.contains(dir)) {
@@ -508,18 +610,23 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
     }
     m_futures.insert(dir, future);
 
-    const auto watcher = new QFutureWatcher<QPair<QSet<QString>, QSet<QString>>>(this);
+    const auto watcher = new QFutureWatcher<QPair<QSet<QString>, QList<CachedEntryData>>>(this);
 
-    connect(watcher, &QFutureWatcher<QPair<QSet<QString>, QSet<QString>>>::finished, this, [dir, watcher, this]() {
+    connect(watcher, &QFutureWatcher<QPair<QSet<QString>, QList<CachedEntryData>>>::finished, this, [dir, watcher, this]() {
         m_futures.remove(dir);
+
+        if (m_futures.isEmpty() && m_loading) {
+            m_loading = false;
+            emit loadingChanged();
+        }
 
         if (!watcher->future().isResultReadyAt(0)) {
             watcher->deleteLater();
             return;
         }
 
-        const auto result = watcher->result();
-        applyChanges(result.first, result.second);
+        auto result = watcher->result();
+        applyChanges(result.first, std::move(result.second));
 
         watcher->deleteLater();
     });
@@ -527,7 +634,7 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
     watcher->setFuture(future);
 }
 
-void FileSystemModel::applyChanges(const QSet<QString>& removedPaths, const QSet<QString>& addedPaths) {
+void FileSystemModel::applyChanges(const QSet<QString>& removedPaths, QList<CachedEntryData> addedEntries) {
     QList<int> removedIndices;
     for (int i = 0; i < m_entries.size(); ++i) {
         if (removedPaths.contains(m_entries[i]->path())) {
@@ -567,10 +674,10 @@ void FileSystemModel::applyChanges(const QSet<QString>& removedPaths, const QSet
     // Create and insert new entries, then resort for correct ordering.
     // resort() emits entriesChanged() after sorting; emit it here only when
     // there are no adds (remove-only path) so the signal fires exactly once.
-    if (!addedPaths.isEmpty()) {
+    if (!addedEntries.isEmpty()) {
         QList<FileSystemEntry*> newEntries;
-        for (const auto& path : addedPaths) {
-            newEntries << new FileSystemEntry(path, m_dir.relativeFilePath(path), this);
+        for (auto& data : addedEntries) {
+            newEntries << new FileSystemEntry(std::move(data), this);
         }
 
         const auto first = static_cast<int>(m_entries.size());

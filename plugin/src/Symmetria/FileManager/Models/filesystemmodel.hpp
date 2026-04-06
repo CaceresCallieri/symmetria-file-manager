@@ -14,6 +14,18 @@
 
 namespace symmetria::filemanager::models {
 
+// Pre-computed file metadata built in the background thread so that
+// FileSystemEntry construction on the main thread avoids blocking stat() calls
+// (critical for SSHFS/FUSE mounts where stat is a network round-trip).
+struct CachedEntryData {
+    QString path;
+    QString relativePath;
+    QFileInfo fileInfo;
+    QString permissions;
+    QString owner;
+    bool isRemoteMount = false;
+};
+
 class FileSystemEntry : public QObject {
     Q_OBJECT
     QML_ELEMENT
@@ -37,9 +49,11 @@ class FileSystemEntry : public QObject {
     Q_PROPERTY(QString owner READ owner CONSTANT)
     Q_PROPERTY(QString mimeType READ mimeType CONSTANT)
     Q_PROPERTY(QString iconPath READ iconPath CONSTANT)
+    Q_PROPERTY(bool isRemoteMount READ isRemoteMount CONSTANT)
 
 public:
     explicit FileSystemEntry(const QString& path, const QString& relativePath, QObject* parent = nullptr);
+    explicit FileSystemEntry(CachedEntryData&& data, QObject* parent = nullptr);
 
     [[nodiscard]] QString path() const;
     [[nodiscard]] QString relativePath() const;
@@ -59,6 +73,7 @@ public:
     [[nodiscard]] QString owner() const;
     [[nodiscard]] QString mimeType() const;
     [[nodiscard]] QString iconPath() const;
+    [[nodiscard]] bool isRemoteMount() const;
 
     void updateRelativePath(const QDir& dir);
 
@@ -85,6 +100,7 @@ private:
 
     const QString m_permissions; // Pre-computed Unix-style permission string (e.g. drwxr-xr-x)
     const QString m_owner;       // Pre-computed at construction; owner() is a blocking syscall
+    const bool m_isRemoteMount;  // True if path is an SSHFS/FUSE/NFS mount point
 };
 
 class FileSystemModel : public QAbstractListModel {
@@ -101,6 +117,7 @@ class FileSystemModel : public QAbstractListModel {
     Q_PROPERTY(QStringList nameFilters READ nameFilters WRITE setNameFilters NOTIFY nameFiltersChanged)
 
     Q_PROPERTY(QQmlListProperty<symmetria::filemanager::models::FileSystemEntry> entries READ entries NOTIFY entriesChanged)
+    Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
 
 public:
     enum SortBy {
@@ -151,6 +168,7 @@ public:
     void setNameFilters(const QStringList& nameFilters);
 
     [[nodiscard]] QQmlListProperty<FileSystemEntry> entries();
+    [[nodiscard]] bool loading() const;
 
 signals:
     void pathChanged();
@@ -162,12 +180,13 @@ signals:
     void filterChanged();
     void nameFiltersChanged();
     void entriesChanged();
+    void loadingChanged();
 
 private:
     QDir m_dir;
     QFileSystemWatcher m_watcher;
     QList<FileSystemEntry*> m_entries;
-    QHash<QString, QFuture<QPair<QSet<QString>, QSet<QString>>>> m_futures;
+    QHash<QString, QFuture<QPair<QSet<QString>, QList<CachedEntryData>>>> m_futures;
 
     QString m_path;
     bool m_recursive;
@@ -177,6 +196,7 @@ private:
     SortBy m_sortBy;
     Filter m_filter;
     QStringList m_nameFilters;
+    bool m_loading = false;
 
     void watchDirIfRecursive(const QString& path);
     void resort();
@@ -184,7 +204,7 @@ private:
     void updateWatcher();
     void updateEntries();
     void updateEntriesForDir(const QString& dir);
-    void applyChanges(const QSet<QString>& removedPaths, const QSet<QString>& addedPaths);
+    void applyChanges(const QSet<QString>& removedPaths, QList<CachedEntryData> addedEntries);
     [[nodiscard]] bool compareEntries(const FileSystemEntry* a, const FileSystemEntry* b) const;
 };
 

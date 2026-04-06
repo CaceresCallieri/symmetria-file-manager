@@ -24,6 +24,11 @@ public:
     [[nodiscard]] QString resolvedUrl() const;
     [[nodiscard]] bool loading() const;
 
+    /// Returns a file:// URL suitable for xdg-open.  For encrypted formats
+    /// (.rpgmvp, .png_, .icns) this returns the cached decrypted PNG;
+    /// for normal files it returns the original path unchanged.
+    Q_INVOKABLE static QString resolvePathForOpen(const QString& path);
+
 signals:
     void sourceChanged();
     void resolvedUrlChanged();
