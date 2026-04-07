@@ -33,7 +33,9 @@ jobs:
             libarchive-dev \
             libfreexl-dev \
             pkg-config \
-            ninja-build
+            ninja-build \
+            locales
+          sudo locale-gen en_US.UTF-8
 
       - name: Cache KF6 SyntaxHighlighting + QXlsx
         id: deps-cache
@@ -94,4 +96,6 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           LD_LIBRARY_PATH: ${{ github.workspace }}/deps/lib
+          XDG_DATA_DIRS: ${{ github.workspace }}/deps/share:/usr/local/share:/usr/share
+          LC_ALL: en_US.UTF-8
         run: ctest --test-dir build --output-on-failure --timeout 60
