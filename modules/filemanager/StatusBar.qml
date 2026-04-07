@@ -1,6 +1,5 @@
 import "../../components"
 import "../../services"
-import "../../config"
 import QtQuick
 import QtQuick.Layouts
 
@@ -71,7 +70,7 @@ Item {
 
                 readonly property bool _acceptEnabled: {
                     if (FileManagerService.pickerSaveMode)
-                        return true;  // In save mode, always enabled (saves to current dir)
+                        return true;  // In save mode, always enabled (confirms save to current directory)
                     if (FileManagerService.pickerMultiple && root._selectedCount > 0)
                         return true;  // Multi-select with marks is always valid (type-filtered at mark time)
                     if (root.currentEntry === null)
@@ -161,8 +160,6 @@ Item {
             TextInput {
                 id: saveNameInput
 
-                property string _originalName: ""
-
                 visible: root._normalVisible && FileManagerService.pickerSaveMode
                     && (FileManagerService.pickerSuggestedName !== "" || FileManagerService.saveNameEditing)
                 text: FileManagerService.pickerSuggestedName
@@ -186,31 +183,38 @@ Item {
                 }
 
                 function _confirmEdit(andSave: bool): void {
-                    FileManagerService.pickerSuggestedName = text;
+                    // Reject empty names — revert to the original name instead of saving ""
+                    const trimmed = text.trim();
+                    if (trimmed === "") {
+                        _cancelEdit();
+                        return;
+                    }
+                    FileManagerService.pickerSuggestedName = trimmed;
                     FileManagerService.saveNameEditing = false;
                     if (andSave)
                         FileManagerService.confirmPickerSelection(root.currentEntry, root.windowState);
                 }
 
                 function _cancelEdit(): void {
-                    text = _originalName;
+                    // Revert to the service's current suggested name (the last committed value)
+                    text = FileManagerService.pickerSuggestedName;
                     FileManagerService.saveNameEditing = false;
                 }
 
                 Keys.onPressed: function(event) {
                     if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                        saveNameInput._confirmEdit(true);
+                        _confirmEdit(true);
                         event.accepted = true;
                     } else if (event.key === Qt.Key_Escape) {
-                        saveNameInput._cancelEdit();
+                        _cancelEdit();
                         event.accepted = true;
                     } else if (event.key === Qt.Key_Tab) {
                         // Toggle between basename-only and full-name selection
-                        const dotIndex = saveNameInput.text.lastIndexOf(".");
-                        if (dotIndex > 0 && saveNameInput.selectionEnd === dotIndex)
-                            saveNameInput.selectAll();
+                        const dotIndex = text.lastIndexOf(".");
+                        if (dotIndex > 0 && selectionEnd === dotIndex)
+                            selectAll();
                         else
-                            saveNameInput._selectBasename();
+                            _selectBasename();
                         event.accepted = true;
                     }
                 }
@@ -229,7 +233,6 @@ Item {
 
                     function onSaveNameEditingChanged() {
                         if (FileManagerService.saveNameEditing) {
-                            saveNameInput._originalName = saveNameInput.text;
                             saveNameInput.forceActiveFocus();
                             saveNameInput._selectBasename();
                         }

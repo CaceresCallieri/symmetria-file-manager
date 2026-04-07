@@ -158,12 +158,14 @@ Item {
         }
     }
 
-    // Return focus to file list when inline save-name editing ends
+    // Return focus to file list when inline save-name editing ends.
+    // Guard against picker completion: if pickerMode is already false, the window
+    // is closing — forcing focus on a departing view is a no-op and may emit warnings.
     Connections {
         target: FileManagerService
 
         function onSaveNameEditingChanged() {
-            if (!FileManagerService.saveNameEditing)
+            if (!FileManagerService.saveNameEditing && FileManagerService.pickerMode)
                 Qt.callLater(() => view.forceActiveFocus());
         }
     }
