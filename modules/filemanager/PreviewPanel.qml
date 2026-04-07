@@ -200,8 +200,8 @@ Item {
                             width: directoryView.width
                             flashActive: root.windowState ? root.windowState.flashActive : false
                             flashQuery: root.windowState ? root.windowState.flashQuery : ""
-                            flashLabel: root.windowState?.flashMatchMap["preview:" + index]?.label ?? ""
-                            flashMatchStart: root.windowState?.flashMatchMap["preview:" + index]?.matchStart ?? -1
+                            flashLabel: root.windowState?.flashPreviewMatchMap[index]?.label ?? ""
+                            flashMatchStart: root.windowState?.flashPreviewMatchMap[index]?.matchStart ?? -1
                         }
                     }
                 }

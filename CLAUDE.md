@@ -44,6 +44,17 @@ systemctl --user restart symmetria-fm
 ```
 The service's `ExecStartPre` automatically clears the QML cache before each start.
 
+### QML Linting
+
+```bash
+/usr/lib/qt6/bin/qmllint modules/filemanager/*.qml services/*.qml components/*.qml config/*.qml
+```
+
+Uses `.qmllint.ini` at the project root. The Qt6 qmllint is at `/usr/lib/qt6/bin/qmllint` (not `/usr/bin/qmllint`, which is the Qt5 version). Configuration notes:
+- `MissingProperty` is demoted to `info` — most hits are false positives from QuickShell singletons (Config, Theme, Logger) whose JS-object properties aren't visible to static analysis
+- `UnqualifiedAccess` and `UnusedImports` are the primary actionable warning categories
+- `AdditionalQmlImportPaths=/usr/lib/qt6/qml` resolves QuickShell and Symmetria.FileManager.Models imports
+
 ### Opening the File Manager
 
 ```bash

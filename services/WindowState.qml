@@ -120,15 +120,13 @@ QtObject {
     property var flashLabelChars: ({})      // { char: true } — chars assigned as labels
     property var flashContinuations: ({})   // { char: true } — chars that extend the query
     property string flashPendingLabel: ""   // First char of a 2-char label being resolved
-    // O(1) lookup map: "column:index" → match object. Rebuilt when flashMatches changes.
-    readonly property var flashMatchMap: {
-        const map = {};
-        for (let i = 0; i < flashMatches.length; i++) {
-            const m = flashMatches[i];
-            map[m.column + ":" + m.index] = m;
-        }
-        return map;
-    }
+    // Per-column match maps — set imperatively by FlashHandler.recompute()
+    // so each ListView's delegates only re-evaluate when their own column
+    // changes, not when any column's matches change.
+    property var flashCurrentMatchMap: ({})
+    property var flashParentMatchMap: ({})
+    property var flashPreviewMatchMap: ({})
+
 
     signal flashJump(string column, int index, string path)
 
@@ -145,6 +143,9 @@ QtObject {
         flashLabelChars = {};
         flashContinuations = {};
         flashPendingLabel = "";
+        flashCurrentMatchMap = {};
+        flashParentMatchMap = {};
+        flashPreviewMatchMap = {};
     }
 
     // === Sort (per-window, ephemeral) ===

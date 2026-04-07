@@ -5,6 +5,14 @@
 // Component IDs accessed via scope: fsModel.
 // Logger singleton is accessed via scope.
 
+// Cached flat entry list across all three columns.  Rebuilt only when
+// invalidated (directory change, file-watcher update, flash mode exit).
+var _cachedAllEntries = null;
+
+function invalidateEntryCache() {
+    _cachedAllEntries = null;
+}
+
 function handleKey(event, root, view) {
     var windowState = root.windowState;
     var key = event.key;
@@ -116,19 +124,7 @@ function handleKey(event, root, view) {
     event.accepted = true;
 }
 
-function recompute(root, view) {
-    var windowState = root.windowState;
-    var query = windowState.flashQuery.toLowerCase();
-    if (query === "") {
-        // Reset result state only — flash remains active, just with no matches yet.
-        // Do not clear flashActive or flashPendingLabel here.
-        windowState.flashMatches = [];
-        windowState.flashLabelChars = {};
-        windowState.flashContinuations = {};
-        return;
-    }
-
-    // Collect entries from all three columns
+function _buildAllEntries(root) {
     var allEntries = [];
 
     var currentEntries = fsModel.entries;
@@ -168,10 +164,46 @@ function recompute(root, view) {
         });
     }
 
+    return allEntries;
+}
+
+function recompute(root, view) {
+    var windowState = root.windowState;
+    var query = windowState.flashQuery.toLowerCase();
+    if (query === "") {
+        // Reset result state only — flash remains active, just with no matches yet.
+        // Do not clear flashActive or flashPendingLabel here.
+        windowState.flashMatches = [];
+        windowState.flashLabelChars = {};
+        windowState.flashContinuations = {};
+        windowState.flashCurrentMatchMap = {};
+        windowState.flashParentMatchMap = {};
+        windowState.flashPreviewMatchMap = {};
+        return;
+    }
+
+    if (!_cachedAllEntries)
+        _cachedAllEntries = _buildAllEntries(root);
+
+    var allEntries = _cachedAllEntries;
+
     var result = FlashLogic.computeFlash(query, allEntries, view.currentIndex);
     windowState.flashMatches = result.matches;
     windowState.flashLabelChars = result.labelChars;
     windowState.flashContinuations = result.continuations;
+
+    // Build per-column match maps so each ListView only re-evaluates
+    // when its own column's matches change (not all three at once).
+    var currentMap = {}, parentMap = {}, previewMap = {};
+    for (var m = 0; m < result.matches.length; m++) {
+        var match = result.matches[m];
+        if (match.column === "current") currentMap[match.index] = match;
+        else if (match.column === "parent") parentMap[match.index] = match;
+        else if (match.column === "preview") previewMap[match.index] = match;
+    }
+    windowState.flashCurrentMatchMap = currentMap;
+    windowState.flashParentMatchMap = parentMap;
+    windowState.flashPreviewMatchMap = previewMap;
 
     if (Logger.minLevel <= Logger.levelDebug) {
         var contKeys = Object.keys(result.continuations).join("");

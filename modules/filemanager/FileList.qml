@@ -12,7 +12,6 @@ import Symmetria.FileManager.Models
 import Quickshell.Io
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 
 Item {
     id: root
@@ -52,8 +51,10 @@ Item {
             // Cancel transient modes on the departing tab
             if (root.windowState.searchActive)
                 root.windowState.clearSearch();
-            if (root.windowState.flashActive)
+            if (root.windowState.flashActive) {
                 root.windowState.clearFlash();
+                FlashHandler.invalidateEntryCache();
+            }
             if (root.windowState.activeChordPrefix !== "")
                 root.windowState.activeChordPrefix = "";
             if (root.windowState.bookmarkSubModeActive)
@@ -218,6 +219,12 @@ Item {
             onPathChanged: root._pathJustChanged = true
             onEntriesChanged: {
                 if (root._pathJustChanged) {
+                    // The C++ model emits entriesChanged twice on path change:
+                    // first with count=0 (stale-entry clear), then with the real
+                    // entries after the async scan.  Skip the empty reset so we
+                    // don't consume _pathJustChanged with a clamped-to-0 cursor.
+                    if (view.count === 0)
+                        return;
                     root._pathJustChanged = false;
                     const restored = root.windowState ? root.windowState.restoreCursor(fsModel.path) : 0;
                     const safeIndex = Math.min(restored, Math.max(view.count - 1, 0));
@@ -244,6 +251,9 @@ Item {
                 // Re-compute matches if search is active (handles async model reload)
                 if (root.windowState && root.windowState.searchQuery !== "")
                     SearchHandler.computeMatches(root, view, true);
+                // Invalidate cached flash entries so the next flash session
+                // builds from current directory contents, not stale data.
+                FlashHandler.invalidateEntryCache();
             }
         }
 
@@ -258,8 +268,8 @@ Item {
                         ? !!root.windowState.selectedPaths[modelData?.path ?? ""] : false
             flashActive: root.windowState ? root.windowState.flashActive : false
             flashQuery: root.windowState ? root.windowState.flashQuery : ""
-            flashLabel: root.windowState?.flashMatchMap["current:" + index]?.label ?? ""
-            flashMatchStart: root.windowState?.flashMatchMap["current:" + index]?.matchStart ?? -1
+            flashLabel: root.windowState?.flashCurrentMatchMap[index]?.label ?? ""
+            flashMatchStart: root.windowState?.flashCurrentMatchMap[index]?.matchStart ?? -1
             onActivated: root._activateCurrentItem()
         }
 

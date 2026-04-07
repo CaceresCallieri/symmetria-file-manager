@@ -186,6 +186,9 @@ function handleKey(event, root, view, pasteProcess, clipboardCopyProcess) {
     case Qt.Key_S:
         Logger.info("Flash", "S pressed → entering flash mode (cursor at " + view.currentIndex + ")");
         root._preFlashIndex = view.currentIndex;
+        // Invalidate before starting — preview column entries may have changed
+        // since the last flash session (cursor moved to different directory entry).
+        FlashHandler.invalidateEntryCache();
         windowState.startFlash();
         event.accepted = true;
         break;
