@@ -21,8 +21,31 @@
 
 namespace symmetria::filemanager::models {
 
-// Forward declaration — defined after isVideo() to keep related accessors together.
+// Forward declaration — defined after the accessors to keep related code together.
 static QString buildPermissions(const QFileInfo& info);
+
+// Resolves the XDG icon path from a pre-computed MIME type string.
+// Runs on the main thread (IconThemeResolver uses unsynchronized static caches)
+// but is cheap: no remote I/O, results cached after first lookup per icon name.
+static QString resolveIconPath(const QFileInfo& fileInfo, const QString& mimeType) {
+    if (fileInfo.isDir())
+        return IconThemeResolver::resolve(QStringLiteral("folder"));
+
+    static const QMimeDatabase db;
+    const auto mime = db.mimeTypeForName(mimeType);
+
+    QString icon = IconThemeResolver::resolve(mime.iconName());
+    if (icon.isEmpty())
+        icon = IconThemeResolver::resolve(mime.genericIconName());
+    if (icon.isEmpty()) {
+        for (const auto& parentName : mime.parentMimeTypes()) {
+            icon = IconThemeResolver::resolve(db.mimeTypeForName(parentName).iconName());
+            if (!icon.isEmpty())
+                break;
+        }
+    }
+    return icon;
+}
 
 // Detect FUSE/NFS/CIFS mount points by comparing the filesystem type of a
 // directory entry against its parent.  A directory is a remote mount point when
@@ -50,10 +73,21 @@ FileSystemEntry::FileSystemEntry(const QString& path, const QString& relativePat
     , m_fileInfo(path)
     , m_path(path)
     , m_relativePath(relativePath)
-    , m_isImageInitialised(false)
-    , m_isVideoInitialised(false)
-    , m_mimeTypeInitialised(false)
-    , m_iconPathInitialised(false)
+    , m_isImage([this]() {
+        if (m_fileInfo.isDir()) return false;
+        if (m_path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)
+            || m_path.endsWith(QStringLiteral(".png_"), Qt::CaseInsensitive)
+            || m_path.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive))
+            return true;
+        return QImageReader(m_path).canRead();
+      }())
+    , m_mimeType([this]() -> QString {
+        if (m_fileInfo.isDir()) return {};
+        static const QMimeDatabase db;
+        return db.mimeTypeForFile(m_path).name();
+      }())
+    , m_isVideo(m_mimeType.startsWith(QStringLiteral("video/")))
+    , m_iconPath(resolveIconPath(m_fileInfo, m_mimeType))
     , m_permissions(buildPermissions(m_fileInfo))
     , m_owner(m_fileInfo.owner())
     , m_isRemoteMount(false) {}
@@ -63,10 +97,10 @@ FileSystemEntry::FileSystemEntry(CachedEntryData&& data, QObject* parent)
     , m_fileInfo(std::move(data.fileInfo))
     , m_path(std::move(data.path))
     , m_relativePath(std::move(data.relativePath))
-    , m_isImageInitialised(false)
-    , m_isVideoInitialised(false)
-    , m_mimeTypeInitialised(false)
-    , m_iconPathInitialised(false)
+    , m_isImage(data.isImage)
+    , m_mimeType(std::move(data.mimeType))
+    , m_isVideo(data.isVideo)
+    , m_iconPath(resolveIconPath(m_fileInfo, m_mimeType))
     , m_permissions(std::move(data.permissions))
     , m_owner(std::move(data.owner))
     , m_isRemoteMount(data.isRemoteMount) {}
@@ -103,28 +137,8 @@ bool FileSystemEntry::isDir() const {
     return m_fileInfo.isDir();
 };
 
-bool FileSystemEntry::isImage() const {
-    if (!m_isImageInitialised) {
-        if (m_path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)
-            || m_path.endsWith(QStringLiteral(".png_"), Qt::CaseInsensitive)
-            || m_path.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive)) {
-            m_isImage = true;
-        } else {
-            QImageReader reader(m_path);
-            m_isImage = reader.canRead();
-        }
-        m_isImageInitialised = true;
-    }
-    return m_isImage;
-}
-
-bool FileSystemEntry::isVideo() const {
-    if (!m_isVideoInitialised) {
-        m_isVideo = mimeType().startsWith(QStringLiteral("video/"));
-        m_isVideoInitialised = true;
-    }
-    return m_isVideo;
-}
+bool FileSystemEntry::isImage() const { return m_isImage; }
+bool FileSystemEntry::isVideo() const { return m_isVideo; }
 
 QDateTime FileSystemEntry::modifiedDate() const {
     return m_fileInfo.lastModified();
@@ -180,46 +194,8 @@ bool FileSystemEntry::isRemoteMount() const {
     return m_isRemoteMount;
 }
 
-QString FileSystemEntry::mimeType() const {
-    if (!m_mimeTypeInitialised) {
-        static const QMimeDatabase db;
-        m_mimeType = db.mimeTypeForFile(m_path).name();
-        m_mimeTypeInitialised = true;
-    }
-    return m_mimeType;
-}
-
-QString FileSystemEntry::iconPath() const {
-    if (!m_iconPathInitialised) {
-        if (m_fileInfo.isDir()) {
-            m_iconPath = IconThemeResolver::resolve(QStringLiteral("folder"));
-        } else {
-            // Reuse the already-resolved MIME type string rather than calling
-            // mimeTypeForFile() again — that avoids a second stat/magic-byte read.
-            static const QMimeDatabase db;
-            const auto mime = db.mimeTypeForName(mimeType());
-
-            // Try the exact MIME icon name (e.g. "application-pdf")
-            m_iconPath = IconThemeResolver::resolve(mime.iconName());
-
-            // Then try the generic icon name (e.g. "audio-x-generic")
-            if (m_iconPath.isEmpty())
-                m_iconPath = IconThemeResolver::resolve(mime.genericIconName());
-
-            // Then walk parent MIME types
-            if (m_iconPath.isEmpty()) {
-                for (const auto& parentName : mime.parentMimeTypes()) {
-                    const auto parentMime = db.mimeTypeForName(parentName);
-                    m_iconPath = IconThemeResolver::resolve(parentMime.iconName());
-                    if (!m_iconPath.isEmpty())
-                        break;
-                }
-            }
-        }
-        m_iconPathInitialised = true;
-    }
-    return m_iconPath;
-}
+QString FileSystemEntry::mimeType() const { return m_mimeType; }
+QString FileSystemEntry::iconPath() const { return m_iconPath; }
 
 void FileSystemEntry::updateRelativePath(const QDir& dir) {
     const auto relPath = dir.relativeFilePath(m_path);
@@ -606,6 +582,25 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
             data.permissions = buildPermissions(data.fileInfo);
             data.owner = data.fileInfo.owner();
             data.isRemoteMount = data.fileInfo.isDir() && detectRemoteMount(data.path, parentFsType);
+
+            // Pre-compute MIME type and image detection in the background thread
+            // so FileSystemEntry accessors become trivial field reads with no I/O.
+            // QMimeDatabase is thread-safe; QImageReader::canRead() is stack-local.
+            if (!data.fileInfo.isDir()) {
+                static const QMimeDatabase mimeDb;
+                data.mimeType = mimeDb.mimeTypeForFile(data.path).name();
+                data.isVideo = data.mimeType.startsWith(QStringLiteral("video/"));
+
+                if (data.path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)
+                    || data.path.endsWith(QStringLiteral(".png_"), Qt::CaseInsensitive)
+                    || data.path.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive)) {
+                    data.isImage = true;
+                } else {
+                    QImageReader reader(data.path);
+                    data.isImage = reader.canRead();
+                }
+            }
+
             cachedEntries.append(std::move(data));
         }
 

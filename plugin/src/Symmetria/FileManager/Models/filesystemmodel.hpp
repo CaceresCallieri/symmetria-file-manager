@@ -24,6 +24,10 @@ struct CachedEntryData {
     QString permissions;
     QString owner;
     bool isRemoteMount = false;
+    // Pre-computed in background thread to avoid GUI-thread I/O
+    bool isImage = false;
+    bool isVideo = false;
+    QString mimeType;
 };
 
 class FileSystemEntry : public QObject {
@@ -86,17 +90,10 @@ private:
     const QString m_path;
     QString m_relativePath;
 
-    mutable bool m_isImage;
-    mutable bool m_isImageInitialised;
-
-    mutable bool m_isVideo;
-    mutable bool m_isVideoInitialised;
-
-    mutable QString m_mimeType;
-    mutable bool m_mimeTypeInitialised;
-
-    mutable QString m_iconPath;
-    mutable bool m_iconPathInitialised;
+    const bool m_isImage;
+    const QString m_mimeType;    // Must precede m_isVideo and m_iconPath (init-order dependency)
+    const bool m_isVideo;
+    const QString m_iconPath;
 
     const QString m_permissions; // Pre-computed Unix-style permission string (e.g. drwxr-xr-x)
     const QString m_owner;       // Pre-computed at construction; owner() is a blocking syscall
