@@ -40,24 +40,9 @@ Item {
         active: opacity > 0
         asynchronous: true
 
-        sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.md
-
-            MaterialIcon {
-                Layout.alignment: Qt.AlignHCenter
-                text: "device_hub"
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xxl * 2
-                font.weight: 500
-            }
-
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Root")
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xl
-                font.weight: 500
-            }
+        sourceComponent: PreviewStateIndicator {
+            iconName: "device_hub"
+            message: qsTr("Root")
         }
 
         Behavior on opacity {

@@ -12,9 +12,9 @@ Loader {
 
     anchors.fill: parent
 
-    opacity: windowState && windowState.contextMenuTargetPath !== "" ? 1 : 0
+    opacity: windowState && windowState.activeModal === windowState.modalContextMenu ? 1 : 0
     active: windowState && !FileManagerService.pickerMode
-        && windowState.contextMenuTargetPath !== ""
+        && windowState.activeModal === windowState.modalContextMenu
     sourceComponent: FocusScope {
         id: popupScope
 
@@ -77,7 +77,7 @@ Loader {
                 }
             } else if (actionId === "playToggle") {
                 root.windowState.audioPlaybackToggle();
-                root.windowState.cancelContextMenu();
+                root.windowState.closeModal();
             } else if (actionId === "extract") {
                 viewMode = "extracting";
                 extractionError = "";
@@ -145,7 +145,7 @@ Loader {
         function _handleActionsKeys(event): void {
             switch (event.key) {
             case Qt.Key_Escape:
-                root.windowState.cancelContextMenu();
+                root.windowState.closeModal();
                 event.accepted = true;
                 break;
             case Qt.Key_J:
@@ -214,7 +214,7 @@ Loader {
                     const app = filteredApps[appIndex];
                     openWithProcess.command = ["gio", "launch", app.desktopId, targetPath];
                     openWithProcess.running = true;
-                    root.windowState.cancelContextMenu();
+                    root.windowState.closeModal();
                 }
                 event.accepted = true;
                 break;
@@ -228,7 +228,7 @@ Loader {
         function _handleExtractingKeys(event): void {
             if ((event.key === Qt.Key_Escape || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
                 && (extractionDone || extractionError !== "")) {
-                root.windowState.cancelContextMenu();
+                root.windowState.closeModal();
             }
             event.accepted = true;
         }
@@ -239,7 +239,7 @@ Loader {
             hoverEnabled: true
             onClicked: {
                 if (popupScope.viewMode !== "extracting" || popupScope.extractionDone || popupScope.extractionError !== "")
-                    root.windowState.cancelContextMenu();
+                    root.windowState.closeModal();
             }
         }
 
@@ -298,14 +298,14 @@ Loader {
                         text: "more_horiz"
                         color: Theme.palette.m3primary
                         font.pointSize: Theme.font.size.lg
-                        font.weight: 500
+                        font.weight: Font.Medium
                     }
 
                     StyledText {
                         text: popupScope.targetName
                         color: Theme.palette.m3onSurface
                         font.pointSize: Theme.font.size.md
-                        font.weight: 600
+                        font.weight: Font.DemiBold
                         elide: Text.ElideMiddle
                         Layout.fillWidth: true
                     }
@@ -368,7 +368,7 @@ Loader {
                                             color: Theme.palette.m3onSurface
                                             font.family: Theme.font.family.mono
                                             font.pointSize: Theme.font.size.xs
-                                            font.weight: 600
+                                            font.weight: Font.DemiBold
                                         }
                                     }
 
@@ -524,7 +524,7 @@ Loader {
                                             text: modelData.name
                                             color: Theme.palette.m3onSurface
                                             font.pointSize: Theme.font.size.sm
-                                            font.weight: 500
+                                            font.weight: Font.Medium
                                         }
 
                                         StyledText {
@@ -540,7 +540,7 @@ Loader {
                                     onClicked: {
                                         openWithProcess.command = ["gio", "launch", modelData.desktopId, popupScope.targetPath];
                                         openWithProcess.running = true;
-                                        root.windowState.cancelContextMenu();
+                                        root.windowState.closeModal();
                                     }
                                 }
                             }
@@ -575,7 +575,7 @@ Loader {
                                     ? Theme.palette.m3error
                                     : Theme.palette.m3onSurfaceVariant
                             font.pointSize: Theme.font.size.xxl
-                            font.weight: 500
+                            font.weight: Font.Medium
                         }
 
                         StyledText {

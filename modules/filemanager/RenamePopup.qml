@@ -16,8 +16,8 @@ Loader {
 
     anchors.fill: parent
 
-    opacity: windowState && windowState.renameTargetPath !== "" ? 1 : 0
-    active: windowState && windowState.renameTargetPath !== ""
+    opacity: windowState && windowState.activeModal === windowState.modalRename ? 1 : 0
+    active: windowState && windowState.activeModal === windowState.modalRename
     asynchronous: true
 
     sourceComponent: FocusScope {
@@ -57,7 +57,7 @@ Loader {
         // Click outside the card to dismiss — no scrim
         MouseArea {
             anchors.fill: parent
-            onClicked: root.windowState.cancelRename()
+            onClicked: root.windowState.closeModal()
         }
 
         // Dialog card — positioned below the selected item, aligned to the file list column
@@ -105,7 +105,7 @@ Loader {
                         text: qsTr("Rename:")
                         color: Theme.palette.m3onSurface
                         font.pointSize: Theme.font.size.md
-                        font.weight: 600
+                        font.weight: Font.DemiBold
                     }
                 }
 
@@ -138,7 +138,7 @@ Loader {
                                 popupScope._attemptRename();
                                 event.accepted = true;
                             } else if (event.key === Qt.Key_Escape) {
-                                root.windowState.cancelRename();
+                                root.windowState.closeModal();
                                 event.accepted = true;
                             } else if (event.key === Qt.Key_Tab) {
                                 // Toggle between name-only and full-name selection
@@ -171,7 +171,7 @@ Loader {
             if (newName === "" || newName === "." || newName === ".." || newName.indexOf("/") !== -1)
                 return;
             if (newName === originalName) {
-                root.windowState.cancelRename();
+                root.windowState.closeModal();
                 return;
             }
             if (checkProcess.running || renameProcess.running)
@@ -215,7 +215,7 @@ Loader {
             onExited: (exitCode, exitStatus) => {
                 if (exitCode === 0) {
                     root.windowState.renameCompleted(checkProcess.pendingNewName);
-                    root.windowState.cancelRename();
+                    root.windowState.closeModal();
                 } else {
                     errorLabel.text = qsTr("Rename failed (exit code %1)").arg(exitCode);
                 }

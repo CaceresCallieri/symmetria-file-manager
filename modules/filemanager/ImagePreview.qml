@@ -52,23 +52,7 @@ Item {
         active: previewHelper.loading || preview.status === Image.Loading
         asynchronous: true
 
-        sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.sm
-
-            MaterialIcon {
-                Layout.alignment: Qt.AlignHCenter
-                text: "hourglass_empty"
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xxl
-            }
-
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Loading\u2026")
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.md
-            }
-        }
+        sourceComponent: PreviewLoadingIndicator {}
     }
 
     // Error state
@@ -77,24 +61,9 @@ Item {
         active: !previewHelper.loading && preview.status === Image.Error
         asynchronous: true
 
-        sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.md
-
-            MaterialIcon {
-                Layout.alignment: Qt.AlignHCenter
-                text: "broken_image"
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xxl * 2
-                font.weight: 500
-            }
-
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Cannot preview")
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xl
-                font.weight: 500
-            }
+        sourceComponent: PreviewStateIndicator {
+            iconName: "broken_image"
+            message: qsTr("Cannot preview")
         }
     }
 }

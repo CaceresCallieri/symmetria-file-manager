@@ -11,10 +11,10 @@ Loader {
 
     anchors.fill: parent
 
-    opacity: windowState && windowState.zoxideActive ? 1 : 0
+    opacity: windowState && windowState.activeModal === windowState.modalZoxide ? 1 : 0
     // Drive active from the source property, not from animated opacity — avoids
     // a race where the Loader activates mid-fade-out with an already-closed state.
-    active: windowState && windowState.zoxideActive
+    active: windowState && windowState.activeModal === windowState.modalZoxide
     asynchronous: true
 
     sourceComponent: FocusScope {
@@ -40,7 +40,7 @@ Loader {
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true
-            onClicked: root.windowState.cancelZoxide()
+            onClicked: root.windowState.closeModal()
         }
 
         StyledRect {
@@ -103,7 +103,7 @@ Loader {
                         text: qsTr("Jump to directory")
                         color: Theme.palette.m3onSurface
                         font.pointSize: Theme.font.size.md
-                        font.weight: 600
+                        font.weight: Font.DemiBold
                     }
                 }
 
@@ -137,7 +137,7 @@ Loader {
 
                         Keys.onPressed: function(event) {
                             if (event.key === Qt.Key_Escape) {
-                                root.windowState.cancelZoxide();
+                                root.windowState.closeModal();
                                 event.accepted = true;
                             } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                                 popupScope._confirmSelection();
@@ -280,7 +280,7 @@ Loader {
             if (results.length === 0 || selectedIndex < 0 || selectedIndex >= results.length)
                 return;
             const targetPath = results[selectedIndex].path;
-            // navigate() calls cancelZoxide() internally — popup closes automatically.
+            // navigate() calls closeModal() internally — popup closes automatically.
             root.windowState.navigate(targetPath);
         }
 

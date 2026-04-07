@@ -74,7 +74,7 @@ Item {
                     color: Theme.palette.m3primary
                     font.family: Theme.font.family.mono
                     font.pointSize: Theme.font.size.sm
-                    font.weight: 700
+                    font.weight: Font.Bold
                 }
             }
 
@@ -92,7 +92,7 @@ Item {
                 }
                 color: Theme.palette.m3onSurfaceVariant
                 font.pointSize: Theme.font.size.sm
-                font.weight: 500
+                font.weight: Font.Medium
             }
         }
 
@@ -144,7 +144,7 @@ Item {
                                                     : Theme.palette.m3onSurface
                             font.family: Theme.font.family.mono
                             font.pointSize: Theme.font.size.xs
-                            font.weight: 600
+                            font.weight: Font.DemiBold
                         }
                     }
 

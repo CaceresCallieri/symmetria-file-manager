@@ -85,7 +85,7 @@ Item {
                         ? Theme.palette.m3primary
                         : Theme.palette.m3onSurfaceVariant
                     font.pointSize: Theme.font.size.xs
-                    font.weight: delegateRoot.isDir ? 600 : 400
+                    font.weight: delegateRoot.isDir ? Font.DemiBold : Font.Normal
                 }
 
                 StyledText {
@@ -131,23 +131,7 @@ Item {
         active: archiveModel.loading
         asynchronous: true
 
-        sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.sm
-
-            MaterialIcon {
-                Layout.alignment: Qt.AlignHCenter
-                text: "hourglass_empty"
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xxl
-            }
-
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Loading\u2026")
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.md
-            }
-        }
+        sourceComponent: PreviewLoadingIndicator {}
     }
 
     // Error state (corrupted/password-protected archive)
@@ -156,24 +140,9 @@ Item {
         active: archiveModel.error !== ""
         asynchronous: true
 
-        sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.md
-
-            MaterialIcon {
-                Layout.alignment: Qt.AlignHCenter
-                text: "block"
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xxl * 2
-                font.weight: 500
-            }
-
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Cannot preview")
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xl
-                font.weight: 500
-            }
+        sourceComponent: PreviewStateIndicator {
+            iconName: "block"
+            message: qsTr("Cannot preview")
         }
     }
 
@@ -183,24 +152,9 @@ Item {
         active: root._isEmpty
         asynchronous: true
 
-        sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.md
-
-            MaterialIcon {
-                Layout.alignment: Qt.AlignHCenter
-                text: "inventory_2"
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xxl * 2
-                font.weight: 500
-            }
-
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Empty archive")
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xl
-                font.weight: 500
-            }
+        sourceComponent: PreviewStateIndicator {
+            iconName: "inventory_2"
+            message: qsTr("Empty archive")
         }
     }
 }

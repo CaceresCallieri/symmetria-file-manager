@@ -111,13 +111,12 @@ QtObject {
         activateTab((activeIndex - 1 + count) % count);
     }
 
-    // Check if the active tab has any open modal/dialog
+    // Check if the active tab has any open modal/dialog.
+    // Zoxide is deliberately excluded — tab switching is allowed while zoxide is open.
     function _hasActiveModal(): bool {
         if (!activeTab)
             return false;
-        return activeTab.deleteConfirmPaths.length > 0
-            || activeTab.createInputActive
-            || activeTab.renameTargetPath !== ""
-            || activeTab.contextMenuTargetPath !== "";
+        const m = activeTab.activeModal;
+        return m !== activeTab.modalNone && m !== activeTab.modalZoxide;
     }
 }

@@ -33,7 +33,7 @@ QtObject {
 
         clearSearch();
         clearFlash();
-        cancelZoxide();
+        if (activeModal !== modalNone) closeModal();
 
         // Truncate forward history and append new path
         _history = _history.slice(0, _historyIndex + 1).concat([path]);
@@ -47,7 +47,7 @@ QtObject {
 
         clearSearch();
         clearFlash();
-        cancelZoxide();
+        if (activeModal !== modalNone) closeModal();
         _historyIndex--;
         currentPath = _history[_historyIndex];
     }
@@ -58,7 +58,7 @@ QtObject {
 
         clearSearch();
         clearFlash();
-        cancelZoxide();
+        if (activeModal !== modalNone) closeModal();
         _historyIndex++;
         currentPath = _history[_historyIndex];
     }
@@ -274,74 +274,65 @@ QtObject {
         return Object.keys(selectedPaths);
     }
 
-    // === Delete confirmation ===
-    // Empty array means no pending deletion
+    // === Modal state ===
+    // Single gate property prevents multiple modals from opening simultaneously.
+    // Data properties (deleteConfirmPaths, renameTargetPath, etc.) carry per-modal
+    // payloads; activeModal determines which modal is visible.
+    readonly property int modalNone: 0
+    readonly property int modalDelete: 1
+    readonly property int modalCreate: 2
+    readonly property int modalRename: 3
+    readonly property int modalContextMenu: 4
+    readonly property int modalZoxide: 5
+
+    property int activeModal: modalNone
+
+    // --- Modal data (read by popup components) ---
     property var deleteConfirmPaths: []
+    property string renameTargetPath: ""
+    property bool renameIncludeExtension: false
+    property string contextMenuTargetPath: ""
+    property string contextMenuTargetMimeType: ""
+
+    signal createCompleted(filename: string)
+    signal renameCompleted(newName: string)
 
     function requestDelete(paths: var): void {
         deleteConfirmPaths = paths;
+        activeModal = modalDelete;
     }
-
-    function cancelDelete(): void {
-        deleteConfirmPaths = [];
-    }
-
-    // === Create file/folder ===
-    property bool createInputActive: false
-
-    signal createCompleted(filename: string)
 
     function requestCreate(): void {
-        createInputActive = true;
+        activeModal = modalCreate;
     }
-
-    function cancelCreate(): void {
-        createInputActive = false;
-    }
-
-    // === Rename ===
-    property string renameTargetPath: ""
-    property bool renameIncludeExtension: false
-
-    signal renameCompleted(newName: string)
 
     function requestRename(path: string, includeExtension: bool): void {
         renameTargetPath = path;
         renameIncludeExtension = includeExtension;
+        activeModal = modalRename;
     }
-
-    function cancelRename(): void {
-        renameTargetPath = "";
-        renameIncludeExtension = false;
-    }
-
-    // === Audio preview ===
-    signal audioPlaybackToggle()
-
-    // === Context menu ===
-    property string contextMenuTargetPath: ""
-    property string contextMenuTargetMimeType: ""
 
     function requestContextMenu(path: string, mimeType: string): void {
-        // Set mimeType before path — the Loader activates on path !== "",
+        // Set mimeType before activeModal — the Loader activates on activeModal,
         // so mimeType must already be available when Component.onCompleted fires.
         contextMenuTargetMimeType = mimeType;
         contextMenuTargetPath = path;
+        activeModal = modalContextMenu;
     }
 
-    function cancelContextMenu(): void {
+    function requestZoxide(): void {
+        activeModal = modalZoxide;
+    }
+
+    function closeModal(): void {
+        activeModal = modalNone;
+        deleteConfirmPaths = [];
+        renameTargetPath = "";
+        renameIncludeExtension = false;
         contextMenuTargetPath = "";
         contextMenuTargetMimeType = "";
     }
 
-    // === Zoxide jump ===
-    property bool zoxideActive: false
-
-    function requestZoxide(): void {
-        zoxideActive = true;
-    }
-
-    function cancelZoxide(): void {
-        zoxideActive = false;
-    }
+    // === Audio preview ===
+    signal audioPlaybackToggle()
 }

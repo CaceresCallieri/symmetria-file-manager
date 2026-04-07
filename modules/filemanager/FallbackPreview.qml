@@ -42,7 +42,7 @@ Item {
             text: root.entry?.name ?? ""
             color: Theme.palette.m3onSurface
             font.pointSize: Theme.font.size.lg
-            font.weight: 500
+            font.weight: Font.Medium
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
             elide: Text.ElideMiddle

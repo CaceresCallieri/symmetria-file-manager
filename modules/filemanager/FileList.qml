@@ -439,13 +439,8 @@ Item {
             Qt.callLater(() => view.forceActiveFocus());
         }
 
-        function onDeleteConfirmPathsChanged() {
-            if (windowState.deleteConfirmPaths.length === 0)
-                Qt.callLater(() => view.forceActiveFocus());
-        }
-
-        function onCreateInputActiveChanged() {
-            if (!windowState.createInputActive)
+        function onActiveModalChanged() {
+            if (windowState.activeModal === windowState.modalNone)
                 Qt.callLater(() => view.forceActiveFocus());
         }
 
@@ -453,23 +448,8 @@ Item {
             root._pendingFocusName = filename;
         }
 
-        function onRenameTargetPathChanged() {
-            if (windowState.renameTargetPath === "")
-                Qt.callLater(() => view.forceActiveFocus());
-        }
-
         function onRenameCompleted(newName: string) {
             root._pendingFocusName = newName;
-        }
-
-        function onContextMenuTargetPathChanged() {
-            if (windowState.contextMenuTargetPath === "")
-                Qt.callLater(() => view.forceActiveFocus());
-        }
-
-        function onZoxideActiveChanged() {
-            if (!windowState.zoxideActive)
-                Qt.callLater(() => view.forceActiveFocus());
         }
 
         function onFlashJump(column: string, index: int, path: string) {
@@ -505,24 +485,9 @@ Item {
         active: opacity > 0
         asynchronous: true
 
-        sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.md
-
-            MaterialIcon {
-                Layout.alignment: Qt.AlignHCenter
-                text: "folder_open"
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xxl * 2
-                font.weight: 500
-            }
-
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("This folder is empty")
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xl
-                font.weight: 500
-            }
+        sourceComponent: PreviewStateIndicator {
+            iconName: "folder_open"
+            message: qsTr("This folder is empty")
         }
 
         Behavior on opacity {
@@ -620,9 +585,7 @@ Item {
         // Vim-style keyboard navigation
         Keys.onPressed: function(event) {
             // Block all keys while a modal popup is visible
-            if (windowState.deleteConfirmPaths.length > 0 || windowState.createInputActive
-                || windowState.renameTargetPath !== "" || windowState.contextMenuTargetPath !== ""
-                || windowState.zoxideActive) {
+            if (windowState.activeModal !== windowState.modalNone) {
                 event.accepted = true;
                 return;
             }

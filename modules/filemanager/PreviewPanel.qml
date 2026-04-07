@@ -133,24 +133,9 @@ Item {
                 active: _previewType === _typeNone
                 asynchronous: true
 
-                sourceComponent: ColumnLayout {
-                    spacing: Theme.spacing.md
-
-                    MaterialIcon {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: "description"
-                        color: Theme.palette.m3outline
-                        font.pointSize: Theme.font.size.xxl * 2
-                        font.weight: 500
-                    }
-
-                    StyledText {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: qsTr("No preview")
-                        color: Theme.palette.m3outline
-                        font.pointSize: Theme.font.size.xl
-                        font.weight: 500
-                    }
+                sourceComponent: PreviewStateIndicator {
+                    iconName: "description"
+                    message: qsTr("No preview")
                 }
             }
 
@@ -167,24 +152,9 @@ Item {
                         opacity: directoryView.count === 0 && !directoryView.model.loading ? 1 : 0
                         active: directoryView.count === 0 && !directoryView.model.loading
 
-                        sourceComponent: ColumnLayout {
-                            spacing: Theme.spacing.md
-
-                            MaterialIcon {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: "folder_open"
-                                color: Theme.palette.m3outline
-                                font.pointSize: Theme.font.size.xxl * 2
-                                font.weight: 500
-                            }
-
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: qsTr("Empty folder")
-                                color: Theme.palette.m3outline
-                                font.pointSize: Theme.font.size.xl
-                                font.weight: 500
-                            }
+                        sourceComponent: PreviewStateIndicator {
+                            iconName: "folder_open"
+                            message: qsTr("Empty folder")
                         }
 
                         Behavior on opacity {
@@ -198,23 +168,7 @@ Item {
                         opacity: directoryView.model.loading ? 1 : 0
                         active: opacity > 0
 
-                        sourceComponent: ColumnLayout {
-                            spacing: Theme.spacing.sm
-
-                            MaterialIcon {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: "hourglass_empty"
-                                color: Theme.palette.m3outline
-                                font.pointSize: Theme.font.size.xxl
-                            }
-
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: qsTr("Loading\u2026")
-                                color: Theme.palette.m3outline
-                                font.pointSize: Theme.font.size.md
-                            }
-                        }
+                        sourceComponent: PreviewLoadingIndicator {}
 
                         Behavior on opacity {
                             Anim {}
@@ -267,7 +221,7 @@ Item {
                         text: "lan"
                         color: Theme.palette.m3outline
                         font.pointSize: Theme.font.size.xxl * 2
-                        font.weight: 500
+                        font.weight: Font.Medium
                     }
 
                     StyledText {
@@ -275,7 +229,7 @@ Item {
                         text: qsTr("Remote directory")
                         color: Theme.palette.m3outline
                         font.pointSize: Theme.font.size.xl
-                        font.weight: 500
+                        font.weight: Font.Medium
                     }
 
                     StyledText {

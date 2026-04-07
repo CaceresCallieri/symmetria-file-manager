@@ -90,7 +90,7 @@ Item {
                             : Theme.palette.m3onSurfaceVariant) ?? Theme.palette.m3onSurface
                         font.pointSize: Theme.font.size.sm
                         font.family: Theme.font.family.mono
-                        font.weight: index === spreadsheetModel.activeSheet ? 600 : 400
+                        font.weight: index === spreadsheetModel.activeSheet ? Font.DemiBold : Font.Normal
                     }
 
                     MouseArea {
@@ -126,7 +126,7 @@ Item {
                         color: Theme.palette.m3onSurfaceVariant
                         font.pointSize: Theme.font.size.sm
                         font.family: Theme.font.family.mono
-                        font.weight: 600
+                        font.weight: Font.DemiBold
                     }
                 }
             }
@@ -212,23 +212,7 @@ Item {
         active: spreadsheetModel.loading
         asynchronous: true
 
-        sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.sm
-
-            MaterialIcon {
-                Layout.alignment: Qt.AlignHCenter
-                text: "hourglass_empty"
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xxl
-            }
-
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Loading\u2026")
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.md
-            }
-        }
+        sourceComponent: PreviewLoadingIndicator {}
     }
 
     // Error state
@@ -237,24 +221,9 @@ Item {
         active: spreadsheetModel.error !== ""
         asynchronous: true
 
-        sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.md
-
-            MaterialIcon {
-                Layout.alignment: Qt.AlignHCenter
-                text: "block"
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xxl * 2
-                font.weight: 500
-            }
-
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Cannot preview")
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xl
-                font.weight: 500
-            }
+        sourceComponent: PreviewStateIndicator {
+            iconName: "block"
+            message: qsTr("Cannot preview")
         }
     }
 
@@ -264,24 +233,9 @@ Item {
         active: root._isEmpty
         asynchronous: true
 
-        sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.md
-
-            MaterialIcon {
-                Layout.alignment: Qt.AlignHCenter
-                text: "grid_off"
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xxl * 2
-                font.weight: 500
-            }
-
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Empty spreadsheet")
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xl
-                font.weight: 500
-            }
+        sourceComponent: PreviewStateIndicator {
+            iconName: "grid_off"
+            message: qsTr("Empty spreadsheet")
         }
     }
 }

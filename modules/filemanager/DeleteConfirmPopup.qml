@@ -11,10 +11,10 @@ Loader {
 
     anchors.fill: parent
 
-    opacity: windowState && windowState.deleteConfirmPaths.length > 0 ? 1 : 0
+    opacity: windowState && windowState.activeModal === windowState.modalDelete ? 1 : 0
     // Drive active from the source property, not from animated opacity — avoids
     // a race where the Loader activates mid-fade-out with an already-empty path.
-    active: windowState && windowState.deleteConfirmPaths.length > 0
+    active: windowState && windowState.activeModal === windowState.modalDelete
     asynchronous: true
 
     sourceComponent: FocusScope {
@@ -32,7 +32,7 @@ Loader {
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true
-            onClicked: root.windowState.cancelDelete()
+            onClicked: root.windowState.closeModal()
         }
 
         StyledRect {
@@ -83,14 +83,14 @@ Loader {
                 case Qt.Key_Enter:
                     // Return/Enter is focus-aware: confirms on Yes, cancels on No
                     if (noButton.activeFocus)
-                        root.windowState.cancelDelete();
+                        root.windowState.closeModal();
                     else if (!trashProcess.running)
                         trashProcess.running = true;
                     event.accepted = true;
                     break;
                 case Qt.Key_N:
                 case Qt.Key_Escape:
-                    root.windowState.cancelDelete();
+                    root.windowState.closeModal();
                     event.accepted = true;
                     break;
                 case Qt.Key_Tab:
@@ -122,7 +122,7 @@ Loader {
                     text: "delete"
                     color: Theme.palette.m3error
                     font.pointSize: Theme.font.size.xxl
-                    font.weight: 500
+                    font.weight: Font.Medium
                 }
 
                 StyledText {
@@ -131,7 +131,7 @@ Loader {
                         ? qsTr("Trash this item?")
                         : qsTr("Trash %1 files?").arg(popupScope.targetPaths.length)
                     font.pointSize: Theme.font.size.xl
-                    font.weight: 600
+                    font.weight: Font.DemiBold
                 }
 
                 StyledText {
@@ -183,7 +183,7 @@ Loader {
                                 text: qsTr("Yes")
                                 color: Theme.palette.m3error
                                 font.pointSize: Theme.font.size.sm
-                                font.weight: 600
+                                font.weight: Font.DemiBold
                             }
 
                             StyledText {
@@ -226,7 +226,7 @@ Loader {
                             StyledText {
                                 text: qsTr("No")
                                 font.pointSize: Theme.font.size.sm
-                                font.weight: 600
+                                font.weight: Font.DemiBold
                             }
 
                             StyledText {
@@ -238,7 +238,7 @@ Loader {
                         }
 
                         StateLayer {
-                            onClicked: root.windowState.cancelDelete()
+                            onClicked: root.windowState.closeModal()
                         }
                     }
                 }
@@ -251,11 +251,11 @@ Loader {
             command: ["gio", "trash", "--"].concat(popupScope.targetPaths)
             onExited: (exitCode, exitStatus) => {
                 if (exitCode === 0) {
-                    root.windowState.cancelDelete();
+                    root.windowState.closeModal();
                 } else {
                     Logger.warn("DeleteConfirmPopup", "gio trash failed with exit code " + exitCode);
                     // Dismiss the popup even on failure — user can retry via D again
-                    root.windowState.cancelDelete();
+                    root.windowState.closeModal();
                 }
             }
         }

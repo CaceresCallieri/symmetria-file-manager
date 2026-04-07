@@ -48,11 +48,7 @@ Item {
             || videoPlayer.mediaStatus === MediaPlayer.StalledMedia
         asynchronous: true
 
-        sourceComponent: StyledText {
-            text: qsTr("Loading\u2026")
-            color: Theme.palette.m3outline
-            font.pointSize: Theme.font.size.md
-        }
+        sourceComponent: PreviewLoadingIndicator {}
     }
 
     // Error state
@@ -61,24 +57,9 @@ Item {
         active: videoPlayer.error !== MediaPlayer.NoError
         asynchronous: true
 
-        sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.md
-
-            MaterialIcon {
-                Layout.alignment: Qt.AlignHCenter
-                text: "videocam_off"
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xxl * 2
-                font.weight: 500
-            }
-
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Cannot preview")
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xl
-                font.weight: 500
-            }
+        sourceComponent: PreviewStateIndicator {
+            iconName: "videocam_off"
+            message: qsTr("Cannot preview")
         }
     }
 }

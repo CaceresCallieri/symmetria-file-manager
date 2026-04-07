@@ -107,7 +107,7 @@ Item {
                 text: "music_note"
                 color: Theme.palette.m3outline
                 font.pointSize: Theme.font.size.xxl * 1.5
-                font.weight: 500
+                font.weight: Font.Medium
 
                 opacity: waveformModel.loading ? 0.4 : 0.7
 
@@ -129,7 +129,7 @@ Item {
                 text: root.audioTitle
                 color: Theme.palette.m3onSurface
                 font.pointSize: Theme.font.size.md
-                font.weight: 600
+                font.weight: Font.DemiBold
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
             }
@@ -278,24 +278,9 @@ Item {
         active: mediaPlayer.error !== MediaPlayer.NoError
         asynchronous: true
 
-        sourceComponent: ColumnLayout {
-            spacing: Theme.spacing.md
-
-            MaterialIcon {
-                Layout.alignment: Qt.AlignHCenter
-                text: "music_off"
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xxl * 2
-                font.weight: 500
-            }
-
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Cannot preview")
-                color: Theme.palette.m3outline
-                font.pointSize: Theme.font.size.xl
-                font.weight: 500
-            }
+        sourceComponent: PreviewStateIndicator {
+            iconName: "music_off"
+            message: qsTr("Cannot preview")
         }
     }
 }

@@ -11,10 +11,10 @@ Loader {
 
     anchors.fill: parent
 
-    opacity: windowState && windowState.createInputActive ? 1 : 0
+    opacity: windowState && windowState.activeModal === windowState.modalCreate ? 1 : 0
     // Drive active from the source property, not from animated opacity — avoids
     // a race where the Loader activates mid-fade-out with an already-closed state.
-    active: windowState && windowState.createInputActive
+    active: windowState && windowState.activeModal === windowState.modalCreate
     asynchronous: true
 
     sourceComponent: FocusScope {
@@ -35,7 +35,7 @@ Loader {
         // Click outside the card to dismiss — NO dark scrim
         MouseArea {
             anchors.fill: parent
-            onClicked: root.windowState.cancelCreate()
+            onClicked: root.windowState.closeModal()
         }
 
         // Dialog card — positioned at top-third of file list area
@@ -50,7 +50,7 @@ Loader {
             width: Math.min(parent.width - Theme.padding.lg * 4, 360)
             implicitHeight: createLayout.implicitHeight + Theme.padding.lg * 3
 
-            // Component is always created with createInputActive === true (Loader
+            // Component is always created with activeModal === modalCreate (Loader
             // active is driven by it), so the initial scale is always 1.
             scale: 1
 
@@ -88,7 +88,7 @@ Loader {
                         text: qsTr("Create:")
                         color: Theme.palette.m3onSurface
                         font.pointSize: Theme.font.size.md
-                        font.weight: 600
+                        font.weight: Font.DemiBold
                     }
                 }
 
@@ -123,7 +123,7 @@ Loader {
                                 popupScope._attemptCreate();
                                 event.accepted = true;
                             } else if (event.key === Qt.Key_Escape) {
-                                root.windowState.cancelCreate();
+                                root.windowState.closeModal();
                                 event.accepted = true;
                             }
                         }
@@ -238,7 +238,7 @@ Loader {
             id: createProcess
             onExited: (exitCode, exitStatus) => {
                 if (exitCode === 0) {
-                    root.windowState.cancelCreate();
+                    root.windowState.closeModal();
                 } else {
                     errorLabel.text = qsTr("Creation failed (exit code %1)").arg(exitCode);
                 }
