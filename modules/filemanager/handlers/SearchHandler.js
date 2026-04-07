@@ -3,6 +3,7 @@
 // Non-library JS — shares the QML component scope of the importing file
 // (FileList.qml).  All component-specific references are passed explicitly
 // as function parameters; QML singletons are accessed through scope.
+// Component IDs accessed via scope: fsModel.
 
 function computeMatches(root, view, preservePosition) {
     var windowState = root.windowState;

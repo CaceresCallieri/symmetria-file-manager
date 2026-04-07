@@ -363,7 +363,7 @@ function _executePaste(root, pasteProcess) {
     var destDir = root.windowState.currentPath;
 
     // Focus the first pasted item after model refreshes
-    root._pendingFocusName = paths[0].substring(paths[0].lastIndexOf("/") + 1);
+    root._pendingFocusName = Paths.basename(paths[0]);
 
     // cp and mv both accept multiple source args before a single destination
     if (FileManagerService.clipboardMode === "yank")

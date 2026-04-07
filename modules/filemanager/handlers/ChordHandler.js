@@ -110,10 +110,10 @@ function _executeChord(prefix, keyChar, root, view, clipboardCopyProcess) {
                 textToCopy = paths.join("\n");
                 break;
             case "f":
-                textToCopy = paths.map(function(p) { return _basename(p); }).join("\n");
+                textToCopy = paths.map(function(p) { return Paths.basename(p); }).join("\n");
                 break;
             case "n":
-                textToCopy = paths.map(function(p) { return _stripExtension(_basename(p)); }).join("\n");
+                textToCopy = paths.map(function(p) { return _stripExtension(Paths.basename(p)); }).join("\n");
                 break;
             default:
                 return;
@@ -155,11 +155,7 @@ function _executeChord(prefix, keyChar, root, view, clipboardCopyProcess) {
     }
 }
 
-// String helpers used by the clipboard chord
-function _basename(path) {
-    return Paths.basename(path);
-}
-
+// String helper used by the clipboard chord
 function _stripExtension(name) {
     var dotIndex = name.lastIndexOf(".");
     return dotIndex > 0 ? name.substring(0, dotIndex) : name;

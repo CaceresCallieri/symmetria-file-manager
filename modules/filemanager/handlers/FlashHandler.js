@@ -2,6 +2,7 @@
 //
 // Non-library JS — shares the QML component scope of FileList.qml.
 // FlashLogic (`.pragma library`) is accessed via the component's import scope.
+// Component IDs accessed via scope: fsModel.
 // Logger singleton is accessed via scope.
 
 function handleKey(event, root, view) {
@@ -198,7 +199,7 @@ function handleJump(column, index, path, root, view) {
             root._saveCursorAndNavigate(function() { windowState.navigate(root.previewDirectoryPath); });
         }
     } else if (column === "parent") {
-        var parentPath = windowState.currentPath.replace(/\/[^/]+$/, "") || "/";
+        var parentPath = Paths.parentDir(windowState.currentPath);
         // Save the flash target cursor BEFORE _saveCursorAndNavigate, which saves
         // currentPath's cursor (a different path). Order is load-bearing.
         windowState.saveCursor(parentPath, index);
