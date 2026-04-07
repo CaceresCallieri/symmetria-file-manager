@@ -51,6 +51,10 @@ Three test executables cover the async model classes: `FileSystemModelTest` (sor
 
 To skip tests when doing a production build: `cmake -B build -DBUILD_TESTING=OFF`
 
+### CI
+
+GitHub Actions runs on every push/PR to `main` (`.github/workflows/ci.yml`). The workflow builds the C++ plugin and runs the QTest suite on Ubuntu 24.04. Qt 6.9 is installed via `jurplel/install-qt-action`; KF6SyntaxHighlighting and QXlsx are built from source and cached.
+
 ### QML Changes
 
 No compilation needed — just restart the service:

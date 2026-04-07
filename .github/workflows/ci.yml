@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  QT_VERSION: "6.9.0"
+  KF6_SYNTAX_TAG: "v6.12.0"
+  QXLSX_TAG: "v1.5.0"
+  DEPS_PREFIX: /usr/local
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: "qtmultimedia"
+          cache: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libarchive-dev \
+            libfreexl-dev \
+            extra-cmake-modules \
+            pkg-config \
+            ninja-build
+
+      - name: Cache KF6 SyntaxHighlighting + QXlsx
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DEPS_PREFIX }}
+          key: deps-${{ env.QT_VERSION }}-kf6${{ env.KF6_SYNTAX_TAG }}-qxlsx${{ env.QXLSX_TAG }}
+
+      - name: Build KF6 SyntaxHighlighting
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch ${{ env.KF6_SYNTAX_TAG }} \
+            https://invent.kde.org/frameworks/syntax-highlighting.git
+          cmake -G Ninja -B syntax-highlighting/build -S syntax-highlighting \
+            -DCMAKE_INSTALL_PREFIX=${{ env.DEPS_PREFIX }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DQRC_SYNTAX=OFF
+          cmake --build syntax-highlighting/build
+          sudo cmake --install syntax-highlighting/build
+
+      - name: Build QXlsx
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch ${{ env.QXLSX_TAG }} \
+            https://github.com/QtExcel/QXlsx.git
+          cmake -G Ninja -B QXlsx/build -S QXlsx/QXlsx \
+            -DCMAKE_INSTALL_PREFIX=${{ env.DEPS_PREFIX }} \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build QXlsx/build
+          sudo cmake --install QXlsx/build
+
+      - name: Restore cached deps to prefix
+        if: steps.deps-cache.outputs.cache-hit == 'true'
+        run: |
+          # Cache restores the files but they may need to be visible to CMake.
+          # The prefix is /usr/local which is already on the default search path.
+          echo "Using cached dependencies from ${{ env.DEPS_PREFIX }}"
+
+      - name: Build plugin
+        working-directory: plugin
+        run: |
+          cmake -G Ninja -B build \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=${{ env.DEPS_PREFIX }}
+          cmake --build build
+
+      - name: Run tests
+        working-directory: plugin
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build --output-on-failure --timeout 60
