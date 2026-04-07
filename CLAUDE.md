@@ -179,12 +179,12 @@ selectedPaths = copy;
 
 ### Modal/Popup Pattern
 
-All modals use `Loader` with `active` bound to the triggering state:
+All modals use `Loader` with `active` bound to the `activeModal` enum on `WindowState`. A single `activeModal` property gates visibility, preventing multiple modals from opening simultaneously:
 
 ```qml
 Loader {
     anchors.fill: parent
-    active: windowState && windowState.deleteConfirmPaths.length > 0
+    active: windowState && windowState.activeModal === windowState.modalDelete
     sourceComponent: DeleteConfirmPopup { ... }
 }
 ```

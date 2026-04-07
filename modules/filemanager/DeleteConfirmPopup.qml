@@ -52,8 +52,8 @@ Loader {
             implicitHeight: dialogLayout.implicitHeight + Theme.padding.lg * 3
 
             // Start at 0.1 — the Behavior on scale animates to 1 (OutBack pop-in).
-            // No live binding needed: this component is only created when deleteConfirmPaths
-            // is non-empty (Loader active is driven by it), so the target is always 1.
+            // No live binding needed: this component is only created when
+            // activeModal === modalDelete, so the target is always 1.
             scale: 0.1
             Component.onCompleted: scale = 1
 

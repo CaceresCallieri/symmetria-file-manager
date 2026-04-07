@@ -259,7 +259,8 @@ Loader {
             width: Math.min(parent.width - Theme.padding.lg * 4, 400)
             implicitHeight: dialogContent.implicitHeight + Theme.padding.lg * 3
 
-            scale: root.windowState && root.windowState.contextMenuTargetPath !== "" ? 1 : 0.1
+            scale: 0.1
+            Component.onCompleted: scale = 1
 
             Behavior on scale {
                 NumberAnimation {

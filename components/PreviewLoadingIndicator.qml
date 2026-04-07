@@ -4,6 +4,8 @@ import "../services"
 import QtQuick.Layouts
 
 ColumnLayout {
+    id: root
+
     spacing: Theme.spacing.sm
 
     MaterialIcon {
