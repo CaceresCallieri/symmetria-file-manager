@@ -127,7 +127,6 @@ QtObject {
     property var flashParentMatchMap: ({})
     property var flashPreviewMatchMap: ({})
 
-
     signal flashJump(string column, int index, string path)
 
     function startFlash(): void {
@@ -136,6 +135,7 @@ QtObject {
         flashActive = true;
     }
 
+    // NOTE: If you add a flashXxxMatchMap property above, reset it here too.
     function clearFlash(): void {
         flashActive = false;
         flashQuery = "";

@@ -185,16 +185,16 @@ function recompute(root, view) {
     if (!_cachedAllEntries)
         _cachedAllEntries = _buildAllEntries(root);
 
-    var allEntries = _cachedAllEntries;
-
-    var result = FlashLogic.computeFlash(query, allEntries, view.currentIndex);
+    var result = FlashLogic.computeFlash(query, _cachedAllEntries, view.currentIndex);
     windowState.flashMatches = result.matches;
     windowState.flashLabelChars = result.labelChars;
     windowState.flashContinuations = result.continuations;
 
     // Build per-column match maps so each ListView only re-evaluates
     // when its own column's matches change (not all three at once).
-    var currentMap = {}, parentMap = {}, previewMap = {};
+    var currentMap = {};
+    var parentMap = {};
+    var previewMap = {};
     for (var m = 0; m < result.matches.length; m++) {
         var match = result.matches[m];
         if (match.column === "current") currentMap[match.index] = match;
@@ -208,8 +208,8 @@ function recompute(root, view) {
     if (Logger.minLevel <= Logger.levelDebug) {
         var contKeys = Object.keys(result.continuations).join("");
         var labelKeys = Object.keys(result.labelChars).join("");
-        var labelList = result.matches.map(function(m) { return m.label + "→" + m.name.substring(0, 15); }).join(", ");
-        Logger.debug("Flash", "Recompute query='" + query + "' | entries=" + allEntries.length
+        var labelList = result.matches.map(function(entry) { return entry.label + "→" + entry.name.substring(0, 15); }).join(", ");
+        Logger.debug("Flash", "Recompute query='" + query + "' | entries=" + _cachedAllEntries.length
             + " | matches=" + result.matches.length
             + " | continuations=[" + contKeys + "] | labelPool=[" + labelKeys + "]"
             + " | labels: " + labelList);

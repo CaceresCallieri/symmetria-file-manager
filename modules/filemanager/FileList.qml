@@ -40,6 +40,10 @@ Item {
     property string previewDirectoryPath: ""
     property int _preFlashIndex: 0
 
+    // Invalidate flash entry cache when preview column entries change so a
+    // flash session entered after the preview has loaded sees current entries.
+    onPreviewDirectoryEntriesChanged: FlashHandler.invalidateEntryCache()
+
     // Save cursor before tab switch so it can be restored when returning
     Connections {
         target: root.tabManager
@@ -217,6 +221,11 @@ Item {
             sortReverse: root.windowState ? root.windowState.sortReverse : true
             watchChanges: true
             onPathChanged: root._pathJustChanged = true
+            // NOTE: Do NOT add an onLoadingChanged handler that clears _pathJustChanged.
+            // loadingChanged(false) fires BEFORE applyChanges() populates entries
+            // (see filesystemmodel.cpp:625-636), so it would consume the flag before
+            // the real onEntriesChanged arrives.  _pathJustChanged staying true for
+            // empty directories is harmless — it's idempotent on next navigation.
             onEntriesChanged: {
                 if (root._pathJustChanged) {
                     // The C++ model emits entriesChanged twice on path change:
