@@ -36,6 +36,21 @@ systemctl --user restart symmetria-fm
 
 **Build dependencies (Arch):** `qt6-base qt6-declarative syntax-highlighting libarchive qxlsx-qt6 freexl`
 
+### Running Tests
+
+The plugin includes a QTest-based test suite. Tests are built by default (`BUILD_TESTING=ON`):
+
+```bash
+cd plugin
+cmake -B build
+cmake --build build --parallel $(nproc)
+QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
+```
+
+Three test executables cover the async model classes: `FileSystemModelTest` (sorting, filtering, file watcher diffs), `ArchivePreviewModelTest` (entry caps, truncation, corruption handling), `SyntaxHighlightHelperTest` (highlighting output, binary detection, truncation). `QT_QPA_PLATFORM=offscreen` is required because `QTextDocument` and `QImageReader` need `QGuiApplication`.
+
+To skip tests when doing a production build: `cmake -B build -DBUILD_TESTING=OFF`
+
 ### QML Changes
 
 No compilation needed — just restart the service:

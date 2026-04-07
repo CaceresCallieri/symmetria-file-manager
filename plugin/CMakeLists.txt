@@ -35,6 +35,12 @@ endif()
 
 add_subdirectory(src/Symmetria/FileManager/Models)
 
+option(BUILD_TESTING "Build unit tests" ON)
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
 # Clear Quickshell QML cache after install
 install(CODE "
     if(DEFINED ENV{SUDO_USER})
