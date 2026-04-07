@@ -10,7 +10,7 @@ env:
   QT_VERSION: "6.9.0"
   KF6_SYNTAX_TAG: "v6.12.0"
   QXLSX_TAG: "v1.5.0"
-  DEPS_PREFIX: /usr/local
+  DEPS_PREFIX: ${{ github.workspace }}/deps
 
 jobs:
   build-and-test:
@@ -53,8 +53,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
             -DQRC_SYNTAX=OFF
-          cmake --build syntax-highlighting/build
-          sudo cmake --install syntax-highlighting/build
+          cmake --build syntax-highlighting/build --parallel $(nproc)
+          cmake --install syntax-highlighting/build
 
       - name: Build QXlsx
         if: steps.deps-cache.outputs.cache-hit != 'true'
@@ -64,27 +64,23 @@ jobs:
           cmake -G Ninja -B QXlsx/build -S QXlsx/QXlsx \
             -DCMAKE_INSTALL_PREFIX=${{ env.DEPS_PREFIX }} \
             -DCMAKE_BUILD_TYPE=Release
-          cmake --build QXlsx/build
-          sudo cmake --install QXlsx/build
-
-      - name: Restore cached deps to prefix
-        if: steps.deps-cache.outputs.cache-hit == 'true'
-        run: |
-          # Cache restores the files but they may need to be visible to CMake.
-          # The prefix is /usr/local which is already on the default search path.
-          echo "Using cached dependencies from ${{ env.DEPS_PREFIX }}"
+          cmake --build QXlsx/build --parallel $(nproc)
+          cmake --install QXlsx/build
 
       - name: Build plugin
         working-directory: plugin
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/deps/lib
         run: |
           cmake -G Ninja -B build \
             -DCMAKE_INSTALL_PREFIX=/usr \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH=${{ env.DEPS_PREFIX }}
-          cmake --build build
+          cmake --build build --parallel $(nproc)
 
       - name: Run tests
         working-directory: plugin
         env:
           QT_QPA_PLATFORM: offscreen
+          LD_LIBRARY_PATH: ${{ github.workspace }}/deps/lib
         run: ctest --test-dir build --output-on-failure --timeout 60

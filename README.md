@@ -121,12 +121,10 @@ To skip tests: `cmake -B build -DBUILD_TESTING=OFF`
 ### Opening the File Manager
 
 ```bash
-# Via IPC (from terminal or scripts)
 qs ipc --any-display -c symmetria-fm call filemanager open ""
-
-# Via systemd service (if enabled)
-# Bind Super+E in your compositor config to the IPC command above
 ```
+
+> Tip: bind this command to a key in your compositor config (e.g., `Super+E` in Hyprland's `keybinds.conf`).
 
 ### Keybindings
 
@@ -213,7 +211,7 @@ symmetria-file-manager/
 │   │                          #   SyntaxHighlightHelper, SpreadsheetPreviewModel,
 │   │                          #   PreviewImageHelper, AudioWaveformModel
 │   └── tests/                 #   QTest suite (38 tests)
-├── modules/filemanager/       # QML UI components (46 files)
+├── modules/filemanager/       # QML UI components (30 files)
 │   ├── handlers/              #   Keyboard handler JS modules
 │   ├── MillerColumns.qml      #   Three-column layout
 │   ├── FileList.qml           #   Main file list with vim keybindings
