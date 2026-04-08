@@ -104,8 +104,8 @@ Item {
 
     // Clipboard indicator strip — left edge, above selection highlight.
     // Colors are hardcoded instead of using Theme palette tokens because
-    // Symmetria's _applyTheme IPC loop overwrites any m3* property with
-    // wallpaper-derived values, clobbering our chosen indicator colors.
+    // palette tokens change with wallpaper-derived color schemes, so
+    // indicator colors must stay fixed to remain visually distinguishable.
     Item {
         anchors.left: parent.left
         anchors.top: parent.top
@@ -132,8 +132,8 @@ Item {
     // Selection indicator strip — left edge, yellow.
     // Same visual pattern as the clipboard strip but takes precedence visually
     // when both are present (selection is the active user intent).
-    // Hardcoded color for the same reason as clipboard: Symmetria's _applyTheme
-    // IPC loop overwrites m3* palette tokens with wallpaper-derived values.
+    // Hardcoded color for the same reason as clipboard: palette tokens change
+    // with wallpaper-derived color schemes, so this must stay fixed.
     Item {
         anchors.left: parent.left
         anchors.top: parent.top

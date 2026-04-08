@@ -66,7 +66,7 @@ Item {
                 color: _acceptEnabled ? Theme.palette.primary : Theme.palette.surfaceVariant
                 radius: Theme.rounding.full
                 implicitWidth: acceptLabel.implicitWidth + Theme.padding.lg * 2
-                implicitHeight: acceptLabel.implicitHeight + Theme.padding.xs * 2
+                implicitHeight: acceptLabel.implicitHeight + Theme.padding.sm * 2
 
                 readonly property bool _acceptEnabled: {
                     if (FileManagerService.pickerSaveMode)
@@ -265,7 +265,7 @@ Item {
                 color: Theme.palette.surfaceVariant
                 radius: Theme.rounding.full
                 implicitWidth: cancelLabel.implicitWidth + Theme.padding.lg * 2
-                implicitHeight: cancelLabel.implicitHeight + Theme.padding.xs * 2
+                implicitHeight: cancelLabel.implicitHeight + Theme.padding.sm * 2
 
                 StyledText {
                     id: cancelLabel

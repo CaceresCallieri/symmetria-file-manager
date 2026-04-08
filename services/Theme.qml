@@ -16,13 +16,11 @@ Singleton {
     // which would clash with M3 names like onSurface, onPrimary, etc.
     // Use immutable reassignment (root.palette = {...}) to trigger bindings.
     property var palette: ({
-        background: "#1a1818",
         surface: "#1a1818",
         surfaceContainerLowest: "#141212",
         surfaceContainerLow: "#1c1a1a",
         surfaceContainer: "#262424",
         surfaceContainerHigh: "#302e2e",
-        surfaceContainerHighest: "#3a3838",
         onSurface: "#eee5da",
         onSurfaceVariant: "#c8c4bc",
         primary: "#c8c4bc",
@@ -31,7 +29,6 @@ Singleton {
         onPrimaryContainer: "#eee5da",
         outline: "#8a8580",
         outlineVariant: "#484442",
-        secondary: "#b0a89e",
         secondaryContainer: "#585350",
         onSecondaryContainer: "#c8c4bc",
         surfaceVariant: "#484442",
@@ -183,6 +180,7 @@ Singleton {
             const scheme = JSON.parse(json);
             root.light = scheme.mode === "light";
 
+            if (!scheme.colours) return;
             const colours = scheme.colours;
             const updated = Object.assign({}, root.palette);
             for (const [key, value] of Object.entries(colours))
