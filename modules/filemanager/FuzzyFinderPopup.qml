@@ -281,12 +281,14 @@ Loader {
                 || popupScope.selectedIndex >= fuzzyModel.resultCount)
                 return;
 
-            root.windowState.closeModal();
-
+            // Read data BEFORE closing the modal — closeModal() deactivates the
+            // Loader, which fires Component.onDestruction and clears fuzzyModel.
             const idx = fuzzyModel.index(popupScope.selectedIndex, 0);
             const targetFullPath = fuzzyModel.data(idx, FuzzyFinder.FullPathRole);
             const targetIsDir = fuzzyModel.data(idx, FuzzyFinder.IsDirRole);
             const targetName = fuzzyModel.data(idx, FuzzyFinder.NameRole);
+
+            root.windowState.closeModal();
 
             if (targetIsDir) {
                 root.windowState.navigate(targetFullPath);
@@ -294,6 +296,8 @@ Loader {
                 // Navigate to the file's parent directory and focus the file.
                 // Emit fuzzyFinderNavigated BEFORE navigate — this sets _pendingFocusName
                 // in FileList so the cursor lands on the file after the path change.
+                // For same-directory files, navigate() returns early, but the signal
+                // handler in FileList handles immediate focus in that case.
                 const parentPath = Paths.parentDir(targetFullPath);
                 root.windowState.fuzzyFinderNavigated(targetName);
                 root.windowState.navigate(parentPath);

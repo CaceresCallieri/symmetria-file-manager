@@ -154,6 +154,18 @@ Item {
         }
 
         function onFuzzyFinderNavigated(filename: string) {
+            // Try to focus immediately — handles same-directory files where
+            // navigate() returns early and onEntriesChanged never fires.
+            const entries = fsModel.entries;
+            for (let i = 0; i < entries.length; i++) {
+                if (entries[i].name === filename) {
+                    view.currentIndex = i;
+                    view.positionViewAtIndex(i, ListView.Contain);
+                    return;
+                }
+            }
+            // File not in current entries — will be picked up after navigate()
+            // triggers a directory change and onEntriesChanged fires.
             root._pendingFocusName = filename;
         }
 
