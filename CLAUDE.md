@@ -34,7 +34,7 @@ systemctl --user restart symmetria-fm
 - `CMAKE_INSTALL_PREFIX` defaults to `/usr` (via `CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT` guard) — combined with `INSTALL_QMLDIR=lib/qt6/qml`, the final path is `/usr/lib/qt6/qml/`
 - Pass `-DCMAKE_INSTALL_PREFIX=/custom/path` to override if needed
 
-**Build dependencies (Arch):** `qt6-base qt6-declarative syntax-highlighting libarchive qxlsx-qt6 freexl`
+**Build dependencies (Arch):** `qt6-base qt6-declarative syntax-highlighting libarchive qxlsx-qt6 freexl qt6-imageformats`
 
 ### Running Tests
 
