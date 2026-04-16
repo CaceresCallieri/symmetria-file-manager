@@ -114,9 +114,10 @@ Item {
 
         if (root.currentEntry.isDir)
             _navigateIntoCurrentItem();
-        else {
-            fileOpener.open(root.currentEntry.path);
-        }
+        else if (root.currentEntry.mimeType === "application/x-shellscript" || root.currentEntry.mimeType === "text/x-shellscript")
+            fileOpener.execute(root.currentEntry.path);
+        else
+            fileOpener.open(root.currentEntry.path, root.currentEntry.mimeType);
     }
 
     Connections {

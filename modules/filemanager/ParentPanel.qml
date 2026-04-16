@@ -84,7 +84,7 @@ Item {
                 if (modelData.isDir)
                     root.windowState.navigate(modelData.path);
                 else {
-                    fileOpener.open(modelData.path);
+                    fileOpener.open(modelData.path, modelData.mimeType);
                 }
             }
         }
