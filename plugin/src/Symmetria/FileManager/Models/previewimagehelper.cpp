@@ -144,13 +144,20 @@ bool PreviewImageHelper::needsCachedDecode(const QString& path) {
         || path.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive);
 }
 
+// Returns true for encrypted RPGMV game assets (.rpgmvp / .png_).
+// Used in two places: routing the open-path vs. preview-path policy, and
+// selecting the decryption branch inside generateCachedPreview.
+bool PreviewImageHelper::isRpgmvFormat(const QString& path) {
+    return path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".png_"), Qt::CaseInsensitive);
+}
+
 // True only for formats where the cached file IS the artifact the user wants
 // to open — i.e. decrypted RPGMV game assets whose source bytes are unusable
 // without decryption. PDFs and ICNS are NOT in this set: their cache is just
 // a thumbnail; the source is what the user actually wants to launch.
 bool PreviewImageHelper::cacheIsOpenableArtifact(const QString& path) {
-    return path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".png_"), Qt::CaseInsensitive);
+    return isRpgmvFormat(path);
 }
 
 QString PreviewImageHelper::cachedPreviewPathFor(const QString& sourcePath) {
@@ -158,8 +165,10 @@ QString PreviewImageHelper::cachedPreviewPathFor(const QString& sourcePath) {
 }
 
 QString PreviewImageHelper::generateCachedPreview(const QString& sourcePath, const QString& cachePath) {
-    if (sourcePath.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)
-        || sourcePath.endsWith(QStringLiteral(".png_"), Qt::CaseInsensitive))
+    // Ensure the cache directory exists before any format handler runs.
+    QDir().mkpath(QFileInfo(cachePath).absolutePath());
+
+    if (isRpgmvFormat(sourcePath))
         return decryptRpgmvp(sourcePath, cachePath);
 
     if (sourcePath.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive))
@@ -171,9 +180,6 @@ QString PreviewImageHelper::generateCachedPreview(const QString& sourcePath, con
 
     const QImage image = reader.read();
     if (image.isNull()) return {};
-
-    // Ensure cache directory exists
-    QDir().mkpath(QFileInfo(cachePath).absolutePath());
 
     if (!image.save(cachePath, "PNG")) return {};
 
@@ -205,8 +211,6 @@ QString PreviewImageHelper::decryptRpgmvp(const QString& sourcePath, const QStri
 
     if (remainder.isEmpty())
         return {};
-
-    QDir().mkpath(QFileInfo(cachePath).absolutePath());
 
     QFile output(cachePath);
     if (!output.open(QIODevice::WriteOnly))
@@ -242,8 +246,11 @@ QString PreviewImageHelper::resolvePathForOpen(const QString& path) {
         return cachePath;
 
     // Cache miss for RPGMV: trivial header-skip + memcopy, safe on the GUI
-    // thread (<1ms even for large files).
-    return generateCachedPreview(path, cachePath);
+    // thread (<1ms even for large files). Fall back to source path if the
+    // write fails — xdg-open on the encrypted source is better than an empty
+    // path being passed to the caller.
+    const auto result = generateCachedPreview(path, cachePath);
+    return result.isEmpty() ? path : result;
 }
 
 QString PreviewImageHelper::resolvePathForPreview(const QString& path) {

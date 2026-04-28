@@ -37,3 +37,6 @@ target_link_libraries(SyntaxHighlightHelperTest PRIVATE KF6::SyntaxHighlighting)
 
 add_model_test(FuzzyFinderTest)
 target_link_libraries(FuzzyFinderTest PRIVATE Qt6::Concurrent)
+
+add_model_test(PreviewImageHelperTest)
+target_link_libraries(PreviewImageHelperTest PRIVATE Qt6::Concurrent)
