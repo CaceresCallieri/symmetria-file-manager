@@ -1,102 +1,72 @@
 #!/usr/bin/env bash
-# Install Symmetria File Manager in standalone or Symmetria-integrated mode.
+# Install Symmetria File Manager — Qt6-native standalone binary + QML modules.
 # Idempotent — safe to run multiple times.
+#
+# What this installs:
+#   /usr/lib/qt6/qml/Symmetria/FileManager/Models/  C++ plugin (FileSystemModel,
+#                                                   ShellRunner, FileWatcher, …)
+#   /usr/lib/qt6/qml/Symmetria/FileManager/UI/      panel QML module
+#   /usr/bin/symmetria-fm                           daemon binary
+#   /usr/bin/symmetria-fm-cli                       IPC sender CLI
+#   ~/.local/share/icons/hicolor/512x512/apps/      app icon
+#   ~/.local/share/applications/                    .desktop entry
+#   ~/.config/systemd/user/symmetria-fm.service     systemd user unit
+#
+# After install:
+#   systemctl --user enable --now symmetria-fm.service
+#   symmetria-fm-cli open ~/Downloads
+#
+# Or run directly without the daemon:
+#   /usr/bin/symmetria-fm
 
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SYMMETRIA_DIR="$HOME/.config/quickshell/symmetria"
-STANDALONE_DIR="$HOME/.config/quickshell/symmetria-fm"
 
-usage() {
-    echo "Usage: $0 [--standalone | --symmetria]"
-    echo
-    echo "  --standalone   (default) Symlink project for 'qs -c symmetria-fm'"
-    echo "  --symmetria    Symlink into Symmetria shell for integrated mode"
-    exit 1
-}
+echo "=== Symmetria File Manager — Installation ==="
+echo "  Project: $PROJECT_DIR"
+echo
 
-MODE="${1:---standalone}"
+# 1. Build + install the C++ plugin and panel QML module.
+echo "[1/4] Building plugin (C++ + QML module)…"
+"$PROJECT_DIR/build-plugin.sh"
 
-case "$MODE" in
-    --standalone)
-        echo "Installing Symmetria File Manager in standalone mode..."
-        echo "  Project:   $PROJECT_DIR"
-        echo "  Target:    $STANDALONE_DIR"
-        echo
+# 2. Build + install the standalone host binary and CLI sender.
+echo
+echo "[2/4] Building standalone host (symmetria-fm + symmetria-fm-cli)…"
+cmake -S "$PROJECT_DIR/host/standalone" -B "$PROJECT_DIR/host/standalone/build" >/dev/null
+cmake --build "$PROJECT_DIR/host/standalone/build" --parallel "$(nproc)"
+sudo cmake --install "$PROJECT_DIR/host/standalone/build"
 
-        ln -sfn "$PROJECT_DIR" "$STANDALONE_DIR"
-        echo "  Linked $STANDALONE_DIR → $PROJECT_DIR"
+# 3. Install user-facing assets (icon, desktop entry).
+echo
+echo "[3/4] Installing user assets…"
+ICON_DIR="$HOME/.local/share/icons/hicolor/512x512/apps"
+DESKTOP_DIR="$HOME/.local/share/applications"
+mkdir -p "$ICON_DIR" "$DESKTOP_DIR"
+cp "$PROJECT_DIR/assets/symmetria-fm.png" "$ICON_DIR/"
+cp "$PROJECT_DIR/symmetria-fm.desktop" "$DESKTOP_DIR/"
+gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+echo "  Icon → $ICON_DIR/symmetria-fm.png"
+echo "  Desktop entry → $DESKTOP_DIR/symmetria-fm.desktop"
 
-        # Install icon to XDG icon directory
-        ICON_DIR="$HOME/.local/share/icons/hicolor/512x512/apps"
-        mkdir -p "$ICON_DIR"
-        cp "$PROJECT_DIR/assets/symmetria-fm.png" "$ICON_DIR/"
-        echo "  Installed icon → $ICON_DIR/symmetria-fm.png"
+# 4. Install the systemd user unit.
+echo
+echo "[4/4] Installing systemd user unit…"
+mkdir -p "$HOME/.config/systemd/user"
+cp "$PROJECT_DIR/symmetria-fm.service" "$HOME/.config/systemd/user/symmetria-fm.service"
+systemctl --user daemon-reload
+echo "  Unit → ~/.config/systemd/user/symmetria-fm.service"
 
-        # Install .desktop file
-        DESKTOP_DIR="$HOME/.local/share/applications"
-        mkdir -p "$DESKTOP_DIR"
-        cp "$PROJECT_DIR/symmetria-fm.desktop" "$DESKTOP_DIR/"
-        echo "  Installed desktop entry → $DESKTOP_DIR/symmetria-fm.desktop"
-
-        # Update icon and desktop entry caches
-        gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
-        update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
-
-        echo
-        echo "Done. Run with:"
-        echo "  qs -c symmetria-fm"
-        echo
-        echo "Or for development (clears QML cache):"
-        echo "  ./run.sh"
-        ;;
-
-    --symmetria)
-        # Icon and .desktop installation are intentionally omitted here;
-        # integrated mode relies on the parent Symmetria Shell's own launcher setup.
-        if [[ ! -d "$SYMMETRIA_DIR" ]]; then
-            echo "ERROR: Symmetria not found at $SYMMETRIA_DIR"
-            exit 1
-        fi
-
-        echo "Installing Symmetria File Manager into Symmetria Shell..."
-        echo "  Project:   $PROJECT_DIR"
-        echo "  Symmetria: $SYMMETRIA_DIR"
-        echo
-
-        # Module directory (entire dir as one symlink)
-        ln -sfn "$PROJECT_DIR/modules/filemanager" "$SYMMETRIA_DIR/modules/filemanager"
-        echo "  Linked modules/filemanager/"
-
-        # Service singleton
-        ln -sfn "$PROJECT_DIR/services/FileManagerService.qml" "$SYMMETRIA_DIR/services/FileManagerService.qml"
-        echo "  Linked services/FileManagerService.qml"
-
-        # Config object
-        ln -sfn "$PROJECT_DIR/config/FileManagerConfig.qml" "$SYMMETRIA_DIR/config/FileManagerConfig.qml"
-        echo "  Linked config/FileManagerConfig.qml"
-
-        echo
-        echo "Symlinks created. Now apply these manual edits:"
-        echo
-        echo "1. shell.qml — add import and component:"
-        echo '   import "modules/filemanager"'
-        echo '   // inside ShellRoot:'
-        echo '   FileManagerModule {}'
-        echo
-        echo "2. config/Config.qml — register FileManagerConfig"
-        echo
-        echo "3. modules/Shortcuts.qml — add IPC handler"
-        echo
-        echo "4. Clear QML cache:"
-        echo "   rm -rf ~/.cache/quickshell/qmlcache"
-        echo
-        echo "5. Test:"
-        echo '   qs -c symmetria ipc call filemanager open'
-        ;;
-
-    *)
-        usage
-        ;;
-esac
+echo
+echo "=== Done ==="
+echo
+echo "Start the daemon (auto-starts at next login if you enable it):"
+echo "  systemctl --user enable --now symmetria-fm.service"
+echo
+echo "Open a window:"
+echo "  symmetria-fm-cli open ~/Downloads"
+echo
+echo "For the XDG portal integration (file picker for any GTK/Qt app),"
+echo "see portal/install-portal.sh."

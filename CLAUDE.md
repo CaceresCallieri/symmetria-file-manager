@@ -4,9 +4,11 @@
 
 ## Project Overview
 
-Symmetria File Manager is a keyboard-first graphical file manager built as a standalone QuickShell application. It runs as a headless systemd service (`symmetria-fm.service`) that spawns FloatingWindow instances on demand via IPC. Pure native Qt/QML/C++ inspired by Yazi's UX philosophy — no Yazi runtime dependency.
+Symmetria File Manager is a keyboard-first graphical file manager built as a standalone Qt6 application. It runs as a headless systemd user service (`symmetria-fm.service`) that listens on `$XDG_RUNTIME_DIR/symmetria-fm.sock` and spawns Qt windows on demand via IPC. Pure native Qt/QML/C++ inspired by Yazi's UX philosophy — no Yazi or QuickShell runtime dependency.
 
-**Do NOT restart the shell (Symmetria) or kill the symmetria-fm service** without the user's consent — they may have open file manager or picker windows with unsaved state.
+The same QML panel is also embeddable in any Qt6 host: Symmetria-IDE imports `Symmetria.FileManager.UI` and renders it as a Telescope-style toggle-overlay above NeoVim.
+
+**Do NOT kill the symmetria-fm service** without the user's consent — they may have open file manager or picker windows with unsaved state.
 
 ## Build & Run
 
@@ -66,19 +68,27 @@ The service's `ExecStartPre` automatically clears the QML cache before each star
 ### QML Linting
 
 ```bash
-/usr/lib/qt6/bin/qmllint modules/filemanager/*.qml services/*.qml components/*.qml config/*.qml
+/usr/lib/qt6/bin/qmllint qml/Symmetria/FileManager/UI/modules/filemanager/*.qml \
+                         qml/Symmetria/FileManager/UI/services/*.qml \
+                         qml/Symmetria/FileManager/UI/components/*.qml \
+                         qml/Symmetria/FileManager/UI/config/*.qml
 ```
 
 Uses `.qmllint.ini` at the project root. The Qt6 qmllint is at `/usr/lib/qt6/bin/qmllint` (not `/usr/bin/qmllint`, which is the Qt5 version). Configuration notes:
-- `MissingProperty` is demoted to `info` — most hits are false positives from QuickShell singletons (Config, Theme, Logger) whose JS-object properties aren't visible to static analysis
+- `MissingProperty` is demoted to `info` — most hits are false positives from `var`-typed singletons (`FmTheme.palette` is a plain JS object) whose keys aren't visible to static analysis
 - `UnqualifiedAccess` and `UnusedImports` are the primary actionable warning categories
-- `AdditionalQmlImportPaths=/usr/lib/qt6/qml` resolves QuickShell and Symmetria.FileManager.Models imports
+- `AdditionalQmlImportPaths=/usr/lib/qt6/qml` resolves `Symmetria.FileManager.Models` and `Symmetria.FileManager.UI` imports
 
 ### Opening the File Manager
 
 ```bash
-qs ipc --any-display -c symmetria-fm call filemanager open ""    # From terminal
-# Or via Super+E keybinding (configured in Symmetria's Shortcuts.qml)
+# Standalone (talks to the symmetria-fm.service daemon)
+symmetria-fm-cli open ~/Downloads
+
+# Or directly without the daemon (for one-off invocations)
+/usr/bin/symmetria-fm
+
+# Inside Symmetria-IDE: <leader>e toggles the embedded overlay
 ```
 
 ## Architecture
@@ -105,13 +115,13 @@ If the plugin is not installed, Symmetria Shell's wallpaper picker and file dial
 
 - **`WindowState.qml`** (per-window) — navigation, search, chords, modals
 - **`FileManagerService.qml`** (singleton) — clipboard, picker mode, format utilities
-- **`WindowFactory.qml`** (singleton) — creates/manages windows, handles IPC
+- **`HostController` (C++, in `host/standalone/server.cpp`)** — owns the QLocalServer, validates incoming IPC commands, emits Qt signals that the host's `main.qml` listens to in order to spawn windows. Replaces the old QuickShell `WindowFactory.qml` which folded windowing + IPC into one QML singleton.
 
 ### Service & Portal
 
-- `symmetria-fm.service` — headless systemd user service, `Restart=always`, auto-clears QML cache
-- `portal/symmetria_portal.py` — XDG Desktop Portal backend for system file dialogs
-- Communication: Portal → IPC → QML picker window → FIFO → Portal → D-Bus response
+- `symmetria-fm.service` — headless systemd user service, `ExecStart=/usr/bin/symmetria-fm`, `Restart=always`. The binary owns a `QLocalServer` at `$XDG_RUNTIME_DIR/symmetria-fm.sock`.
+- `portal/symmetria_portal.py` — XDG Desktop Portal backend for system file dialogs.
+- Communication: Portal → `symmetria-fm-cli createPicker '<json>'` → QLocalSocket → daemon → QML picker window → FIFO → Portal → D-Bus response.
 
 ## Coding Conventions
 
@@ -155,16 +165,17 @@ Declare properties in this order within every QML component:
 **Always declare explicit imports in every QML file.** Never rely on scope inheritance from parent Loaders — it is fragile and causes intermittent `ReferenceError` (see `QUIRKS.md` §2).
 
 ```qml
-// Relative imports first, then Qt/framework modules
-import "../../components"
-import "../../services"
-import "../../config"
-import Symmetria.FileManager.Models
-import Quickshell
-import Quickshell.Io
+// All panel-tier QML accesses singletons + types via the unified module URI.
+// The single qmldir at qml/Symmetria/FileManager/UI/qmldir declares
+// FileManager (entry), FmTheme/Logger/FileManagerService/etc. (singletons),
+// and per-instance / component types — all under one module URI.
+import Symmetria.FileManager.UI
+import Symmetria.FileManager.Models  // for ShellRunner, FileWatcher, FileSystemModel
 import QtQuick
 import QtQuick.Layouts
 ```
+
+External hosts that embed the panel use `import Symmetria.FileManager.UI as FmUi` to avoid colliding with their own `Theme` singleton (e.g. Symmetria-IDE's `qml/design/Theme.qml`).
 
 ### Animation Rules
 
@@ -175,7 +186,7 @@ import QtQuick.Layouts
 
 - **Never use `Anim` on color properties** — produces `#000000` permanently (see `QUIRKS.md` §7)
 - `StyledRect` and `StyledText` already have internal `Behavior on color { CAnim {} }` — do NOT add another
-- Both `Anim` and `CAnim` use `Theme.animDuration` (400ms) and `Theme.animCurveStandard` easing
+- Both `Anim` and `CAnim` use `FmTheme.animDuration` (400ms) and `FmTheme.animCurveStandard` easing
 
 ### State Management
 
@@ -197,8 +208,8 @@ selectedPaths = copy;
 - Do not create new singletons for small pieces of state — group related state together
 
 **Singleton initialization:**
-- QuickShell singletons are lazy — they don't exist until first referenced
-- `shell.qml` must force-initialize singletons that register IPC handlers: `void WindowFactory;`
+- QML singletons are lazy — they don't exist until first referenced. The standalone host's `main.qml` references the singletons it uses (Logger, FmTheme, FileManagerService) at startup so they instantiate before the first IPC arrives.
+- `pragma Singleton` files use `QtObject` as their root (not `Item`); since QtObject has no default property, child elements (Timer, ShellRunner, FileWatcher) are declared as named properties (`property Timer _foo: Timer { id: foo }`).
 
 ### Loader Patterns
 
@@ -253,12 +264,12 @@ Use `Paths.basename(path)` and `Paths.parentDir(path)` instead of inline `substr
 
 ### Theme & Typography
 
-- All colors from `Theme.palette.*` — property names match `color-scheme.json` keys directly (e.g., `Theme.palette.surface`, `Theme.palette.onSurface`, `Theme.palette.primary`)
-- **Theme source**: Reads palette from `~/.config/quickshell/symmetria/config/color-scheme.json` directly (no IPC — works without Symmetria Shell running). Reads transparency from `shell.json`. Layout tokens (rounding, spacing, padding, fonts) are file-manager-specific and NOT synced from the shell.
-- **Indicator colors** via `Theme.indicator.cut`, `.yank`, `.selection` — hardcoded deliberately because palette tokens change with wallpaper-derived color schemes
-- **Overlay colors** via `Theme.overlay.subtle` (0.06 white), `.emphasis` (0.10 white) — for separators, keycap backgrounds, subtle highlights
-- Sans: `Theme.font.family.sans` (Rubik), Mono: `Theme.font.family.mono` (CaskaydiaCove NF), Icons: `Theme.font.family.material`
-- Spacing/padding/rounding accessed via `Theme.spacing.*`, `Theme.padding.*`, `Theme.rounding.*`
+- All colors from `FmTheme.palette.*` — property names match `color-scheme.json` keys directly (e.g., `FmTheme.palette.surface`, `FmTheme.palette.onSurface`, `FmTheme.palette.primary`)
+- **Theme source**: Reads palette from `~/.config/quickshell/symmetria/config/color-scheme.json` directly (no IPC — works without Symmetria Shell running). Reads transparency from `shell.json`. Layout tokens (rounding, spacing, padding, fonts) are file-manager-specific and NOT synced from the shell. The path is historically named after Symmetria Shell's config dir; the file manager uses it as a convenient theme source, not a runtime dependency.
+- **Indicator colors** via `FmTheme.indicator.cut`, `.yank`, `.selection` — hardcoded deliberately because palette tokens change with wallpaper-derived color schemes
+- **Overlay colors** via `FmTheme.overlay.subtle` (0.06 white), `.emphasis` (0.10 white) — for separators, keycap backgrounds, subtle highlights
+- Sans: `FmTheme.font.family.sans` (Rubik), Mono: `FmTheme.font.family.mono` (CaskaydiaCove NF), Icons: `FmTheme.font.family.material`
+- Spacing/padding/rounding accessed via `FmTheme.spacing.*`, `FmTheme.padding.*`, `FmTheme.rounding.*`
 
 ### SortBy Enum
 
@@ -266,14 +277,16 @@ Use `FileSystemModel.Alphabetical`, `.Modified`, `.Size`, `.Extension`, `.Natura
 
 ## Critical Pitfalls
 
-**QML cache after plugin rebuild** — The service clears cache on restart (`ExecStartPre`), but if you're running the file manager manually (not via systemd), you must clear it yourself: `rm -rf ~/.cache/quickshell/qmlcache`
+**QFileSystemWatcher atomic-replace** — The watcher silently drops a watch when the watched path is unlinked then renamed-into-place (the typical pattern for `:w` in nvim, git checkout, atomic JSON saves). `FileWatcher` mitigates this by watching both the file AND its parent directory and re-arming via `removePath; addPath` on every change signal, with a 100ms QTimer retry fallback. The `atomicReplaceTenTimes` test asserts this holds across 10 consecutive replacements. If hot-reload of bookmarks.json or color-scheme.json starts breaking, this is where to look.
 
-**FloatingWindow keyboard focus** — Must use `WlrKeyboardFocus.Exclusive` to prevent Hyprland from consuming key events meant for the file manager.
+**Wayland focus on Hyprland** — Without `WlrKeyboardFocus.Exclusive` (which only existed under QuickShell's wlr-layer-shell), the picker window relies on `Qt.Dialog | Qt.WindowStaysOnTopHint + requestActivate()` to claim focus. If Hyprland's bindings still swallow keys destined for the picker, ship a `windowrulev2 = float, class:^(symmetria-fm)$` rule.
 
 **QML Loader quirks** — `anchors.margins` silently fails inside Loader `sourceComponent` blocks. Always use explicit x/y/width/height positioning and explicit imports inside Loaders. See `QUIRKS.md` for details.
 
-**QML Singleton lazy-init** — QuickShell singletons don't initialize until first referenced. `shell.qml` must contain `void WindowFactory;` to force IpcHandler registration at startup.
+**QtObject has no default property** — `pragma Singleton` files and the host's `main.qml` use `QtObject` as their root; child elements (Timer, ShellRunner, FileWatcher, Component, Connections) must be declared as named properties (`property Timer _foo: Timer { id: foo }`). The `id: foo` form remains accessible from the rest of the scope.
+
+**Two `Theme` singletons in one engine** — When the panel is embedded in Symmetria-IDE, both modules (`Symmetria.FileManager.UI` and the IDE's `design`) define `Theme`. The FM's singleton is renamed to `FmTheme` to remove the collision; external hosts that import via `import Symmetria.FileManager.UI as FmUi` get the alias-prefixed namespace.
 
 **QML `on` prefix restriction** — QML reserves identifiers starting with `on` + uppercase letter for signal handlers. The palette uses `property var` (plain JS object) instead of `QtObject` because M3 token names like `onSurface`, `onPrimary`, `onSecondaryContainer` would clash with signal handler syntax inside `QtObject`. This means palette updates must use immutable reassignment (`root.palette = {...}`) to trigger bindings — do NOT mutate individual keys.
 
-**Vim chord detection** — Uses timer-based multi-key detection (500ms timeout), NOT Symmetria's KeyChords module (those are for global shell shortcuts).
+**Vim chord detection** — Uses timer-based multi-key detection (500ms timeout), implemented in `qml/Symmetria/FileManager/UI/modules/filemanager/handlers/ChordHandler.js`.
