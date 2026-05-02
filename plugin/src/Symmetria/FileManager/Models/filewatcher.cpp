@@ -187,7 +187,7 @@ void FileWatcher::rearmWatch()
         }
     }
 
-    if (!fileWatchAdded && info.exists() == false) {
+    if (!fileWatchAdded && !info.exists()) {
         // File didn't exist when we tried to add — schedule a retry. The
         // parent directory watch should also fire once the file appears,
         // but the timer is a belt-and-suspenders fallback for compositors

@@ -176,9 +176,11 @@ void ShellRunner::emitLines(QString& buffer, void (ShellRunner::*signal)(const Q
 void ShellRunner::onErrorOccurred(QProcess::ProcessError /*error*/)
 {
     // FailedToStart fires before started(), so m_running is still false here —
-    // no state correction needed. Subsequent errors (Crashed, Timedout, …)
-    // are followed by `finished()`, which clears m_running. We just surface
-    // the message to QML.
+    // no state correction needed. For errors other than FailedToStart (Crashed,
+    // ReadError, WriteError, etc.), we also don't touch m_running: if the process
+    // terminates as a result, finished() will clear it; if it keeps running
+    // (e.g. a transient WriteError), m_running correctly stays true.
+    // We just surface the message to QML.
     emit errorOccurred(m_process.errorString());
 }
 

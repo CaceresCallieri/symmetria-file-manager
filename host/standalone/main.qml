@@ -82,9 +82,11 @@ QtObject {
         // createObject(root, …) gives the window a QObject parent, so its
         // lifetime is owned by the host — no JS-side tracking array needed.
         // The window self-destroys on `onClosing`.
-        fileManagerWindowComponent.createObject(root, {
+        const win = fileManagerWindowComponent.createObject(root, {
             initialPath: path
         });
+        if (!win)
+            Logger.error("HostController", "failed to create FileManager window for path: " + path);
     }
 
     function _spawnPicker(options: var): void {
@@ -96,6 +98,10 @@ QtObject {
         root._pickerWindow = pickerWindowComponent.createObject(root, {
             initialPath: options.currentFolder || Paths.home
         });
+        if (!root._pickerWindow) {
+            Logger.error("HostController", "failed to create picker window — cancelling picker mode");
+            FileManagerService.cancelPickerMode();
+        }
     }
 
     property Connections _hostConn: Connections {

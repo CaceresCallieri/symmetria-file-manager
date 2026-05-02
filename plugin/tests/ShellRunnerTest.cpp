@@ -136,6 +136,7 @@ private slots:
 
         QVERIFY(waitForSpy(errorSpy));
         QCOMPARE(errorSpy.count(), 1);
+        QVERIFY(!errorSpy.first().at(0).toString().isEmpty());
         QCOMPARE(startedSpy.count(), 0);
         QCOMPARE(runner.running(), false);
     }
