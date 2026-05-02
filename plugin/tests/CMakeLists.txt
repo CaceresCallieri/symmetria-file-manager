@@ -40,3 +40,9 @@ target_link_libraries(FuzzyFinderTest PRIVATE Qt6::Concurrent)
 
 add_model_test(PreviewImageHelperTest)
 target_link_libraries(PreviewImageHelperTest PRIVATE Qt6::Concurrent)
+
+add_model_test(ShellRunnerTest)
+
+add_model_test(FileWatcherTest)
+
+add_model_test(EnvTest)
