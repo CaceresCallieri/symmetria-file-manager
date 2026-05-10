@@ -130,6 +130,19 @@ Item {
 
             const finish = function(ignoredSet) {
                 if (gen !== root._generation) return;
+                // Defensive orphan guard: only destroy `m` if a DIFFERENT model
+                // is already registered for `path` (the orphan-races-winner
+                // scenario). The earlier identity-less check
+                // (`if (root._models[path])`) was a regression — it fired on
+                // EVERY subsequent entriesChanged emit on the registered model
+                // (showHidden flip, watchChanges disk update), destroying the
+                // live model and emptying the tree. With the _pending guard at
+                // the top of _expand, the true orphan case is unreachable, but
+                // this defensive check is cheap and correct.
+                if (root._models[path] && root._models[path] !== m) {
+                    m.destroy();
+                    return;
+                }
                 const newIgnored = Object.assign({}, root._ignored);
                 newIgnored[path] = ignoredSet || ({});
                 root._ignored = newIgnored;
@@ -144,12 +157,6 @@ Item {
                     const newExpanded = Object.assign({}, root._expanded);
                     newExpanded[path] = true;
                     root._expanded = newExpanded;
-                } else {
-                    // A second expand call arrived before first entriesChanged.
-                    // Destroy this orphaned model — the first one is already registered.
-                    m.destroy();
-                    root._rebuildRows();
-                    return;
                 }
                 root._rebuildRows();
             };
