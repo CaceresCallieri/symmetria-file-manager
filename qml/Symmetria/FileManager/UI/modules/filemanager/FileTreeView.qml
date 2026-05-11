@@ -281,7 +281,11 @@ Item {
                     break;
                 }
             }
-            if (restored >= 0) root._pendingFocusName = "";
+            // Always consume _pendingFocusName — keeping it set when the file
+            // isn't found on THIS rebuild causes every future rebuild to attempt
+            // the same stale match, potentially hijacking cursor placement for
+            // unrelated file-watcher or expand/collapse events.
+            root._pendingFocusName = "";
         }
         if (restored < 0 && prevPath !== "") {
             for (let i = 0; i < newRows.length; i++) {
@@ -447,6 +451,9 @@ Item {
         // navigate() is a no-op on an unchanged path, so we focus immediately.
         function onFuzzyFinderNavigated(filename: string): void {
             root._pendingFocusName = filename;
+            // depth === 0: only direct children of rootPath — the popup always
+            // navigates to the file's parent before emitting this signal, so the
+            // picked file is guaranteed to be a depth-0 row in the CURRENT tree.
             for (let i = 0; i < root._rows.length; i++) {
                 if (root._rows[i].name === filename && root._rows[i].depth === 0) {
                     view.currentIndex = i;

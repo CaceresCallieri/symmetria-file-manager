@@ -313,6 +313,10 @@ Loader {
                 // For same-directory files, navigate() returns early, but the signal
                 // handler in FileList handles immediate focus in that case.
                 const parentPath = Paths.parentDir(targetFullPath);
+                // INVARIANT: fuzzyFinderNavigated MUST be emitted BEFORE navigate().
+                // FileTreeView._rebuildRows matches the pending file by depth=0,
+                // relying on the tree's root already being the file's parent when
+                // the rebuild fires. Swapping the order breaks cross-dir focus.
                 root.windowState.fuzzyFinderNavigated(targetName);
                 root.windowState.navigate(parentPath);
             }

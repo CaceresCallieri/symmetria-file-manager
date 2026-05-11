@@ -198,6 +198,9 @@ static bool walkRecursive(
     QSet<QString>& visitedDirs,
     QVector<CachedPath>& out)
 {
+    // Fast-path: skip QFileInfo + gitignore parse + entryInfoList for this subtree
+    // if the cap is already hit. The loop guard below handles mid-iteration caps;
+    // this guard avoids redundant work when the recursion itself triggered the cap.
     if (out.size() >= FuzzyFinder::MaxScanFiles)
         return false;
 
@@ -290,7 +293,7 @@ static WalkResult walkDirectory(const QString& rootPath, bool showHidden) {
 
     if (!finished) {
         result.error = QStringLiteral(
-            "Directory tree too large — indexed first %1 files. Open the finder "
+            "Directory tree too large — indexed first %1 entries (files + directories). Open the finder "
             "from a more specific subdirectory for complete results.")
             .arg(FuzzyFinder::MaxScanFiles);
     }
