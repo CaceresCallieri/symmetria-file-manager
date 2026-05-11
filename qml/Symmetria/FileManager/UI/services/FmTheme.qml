@@ -81,7 +81,7 @@ QtObject {
     // in ~/.config/ghostty/config), and PANELS stay fully transparent so they
     // become "windows" onto that single backdrop. This is intentionally one
     // alpha layer, not two — stacking panel tints on top of the backdrop
-    // compounds (`effective = 1 − (1 − layers)(1 − base)`) and darkens the
+    // compounds (`effective = 1 − (1 − layers)(1 − backdrop)`) and darkens the
     // columns relative to the bars (PathBar/StatusBar/TabBar have no background
     // of their own, so they'd stay clear while columns darken — visually
     // inconsistent). See CLAUDE.md "Transparency model" for the full rationale.
@@ -91,9 +91,11 @@ QtObject {
     readonly property color windowBackdrop: Qt.rgba(0, 0, 0, 0.6)
     readonly property real _transparencyLayers: 0.0
 
-    // Apply depth-aware transparency. Depth 0 (window backdrop) is now served
-    // by `windowBackdrop` directly; this function only handles depth 1+ panels,
-    // which are fully transparent passthrough by design.
+    // Returns `c` tinted with the panel-layer alpha (currently 0.0 = fully
+    // transparent passthrough). The `depth` parameter is retained so existing
+    // call sites (`layer(c, 1)`) keep compiling; it is intentionally ignored
+    // because the window backdrop is now served by `windowBackdrop` directly,
+    // not through this function.
     function layer(c: color, depth: int): color {
         return Qt.alpha(c, root._transparencyLayers);
     }
