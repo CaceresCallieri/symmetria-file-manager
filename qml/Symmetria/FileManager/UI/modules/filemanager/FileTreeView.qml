@@ -467,7 +467,7 @@ Item {
 
     StyledRect {
         anchors.fill: parent
-        color: FmTheme.layer(FmTheme.palette.surfaceContainerLow, 1)
+        color: FmTheme.layer(FmTheme.palette.surfaceContainerLow)
     }
 
     Loader {

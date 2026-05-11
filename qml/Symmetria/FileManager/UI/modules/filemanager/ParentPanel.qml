@@ -28,7 +28,7 @@ Item {
     // Background — match PreviewPanel shade
     StyledRect {
         anchors.fill: parent
-        color: FmTheme.layer(FmTheme.palette.surfaceContainerLow, 1)
+        color: FmTheme.layer(FmTheme.palette.surfaceContainerLow)
     }
 
     // Empty state when at filesystem root

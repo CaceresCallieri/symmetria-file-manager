@@ -92,11 +92,9 @@ QtObject {
     readonly property real _transparencyLayers: 0.0
 
     // Returns `c` tinted with the panel-layer alpha (currently 0.0 = fully
-    // transparent passthrough). The `depth` parameter is retained so existing
-    // call sites (`layer(c, 1)`) keep compiling; it is intentionally ignored
-    // because the window backdrop is now served by `windowBackdrop` directly,
-    // not through this function.
-    function layer(c: color, depth: int): color {
+    // transparent passthrough). The window backdrop is served by
+    // `windowBackdrop` directly, so this function is only for panel surfaces.
+    function layer(c: color): color {
         return Qt.alpha(c, root._transparencyLayers);
     }
 
