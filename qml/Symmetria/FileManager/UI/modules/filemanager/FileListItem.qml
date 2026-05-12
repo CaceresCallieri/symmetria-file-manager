@@ -71,6 +71,13 @@ Item {
     property int flashMatchStart: -1
     readonly property bool isFlashMatch: flashActive && flashLabel !== ""
 
+    // Optional per-row badge data. The list owns the version counter and bumps
+    // it whenever the provider emits statusChanged; this delegate reads both
+    // statusProvider AND statusVersion so the binding re-evaluates on every
+    // update. Null provider (default) renders no badge.
+    property var statusProvider: null
+    property int statusVersion: 0
+
     implicitHeight: Config.fileManager.sizes.itemHeight
 
     // Search match highlight — subtle gray tint behind matching rows
@@ -218,6 +225,31 @@ Item {
             color: FmTheme.palette.outline
             font.pointSize: FmTheme.font.size.xs
             elide: Text.ElideMiddle
+        }
+
+        // Git status badge — populated when statusProvider is wired and
+        // returns non-null for this row's path. Placed before the size column
+        // so it sits at the right edge of the name region for both files
+        // (which have a size column) and directories (which don't).
+        Loader {
+            id: statusBadgeLoader
+            readonly property var _badge: {
+                const _tick = root.statusVersion;
+                void _tick;
+                if (!root.statusProvider) return null;
+                if (!root.modelData) return null;
+                try {
+                    return root.statusProvider.statusForPath(root.modelData.path);
+                } catch (e) {
+                    // Provider threw — degrade gracefully, no badge.
+                    return null;
+                }
+            }
+            active: _badge !== null
+            Layout.alignment: Qt.AlignVCenter
+            sourceComponent: GitStatusBadge {
+                status: statusBadgeLoader._badge
+            }
         }
 
         // File size (hidden for directories)

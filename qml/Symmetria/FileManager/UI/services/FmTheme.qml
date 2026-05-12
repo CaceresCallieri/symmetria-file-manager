@@ -136,6 +136,25 @@ QtObject {
         property color selection: "#f0c674"
     }
 
+    // === Git status badge colors ===
+    // Named palette consumed by GitStatusBadge. Intentionally NOT palette-derived
+    // for the same reason as `indicator`: badge semantics must be stable across
+    // wallpaper changes (red = unstaged, green = staged is a learned convention
+    // — users shouldn't have to relearn it because the desktop tint shifted).
+    //
+    // The FM does NOT decide which badge corresponds to which color — that's
+    // the statusProvider's job. The FM just exposes named slots so providers
+    // can pick coherent values without inventing hex literals.
+    property QtObject gitStatus: QtObject {
+        property color unstagedRed: "#e06c75"      // modified or deleted in worktree
+        property color stagedGreen: "#98c379"      // staged add/modify/delete
+        property color untrackedBlue: "#61afef"    // new untracked files
+        property color renamedYellow: "#e5c07b"    // renames / copies
+        property color conflictedMagenta: "#c678dd" // merge conflicts
+        property color ignoredGray: "#5c6370"      // ignored (rarely rendered)
+        property color badgeText: "#1a1818"        // text on saturated background
+    }
+
     // === Overlay tokens ===
     property QtObject overlay: QtObject {
         property color subtle: Qt.alpha("#ffffff", 0.06)

@@ -58,6 +58,19 @@ Item {
     // prop so consumers with deeper projects can tune it.
     property int maxExpandDepth: 8
 
+    // Optional per-row badge data source. The FM stays git-agnostic — this is
+    // a duck-typed extension point. Consumers (e.g. Symmetria-IDE) supply an
+    // object with `statusForPath(path) -> {char, color, textColor?, tooltip?}`
+    // or null, plus a `statusChanged()` signal that fires whenever any path's
+    // status changes. Set to null (default) renders no badges and has zero
+    // overhead — every status binding short-circuits on the null check.
+    //
+    // The same provider object is intended to answer for both files and
+    // directories — directories get aggregate status (e.g. "·" if any
+    // descendant has changes), letting the user see active subtrees at a
+    // glance without expanding them.
+    property var statusProvider: null
+
     readonly property int indentPixels: 16
     readonly property var currentRow: (view.currentIndex >= 0 && view.currentIndex < _rows.length) ? _rows[view.currentIndex] : null
     readonly property var currentEntry: currentRow ? currentRow.entry : null
@@ -109,6 +122,12 @@ Item {
     // tree mounts repeatedly within a session.
     property bool _autoExpandCeilingLogged: false
     property bool _autoExpandFanoutLogged: false
+
+    // Monotonic counter incremented when statusProvider.statusChanged() fires.
+    // Each row delegate's badge binding reads this as a fake dependency, so
+    // bumping it triggers re-evaluation of every visible row's status lookup
+    // in a single pass — no per-delegate Connections object required.
+    property int _statusVersion: 0
 
     signal fileActivated(string path)
     signal directoryChanged(string path)
@@ -623,6 +642,18 @@ Item {
         }
     }
 
+    // Status-provider live-update bridge. Target null (no provider attached)
+    // is fine — Connections silently ignores it. When the provider signals
+    // statusChanged(), bumping _statusVersion invalidates every visible row's
+    // badge binding in one pass.
+    Connections {
+        target: root.statusProvider
+        ignoreUnknownSignals: true
+        function onStatusChanged(): void {
+            root._statusVersion = root._statusVersion + 1;
+        }
+    }
+
     StyledRect {
         anchors.fill: parent
         color: FmTheme.layer(FmTheme.palette.surfaceContainerLow)
@@ -762,6 +793,30 @@ Item {
                     }
                     color: FmTheme.palette.onSurface
                     font.pointSize: FmTheme.font.size.md
+                }
+                Loader {
+                    id: statusBadgeLoader
+                    anchors.verticalCenter: parent.verticalCenter
+                    // Read _statusVersion to register the binding dependency —
+                    // bumping the counter (via Connections.onStatusChanged) forces
+                    // a re-query of the provider here. The void expression keeps
+                    // the dependency live without affecting the returned value.
+                    readonly property var _badge: {
+                        const _tick = root._statusVersion;
+                        void _tick;
+                        if (!root.statusProvider) return null;
+                        if (!delegateRoot.modelData) return null;
+                        try {
+                            return root.statusProvider.statusForPath(delegateRoot.modelData.path);
+                        } catch (e) {
+                            // Provider threw — degrade gracefully, no badge.
+                            return null;
+                        }
+                    }
+                    active: _badge !== null
+                    sourceComponent: GitStatusBadge {
+                        status: statusBadgeLoader._badge
+                    }
                 }
             }
 

@@ -16,6 +16,18 @@ Item {
     property WindowState windowState
     property TabManager tabManager
 
+    // Optional per-row badge data source — duck-typed extension point matching
+    // FileTreeView.statusProvider. Null (default) renders no badges; otherwise
+    // the consumer supplies an object with statusForPath(path) and a
+    // statusChanged() signal. See FileTreeView.qml for the full contract.
+    property var statusProvider: null
+
+    // Monotonic counter incremented when statusProvider.statusChanged() fires.
+    // Passed through to each FileListItem so its badge binding re-evaluates on
+    // every update. Single Connections object on the list rather than N on the
+    // delegates.
+    property int _statusVersion: 0
+
     readonly property var currentEntry: view.currentIndex >= 0 && view.currentIndex < view.count ? fsModel.entries[view.currentIndex] : null
     readonly property int fileCount: view.count
     signal closeRequested()
@@ -184,6 +196,18 @@ Item {
         }
     }
 
+    // Status-provider live-update bridge — bumps _statusVersion to invalidate
+    // every visible delegate's badge binding in one pass. Mirror of the same
+    // pattern in FileTreeView; null target is safe (Connections silently
+    // ignores it when no provider is wired).
+    Connections {
+        target: root.statusProvider
+        ignoreUnknownSignals: true
+        function onStatusChanged() {
+            root._statusVersion = root._statusVersion + 1;
+        }
+    }
+
     // Background
     StyledRect {
         anchors.fill: parent
@@ -319,6 +343,8 @@ Item {
             flashQuery: root.windowState ? root.windowState.flashQuery : ""
             flashLabel: root.windowState?.flashCurrentMatchMap[index]?.label ?? ""
             flashMatchStart: root.windowState?.flashCurrentMatchMap[index]?.matchStart ?? -1
+            statusProvider: root.statusProvider
+            statusVersion: root._statusVersion
             onActivated: root._activateCurrentItem()
         }
 

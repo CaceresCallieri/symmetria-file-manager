@@ -23,6 +23,7 @@ CAnim 1.0 components/CAnim.qml
 ClippingRect 1.0 components/ClippingRect.qml
 FileIcon 1.0 components/FileIcon.qml
 FileOpener 1.0 components/FileOpener.qml
+GitStatusBadge 1.0 components/GitStatusBadge.qml
 MaterialIcon 1.0 components/MaterialIcon.qml
 PreviewLoadingIndicator 1.0 components/PreviewLoadingIndicator.qml
 PreviewStateIndicator 1.0 components/PreviewStateIndicator.qml
