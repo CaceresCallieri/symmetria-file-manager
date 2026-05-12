@@ -10,6 +10,20 @@ pragma ComponentBehavior: Bound
 //   1. Standalone FM via Ctrl-E in FileManager.qml's Loader swap.
 //   2. Symmetria-IDE sidebar via `import Symmetria.FileManager.UI as FmUi`.
 //
+// Auto-expand (mount-only): `initialExpandDepth` controls how many directory
+// levels are expanded automatically when the tree mounts or rootPath changes.
+// 0 = collapsed (default), N>0 = N levels, -1 = recursive (capped by
+// `maxExpandDepth`). After mount, expansion is fully user-controlled —
+// unrelated prop changes (theme, width, respectGitignore toggle) do NOT
+// re-trigger auto-expand.
+//
+// Guardrails are intentionally NOT props — they're failure-mode protection,
+// not configuration:
+//   - .git/ is unconditionally skipped (never useful, even without gitignore)
+//   - directories with >200 children are skipped (unreadable expanded)
+//   - total row ceiling 10k (last-resort backstop for pathological trees)
+// Each hit emits one Logger.info so we can diagnose without exposing knobs.
+//
 // Out of scope for v1: drag-drop, inline rename/create/delete, multi-select,
 // right-click menu, persistent expansion across restarts (the expandedPaths
 // prop is reserved for v2).
@@ -30,6 +44,19 @@ Item {
     property bool respectGitignore: true
     property var expandedPaths: []
     property WindowState windowState: null
+
+    // Auto-expand on mount or rootPath change.
+    //   0  = collapsed (default — preserves all existing callers)
+    //   N>0 = expand N levels below root
+    //   -1 = expand recursively, capped by `maxExpandDepth`
+    // Mount-only — after the initial expansion phase settles, expansion is
+    // fully user-controlled. Re-triggers only on rootPath change.
+    property int initialExpandDepth: 0
+
+    // Hard cap when `initialExpandDepth: -1`. 8 covers realistic repo nesting;
+    // deeper than that the row indentation is unreadable anyway. Exposed as a
+    // prop so consumers with deeper projects can tune it.
+    property int maxExpandDepth: 8
 
     readonly property int indentPixels: 16
     readonly property var currentRow: (view.currentIndex >= 0 && view.currentIndex < _rows.length) ? _rows[view.currentIndex] : null
@@ -59,6 +86,30 @@ Item {
     // ends up on the file the user picked rather than at row 0.
     property string _pendingFocusName: ""
 
+    // Auto-expand guardrails (failure-mode protection, NOT configuration).
+    // Hidden behind the prop so callers can't accidentally raise them and
+    // re-discover the failure modes the defaults protect against. Each
+    // triggers a one-shot Logger.info on hit (not a warn — they're expected
+    // outcomes on big trees, not bugs) so we can diagnose without UI feedback.
+    readonly property int _autoExpandFanoutCap: 200
+    readonly property int _autoExpandNodeCeiling: 10000
+    readonly property var _autoExpandSkipNames: ({ ".git": true })
+
+    // True between the initial _expand(rootPath) and the last pending model
+    // settling. Gates the recursive fan-out so manual expansion after mount
+    // doesn't trigger further auto-expansion.
+    property bool _autoExpandActive: false
+    property int _autoExpandTargetDepth: 0
+    // childPath -> number of fan-out rounds from rootPath to reach it.
+    // Carries the depth through the async expansion hop since _expand()
+    // doesn't take a depth parameter (changing its signature would affect
+    // the unrelated _toggle() callers). rootPath has no entry (implicit 0).
+    property var _autoExpandPending: ({})
+    // One-shot guards so the same diagnostic doesn't spam the log if the
+    // tree mounts repeatedly within a session.
+    property bool _autoExpandCeilingLogged: false
+    property bool _autoExpandFanoutLogged: false
+
     signal fileActivated(string path)
     signal directoryChanged(string path)
     signal showHiddenToggleRequested()
@@ -68,6 +119,17 @@ Item {
     onRootPathChanged: {
         _resetTreeState();
         if (rootPath !== "") {
+            // Compute the effective auto-expand depth BEFORE _expand() so the
+            // rootPath's onChange callback can see _autoExpandActive on its
+            // first emission. Order is critical: _expand() registers an async
+            // entriesChanged handler that reads these flags when entries land.
+            const target = initialExpandDepth === -1
+                ? maxExpandDepth
+                : initialExpandDepth;
+            _autoExpandTargetDepth = Math.max(0, target);
+            _autoExpandActive = _autoExpandTargetDepth > 0;
+            _autoExpandCeilingLogged = false;
+            _autoExpandFanoutLogged = false;
             _expand(rootPath);
             root.directoryChanged(rootPath);
         }
@@ -95,6 +157,7 @@ Item {
         _expanded = ({});
         _ignored = ({});
         _pending = ({});
+        _autoExpandPending = ({});
         _rows = [];
         _loading = false;
         gitignoreSvc.clear();
@@ -169,6 +232,29 @@ Item {
                     root._expanded = newExpanded;
                 }
                 root._rebuildRows();
+
+                // Auto-expand fan-out — only during the mount-time phase.
+                // Manual user toggles after _autoExpandActive flips false
+                // don't trigger further recursion, preserving the user's
+                // expansion choices for the rest of the session.
+                if (root._autoExpandActive) {
+                    const expansionsTaken = root._autoExpandPending[path] !== undefined
+                        ? root._autoExpandPending[path]
+                        : 0;  // rootPath itself — implicit zero
+                    delete root._autoExpandPending[path];
+                    root._autoExpandChildrenOf(path, expansionsTaken);
+                    // BFS settles when no more directories are queued.
+                    // _autoExpandChildrenOf adds to _pending synchronously,
+                    // so this check correctly reflects the post-recursion
+                    // state (children we just enqueued are visible here).
+                    if (Object.keys(root._pending).length === 0) {
+                        root._autoExpandActive = false;
+                        Logger.info(
+                            "FileTreeView",
+                            "auto-expand complete: " + root._rows.length + " rows visible"
+                        );
+                    }
+                }
             };
             if (root.respectGitignore && candidates.length > 0)
                 gitignoreSvc.filter(path, candidates, finish);
@@ -230,6 +316,65 @@ Item {
         const r = root.rootPath;
         _resetTreeState();
         if (r !== "") _expand(r);
+    }
+
+    // Auto-expand fan-out — invoked from the async _expand finish callback
+    // for each directory whose entries just landed. `parentExpansions` is the
+    // number of fan-out rounds taken from rootPath to reach `parentPath`;
+    // rootPath itself = 0, its direct children = 1, etc.
+    //
+    // We stop recursion if any of these guardrails fire:
+    //   1. _autoExpandActive went false (BFS settled or rootPath changed)
+    //   2. parentExpansions >= _autoExpandTargetDepth (budget exhausted)
+    //   3. _rows.length >= _autoExpandNodeCeiling (last-resort backstop)
+    //   4. The parent has > _autoExpandFanoutCap children (predictive skip
+    //      — saves the I/O cost of expanding hundreds of siblings the user
+    //      can't reasonably scan visually)
+    function _autoExpandChildrenOf(parentPath: string, parentExpansions: int): void {
+        if (!_autoExpandActive) return;
+        if (parentExpansions >= _autoExpandTargetDepth) return;
+        if (_rows.length >= _autoExpandNodeCeiling) {
+            if (!_autoExpandCeilingLogged) {
+                Logger.info(
+                    "FileTreeView",
+                    "auto-expand: node ceiling reached (" + _autoExpandNodeCeiling
+                    + " rows), leaving remainder collapsed"
+                );
+                _autoExpandCeilingLogged = true;
+            }
+            return;
+        }
+        const m = _models[parentPath];
+        if (!m) return;
+        const entries = m.entries;
+        if (entries.length > _autoExpandFanoutCap) {
+            if (!_autoExpandFanoutLogged) {
+                Logger.info(
+                    "FileTreeView",
+                    "auto-expand: skipping high-fanout dir (" + entries.length
+                    + " children > " + _autoExpandFanoutCap + " cap): " + parentPath
+                );
+                _autoExpandFanoutLogged = true;
+            }
+            return;
+        }
+        const ignored = _ignored[parentPath] || ({});
+        for (let i = 0; i < entries.length; i++) {
+            const e = entries[i];
+            if (!e || !e.isDir) continue;
+            if (_autoExpandSkipNames[e.name]) continue;
+            if (!showHidden && _isHidden(e.name)) continue;
+            if (respectGitignore && ignored[e.path]) continue;
+            // Skip if already expanded, has a model, or is mid-flight —
+            // protects against re-entrant expansion of the same path.
+            if (_expanded[e.path] || _models[e.path] || _pending[e.path]) continue;
+            // Tag the child with its expansion depth so the async finish
+            // callback can recover the budget when this dir's entries land.
+            const tagged = Object.assign({}, _autoExpandPending);
+            tagged[e.path] = parentExpansions + 1;
+            _autoExpandPending = tagged;
+            _expand(e.path);
+        }
     }
 
     function _rebuildRows(): void {
