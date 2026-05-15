@@ -113,6 +113,14 @@ void HostController::handleCommand(QLocalSocket* client, const QJsonObject& cmd)
         emit openOverlayRequested(args.value(QStringLiteral("initialPath")).toString());
         reply(true);
     } else if (method == QStringLiteral("createPicker")) {
+        // createPicker schema (forwarded as-is to QML via QVariantMap):
+        //   fifo (string, required)        — FIFO path validated below
+        //   title, multiple, directory, saveMode, suggestedName,
+        //   acceptLabel, currentFolder    — picker UX options
+        //   parentWindow (string)          — XDG-portal window handle
+        //                                    ("wayland:HANDLE" or "x11:XID");
+        //                                    consumed in main.qml _spawnPicker
+        //                                    to set xdg-foreign transient parent.
         const QString fifoPath = args.value(QStringLiteral("fifo")).toString();
         if (!validateFifoPath(fifoPath)) {
             qWarning() << "HostController: rejected createPicker with invalid fifo path:" << fifoPath;

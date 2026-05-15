@@ -143,7 +143,8 @@ class FileChooserBackend(ServiceInterface):
         title: "s",
         options: "a{sv}",
     ) -> "ua{sv}":
-        log.info("OpenFile request: title=%r, app_id=%r", title, app_id)
+        log.info("OpenFile request: title=%r, app_id=%r, parent_window=%r",
+                 title, app_id, parent_window)
 
         multiple = get_option(options, "multiple", False)
         directory = get_option(options, "directory", False)
@@ -165,6 +166,7 @@ class FileChooserBackend(ServiceInterface):
                 "directory": directory,
                 "acceptLabel": accept_label,
                 "currentFolder": current_folder,
+                "parentWindow": parent_window,
             })
 
             launch_picker_ipc(picker_options)
@@ -204,7 +206,8 @@ class FileChooserBackend(ServiceInterface):
         title: "s",
         options: "a{sv}",
     ) -> "ua{sv}":
-        log.info("SaveFile request: title=%r, app_id=%r", title, app_id)
+        log.info("SaveFile request: title=%r, app_id=%r, parent_window=%r",
+                 title, app_id, parent_window)
 
         current_name = get_option(options, "current_name", "")
         accept_label = get_option(options, "accept_label", "")
@@ -239,6 +242,7 @@ class FileChooserBackend(ServiceInterface):
                 "suggestedName": current_name,
                 "acceptLabel": accept_label or "Save",
                 "currentFolder": current_folder,
+                "parentWindow": parent_window,
             })
 
             launch_picker_ipc(picker_options)
@@ -284,7 +288,8 @@ class FileChooserBackend(ServiceInterface):
         title: "s",
         options: "a{sv}",
     ) -> "ua{sv}":
-        log.info("SaveFiles request: title=%r, app_id=%r", title, app_id)
+        log.info("SaveFiles request: title=%r, app_id=%r, parent_window=%r",
+                 title, app_id, parent_window)
 
         accept_label = get_option(options, "accept_label", "")
         current_folder_raw = get_option(options, "current_folder", None)
@@ -306,6 +311,7 @@ class FileChooserBackend(ServiceInterface):
                 "saveMode": True,
                 "acceptLabel": accept_label or "Save Here",
                 "currentFolder": current_folder,
+                "parentWindow": parent_window,
             })
 
             launch_picker_ipc(picker_options)
