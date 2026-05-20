@@ -21,6 +21,10 @@ pragma ComponentBehavior: Bound
 // not configuration:
 //   - .git/ is unconditionally skipped (never useful, even without gitignore)
 //   - directories with >200 children are skipped (unreadable expanded)
+//   - cascade-wide model ceiling 100 (stops fan-out once that many directories
+//     are auto-expanded — the real cost driver is FileSystemModel +
+//     QFileSystemWatcher per dir, not visible row count, so this caps I/O on
+//     trees like $HOME where most subdirs are individually under the 200 cap)
 //   - total row ceiling 10k (last-resort backstop for pathological trees)
 // Each hit emits one Logger.info so we can diagnose without exposing knobs.
 //
@@ -60,16 +64,33 @@ Item {
 
     // Optional per-row badge data source. The FM stays git-agnostic — this is
     // a duck-typed extension point. Consumers (e.g. Symmetria-IDE) supply an
-    // object with `statusForPath(path) -> {char, color, textColor?, tooltip?}`
-    // or null, plus a `statusChanged()` signal that fires whenever any path's
-    // status changes. Set to null (default) renders no badges and has zero
-    // overhead — every status binding short-circuits on the null check.
+    // object with `statusForPath(path) -> {char, color, textColor?, tooltip?,
+    // adds?, dels?}` or null, plus a `statusChanged()` signal that fires
+    // whenever any path's status changes. Set to null (default) renders no
+    // badges and has zero overhead — every status binding short-circuits on
+    // the null check. The optional `adds` / `dels` integers, when both ≥1,
+    // render as a small `+N -M` accessory after the badge — used by IDE-side
+    // consumers to surface per-file line-change counts inline.
     //
     // The same provider object is intended to answer for both files and
     // directories — directories get aggregate status (e.g. "·" if any
     // descendant has changes), letting the user see active subtrees at a
     // glance without expanding them.
     property var statusProvider: null
+
+    // Optional absolute-path membership filter. `null` (default) preserves
+    // existing behaviour (full tree visible). When set to a JS map of the
+    // shape `{absPath: true, ...}`, rows whose `entry.path` is NOT in the
+    // map are hidden, AND the auto-expand fan-out skips directories absent
+    // from the map. The filter map MUST include rootPath itself, every
+    // leaf path the consumer wants visible, AND every ancestor up to
+    // rootPath — the FM does NOT compute ancestor closure (keeps the gate
+    // O(1) per row). Consumers fold ancestors in at build time.
+    //
+    // Intentionally NOT git-specific: any consumer wanting to narrow the
+    // tree by an arbitrary path set (search results, tag-filtered views,
+    // fuzzy-finder previews) reuses the same prop.
+    property var pathFilter: null
 
     // Density multiplier applied to every size in the row delegate
     // (row height, indent, icon dimensions, font point sizes, leading
@@ -115,6 +136,14 @@ Item {
     // triggers a one-shot Logger.info on hit (not a warn — they're expected
     // outcomes on big trees, not bugs) so we can diagnose without UI feedback.
     readonly property int _autoExpandFanoutCap: 200
+    // Cascade-wide cap on how many directories the auto-expand pass is allowed
+    // to instantiate models for. Counted across _models (settled) + _pending
+    // (in-flight) so a burst of synchronous _expand() calls within one fan-out
+    // round is accounted for at the next round's gate, preventing overshoot.
+    // 100 covers realistic project trees (typical: 30–50 dirs at depth 8) with
+    // 2–3x headroom; stops $HOME-class trees cold within the first fan-out
+    // round (where one level already exceeds the cap).
+    readonly property int _autoExpandModelCeiling: 100
     readonly property int _autoExpandNodeCeiling: 10000
     readonly property var _autoExpandSkipNames: ({ ".git": true })
 
@@ -132,6 +161,7 @@ Item {
     // tree mounts repeatedly within a session.
     property bool _autoExpandCeilingLogged: false
     property bool _autoExpandFanoutLogged: false
+    property bool _autoExpandModelCeilingLogged: false
 
     // Monotonic counter incremented when statusProvider.statusChanged() fires.
     // Each row delegate's badge binding reads this as a fake dependency, so
@@ -144,6 +174,16 @@ Item {
     signal showHiddenToggleRequested()
 
     implicitWidth: 280
+    // Honest height: report the visible content's actual height so
+    // layouts that don't `fillHeight` can grow this component to its
+    // natural size. Adding `view.anchors.margins * 2` for the inner
+    // ListView's symmetric padding. Consumers that DO `fillHeight: true`
+    // (the standalone FM, the main FileTreeView in symmetria-ide) are
+    // unaffected — Layouts override implicit height when fillHeight is
+    // set. The path-filtered IDE consumer (Active Changes panel) sets
+    // no fillHeight and relies on this to size to its changeset rather
+    // than scrolling internally.
+    implicitHeight: view.contentHeight + FmTheme.padding.sm * 2
 
     onRootPathChanged: {
         _resetTreeState();
@@ -159,6 +199,7 @@ Item {
             _autoExpandActive = _autoExpandTargetDepth > 0;
             _autoExpandCeilingLogged = false;
             _autoExpandFanoutLogged = false;
+            _autoExpandModelCeilingLogged = false;
             _expand(rootPath);
             root.directoryChanged(rootPath);
         }
@@ -169,6 +210,36 @@ Item {
     onRespectGitignoreChanged: {
         gitignoreSvc.clear();
         _refreshAllExpanded();
+    }
+
+    // pathFilter changes are expected to be frequent (e.g. a git-status
+    // watcher emitting a new filter map every time the working tree
+    // changes). Two-pass rebuild: (1) refresh visible rows against the
+    // new set — cheap, only touches what's already expanded; (2) if
+    // auto-expand is configured AND we still have a filter, re-arm the
+    // cascade against every settled model so newly-arrived in-set paths
+    // under unexplored dirs become reachable. The existing
+    // _autoExpandModelCeiling + _autoExpandFanoutCap still bound the
+    // worst case, so a pathological filter can't blow up I/O.
+    //
+    // We do NOT touch _expanded / _models / _pending — paths already
+    // expanded stay expanded; paths the user manually collapsed stay
+    // collapsed; in-flight expansions race to completion. Each is the
+    // correct behaviour individually.
+    onPathFilterChanged: {
+        _rebuildRows();
+        if (initialExpandDepth !== 0 && pathFilter) {
+            _autoExpandActive = true;
+            for (const parent in _models) {
+                const taken = _autoExpandPending[parent] !== undefined
+                    ? _autoExpandPending[parent]
+                    : 0;
+                _autoExpandChildrenOf(parent, taken);
+            }
+            if (Object.keys(_pending).length === 0) {
+                _autoExpandActive = false;
+            }
+        }
     }
 
     function _isHidden(name: string): bool {
@@ -356,6 +427,7 @@ Item {
             _autoExpandActive = _autoExpandTargetDepth > 0;
             _autoExpandCeilingLogged = false;
             _autoExpandFanoutLogged = false;
+            _autoExpandModelCeilingLogged = false;
             _expand(r);
         }
     }
@@ -368,13 +440,29 @@ Item {
     // We stop recursion if any of these guardrails fire:
     //   1. _autoExpandActive went false (BFS settled or rootPath changed)
     //   2. parentExpansions >= _autoExpandTargetDepth (budget exhausted)
-    //   3. _rows.length >= _autoExpandNodeCeiling (last-resort backstop)
-    //   4. The parent has > _autoExpandFanoutCap children (predictive skip
+    //   3. models + pending >= _autoExpandModelCeiling (cascade-wide cap on
+    //      directories instantiated — flips _autoExpandActive false to halt
+    //      pending in-flight expansions from fanning out further)
+    //   4. _rows.length >= _autoExpandNodeCeiling (last-resort backstop)
+    //   5. The parent has > _autoExpandFanoutCap children (predictive skip
     //      — saves the I/O cost of expanding hundreds of siblings the user
     //      can't reasonably scan visually)
     function _autoExpandChildrenOf(parentPath: string, parentExpansions: int): void {
         if (!_autoExpandActive) return;
         if (parentExpansions >= _autoExpandTargetDepth) return;
+        const modelCount = Object.keys(_models).length + Object.keys(_pending).length;
+        if (modelCount >= _autoExpandModelCeiling) {
+            if (!_autoExpandModelCeilingLogged) {
+                Logger.info(
+                    "FileTreeView",
+                    "auto-expand: model ceiling reached (" + _autoExpandModelCeiling
+                    + " directories instantiated), halting cascade"
+                );
+                _autoExpandModelCeilingLogged = true;
+            }
+            _autoExpandActive = false;
+            return;
+        }
         if (_rows.length >= _autoExpandNodeCeiling) {
             if (!_autoExpandCeilingLogged) {
                 Logger.info(
@@ -407,6 +495,13 @@ Item {
             if (_autoExpandSkipNames[e.name]) continue;
             if (!showHidden && _isHidden(e.name)) continue;
             if (respectGitignore && ignored[e.path]) continue;
+            // pathFilter gate: skip dirs that aren't in the consumer's
+            // membership set. This is the load-bearing perf win — a
+            // changeset across 4 subtrees instantiates 4 FileSystemModel
+            // + QFileSystemWatcher pairs, not the dozens a full
+            // recursive expansion would otherwise spawn. The leaf-row
+            // filter in _rebuildRows is the secondary gate.
+            if (pathFilter && !pathFilter[e.path]) continue;
             // Skip if already expanded, has a model, or is mid-flight —
             // protects against re-entrant expansion of the same path.
             if (_expanded[e.path] || _models[e.path] || _pending[e.path]) continue;
@@ -441,6 +536,12 @@ Item {
                 if (!e) continue;
                 if (!root.showHidden && root._isHidden(e.name)) continue;
                 if (root.respectGitignore && ignored[e.path]) continue;
+                // pathFilter gate (leaf-row): hide entries not in the
+                // consumer's set. Pairs with the same gate in
+                // _autoExpandChildrenOf — this one catches mixed dirs
+                // (some children in-set, some out-of-set) once they're
+                // already expanded.
+                if (root.pathFilter && !root.pathFilter[e.path]) continue;
                 newRows.push({
                     "path": e.path,
                     "name": e.name,
@@ -694,6 +795,18 @@ Item {
         ScrollBar.vertical: ScrollBar {
             policy: ScrollBar.AsNeeded
             width: 6
+            // Explicit overflow gate. `AsNeeded` controls when the thumb
+            // is shown, but a custom contentItem with a constant
+            // opacity (0.4 below) renders independently — so the track
+            // would paint as a faint 6px gutter even when the
+            // flickable has no overflow. Gating the entire ScrollBar's
+            // visibility on real overflow makes the gutter disappear
+            // for content-fit consumers (e.g. the IDE's Active Changes
+            // pane, whose enclosing FileTreeView sizes to its content
+            // via the root `implicitHeight: view.contentHeight + …`).
+            // 0.5px epsilon absorbs subpixel rounding from
+            // compactScale row-height multiplications.
+            visible: view.contentHeight > view.height + 0.5
             contentItem: Rectangle {
                 implicitWidth: 6
                 radius: width / 2
@@ -829,6 +942,34 @@ Item {
                     active: _badge !== null
                     sourceComponent: GitStatusBadge {
                         status: statusBadgeLoader._badge
+                    }
+                }
+                // Optional inline `+adds -dels` accessory. Reads from the
+                // SAME `_badge` object the badge Loader already computed
+                // — no second `statusForPath` call. Active only when the
+                // provider supplied at least one non-zero count, so the
+                // standalone FM (whose provider doesn't set these
+                // fields) renders nothing here at zero cost.
+                Loader {
+                    id: deltaLoader
+                    anchors.verticalCenter: parent.verticalCenter
+                    active: statusBadgeLoader._badge
+                        && ((statusBadgeLoader._badge.adds || 0) > 0
+                            || (statusBadgeLoader._badge.dels || 0) > 0)
+                    sourceComponent: Row {
+                        spacing: FmTheme.spacing.sm * root.compactScale
+                        StyledText {
+                            visible: (statusBadgeLoader._badge.adds || 0) > 0
+                            text: "+" + statusBadgeLoader._badge.adds
+                            color: FmTheme.gitStatus.addsGreen
+                            font.pointSize: FmTheme.font.size.sm * root.compactScale
+                        }
+                        StyledText {
+                            visible: (statusBadgeLoader._badge.dels || 0) > 0
+                            text: "-" + statusBadgeLoader._badge.dels
+                            color: FmTheme.gitStatus.delsRed
+                            font.pointSize: FmTheme.font.size.sm * root.compactScale
+                        }
                     }
                 }
             }

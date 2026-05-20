@@ -153,6 +153,13 @@ QtObject {
         property color conflictedMagenta: "#c678dd" // merge conflicts
         property color ignoredGray: "#5c6370"      // ignored (rarely rendered)
         property color badgeText: "#1a1818"        // text on saturated background
+        // Inline line-delta text colors. Distinct from staged/unstaged
+        // badge fills (which are saturated for use as backgrounds) —
+        // these are slightly muted so they read cleanly as TEXT on the
+        // surface background. Used by FileTreeView's row delegate when
+        // statusProvider returns {adds, dels} on the status object.
+        property color addsGreen: "#7eb777"        // line-additions ('+N')
+        property color delsRed:   "#d76060"        // line-deletions ('-N')
     }
 
     // === Overlay tokens ===
