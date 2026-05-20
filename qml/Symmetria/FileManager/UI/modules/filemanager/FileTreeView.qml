@@ -68,7 +68,7 @@ Item {
     // adds?, dels?}` or null, plus a `statusChanged()` signal that fires
     // whenever any path's status changes. Set to null (default) renders no
     // badges and has zero overhead — every status binding short-circuits on
-    // the null check. The optional `adds` / `dels` integers, when both ≥1,
+    // the null check. The optional `adds` / `dels` integers, when either is ≥1,
     // render as a small `+N -M` accessory after the badge — used by IDE-side
     // consumers to surface per-file line-change counts inline.
     //
@@ -176,8 +176,8 @@ Item {
     implicitWidth: 280
     // Honest height: report the visible content's actual height so
     // layouts that don't `fillHeight` can grow this component to its
-    // natural size. Adding `view.anchors.margins * 2` for the inner
-    // ListView's symmetric padding. Consumers that DO `fillHeight: true`
+    // natural size. Adding `FmTheme.padding.sm * 2` to account for the
+    // ListView's symmetric `anchors.margins: FmTheme.padding.sm`. Consumers that DO `fillHeight: true`
     // (the standalone FM, the main FileTreeView in symmetria-ide) are
     // unaffected — Layouts override implicit height when fillHeight is
     // set. The path-filtered IDE consumer (Active Changes panel) sets
@@ -230,6 +230,9 @@ Item {
         _rebuildRows();
         if (initialExpandDepth !== 0 && pathFilter) {
             _autoExpandActive = true;
+            _autoExpandCeilingLogged = false;
+            _autoExpandFanoutLogged = false;
+            _autoExpandModelCeilingLogged = false;
             for (const parent in _models) {
                 const taken = _autoExpandPending[parent] !== undefined
                     ? _autoExpandPending[parent]
@@ -953,20 +956,29 @@ Item {
                 Loader {
                     id: deltaLoader
                     anchors.verticalCenter: parent.verticalCenter
-                    active: statusBadgeLoader._badge
-                        && ((statusBadgeLoader._badge.adds || 0) > 0
-                            || (statusBadgeLoader._badge.dels || 0) > 0)
+                    // Cache the badge snapshot on the Loader itself so the
+                    // sourceComponent's bindings read a stable local property
+                    // rather than traversing back to statusBadgeLoader._badge
+                    // on every evaluation. This also eliminates the null-race
+                    // window where active flips to true but _badge transitions
+                    // to null before the inner bindings evaluate — the
+                    // sourceComponent reads _delta which holds the snapshot
+                    // captured at the same time active was computed.
+                    readonly property var _delta: statusBadgeLoader._badge
+                    active: _delta !== null && _delta !== undefined
+                        && ((_delta.adds || 0) > 0
+                            || (_delta.dels || 0) > 0)
                     sourceComponent: Row {
                         spacing: FmTheme.spacing.sm * root.compactScale
                         StyledText {
-                            visible: (statusBadgeLoader._badge.adds || 0) > 0
-                            text: "+" + statusBadgeLoader._badge.adds
+                            visible: (deltaLoader._delta ? deltaLoader._delta.adds : 0) > 0
+                            text: "+" + (deltaLoader._delta ? deltaLoader._delta.adds : 0)
                             color: FmTheme.gitStatus.addsGreen
                             font.pointSize: FmTheme.font.size.sm * root.compactScale
                         }
                         StyledText {
-                            visible: (statusBadgeLoader._badge.dels || 0) > 0
-                            text: "-" + statusBadgeLoader._badge.dels
+                            visible: (deltaLoader._delta ? deltaLoader._delta.dels : 0) > 0
+                            text: "-" + (deltaLoader._delta ? deltaLoader._delta.dels : 0)
                             color: FmTheme.gitStatus.delsRed
                             font.pointSize: FmTheme.font.size.sm * root.compactScale
                         }
