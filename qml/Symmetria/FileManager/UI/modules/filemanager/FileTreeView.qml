@@ -173,6 +173,23 @@ Item {
     signal directoryChanged(string path)
     signal showHiddenToggleRequested()
 
+    // Public focus-routing surface. Delegates `forceActiveFocus()` to the
+    // internal `view` ListView, which is the item that actually owns the
+    // `Keys.onPressed` handler (j/k/h/l/Ctrl+D/Ctrl+U/Return/...). The
+    // FileTreeView's outer root is a plain Item, NOT a FocusScope, so
+    // calling `forceActiveFocus()` on it from a consumer only makes the
+    // outer Item the activeFocusItem — keystrokes never reach the
+    // ListView and the nav keys appear dead.
+    //
+    // Consumers (e.g. the IDE's `onFocusTreeRequested` slot, and the
+    // Active Changes panel's `focusInternal()` proxy) call this instead
+    // of walking descendants by hand. Symmetric across all FileTreeView
+    // instances — a consumer holding any FileTreeView reference can hand
+    // it focus without needing to know about the internal `view` id.
+    function focusInternal(): void {
+        view.forceActiveFocus();
+    }
+
     implicitWidth: 280
     // Honest height: report the visible content's actual height so
     // layouts that don't `fillHeight` can grow this component to its
