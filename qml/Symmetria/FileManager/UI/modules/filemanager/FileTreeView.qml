@@ -78,6 +78,26 @@ Item {
     // glance without expanding them.
     property var statusProvider: null
 
+    // Optional absolute-path membership map of pre-computed ignored entries.
+    // `null` (default) means the FM falls back to its per-directory
+    // `git check-ignore --stdin` shell pipeline through `Gitignore.qml`.
+    // When set to a `{absPath: true, ...}` map (e.g. produced by the IDE's
+    // GitController in a single `git ls-files --others --ignored
+    // --exclude-standard --directory` pass per scan), the per-directory
+    // subprocess spawn is short-circuited entirely — we just consult the
+    // map for each candidate. This is the dominant mount-time win for
+    // medium-to-large repos: the Gitignore service serialises one shell
+    // process per expanded directory, which on a 100-dir BFS cascade is
+    // ~3–4 seconds of pure subprocess overhead, while the entire repo can
+    // be enumerated by git in one ~7ms shot.
+    //
+    // The map is consulted only during fan-out gating + initial expansion;
+    // there is no separate emit / signal hooked in here, so consumers
+    // recompute and reassign the prop whenever their underlying set
+    // changes. Compatible with `respectGitignore: true` — when both this
+    // prop is set AND respectGitignore is true, the map wins.
+    property var ignoredPathSet: null
+
     // Optional absolute-path membership filter. `null` (default) preserves
     // existing behaviour (full tree visible). When set to a JS map of the
     // shape `{absPath: true, ...}`, rows whose `entry.path` is NOT in the
@@ -151,6 +171,13 @@ Item {
     // settling. Gates the recursive fan-out so manual expansion after mount
     // doesn't trigger further auto-expansion.
     property bool _autoExpandActive: false
+    // True between rootPath assignment and the first time _pending drains to
+    // empty. Independent of _autoExpandActive so the terminal "tree mount
+    // settled" Logger emission still fires when the model ceiling or fan-out
+    // cap tripped early (in those cases _autoExpandActive flips to false
+    // BEFORE the last in-flight model resolves, which suppressed the original
+    // "auto-expand complete" emit and left the mount unobservable).
+    property bool _mountInFlight: false
     property int _autoExpandTargetDepth: 0
     // childPath -> number of fan-out rounds from rootPath to reach it.
     // Carries the depth through the async expansion hop since _expand()
@@ -214,6 +241,7 @@ Item {
                 : initialExpandDepth;
             _autoExpandTargetDepth = Math.max(0, target);
             _autoExpandActive = _autoExpandTargetDepth > 0;
+            _mountInFlight = true;
             _autoExpandCeilingLogged = false;
             _autoExpandFanoutLogged = false;
             _autoExpandModelCeilingLogged = false;
@@ -278,6 +306,7 @@ Item {
         _ignored = ({});
         _pending = ({});
         _autoExpandPending = ({});
+        _mountInFlight = false;
         _rows = [];
         _loading = false;
         gitignoreSvc.clear();
@@ -314,8 +343,35 @@ Item {
             _loading = Object.keys(failedPending).length > 0;
             return;
         }
+        // Single per-scan handler. Connected to BOTH `loadingChanged` and
+        // `entriesChanged` via a `Qt.callLater` deferral:
+        //   - `entriesChanged` fires when applyChanges() actually inserts /
+        //     removes rows (non-empty scans, watcher-driven updates).
+        //   - `loadingChanged` (the false transition) is the ONLY signal we
+        //     get for EMPTY directory scans — applyChanges() does nothing
+        //     when there are no adds and no removes, so `entriesChanged`
+        //     never fires there. Without this second connection, empty
+        //     directories leak their entry in `_pending` forever, blocking
+        //     the BFS auto-expand from ever signalling completion.
+        // Deferral rationale: the C++ FileSystemModel emits loadingChanged
+        // BEFORE calling applyChanges() inside the same futureWatcher
+        // ::finished handler, which means m.entries is still EMPTY at the
+        // moment loadingChanged fires for a non-empty scan. Running the
+        // finish path synchronously here would see no candidates, skip
+        // fan-out, and settle the mount at 0 rows. `Qt.callLater` queues
+        // onChange for the next event-loop tick, by which time the
+        // synchronous applyChanges() (and any cascaded entriesChanged
+        // emit) has completed and m.entries is populated. callLater also
+        // COALESCES duplicate scheduling, so when both loadingChanged and
+        // entriesChanged fire in the same tick (the normal non-empty
+        // path), onChange runs exactly once.
         const onChange = function() {
             if (gen !== root._generation) return;
+            // Skip the "loading just started" emission of loadingChanged.
+            // We only act on the loading→false transition, which is when
+            // the scan has settled and m.entries reflects the post-scan
+            // state.
+            if (m.loading) return;
             const entries = m.entries;
             const candidates = [];
             for (let i = 0; i < entries.length; i++)
@@ -371,19 +427,49 @@ Item {
                     // state (children we just enqueued are visible here).
                     if (Object.keys(root._pending).length === 0) {
                         root._autoExpandActive = false;
-                        Logger.info(
-                            "FileTreeView",
-                            "auto-expand complete: " + root._rows.length + " rows visible"
-                        );
                     }
                 }
+
+                // Terminal "tree mount settled" emit — fires on the first
+                // pending-drained-to-empty transition after rootPath change,
+                // regardless of whether auto-expand finished naturally, hit
+                // the model ceiling, or was disabled (initialExpandDepth: 0).
+                // Single deterministic ground-truth marker for "the tree is
+                // now interactive"; consumers (incl. bench/measure_mount.py)
+                // grep for this. Gated by _mountInFlight so subsequent
+                // user-driven _expand cycles don't re-emit it.
+                if (root._mountInFlight && Object.keys(root._pending).length === 0) {
+                    root._mountInFlight = false;
+                    Logger.info(
+                        "FileTreeView",
+                        "tree mount settled: " + root._rows.length + " rows visible"
+                    );
+                }
             };
-            if (root.respectGitignore && candidates.length > 0)
+            // Short-circuit: when the consumer supplies a precomputed
+            // ignored-path map, do an O(n) membership filter against it
+            // instead of spawning `git check-ignore --stdin` per dir
+            // through gitignoreSvc. See `ignoredPathSet` prop docstring
+            // for the rationale (the per-dir subprocess queue dominates
+            // mount time on big repos by ~30–40ms per directory). When
+            // the prop is null we fall back to the original gitignoreSvc
+            // path so the standalone FM (which has no IDE-side
+            // GitController) keeps working unchanged.
+            if (root.ignoredPathSet) {
+                const dirIgnored = ({});
+                for (let i = 0; i < candidates.length; i++) {
+                    const c = candidates[i];
+                    if (root.ignoredPathSet[c]) dirIgnored[c] = true;
+                }
+                finish(dirIgnored);
+            } else if (root.respectGitignore && candidates.length > 0)
                 gitignoreSvc.filter(path, candidates, finish);
             else
                 finish({});
         };
-        m.entriesChanged.connect(onChange);
+        const scheduleOnChange = function() { Qt.callLater(onChange); };
+        m.entriesChanged.connect(scheduleOnChange);
+        m.loadingChanged.connect(scheduleOnChange);
     }
 
     function _collapse(path: string): void {
