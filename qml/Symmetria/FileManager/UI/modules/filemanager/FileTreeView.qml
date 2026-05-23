@@ -332,6 +332,13 @@ Item {
     // correct behaviour individually.
     onPathFilterChanged: {
         _rebuildRows();
+        // NOTE: the lazyExpand path is intentionally NOT re-armed here.
+        // No current consumer combines lazyExpand:true with pathFilter — the
+        // IDE's Active Changes panel uses pathFilter with initialExpandDepth:-1
+        // (BFS path), and the main FileTreeView uses lazyExpand:true with no
+        // pathFilter. If a future consumer combines both, add a
+        // _kickLazyExpand() call here after _rebuildRows() so newly-visible
+        // rows trigger a viewport-fill cycle.
         if (initialExpandDepth !== 0 && pathFilter) {
             _autoExpandActive = true;
             _autoExpandCeilingLogged = false;
@@ -360,7 +367,7 @@ Item {
     // `_models` — there's no handler entry to look up (the registered
     // model owns the map slot for that path), and Qt's destructor will
     // cascade-disconnect the orphan's signals anyway.
-    function _destroyModel(m: var, path: string): void {
+    function _destroyModel(m: var, path: string = ""): void {
         if (!m) return;
         if (path && path !== "") {
             const handler = root._modelHandlers[path];
