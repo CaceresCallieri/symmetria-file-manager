@@ -290,6 +290,18 @@ Item {
         }
     }
 
+    // Disconnect onChange signal handlers before destroy to prevent a
+    // deferred Qt.callLater invocation from accessing a destroyed C++ object.
+    // Must be called instead of m.destroy() at every destroy site.
+    function _destroyModel(m: var): void {
+        if (!m) return;
+        if (m._scheduleOnChange) {
+            m.entriesChanged.disconnect(m._scheduleOnChange);
+            m.loadingChanged.disconnect(m._scheduleOnChange);
+        }
+        if (m.destroy) m.destroy();
+    }
+
     function _isHidden(name: string): bool {
         return name.length > 0 && name.charAt(0) === ".";
     }
@@ -299,7 +311,7 @@ Item {
         const models = _models;
         for (const key in models) {
             const m = models[key];
-            if (m && m.destroy) m.destroy();
+            _destroyModel(m);
         }
         _models = ({});
         _expanded = ({});
@@ -389,7 +401,7 @@ Item {
                 // the top of _expand, the true orphan case is unreachable, but
                 // this defensive check is cheap and correct.
                 if (root._models[path] && root._models[path] !== m) {
-                    m.destroy();
+                    root._destroyModel(m);
                     return;
                 }
                 const newIgnored = Object.assign({}, root._ignored);
@@ -421,13 +433,14 @@ Item {
                     delete clearedPending[path];
                     root._autoExpandPending = clearedPending;
                     root._autoExpandChildrenOf(path, expansionsTaken);
-                    // BFS settles when no more directories are queued.
-                    // _autoExpandChildrenOf adds to _pending synchronously,
-                    // so this check correctly reflects the post-recursion
-                    // state (children we just enqueued are visible here).
-                    if (Object.keys(root._pending).length === 0) {
-                        root._autoExpandActive = false;
-                    }
+                }
+                // Check pending once, after fan-out — used by both the
+                // _autoExpandActive flip and the mount-settled emit below.
+                // _autoExpandChildrenOf adds to _pending synchronously, so
+                // this reflects the post-recursion state correctly.
+                const pendingEmpty = Object.keys(root._pending).length === 0;
+                if (root._autoExpandActive && pendingEmpty) {
+                    root._autoExpandActive = false;
                 }
 
                 // Terminal "tree mount settled" emit — fires on the first
@@ -438,7 +451,7 @@ Item {
                 // now interactive"; consumers (incl. bench/measure_mount.py)
                 // grep for this. Gated by _mountInFlight so subsequent
                 // user-driven _expand cycles don't re-emit it.
-                if (root._mountInFlight && Object.keys(root._pending).length === 0) {
+                if (root._mountInFlight && pendingEmpty) {
                     root._mountInFlight = false;
                     Logger.info(
                         "FileTreeView",
@@ -455,7 +468,7 @@ Item {
             // the prop is null we fall back to the original gitignoreSvc
             // path so the standalone FM (which has no IDE-side
             // GitController) keeps working unchanged.
-            if (root.ignoredPathSet) {
+            if (root.ignoredPathSet && root.respectGitignore) {
                 const dirIgnored = ({});
                 for (let i = 0; i < candidates.length; i++) {
                     const c = candidates[i];
@@ -467,7 +480,11 @@ Item {
             else
                 finish({});
         };
-        const scheduleOnChange = function() { Qt.callLater(onChange); };
+        const scheduleOnChange = () => Qt.callLater(onChange);
+        // Attach to the model object so _collapse/_resetTreeState can
+        // disconnect before destroy, preventing a deferred Qt.callLater
+        // invocation from accessing a destroyed C++ object.
+        m._scheduleOnChange = scheduleOnChange;
         m.entriesChanged.connect(scheduleOnChange);
         m.loadingChanged.connect(scheduleOnChange);
     }
@@ -484,12 +501,12 @@ Item {
 
         const newModels = Object.assign({}, _models);
         const cur = newModels[path];
-        if (cur && cur.destroy) cur.destroy();
+        _destroyModel(cur);
         delete newModels[path];
         for (const key in _models) {
             if (key !== path && key.startsWith(prefix)) {
                 const cm = newModels[key];
-                if (cm && cm.destroy) cm.destroy();
+                _destroyModel(cm);
                 delete newModels[key];
             }
         }
@@ -531,6 +548,7 @@ Item {
             const target = initialExpandDepth === -1 ? maxExpandDepth : initialExpandDepth;
             _autoExpandTargetDepth = Math.max(0, target);
             _autoExpandActive = _autoExpandTargetDepth > 0;
+            _mountInFlight = true;
             _autoExpandCeilingLogged = false;
             _autoExpandFanoutLogged = false;
             _autoExpandModelCeilingLogged = false;
