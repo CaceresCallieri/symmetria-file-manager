@@ -367,7 +367,20 @@ Item {
     // `_models` — there's no handler entry to look up (the registered
     // model owns the map slot for that path), and Qt's destructor will
     // cascade-disconnect the orphan's signals anyway.
-    function _destroyModel(m: var, path: string = ""): void {
+    //
+    // REGRESSION NOTE: do NOT add a default value to the typed `path`
+    // parameter (e.g. `path: string = ""`). Qt's QML grammar in 6.11
+    // rejects default values on typed parameters with `Type annotations
+    // are not supported (yet)`, which cascades to "Type FileTreeView
+    // unavailable" and silently breaks every consumer of this component.
+    // The empty-path branch below is reached when callers omit the arg
+    // (JS passes `undefined`, the `path && path !== ""` guard treats it
+    // as falsy and skips the disconnect). A 2026-05-23 review attempted
+    // to add `= ""` for "type strictness" — that change ships green in
+    // tests (which don't QQmlEngine.load) but fails at engine load in
+    // the live IDE. Verified by running the IDE against the source-tree
+    // FM and watching Main.qml fail to load.
+    function _destroyModel(m: var, path: string): void {
         if (!m) return;
         if (path && path !== "") {
             const handler = root._modelHandlers[path];
