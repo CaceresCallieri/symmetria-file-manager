@@ -55,12 +55,34 @@ Item {
     //   -1 = expand recursively, capped by `maxExpandDepth`
     // Mount-only — after the initial expansion phase settles, expansion is
     // fully user-controlled. Re-triggers only on rootPath change.
+    // Ignored when `lazyExpand` is true.
     property int initialExpandDepth: 0
 
     // Hard cap when `initialExpandDepth: -1`. 8 covers realistic repo nesting;
     // deeper than that the row indentation is unreadable anyway. Exposed as a
     // prop so consumers with deeper projects can tune it.
     property int maxExpandDepth: 8
+
+    // Viewport-driven (lazy) auto-expand. When true, `initialExpandDepth` is
+    // ignored: at mount we expand only the root, then walk the row list
+    // expanding one un-expanded directory at a time, re-checking after each
+    // settle, until the rendered row count covers the viewport (plus an
+    // overscroll buffer of `_lazyExpandBufferRows` rows). After mount, when
+    // the user scrolls within `_lazyExpandBufferRows` of the rendered
+    // content's tail, we expand one more directory; same handler also fires
+    // on viewport-height + compactScale changes.
+    //
+    // Win vs `initialExpandDepth: -1`: the eager cascade instantiates one
+    // `FileSystemModel` + `QFileSystemWatcher` per expanded directory — on
+    // medium-to-large repos (bambin: ~480 dirs) it cap-trips at the
+    // `_autoExpandModelCeiling` of 100 dirs whose visible-row payoff is
+    // small (~30 rows fit in the IDE sidebar). Lazy expand follows the
+    // user's attention instead of fanning out blindly.
+    //
+    // Single-shot diagnostic emit per mount logs the count of directories
+    // actually expanded so we can tell at a glance whether option 4 is
+    // pulling its weight on a given repo.
+    property bool lazyExpand: false
 
     // Optional per-row badge data source. The FM stays git-agnostic — this is
     // a duck-typed extension point. Consumers (e.g. Symmetria-IDE) supply an
@@ -136,6 +158,17 @@ Item {
     property var _models: ({})
     property var _expanded: ({})
     property var _ignored: ({})
+    // Path-keyed onChange handler functions, used by `_destroyModel` to
+    // disconnect entriesChanged/loadingChanged before destroying a
+    // FileSystemModel. Cannot live as a dynamic JS property on the model
+    // itself (`m._scheduleOnChange = fn`) because `pragma ComponentBehavior:
+    // Bound` puts QML in strict-property mode, which rejects assignment to
+    // non-declared properties on C++ QObject types — the assignment emits a
+    // QML warning and silently no-ops, leaving disconnect impossible. The
+    // path key is stable because `m.path` matches `_models[path]`'s key,
+    // and there is exactly one model per path (gotcha-grade: orphan races
+    // are caught by the identity check inside the finish callback).
+    property var _modelHandlers: ({})
     property var _rows: []
     property int _generation: 0
     property bool _pendingG: false
@@ -171,6 +204,22 @@ Item {
     // settling. Gates the recursive fan-out so manual expansion after mount
     // doesn't trigger further auto-expansion.
     property bool _autoExpandActive: false
+    // Independent gate for the lazyExpand cycle. Mutually exclusive with
+    // `_autoExpandActive` per mount: lazyExpand bypasses the BFS fan-out
+    // entirely and walks `_rows` instead. Set true at mount AND on scroll-
+    // driven re-trigger; cleared in `_advanceLazyExpand` when the viewport
+    // is filled or no more un-expanded dirs remain.
+    property bool _lazyExpandActive: false
+    // Overscroll headroom in row units. 8 rows is enough to hide a single
+    // momentum-scroll flick worth of extension without re-triggering the
+    // cycle mid-frame. Higher values trade more eager expansion at mount
+    // for less work during scroll; lower values keep mount tighter but
+    // make scroll-driven extension visible to the user.
+    readonly property int _lazyExpandBufferRows: 8
+    // Count of dirs the lazyExpand cycle has expanded since mount started —
+    // diagnostic, dumped once in the `tree mount settled` line so we can
+    // tell at a glance how aggressively viewport-fill ran on a given repo.
+    property int _lazyExpandCount: 0
     // True between rootPath assignment and the first time _pending drains to
     // empty. Independent of _autoExpandActive so the terminal "tree mount
     // settled" Logger emission still fires when the model ceiling or fan-out
@@ -236,11 +285,21 @@ Item {
             // rootPath's onChange callback can see _autoExpandActive on its
             // first emission. Order is critical: _expand() registers an async
             // entriesChanged handler that reads these flags when entries land.
-            const target = initialExpandDepth === -1
-                ? maxExpandDepth
-                : initialExpandDepth;
-            _autoExpandTargetDepth = Math.max(0, target);
-            _autoExpandActive = _autoExpandTargetDepth > 0;
+            //
+            // lazyExpand wins over initialExpandDepth: when true, we skip the
+            // BFS fan-out entirely and let `_advanceLazyExpand` drive the
+            // expansion cycle off the rendered row count instead.
+            if (lazyExpand) {
+                _autoExpandTargetDepth = 0;
+                _autoExpandActive = false;
+                _lazyExpandActive = true;
+            } else {
+                const target = initialExpandDepth === -1
+                    ? maxExpandDepth
+                    : initialExpandDepth;
+                _autoExpandTargetDepth = Math.max(0, target);
+                _autoExpandActive = _autoExpandTargetDepth > 0;
+            }
             _mountInFlight = true;
             _autoExpandCeilingLogged = false;
             _autoExpandFanoutLogged = false;
@@ -293,11 +352,25 @@ Item {
     // Disconnect onChange signal handlers before destroy to prevent a
     // deferred Qt.callLater invocation from accessing a destroyed C++ object.
     // Must be called instead of m.destroy() at every destroy site.
-    function _destroyModel(m: var): void {
+    //
+    // The `path` arg is OPTIONAL — pass it for any model registered in
+    // `_models`, since the entry in `_modelHandlers[path]` holds the
+    // function we connected and we need it to disconnect cleanly. Pass
+    // empty string (or omit) for orphan models that never made it into
+    // `_models` — there's no handler entry to look up (the registered
+    // model owns the map slot for that path), and Qt's destructor will
+    // cascade-disconnect the orphan's signals anyway.
+    function _destroyModel(m: var, path: string): void {
         if (!m) return;
-        if (m._scheduleOnChange) {
-            m.entriesChanged.disconnect(m._scheduleOnChange);
-            m.loadingChanged.disconnect(m._scheduleOnChange);
+        if (path && path !== "") {
+            const handler = root._modelHandlers[path];
+            if (handler) {
+                m.entriesChanged.disconnect(handler);
+                m.loadingChanged.disconnect(handler);
+                const cleared = Object.assign({}, root._modelHandlers);
+                delete cleared[path];
+                root._modelHandlers = cleared;
+            }
         }
         if (m.destroy) m.destroy();
     }
@@ -311,14 +384,17 @@ Item {
         const models = _models;
         for (const key in models) {
             const m = models[key];
-            _destroyModel(m);
+            _destroyModel(m, key);
         }
         _models = ({});
+        _modelHandlers = ({});
         _expanded = ({});
         _ignored = ({});
         _pending = ({});
         _autoExpandPending = ({});
         _mountInFlight = false;
+        _lazyExpandActive = false;
+        _lazyExpandCount = 0;
         _rows = [];
         _loading = false;
         gitignoreSvc.clear();
@@ -421,11 +497,17 @@ Item {
                 }
                 root._rebuildRows();
 
-                // Auto-expand fan-out — only during the mount-time phase.
-                // Manual user toggles after _autoExpandActive flips false
-                // don't trigger further recursion, preserving the user's
-                // expansion choices for the rest of the session.
-                if (root._autoExpandActive) {
+                // Expansion cycle drive — mutually exclusive: either the
+                // BFS fan-out (legacy path) or the lazyExpand walker. Both
+                // synchronously add to `_pending` if they want to keep
+                // going, so the pendingEmpty check below sees the
+                // post-recursion state correctly. Manual user toggles
+                // after both flags clear don't trigger further recursion,
+                // preserving the user's expansion choices for the rest of
+                // the session.
+                if (root._lazyExpandActive) {
+                    root._advanceLazyExpand();
+                } else if (root._autoExpandActive) {
                     const expansionsTaken = root._autoExpandPending[path] !== undefined
                         ? root._autoExpandPending[path]
                         : 0;  // rootPath itself — implicit zero
@@ -434,13 +516,20 @@ Item {
                     root._autoExpandPending = clearedPending;
                     root._autoExpandChildrenOf(path, expansionsTaken);
                 }
-                // Check pending once, after fan-out — used by both the
-                // _autoExpandActive flip and the mount-settled emit below.
-                // _autoExpandChildrenOf adds to _pending synchronously, so
-                // this reflects the post-recursion state correctly.
+                // Check pending once, after expansion-cycle drive — used by
+                // the active-flag flips and the mount-settled emit below.
                 const pendingEmpty = Object.keys(root._pending).length === 0;
                 if (root._autoExpandActive && pendingEmpty) {
                     root._autoExpandActive = false;
+                }
+                // _lazyExpandActive normally clears inside _advanceLazyExpand
+                // (when viewport is full or no more un-expanded dirs remain).
+                // The pendingEmpty fallback handles a hypothetical race where
+                // the flag's still true at this point but no new _expand was
+                // queued — guarantees we never settle mount-in-flight without
+                // also clearing the lazy gate.
+                if (root._lazyExpandActive && pendingEmpty) {
+                    root._lazyExpandActive = false;
                 }
 
                 // Terminal "tree mount settled" emit — fires on the first
@@ -453,9 +542,12 @@ Item {
                 // user-driven _expand cycles don't re-emit it.
                 if (root._mountInFlight && pendingEmpty) {
                     root._mountInFlight = false;
+                    const lazySuffix = root.lazyExpand
+                        ? " (lazy: " + root._lazyExpandCount + " dirs)"
+                        : "";
                     Logger.info(
                         "FileTreeView",
-                        "tree mount settled: " + root._rows.length + " rows visible"
+                        "tree mount settled: " + root._rows.length + " rows visible" + lazySuffix
                     );
                 }
             };
@@ -481,10 +573,16 @@ Item {
                 finish({});
         };
         const scheduleOnChange = () => Qt.callLater(onChange);
-        // Attach to the model object so _collapse/_resetTreeState can
-        // disconnect before destroy, preventing a deferred Qt.callLater
-        // invocation from accessing a destroyed C++ object.
-        m._scheduleOnChange = scheduleOnChange;
+        // Stash the handler in the path-keyed map (NOT on `m` — QML's
+        // strict-property mode under `pragma ComponentBehavior: Bound`
+        // silently rejects `m._scheduleOnChange = fn` assignments to
+        // C++ QObject types like FileSystemModel; the warning emits to
+        // the Qt log but the assignment no-ops, leaving disconnect
+        // unable to find the function. Storing keyed on `path` works
+        // because there is exactly one model per path at any time.
+        const newHandlers = Object.assign({}, root._modelHandlers);
+        newHandlers[path] = scheduleOnChange;
+        root._modelHandlers = newHandlers;
         m.entriesChanged.connect(scheduleOnChange);
         m.loadingChanged.connect(scheduleOnChange);
     }
@@ -501,12 +599,12 @@ Item {
 
         const newModels = Object.assign({}, _models);
         const cur = newModels[path];
-        _destroyModel(cur);
+        _destroyModel(cur, path);
         delete newModels[path];
         for (const key in _models) {
             if (key !== path && key.startsWith(prefix)) {
                 const cm = newModels[key];
-                _destroyModel(cm);
+                _destroyModel(cm, key);
                 delete newModels[key];
             }
         }
@@ -542,12 +640,18 @@ Item {
         _resetTreeState();
         if (r !== "") {
             // Re-arm auto-expand state (same logic as onRootPathChanged) so
-            // Shift-R respects initialExpandDepth. Without this, _refreshAll()
-            // would leave _autoExpandActive=false from the previous mount and
-            // the tree would always reload collapsed regardless of the prop.
-            const target = initialExpandDepth === -1 ? maxExpandDepth : initialExpandDepth;
-            _autoExpandTargetDepth = Math.max(0, target);
-            _autoExpandActive = _autoExpandTargetDepth > 0;
+            // Shift-R respects initialExpandDepth / lazyExpand. Without this,
+            // _refreshAll() would leave _autoExpandActive=false from the
+            // previous mount and the tree would always reload collapsed.
+            if (lazyExpand) {
+                _autoExpandTargetDepth = 0;
+                _autoExpandActive = false;
+                _lazyExpandActive = true;
+            } else {
+                const target = initialExpandDepth === -1 ? maxExpandDepth : initialExpandDepth;
+                _autoExpandTargetDepth = Math.max(0, target);
+                _autoExpandActive = _autoExpandTargetDepth > 0;
+            }
             _mountInFlight = true;
             _autoExpandCeilingLogged = false;
             _autoExpandFanoutLogged = false;
@@ -636,6 +740,84 @@ Item {
             _autoExpandPending = tagged;
             _expand(e.path);
         }
+    }
+
+    // Lazy-expand cycle driver. Called from the _expand finish callback
+    // when _lazyExpandActive is true. Synchronously decides whether to
+    // expand one more directory: if the rendered row count is short of
+    // the viewport (plus overscroll buffer) AND there's an un-expanded
+    // directory in `_rows`, calls _expand on it. That `_expand` adds to
+    // `_pending` synchronously, so the finish-callback's pendingEmpty
+    // check sees we're still working and skips the mount-settle. When
+    // viewport is full OR no more candidates remain, clears
+    // _lazyExpandActive so the next pendingEmpty cycle settles the mount.
+    //
+    // Cycle re-arm from scroll/resize/density events comes through
+    // `_kickLazyExpand` below — keep the two entry points distinct so
+    // recursive re-entry can't loop on an already-active cycle.
+    function _advanceLazyExpand(): void {
+        if (!root._shouldExpandMore()) {
+            root._lazyExpandActive = false;
+            return;
+        }
+        const next = root._findNextUnExpandedDir();
+        if (next === "") {
+            root._lazyExpandActive = false;
+            return;
+        }
+        root._lazyExpandCount = root._lazyExpandCount + 1;
+        root._expand(next);
+    }
+
+    // External re-arm: called when the user scrolls, the viewport resizes,
+    // or compactScale changes. No-op when:
+    //   - lazyExpand isn't enabled,
+    //   - a cycle is already in flight (_lazyExpandActive flag),
+    //   - the initial mount is still draining its pending queue,
+    //   - or there's other expansion work in flight from manual user toggles.
+    // The order of guards matters: cheapest checks first so the typical
+    // mid-scroll path (cycle already active OR plenty of buffer) bails
+    // before we touch row-height math.
+    function _kickLazyExpand(): void {
+        if (!root.lazyExpand) return;
+        if (root._lazyExpandActive) return;
+        if (root._mountInFlight) return;
+        if (Object.keys(root._pending).length > 0) return;
+        if (!root._shouldExpandMore()) return;
+        root._lazyExpandActive = true;
+        root._advanceLazyExpand();
+    }
+
+    // Returns true when the rendered tree has fewer rows below the visible
+    // viewport bottom than _lazyExpandBufferRows. Synchronous on `_rows`
+    // length + cached row height — does NOT depend on `view.contentHeight`,
+    // which lags `_rows` mutations by a layout cycle.
+    function _shouldExpandMore(): bool {
+        if (Object.keys(root._pending).length > 0) return false;
+        const rowHeight = Config.fileManager.sizes.itemHeight * root.compactScale;
+        if (rowHeight <= 0) return false;
+        const visibleBottomRow = Math.ceil((view.contentY + view.height) / rowHeight);
+        const rowsBeyond = root._rows.length - visibleBottomRow;
+        return rowsBeyond < root._lazyExpandBufferRows;
+    }
+
+    // First-in-row-order un-expanded directory. We mirror the same skip
+    // filters as `_autoExpandChildrenOf` — .git etc. — even though most of
+    // them are also enforced by the FileSystemModel + _rebuildRows pipeline.
+    // Belt-and-suspenders here is cheap and keeps the lazy path's behaviour
+    // identical to the BFS path's when ambiguous.
+    function _findNextUnExpandedDir(): string {
+        const rows = root._rows;
+        for (let i = 0; i < rows.length; i++) {
+            const r = rows[i];
+            if (!r.isDir) continue;
+            if (r.expanded) continue;
+            if (root._autoExpandSkipNames[r.name]) continue;
+            // Hidden + ignored entries are already absent from `_rows` (they
+            // get filtered in _rebuildRows), so no explicit check needed.
+            return r.path;
+        }
+        return "";
     }
 
     function _rebuildRows(): void {
@@ -876,6 +1058,23 @@ Item {
             }
         }
     }
+
+    // Lazy-expand re-arm bridge. When the user scrolls or the viewport
+    // height changes (window resize, panel toggle), the visible-bottom row
+    // moves and the "rows beyond" budget may go negative — `_kickLazyExpand`
+    // gates on that and expands one more directory if so. Connected to the
+    // ListView's signals rather than autobinding on a property so we don't
+    // pay the eval cost on every contentY tick when lazyExpand is off
+    // (the function short-circuits on `lazyExpand: false` regardless).
+    Connections {
+        target: view
+        function onContentYChanged(): void { root._kickLazyExpand(); }
+        function onHeightChanged(): void { root._kickLazyExpand(); }
+    }
+
+    // compactScale changes the row pixel height, which moves the visible
+    // bottom row in `_shouldExpandMore`. Re-evaluate after the change.
+    onCompactScaleChanged: _kickLazyExpand()
 
     // Status-provider live-update bridge. Target null (no provider attached)
     // is fine — Connections silently ignores it. When the provider signals
