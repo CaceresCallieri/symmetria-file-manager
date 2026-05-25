@@ -120,16 +120,6 @@ Item {
     // last restore expansion lands.
     property var restoreExpandedPaths: null
 
-    // Internal: queue of paths still waiting to be expanded during a
-    // restore cycle. Populated from `restoreExpandedPaths` at mount
-    // time; drained as parent models settle (see `_advanceRestoreFor`
-    // in the `_expand` finish callback).
-    property var _restorePending: []
-    // True between the restore-start and the moment `_restorePending`
-    // drains. Mutually exclusive with `_lazyExpandActive` and
-    // `_autoExpandActive` for the lifetime of one mount.
-    property bool _restoreActive: false
-
     // Optional per-row badge data source. The FM stays git-agnostic — this is
     // a duck-typed extension point. Consumers (e.g. Symmetria-IDE) supply an
     // object with `statusForPath(path) -> {char, color, textColor?, tooltip?,
@@ -266,6 +256,17 @@ Item {
     // diagnostic, dumped once in the `tree mount settled` line so we can
     // tell at a glance how aggressively viewport-fill ran on a given repo.
     property int _lazyExpandCount: 0
+
+    // Restore-cycle state (mutually exclusive with _autoExpandActive and
+    // _lazyExpandActive per mount).
+    // Queue of paths still waiting to be expanded during a restore cycle.
+    // Populated from `restoreExpandedPaths` at mount time; drained as
+    // parent models settle (see `_advanceRestoreFor` in the _expand finish
+    // callback).
+    property var _restorePending: []
+    // True between the restore-start and the moment `_restorePending` drains.
+    property bool _restoreActive: false
+
     // True between rootPath assignment and the first time _pending drains to
     // empty. Independent of _autoExpandActive so the terminal "tree mount
     // settled" Logger emission still fires when the model ceiling or fan-out
@@ -297,14 +298,18 @@ Item {
     // Emitted after every user-driven mutation of `_expanded` so an
     // outer consumer can persist the set. Carries the full current
     // path list (not a delta) — keeps the consumer's contract trivial
-    // (just save the whole thing atomically). The restore cycle
-    // deliberately SUPPRESSES this emit while `_restoreActive` is
-    // true: a restore is replaying what the cache already holds, so
-    // re-emitting would (a) churn the consumer's atomic-write path N
-    // times for no information gain, and (b) risk a save-with-incomplete-set
-    // race during the brief window where some paths have been replayed
-    // but later ones in the queue haven't. The first post-restore
-    // user toggle is what triggers the save of the now-canonical set.
+    // (just save the whole thing atomically).
+    //
+    // Suppressed in two cases:
+    //   1. `_restoreActive` — the restore cycle is replaying what the
+    //      cache already holds; re-emitting would churn the consumer's
+    //      atomic-write path N times and risk a save-with-incomplete-set
+    //      race during the brief window where some paths have been
+    //      replayed but later ones haven't.
+    //   2. `_mountInFlight` — the initial BFS / lazyExpand cascade emits
+    //      on every directory settle; consumers shouldn't receive dozens
+    //      of partial-set saves before mount completes. The first
+    //      post-mount user toggle triggers the save of the settled set.
     signal expandedStateChanged(var paths)
 
     // Public focus-routing surface. Delegates `forceActiveFocus()` to the
@@ -770,10 +775,29 @@ Item {
         _resetTreeState();
         if (r !== "") {
             // Re-arm auto-expand state (same logic as onRootPathChanged) so
-            // Shift-R respects initialExpandDepth / lazyExpand. Without this,
-            // _refreshAll() would leave _autoExpandActive=false from the
-            // previous mount and the tree would always reload collapsed.
-            if (lazyExpand) {
+            // Shift-R respects the priority ladder: restoreExpandedPaths >
+            // lazyExpand > initialExpandDepth. Without this, _refreshAll()
+            // would leave _autoExpandActive=false from the previous mount
+            // and the tree would always reload collapsed.
+            const cache = root.restoreExpandedPaths;
+            const hasCache = cache != null && cache.length > 0;
+            if (hasCache) {
+                _autoExpandTargetDepth = 0;
+                _autoExpandActive = false;
+                _lazyExpandActive = false;
+                _restoreActive = true;
+                const prefix = r === "/" ? "/" : r + "/";
+                const queue = [];
+                for (let i = 0; i < cache.length; i++) {
+                    const p = cache[i];
+                    if (typeof p !== "string") continue;
+                    if (p === r) continue;
+                    if (!p.startsWith(prefix)) continue;
+                    queue.push(p);
+                }
+                queue.sort(function (a, b) { return a.length - b.length; });
+                _restorePending = queue;
+            } else if (lazyExpand) {
                 _autoExpandTargetDepth = 0;
                 _autoExpandActive = false;
                 _lazyExpandActive = true;
@@ -906,7 +930,12 @@ Item {
     // The sort keeps the emitted list stable across consumers that
     // diff it for change detection.
     function _emitExpandedState(): void {
-        if (root._restoreActive) return;
+        // Suppress during restore cycle (replaying saved state — consumer
+        // already holds this set) and during the initial mount cascade
+        // (_mountInFlight covers lazyExpand + BFS auto-expand — emitting
+        // on every directory settle during a 100-dir cascade churns the
+        // consumer's atomic-write path with partial sets).
+        if (root._restoreActive || root._mountInFlight) return;
         const keys = Object.keys(root._expanded);
         keys.sort();
         root.expandedStateChanged(keys);
@@ -953,8 +982,34 @@ Item {
             remaining.push(p);
         }
         root._restorePending = remaining;
-        if (remaining.length === 0 && toExpand.length === 0) {
-            root._restoreActive = false;
+        // Second-pass rescue: if this node had no direct children in the
+        // queue but the remaining list contains paths whose parent is
+        // already in _expanded (e.g. an intermediate ancestor was omitted
+        // from the cache), dispatch those now rather than waiting for
+        // pendingEmpty to force-clear them. Handles the case where the
+        // cached set skips a level (e.g. saved ["/a/b", "/a/b/c/d"] but
+        // not "/a/b/c") — without this, "/a/b/c/d" would be silently
+        // abandoned once "/a/b" settles with no matching children.
+        if (toExpand.length === 0 && remaining.length > 0) {
+            const rescued = [];
+            const stillPending = [];
+            for (let i = 0; i < remaining.length; i++) {
+                const p = remaining[i];
+                const lastSlash = p.lastIndexOf("/");
+                const parentPath = lastSlash > 0 ? p.substring(0, lastSlash) : "/";
+                if (root._expanded[parentPath]) {
+                    rescued.push(p);
+                } else {
+                    stillPending.push(p);
+                }
+            }
+            root._restorePending = stillPending;
+            for (let i = 0; i < rescued.length; i++) {
+                root._expand(rescued[i]);
+            }
+            if (rescued.length === 0 && stillPending.length === 0) {
+                root._restoreActive = false;
+            }
             return;
         }
         for (let i = 0; i < toExpand.length; i++) {
