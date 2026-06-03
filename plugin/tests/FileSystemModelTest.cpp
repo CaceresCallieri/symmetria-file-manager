@@ -410,6 +410,54 @@ private slots:
         const QStringList names = entryNames(model);
         QCOMPARE(names, QStringList{"keep.txt"});
     }
+
+    // Regression: "pasted files appear 2-3x until you re-navigate".
+    //
+    // When a multi-file mv/cp lands in the watched directory, inotify fires
+    // several directoryChanged signals and multiple background scans can be in
+    // flight at once. Each scan snapshots oldPaths at schedule time (before any
+    // prior scan's result is applied), so a freshly-arrived file ends up in the
+    // `added` set of more than one scan. If applyChanges() blindly appended its
+    // `added` entries, those overlapping scans would each insert the same path —
+    // 2x, 3x — until a full re-navigation rebuilt m_entries from a deduplicated
+    // QSet. applyChanges() must therefore be idempotent: skip any added path it
+    // already holds. This drives applyChanges() directly because the timing race
+    // cannot be reproduced reliably through the real inotify path.
+    void applyChangesIdempotentOnDuplicatePaths()
+    {
+        auto makeEntry = [](const QString& path) {
+            CachedEntryData data;
+            data.path = path;
+            data.fileInfo = QFileInfo(path);
+            data.relativePath = data.fileInfo.fileName();
+            return data;
+        };
+
+        FileSystemModel model;
+
+        // First scan adds two files.
+        QList<CachedEntryData> firstBatch;
+        firstBatch << makeEntry("/tmp/a.jpg") << makeEntry("/tmp/b.jpg");
+        model.applyChanges({}, firstBatch);
+        QCOMPARE(model.rowCount(), 2);
+
+        // A second, stale scan re-reports an already-present path (a.jpg) along
+        // with a genuinely new one (c.jpg) — exactly what two overlapping scans
+        // sharing the same oldPaths snapshot would produce.
+        QList<CachedEntryData> staleBatch;
+        staleBatch << makeEntry("/tmp/a.jpg") << makeEntry("/tmp/c.jpg");
+        model.applyChanges({}, staleBatch);
+
+        // a.jpg must not be duplicated; only c.jpg is genuinely new.
+        QCOMPARE(model.rowCount(), 3);
+        QStringList names = entryNames(model);
+        names.sort();
+        QCOMPARE(names, (QStringList{"a.jpg", "b.jpg", "c.jpg"}));
+
+        // Re-applying an entirely already-present batch must be a complete no-op.
+        model.applyChanges({}, staleBatch);
+        QCOMPARE(model.rowCount(), 3);
+    }
 };
 
 QTEST_MAIN(FileSystemModelTest)

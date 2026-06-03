@@ -12,6 +12,12 @@
 #include <qqmlintegration.h>
 #include <qqmllist.h>
 
+// Forward-declared at global scope so FileSystemModel can friend it for
+// white-box testing (see the friend declaration below). A qualified friend
+// (::FileSystemModelTest) cannot introduce a new class, only refer to one that
+// already exists, so this declaration must precede the namespace.
+class FileSystemModelTest;
+
 namespace symmetria::filemanager::models {
 
 // Pre-computed file metadata built in the background thread so that
@@ -103,6 +109,15 @@ private:
 class FileSystemModel : public QAbstractListModel {
     Q_OBJECT
     QML_ELEMENT
+
+    // White-box access for the idempotency regression test, which calls the
+    // private applyChanges() directly to prove that re-adding an already-present
+    // path is a no-op (the duplicate-paste race cannot be triggered reliably
+    // through the inotify path). Friending a test class does not affect layout
+    // or production behavior.
+    // Qualified with :: because the test class lives in the global namespace,
+    // not this one — an unqualified name would bind to a phantom class here.
+    friend class ::FileSystemModelTest;
 
     Q_PROPERTY(QString path READ path WRITE setPath NOTIFY pathChanged)
     Q_PROPERTY(bool recursive READ recursive WRITE setRecursive NOTIFY recursiveChanged)
