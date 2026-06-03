@@ -458,6 +458,65 @@ private slots:
         model.applyChanges({}, staleBatch);
         QCOMPARE(model.rowCount(), 3);
     }
+
+    // Complementary: remove + all-dupes-added — verifies the else-if branch that
+    // emits entriesChanged() when removals happened but no new entries survived dedup.
+    void applyChangesRemoveWithAllDupedAdds()
+    {
+        auto makeEntry = [](const QString& path) {
+            CachedEntryData data;
+            data.path = path;
+            data.fileInfo = QFileInfo(path);
+            data.relativePath = data.fileInfo.fileName();
+            return data;
+        };
+
+        FileSystemModel model;
+
+        // Seed the model with two files.
+        QList<CachedEntryData> seed;
+        seed << makeEntry("/tmp/x.txt") << makeEntry("/tmp/y.txt");
+        model.applyChanges({}, seed);
+        QCOMPARE(model.rowCount(), 2);
+
+        // Simulate a stale scan: remove x.txt, but also "add" y.txt which is
+        // already present. After dedup filtering, newEntries is empty; only the
+        // removal applies. entriesChanged() must still fire (via the else-if branch).
+        QSignalSpy spy(&model, &FileSystemModel::entriesChanged);
+        QList<CachedEntryData> addAlreadyPresent;
+        addAlreadyPresent << makeEntry("/tmp/y.txt");
+        model.applyChanges({"/tmp/x.txt"}, addAlreadyPresent);
+
+        QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(spy.count(), 1);
+        QStringList names = entryNames(model);
+        QCOMPARE(names, QStringList{"y.txt"});
+    }
+
+    // Within-batch duplicate: same path appearing twice in a single addedEntries
+    // list. Unreachable from the production watcher path (which uses QSet
+    // subtraction), but applyChanges is now a semi-public interface via friend.
+    void applyChangesWithinBatchDuplicate()
+    {
+        auto makeEntry = [](const QString& path) {
+            CachedEntryData data;
+            data.path = path;
+            data.fileInfo = QFileInfo(path);
+            data.relativePath = data.fileInfo.fileName();
+            return data;
+        };
+
+        FileSystemModel model;
+
+        // Pass the same path twice in a single batch.
+        QList<CachedEntryData> dupBatch;
+        dupBatch << makeEntry("/tmp/dup.txt") << makeEntry("/tmp/dup.txt");
+        model.applyChanges({}, dupBatch);
+
+        // Must appear exactly once, not twice.
+        QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(entryNames(model), QStringList{"dup.txt"});
+    }
 };
 
 QTEST_MAIN(FileSystemModelTest)

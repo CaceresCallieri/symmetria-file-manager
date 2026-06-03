@@ -13,9 +13,9 @@
 #include <qqmllist.h>
 
 // Forward-declared at global scope so FileSystemModel can friend it for
-// white-box testing (see the friend declaration below). A qualified friend
-// (::FileSystemModelTest) cannot introduce a new class, only refer to one that
-// already exists, so this declaration must precede the namespace.
+// white-box testing (see the friend declaration below). Without this prior
+// declaration, `friend class ::FileSystemModelTest` inside the namespace would
+// refer to a name in the global namespace that doesn't yet exist.
 class FileSystemModelTest;
 
 namespace symmetria::filemanager::models {
@@ -216,6 +216,9 @@ private:
     void updateWatcher();
     void updateEntries();
     void updateEntriesForDir(const QString& dir);
+    // Called from the watcher path and directly by FileSystemModelTest (white-box).
+    // Precondition: addedEntries paths should be distinct (production callers use
+    // QSet subtraction; within-batch dupes are also handled defensively).
     void applyChanges(const QSet<QString>& removedPaths, QList<CachedEntryData> addedEntries);
     [[nodiscard]] bool compareEntries(const FileSystemEntry* a, const FileSystemEntry* b) const;
 };

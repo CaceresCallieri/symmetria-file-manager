@@ -678,16 +678,10 @@ void FileSystemModel::applyChanges(const QSet<QString>& removedPaths, QList<Cach
         endRemoveRows();
     }
 
-    // Drop any added path already present in the model. applyChanges must be
-    // idempotent because overlapping watcher-triggered scans can each carry the
-    // same path in their `added` set: every scan snapshots `oldPaths` at
-    // schedule time (see updateEntriesForDir), so if scan A's result is applied
-    // before scan B was scheduled — or if a best-effort cancel() loses the race
-    // and both A and B apply — a freshly-arrived file lands in both `added`
-    // sets and would be appended twice (the "pasted files appear 2-3x until you
-    // re-navigate" bug). Re-navigation hid it because the full rescan rebuilds
-    // m_entries from a deduplicated QSet. Filtering here fixes it at the single
-    // chokepoint where entries enter the model incrementally.
+    // Guard against duplicate inserts: overlapping watcher scans each snapshot
+    // oldPaths at schedule time, so the same path can land in multiple `added`
+    // sets. Filter against current m_entries so applyChanges stays idempotent.
+    // Also guards within-batch duplicates (same path twice in addedEntries).
     QSet<QString> existingPaths;
     existingPaths.reserve(static_cast<int>(m_entries.size()));
     for (const auto& entry : std::as_const(m_entries)) {
@@ -702,6 +696,7 @@ void FileSystemModel::applyChanges(const QSet<QString>& removedPaths, QList<Cach
         if (existingPaths.contains(data.path)) {
             continue;
         }
+        existingPaths.insert(data.path); // keep set current for within-batch dupes
         newEntries << new FileSystemEntry(std::move(data), this);
     }
 
