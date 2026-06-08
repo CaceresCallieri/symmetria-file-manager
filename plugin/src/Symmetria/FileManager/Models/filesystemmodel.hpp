@@ -36,6 +36,22 @@ struct CachedEntryData {
     QString mimeType;
 };
 
+// statfs f_type of a path's filesystem (0 if the syscall fails). Exposed so a
+// single-path caller (FileInfo) can supply the parent-directory fs type to
+// buildCachedEntryData below, matching the mount-boundary detection the
+// directory scan performs. Blocking on remote mounts — call off the GUI thread.
+[[nodiscard]] unsigned long filesystemFsType(const QString& path);
+
+// Builds the full per-path metadata bundle (mime, isImage/isVideo, permissions,
+// owner, remote-mount flag) on a worker thread so FileSystemEntry accessors stay
+// I/O-free. Shared by FileSystemModel's directory scan and the FileInfo element,
+// so both derive identical metadata from a path. `parentFsType` is the result of
+// filesystemFsType() on the path's PARENT directory (0 if unavailable) — used
+// only to flag remote-mount roots. Blocking (stat/statfs) — never call on the
+// GUI thread.
+[[nodiscard]] CachedEntryData buildCachedEntryData(
+    const QString& path, const QString& relativePath, unsigned long parentFsType);
+
 class FileSystemEntry : public QObject {
     Q_OBJECT
     QML_ELEMENT

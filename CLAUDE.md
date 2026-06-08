@@ -115,11 +115,12 @@ finding. C++ plugin changes use the ctest gate (see Build & Run → Running Test
 
 ### Plugin: `Symmetria.FileManager.Models` (C++ → QML)
 
-Six model classes in C++ namespace `symmetria::filemanager::models`:
+Model classes in C++ namespace `symmetria::filemanager::models`:
 
 | Class | Purpose |
 |-------|---------|
 | `FileSystemModel` + `FileSystemEntry` | Async directory listing with sorting, filtering, file watching |
+| `FileInfo` | Async path → single `FileSystemEntry`. The QML bridge for path-only consumers (the fuzzy finder; the future IDE) that need to drive `PreviewContent` but have no `FileSystemModel`. Reuses `buildCachedEntryData()` so its derivation is identical to the scan's |
 | `ArchivePreviewModel` | Lists archive contents (zip, tar, 7z, rar) via libarchive |
 | `SpreadsheetPreviewModel` | Reads .xlsx (QXlsx) and .xls (freexl) for preview |
 | `SyntaxHighlightHelper` | Syntax-highlighted HTML for text file previews via KF6 |
@@ -131,6 +132,21 @@ Six model classes in C++ namespace `symmetria::filemanager::models`:
 Symmetria Shell imports `Symmetria.FileManager.Models` in 5 QML files (wallpaper grid, file dialog, etc.) — it depends on this plugin being installed. Symmetria File Manager does NOT depend on the shell at runtime — it reads its palette directly from `color-scheme.json` on disk, not via IPC.
 
 If the plugin is not installed, Symmetria Shell's wallpaper picker and file dialog will fail to load. After any plugin API changes, verify the shell still works.
+
+### Preview Routing (shared)
+
+- **`PreviewContent.qml`** is the single file-preview router. Given a
+  `FileSystemEntry`-shaped `entry`, it picks the type (image/PDF, video, audio,
+  text/code, archive, spreadsheet, directory, fallback) and stacks one Loader per
+  type. It is shared by **both** the normal pane (`PreviewPanel.qml`) and the
+  fuzzy finder's info pane (`FuzzyFinderInfoPanel.qml`), so a new preview type
+  added here appears in both consumers — do NOT re-implement type routing in a
+  consumer. The leaf previews (`ImagePreview`, `TextPreview`, …) consume only
+  `entry`; they are agnostic to where it comes from.
+- The two consumers differ only in how they obtain the `entry`: `PreviewPanel`
+  has a real `FileSystemEntry` from its `FileSystemModel`; the finder has only a
+  path, so `FuzzyFinderInfoPanel` mints one via the `FileInfo` element. Both
+  debounce (150 ms) before driving the preview so fast j/k doesn't thrash it.
 
 ### State Architecture
 

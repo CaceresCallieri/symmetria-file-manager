@@ -68,6 +68,46 @@ static bool detectRemoteMount(const QString& path, unsigned long parentFsType) {
     return isRemoteFsType(fsType) && fsType != parentFsType;
 }
 
+unsigned long filesystemFsType(const QString& path) {
+    struct statfs sfs;
+    // 0 is a safe sentinel for "statfs failed" — it matches no remote magic, so
+    // a dir whose own f_type is 0 is never mistakenly flagged as a remote mount.
+    if (::statfs(path.toUtf8().constData(), &sfs) != 0)
+        return 0;
+    return static_cast<unsigned long>(sfs.f_type);
+}
+
+CachedEntryData buildCachedEntryData(
+    const QString& path, const QString& relativePath, unsigned long parentFsType) {
+    CachedEntryData data;
+    data.path = path;
+    data.relativePath = relativePath;
+    data.fileInfo = QFileInfo(path);
+    data.permissions = buildPermissions(data.fileInfo);
+    data.owner = data.fileInfo.owner();
+    data.isRemoteMount = data.fileInfo.isDir() && detectRemoteMount(path, parentFsType);
+
+    // Pre-compute MIME type and image detection here (background thread) so the
+    // FileSystemEntry accessors become trivial field reads with no I/O.
+    // QMimeDatabase is thread-safe; QImageReader::canRead() is stack-local.
+    if (!data.fileInfo.isDir()) {
+        static const QMimeDatabase mimeDb;
+        data.mimeType = mimeDb.mimeTypeForFile(path).name();
+        data.isVideo = data.mimeType.startsWith(QStringLiteral("video/"));
+
+        if (path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)
+            || path.endsWith(QStringLiteral(".png_"), Qt::CaseInsensitive)
+            || path.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive)) {
+            data.isImage = true;
+        } else {
+            QImageReader reader(path);
+            data.isImage = reader.canRead();
+        }
+    }
+
+    return data;
+}
+
 FileSystemEntry::FileSystemEntry(const QString& path, const QString& relativePath, QObject* parent)
     : QObject(parent)
     , m_fileInfo(path)
@@ -485,12 +525,9 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
     }
 
     const auto future = QtConcurrent::run([=](QPromise<QPair<QSet<QString>, QList<CachedEntryData>>>& promise) {
-        // Get the parent directory's filesystem type so we can detect mount boundaries
-        struct statfs parentSfs;
-        // 0 is used as a sentinel for "parent statfs failed" — an entry whose
-        // own f_type is 0 would not match any known remote magic, so it stays safe.
-        const unsigned long parentFsType = (::statfs(dir.toUtf8().constData(), &parentSfs) == 0)
-            ? static_cast<unsigned long>(parentSfs.f_type) : 0;
+        // Get the parent directory's filesystem type once (shared by every entry)
+        // so we can detect mount boundaries without a per-entry statfs.
+        const unsigned long parentFsType = filesystemFsType(dir);
 
         const auto flags = recursive ? QDirIterator::Subdirectories : QDirIterator::NoIteratorFlags;
 
@@ -575,33 +612,9 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
         cachedEntries.reserve(added.size());
         for (const auto& entryPath : added) {
             if (promise.isCanceled()) return;
-            CachedEntryData data;
-            data.path = entryPath;
-            data.relativePath = currentDir.relativeFilePath(entryPath);
-            data.fileInfo = QFileInfo(entryPath);
-            data.permissions = buildPermissions(data.fileInfo);
-            data.owner = data.fileInfo.owner();
-            data.isRemoteMount = data.fileInfo.isDir() && detectRemoteMount(data.path, parentFsType);
-
-            // Pre-compute MIME type and image detection in the background thread
-            // so FileSystemEntry accessors become trivial field reads with no I/O.
-            // QMimeDatabase is thread-safe; QImageReader::canRead() is stack-local.
-            if (!data.fileInfo.isDir()) {
-                static const QMimeDatabase mimeDb;
-                data.mimeType = mimeDb.mimeTypeForFile(data.path).name();
-                data.isVideo = data.mimeType.startsWith(QStringLiteral("video/"));
-
-                if (data.path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)
-                    || data.path.endsWith(QStringLiteral(".png_"), Qt::CaseInsensitive)
-                    || data.path.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive)) {
-                    data.isImage = true;
-                } else {
-                    QImageReader reader(data.path);
-                    data.isImage = reader.canRead();
-                }
-            }
-
-            cachedEntries.append(std::move(data));
+            // Shared with the FileInfo element — see buildCachedEntryData in the header.
+            cachedEntries.append(buildCachedEntryData(
+                entryPath, currentDir.relativeFilePath(entryPath), parentFsType));
         }
 
         promise.addResult(qMakePair(std::move(removed), std::move(cachedEntries)));

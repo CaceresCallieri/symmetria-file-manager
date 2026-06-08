@@ -43,11 +43,13 @@ FallbackPreview 1.0 modules/filemanager/FallbackPreview.qml
 FileList 1.0 modules/filemanager/FileList.qml
 FileListItem 1.0 modules/filemanager/FileListItem.qml
 FileTreeView 1.0 modules/filemanager/FileTreeView.qml
+FuzzyFinderInfoPanel 1.0 modules/filemanager/FuzzyFinderInfoPanel.qml
 FuzzyFinderPopup 1.0 modules/filemanager/FuzzyFinderPopup.qml
 ImagePreview 1.0 modules/filemanager/ImagePreview.qml
 MillerColumns 1.0 modules/filemanager/MillerColumns.qml
 ParentPanel 1.0 modules/filemanager/ParentPanel.qml
 PathBar 1.0 modules/filemanager/PathBar.qml
+PreviewContent 1.0 modules/filemanager/PreviewContent.qml
 PreviewMetadata 1.0 modules/filemanager/PreviewMetadata.qml
 PreviewPanel 1.0 modules/filemanager/PreviewPanel.qml
 RenamePopup 1.0 modules/filemanager/RenamePopup.qml

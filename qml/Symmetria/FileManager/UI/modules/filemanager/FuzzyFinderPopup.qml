@@ -40,26 +40,6 @@ Loader {
             showHidden: Config.fileManager.showHidden
         }
 
-        // Syntax-highlighted preview of the highlighted file (text files only).
-        SyntaxHighlightHelper {
-            id: previewHelper
-            filePath: (popupScope.selectedEntry && popupScope.selectedEntry.fullPath
-                       && !popupScope.selectedEntry.isDir && !popupScope.selectedEntry.isBinary)
-                      ? popupScope.selectedEntry.fullPath : ""
-        }
-
-        // Shared styles for the compact File Info metadata pairs.
-        component MetaLabel: StyledText {
-            color: FmTheme.palette.onSurfaceVariant
-            font.pointSize: FmTheme.font.size.xs
-        }
-        component MetaValue: StyledText {
-            color: FmTheme.palette.onSurface
-            font.pointSize: FmTheme.font.size.xs
-            font.family: FmTheme.font.family.mono
-            elide: Text.ElideRight
-        }
-
         // === Scrim backdrop — click to cancel ===
         MouseArea {
             anchors.fill: parent
@@ -294,10 +274,8 @@ Loader {
                         }
                     }
 
-                    // === File Info panel ===
-                    ColumnLayout {
-                        id: infoPanel
-
+                    // === File Info panel (size/type/git/modified + shared preview) ===
+                    FuzzyFinderInfoPanel {
                         // Hard-cap the width: without max/min, the long filename and
                         // wide preview blow this column out to full width and starve
                         // the results ListView (preferredWidth alone is only a hint).
@@ -307,112 +285,9 @@ Loader {
                         Layout.fillWidth: false
                         Layout.fillHeight: true
                         visible: fuzzyModel.resultCount > 0
-                        spacing: FmTheme.spacing.sm
 
-                        // File name
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: popupScope.selectedEntry.name || ""
-                            color: FmTheme.palette.onSurface
-                            font.pointSize: FmTheme.font.size.sm
-                            font.weight: Font.DemiBold
-                            font.family: FmTheme.font.family.mono
-                            elide: Text.ElideMiddle
-                        }
-
-                        // Metadata — compact 2-up grid. Each cell is a
-                        // space-between label/value pair, two per row, so the four
-                        // facts occupy two tight rows and leave the preview more room.
-                        GridLayout {
-                            Layout.fillWidth: true
-                            columns: 2
-                            columnSpacing: FmTheme.spacing.md * 2
-                            rowSpacing: FmTheme.spacing.sm
-
-                            // Size
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: FmTheme.spacing.sm
-                                MetaLabel { text: qsTr("Size") }
-                                Item { Layout.fillWidth: true }
-                                MetaValue {
-                                    text: popupScope.selectedEntry.isDir
-                                          ? qsTr("dir")
-                                          : FileManagerService.formatSize(popupScope.selectedEntry.size || 0)
-                                }
-                            }
-                            // Type
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: FmTheme.spacing.sm
-                                MetaLabel { text: qsTr("Type") }
-                                Item { Layout.fillWidth: true }
-                                MetaValue { text: popupScope._typeLabel(popupScope.selectedEntry) }
-                            }
-                            // Git
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: FmTheme.spacing.sm
-                                // Compute the git status badge shape once and reuse it for
-                                // both the visible check and the status binding, avoiding
-                                // a double call to the _gitStatusObj switch statement.
-                                readonly property var _gitObj: popupScope._gitStatusObj(
-                                    popupScope.selectedEntry.gitStatus)
-                                MetaLabel { text: qsTr("Git") }
-                                Item { Layout.fillWidth: true }
-                                GitStatusBadge {
-                                    id: gitBadge
-                                    visible: parent._gitObj !== null
-                                    status: parent._gitObj || ({ char: "?", color: FmTheme.palette.outline })
-                                }
-                                MetaValue { text: "—"; visible: !gitBadge.visible }
-                            }
-                            // Modified
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: FmTheme.spacing.sm
-                                MetaLabel { text: qsTr("Modified") }
-                                Item { Layout.fillWidth: true }
-                                MetaValue {
-                                    text: popupScope.selectedEntry.modified
-                                          ? FileManagerService.formatDate(popupScope.selectedEntry.modified)
-                                          : "—"
-                                }
-                            }
-                        }
-
-                        // Preview (text files) — fills ALL remaining panel height.
-                        // It is the only fillHeight child, so it absorbs every pixel
-                        // left below the compact metadata (no trailing spacer).
-                        StyledRect {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            Layout.topMargin: FmTheme.spacing.sm
-                            radius: FmTheme.rounding.sm
-                            color: Qt.alpha(FmTheme.palette.onSurface, 0.04)
-                            visible: previewHelper.hasContent
-                            clip: true
-
-                            Flickable {
-                                anchors.fill: parent
-                                anchors.margins: FmTheme.padding.sm
-                                contentWidth: width
-                                contentHeight: previewText.implicitHeight
-                                boundsBehavior: Flickable.StopAtBounds
-                                clip: true
-
-                                Text {
-                                    id: previewText
-                                    width: parent.width
-                                    text: previewHelper.highlightedContent
-                                    textFormat: Text.RichText
-                                    wrapMode: Text.NoWrap
-                                    color: FmTheme.palette.onSurfaceVariant
-                                    font.pointSize: FmTheme.font.size.xs
-                                    font.family: FmTheme.font.family.mono
-                                }
-                            }
-                        }
+                        entry: popupScope.selectedEntry
+                        windowState: root.windowState
                     }
                 }
 
@@ -500,34 +375,6 @@ Loader {
                 gitStatus: fuzzyModel.data(idx, FuzzyFinder.GitStatusRole),
                 isBinary:  fuzzyModel.data(idx, FuzzyFinder.IsBinaryRole),
             };
-        }
-
-        function _typeLabel(entry: var): string {
-            if (!entry || entry.name === undefined)
-                return "";
-            if (entry.isDir)
-                return qsTr("directory");
-            const name = entry.name + "";
-            const dot = name.lastIndexOf(".");
-            return (dot > 0 && dot < name.length - 1) ? name.substring(dot + 1) : qsTr("file");
-        }
-
-        // Map fff's git status string (porcelain-ish, e.g. "M ", "??", "A ") to the
-        // GitStatusBadge `{char, color, tooltip}` shape. Returns null when there is
-        // no status (badge hidden).
-        function _gitStatusObj(s: var): var {
-            if (!s || (s + "").trim().length === 0)
-                return null;
-            const code = (s + "").trim().charAt(0);
-            switch (code) {
-            case "M": return { char: "M", color: FmTheme.indicator.cut,       tooltip: qsTr("Modified") };
-            case "A": return { char: "A", color: FmTheme.indicator.selection, tooltip: qsTr("Added") };
-            case "D": return { char: "D", color: FmTheme.palette.error,        tooltip: qsTr("Deleted") };
-            case "R": return { char: "R", color: FmTheme.indicator.yank,       tooltip: qsTr("Renamed") };
-            case "?": return { char: "?", color: FmTheme.palette.outline,      tooltip: qsTr("Untracked") };
-            case "!": return { char: "!", color: FmTheme.palette.outline,      tooltip: qsTr("Ignored") };
-            default:  return { char: code, color: FmTheme.palette.outline,     tooltip: s + "" };
-            }
         }
 
         function _highlightPath(path: string, indices: var): string {
