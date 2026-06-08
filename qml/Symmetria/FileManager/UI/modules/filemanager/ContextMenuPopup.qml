@@ -577,6 +577,8 @@ Loader {
                                         spacing: 1
 
                                         StyledText {
+                                            width: parent.width
+                                            elide: Text.ElideRight
                                             text: appDelegate.appName
                                             color: FmTheme.palette.onSurface
                                             font.pointSize: FmTheme.font.size.sm
@@ -584,6 +586,8 @@ Loader {
                                         }
 
                                         StyledText {
+                                            width: parent.width
+                                            elide: Text.ElideRight
                                             text: appDelegate.appDesktopId
                                             color: FmTheme.palette.onSurfaceVariant
                                             font.pointSize: FmTheme.font.size.xs

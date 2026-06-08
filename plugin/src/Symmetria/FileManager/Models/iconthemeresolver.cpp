@@ -345,16 +345,25 @@ QString IconThemeResolver::resolveApp(const QString& iconName)
     }
 
     // Legacy flat /usr/share/pixmaps fallback (pre-theme-spec app icons).
+    // Use lookupName (extension-stripped) for the extension-appending variants so that
+    // a sloppy "Icon=foo.png" entry doesn't produce "foo.png.png" paths. The bare
+    // iconName (original, possibly with extension) is tried last to cover files stored
+    // without a recognised image extension.
     if (result.isEmpty()) {
         static const QStringList exts = {
-            QStringLiteral(".png"), QStringLiteral(".svg"), QStringLiteral(".xpm"), QString()
+            QStringLiteral(".png"), QStringLiteral(".svg"), QStringLiteral(".xpm")
         };
         for (const auto& ext : exts) {
-            const QString path = QStringLiteral("/usr/share/pixmaps/") + iconName + ext;
+            const QString path = QStringLiteral("/usr/share/pixmaps/") + lookupName + ext;
             if (QFileInfo::exists(path)) {
                 result = path;
                 break;
             }
+        }
+        if (result.isEmpty()) {
+            const QString path = QStringLiteral("/usr/share/pixmaps/") + iconName;
+            if (QFileInfo::exists(path))
+                result = path;
         }
     }
 

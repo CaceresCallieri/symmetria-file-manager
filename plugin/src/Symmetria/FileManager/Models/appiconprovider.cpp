@@ -16,10 +16,13 @@ AppIconProvider::AppIconProvider(QObject* parent)
 
 // XDG application directories in priority order: $XDG_DATA_HOME/applications first,
 // then each $XDG_DATA_DIRS/applications. QStandardPaths::ApplicationsLocation
-// already expands to exactly this list.
-static QStringList applicationDirs()
+// already expands to exactly this list. Cached once — matches the iconSearchPaths()
+// pattern in iconthemeresolver.cpp for consistency.
+static const QStringList& applicationDirs()
 {
-    return QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation);
+    static const QStringList dirs =
+        QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation);
+    return dirs;
 }
 
 QString AppIconProvider::locateDesktopFile(const QString& desktopId)
