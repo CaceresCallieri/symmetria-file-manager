@@ -89,6 +89,7 @@ implementation inspired by Yazi's UX philosophy — no Yazi runtime dependency.
 - [Always clear QML cache after edits](feedback_clear_qml_cache.md) — run `rm -rf ~/.cache/quickshell/qmlcache` yourself after any QML edit, don't leave it to the user
 - [Keyboard features can't be tested via synthetic input](feedback_keyboard_testing_synthetic_input.md) — hyprctl sendshortcut/wtype don't reach the Qt surface; verify chords/nav via real keyboard or QTest
 - [QML dev tooling already verified complete](feedback_qml_dev_tooling_verified.md) — qmlls6 LSP + qmltypes + qmllint all working in Neovim; don't re-investigate; Qt's AI Assistant is Qt-Creator-only (irrelevant here)
+- [Deploy new UI components before linting](feedback_ui_module_deploy_for_qmllint.md) — a NEW component in Symmetria.FileManager.UI fails the gate ("anchors unresolved" on consumers) until `sudo cmake --install plugin/build` refreshes the /usr/lib snapshot qmllint resolves from
 
 ## QML Quirks (see QUIRKS.md)
 - [QML Loader quirks](feedback_qml_loader_quirks.md) — anchors.margins silently fails in Loader sourceComponents; always use explicit x/y/width/height and explicit imports
