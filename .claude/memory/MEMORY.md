@@ -87,6 +87,8 @@ implementation inspired by Yazi's UX philosophy — no Yazi runtime dependency.
 
 ## Workflow Feedback
 - [Always clear QML cache after edits](feedback_clear_qml_cache.md) — run `rm -rf ~/.cache/quickshell/qmlcache` yourself after any QML edit, don't leave it to the user
+- [Keyboard features can't be tested via synthetic input](feedback_keyboard_testing_synthetic_input.md) — hyprctl sendshortcut/wtype don't reach the Qt surface; verify chords/nav via real keyboard or QTest
+- [QML dev tooling already verified complete](feedback_qml_dev_tooling_verified.md) — qmlls6 LSP + qmltypes + qmllint all working in Neovim; don't re-investigate; Qt's AI Assistant is Qt-Creator-only (irrelevant here)
 
 ## QML Quirks (see QUIRKS.md)
 - [QML Loader quirks](feedback_qml_loader_quirks.md) — anchors.margins silently fails in Loader sourceComponents; always use explicit x/y/width/height and explicit imports
