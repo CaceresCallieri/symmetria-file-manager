@@ -29,7 +29,6 @@ ColumnLayout {
     Timer {
         id: previewDebounce
         interval: 150
-        repeat: false
         onTriggered: root._previewPath = root.entry?.fullPath ?? ""
     }
 

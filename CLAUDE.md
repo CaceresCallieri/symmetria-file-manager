@@ -51,7 +51,7 @@ cmake --build build --parallel $(nproc)
 QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
 ```
 
-Three test executables cover the async model classes: `FileSystemModelTest` (sorting, filtering, file watcher diffs), `ArchivePreviewModelTest` (entry caps, truncation, corruption handling), `SyntaxHighlightHelperTest` (highlighting output, binary detection, truncation). `QT_QPA_PLATFORM=offscreen` is required because `QTextDocument` and `QImageReader` need `QGuiApplication`.
+Four test executables cover the async model classes: `FileSystemModelTest` (sorting, filtering, file watcher diffs), `ArchivePreviewModelTest` (entry caps, truncation, corruption handling), `SyntaxHighlightHelperTest` (highlighting output, binary detection, truncation), `FileInfoTest` (path → entry bridge, 6 cases). `QT_QPA_PLATFORM=offscreen` is required because `QTextDocument` and `QImageReader` need `QGuiApplication`.
 
 To skip tests when doing a production build: `cmake -B build -DBUILD_TESTING=OFF`
 
@@ -135,14 +135,10 @@ If the plugin is not installed, Symmetria Shell's wallpaper picker and file dial
 
 ### Preview Routing (shared)
 
-- **`PreviewContent.qml`** is the single file-preview router. Given a
-  `FileSystemEntry`-shaped `entry`, it picks the type (image/PDF, video, audio,
-  text/code, archive, spreadsheet, directory, fallback) and stacks one Loader per
-  type. It is shared by **both** the normal pane (`PreviewPanel.qml`) and the
-  fuzzy finder's info pane (`FuzzyFinderInfoPanel.qml`), so a new preview type
-  added here appears in both consumers — do NOT re-implement type routing in a
-  consumer. The leaf previews (`ImagePreview`, `TextPreview`, …) consume only
-  `entry`; they are agnostic to where it comes from.
+- **`PreviewContent.qml`** is the single file-preview router shared by the
+  normal pane (`PreviewPanel.qml`) and the fuzzy finder's info pane
+  (`FuzzyFinderInfoPanel.qml`). A new preview type added here appears in both
+  consumers automatically — do NOT re-implement type routing in a consumer.
 - The two consumers differ only in how they obtain the `entry`: `PreviewPanel`
   has a real `FileSystemEntry` from its `FileSystemModel`; the finder has only a
   path, so `FuzzyFinderInfoPanel` mints one via the `FileInfo` element. Both

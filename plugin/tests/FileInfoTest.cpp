@@ -90,6 +90,7 @@ private slots:
         QVERIFY(e != nullptr);
         QCOMPARE(e->isDir(), false);
         QCOMPARE(e->isImage(), false);
+        QCOMPARE(e->isVideo(), false);
         QCOMPARE(e->mimeType(), QStringLiteral("text/plain"));
     }
 
@@ -144,6 +145,28 @@ private slots:
         QVERIFY(e != nullptr);
         QCOMPARE(e->name(), QStringLiteral("stale_b.txt"));
         QCOMPARE(e->isImage(), false);
+    }
+
+    void nonexistentPathDegradesGracefully()
+    {
+        // buildCachedEntryData degrades gracefully for paths that do not exist
+        // (e.g. a file deleted between the fuzzy finder scan and the preview).
+        // The entry should still be produced (QFileInfo does not throw for missing
+        // paths) but reflect the missing state: size <= 0, isImage/isVideo false.
+        const QString missingPath = m_tmpDir.path() + "/does_not_exist.txt";
+        QVERIFY(!QFile::exists(missingPath));
+
+        FileInfo fi;
+        fi.setPath(missingPath);
+        QVERIFY(waitForReady(fi));
+
+        // An entry IS produced — no nullptr / crash — just with degenerate metadata.
+        auto* e = fi.entry();
+        QVERIFY(e != nullptr);
+        QCOMPARE(e->isDir(), false);
+        QCOMPARE(e->isImage(), false);
+        QCOMPARE(e->isVideo(), false);
+        QVERIFY(e->size() <= 0);
     }
 };
 
