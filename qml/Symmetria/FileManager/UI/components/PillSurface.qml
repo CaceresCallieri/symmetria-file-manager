@@ -34,6 +34,18 @@ import QtQuick.Effects
 // Shadow infra is Qt6-native RectangularShadow (QtQuick.Effects) — no Qt5Compat
 // GraphicalEffects, no custom shaders. Available since Qt 6.9 (CI floor).
 //
+// GOTCHA — shadows render OUTSIDE the pill bounds. The two RectangularShadows
+// are offset + blurred, so they paint into the area AROUND pillBody, beyond
+// this component's own rect. Two consequences:
+//   1. Any ANCESTOR with `clip: true` will cut the soft shadow edges off,
+//      leaving a flat, sliced-looking pill. If a shadow looks chopped, search
+//      up the parent chain for a clip — do NOT "fix" it by shrinking the blur.
+//   2. The host Item (a bar/card) must leave margin around the pill for the
+//      shadow to occupy (e.g. StatusBar's anchors.*Margin insets, the bars'
+//      implicitHeight padding). A pill anchored flush to a tight parent has
+//      nowhere to cast its shadow.
+// This is inherent to drop-shadow-style depth, not a bug to engineer around.
+//
 // To retune the aesthetic for ALL pills at once, edit the property defaults
 // here; consumers that override a property (e.g. TabBar driving the shadow
 // alphas off the active state) keep working because the public API is stable.
