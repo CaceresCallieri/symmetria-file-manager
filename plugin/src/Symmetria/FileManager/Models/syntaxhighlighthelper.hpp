@@ -81,6 +81,10 @@ private:
 
     void loadFile();
 
+    // Returns the "Wine" preview theme (mirrors the user's NeoVim colorscheme),
+    // falling back to KF6's built-in dark theme if the embedded theme fails to load.
+    [[nodiscard]] KSyntaxHighlighting::Theme previewTheme() const;
+
     // Pure computation — safe to call from any thread.
     static HighlightResult computeHighlight(
         const QString& path,

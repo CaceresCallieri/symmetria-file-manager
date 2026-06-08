@@ -32,6 +32,18 @@ target_include_directories(symmetria-filemanager-models PRIVATE
     "${CMAKE_SOURCE_DIR}/third_party/fff/crates/fff-c/include"
 )
 
+# Embed the "Wine" syntax-highlighting theme (mirrors the user's NeoVim Lush
+# colorscheme) directly into the plugin .so as a Qt resource. SyntaxHighlightHelper
+# registers ":/symmetria-fm-syntax" as a KSyntaxHighlighting custom search path,
+# which scans the "themes/" subfolder beneath it — hence the resource path
+# ":/symmetria-fm-syntax/themes/wine.theme". Embedding (vs installing to an XDG
+# data dir) means every consumer of this plugin inherits the theme with no
+# install-path coordination, mirroring how KF6 ships its own built-in themes.
+qt_add_resources(symmetria-filemanager-models "syntax_themes"
+    PREFIX "/symmetria-fm-syntax"
+    FILES themes/wine.theme
+)
+
 # libfff_c.so is co-installed next to this module (see install rule below), so
 # the loader must look beside the library. Without this, EVERY consumer of the
 # plugin (the FM, Symmetria Shell's wallpaper picker/file dialog, Symmetria-IDE)

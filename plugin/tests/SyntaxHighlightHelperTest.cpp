@@ -66,6 +66,29 @@ private slots:
         QVERIFY2(!html.contains("color:#000000"), "Black color detected — theme/definition order may be wrong");
     }
 
+    void usesWineThemeColors()
+    {
+        // The preview must use the custom "Wine" theme (mirroring the user's
+        // NeoVim colorscheme), NOT KF6's built-in Breeze Dark. Regression guard
+        // for the call site in loadFile(): if previewTheme() is bypassed (e.g.
+        // reverted to defaultTheme()), these wine-specific hexes vanish.
+        //
+        // Markdown 'Header H*' maps to the Function text-style; Wine paints
+        // Function #fdd888 — a color Breeze Dark never emits, so its presence
+        // proves the Wine theme is in effect end-to-end.
+        const QString path = writeFile(m_tmpDir, "wine_check.md",
+            "# Heading\n\nA `code` span and a string.\n\n1. item\n");
+
+        SyntaxHighlightHelper helper;
+        helper.setFilePath(path);
+        QVERIFY(waitForContent(helper));
+
+        const QString html = helper.highlightedContent();
+        QVERIFY2(html.contains("color:#fdd888"),
+            "Wine 'Function' color (markdown heading) missing — preview is not "
+            "using the Wine theme (previewTheme() likely bypassed in loadFile)");
+    }
+
     void htmlContainsExpectedTags()
     {
         const QString path = writeFile(m_tmpDir, "tags.cpp",

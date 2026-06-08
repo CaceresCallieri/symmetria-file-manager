@@ -16,7 +16,27 @@
 namespace symmetria::filemanager::models {
 
 SyntaxHighlightHelper::SyntaxHighlightHelper(QObject* parent)
-    : QObject(parent) {}
+    : QObject(parent) {
+    // Register the embedded "Wine" theme's resource root as a custom search path.
+    // KSyntaxHighlighting scans "<path>/themes/" beneath each custom path, so the
+    // theme at ":/symmetria-fm-syntax/themes/wine.theme" becomes discoverable as
+    // the theme named "Wine" (see its metadata.name). The .theme JSON is embedded
+    // in this plugin's .so via qt_add_resources (CMakeLists.txt) — no install step.
+    m_repository.addCustomSearchPath(QStringLiteral(":/symmetria-fm-syntax"));
+}
+
+// --------------------------------------------------------------------------
+// previewTheme — resolves the "Wine" preview theme that mirrors the user's
+// NeoVim Lush colorscheme. Falls back to KF6's built-in dark theme if the
+// embedded theme is missing or failed to parse, so previews never render with
+// black-on-black text.
+// --------------------------------------------------------------------------
+KSyntaxHighlighting::Theme SyntaxHighlightHelper::previewTheme() const {
+    const auto wine = m_repository.theme(QStringLiteral("Wine"));
+    if (wine.isValid())
+        return wine;
+    return m_repository.defaultTheme(KSyntaxHighlighting::Repository::DarkTheme);
+}
 
 QString SyntaxHighlightHelper::filePath() const { return m_filePath; }
 
@@ -81,8 +101,7 @@ void SyntaxHighlightHelper::loadFile() {
         def = m_repository.definitionForMimeType(
             mimeDb.mimeTypeForFile(path, QMimeDatabase::MatchExtension).name());
     }
-    const auto theme = m_repository.defaultTheme(
-        KSyntaxHighlighting::Repository::DarkTheme);
+    const auto theme = previewTheme();
 
     // Heavy work (file I/O + QTextDocument + rehighlight) runs off the GUI thread.
     const auto future = QtConcurrent::run([path, def, theme]() {
