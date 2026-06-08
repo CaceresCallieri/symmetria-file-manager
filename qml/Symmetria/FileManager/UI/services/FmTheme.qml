@@ -76,19 +76,25 @@ QtObject {
     property list<real> animCurveStandardDecel: [0, 0, 0, 1, 1, 1]
 
     // === Transparency ===
-    // Ghostty-style single-layer model: the WINDOW carries a pure-black tint
-    // at ~0.6 alpha (matches `background = #000000` + `background-opacity = 0.6`
-    // in ~/.config/ghostty/config), and PANELS stay fully transparent so they
-    // become "windows" onto that single backdrop. This is intentionally one
-    // alpha layer, not two — stacking panel tints on top of the backdrop
-    // compounds (`effective = 1 − (1 − layers)(1 − backdrop)`) and darkens the
-    // columns relative to the bars (PathBar/StatusBar/TabBar have no background
-    // of their own, so they'd stay clear while columns darken — visually
-    // inconsistent). See CLAUDE.md "Transparency model" for the full rationale.
+    // Solid-body model (macOS-Tahoe / GNOME-Files style): the Miller columns are
+    // SOLID rounded surfaces (built in MillerColumns.qml), so transparency
+    // survives only in the CHROME — the empty areas of the top/bottom bars around
+    // the clay pills, where the window backdrop shows through. The backdrop is a
+    // near-opaque black (~0.9 alpha) so that show-through is a subtle hint of
+    // wallpaper, not a wash. (Was 0.6 under the older Ghostty single-layer model,
+    // when the whole body was transparent onto the backdrop.)
+    //
+    // _transparencyLayers stays 0.0: the panels' internal backgrounds
+    // (ParentPanel / FileList / PreviewPanel each call
+    // FmTheme.layer(surfaceContainerLow)) remain fully transparent and let the
+    // MillerColumns surface behind them show. Do NOT raise it to tint panels —
+    // the solid fill is owned by the column surfaces, and a layer tint would
+    // compound with the backdrop in the chrome gaps. See CLAUDE.md
+    // "Transparency model" for the full rationale.
     //
     // Decoupled from shell.json — Symmetria Shell's transparency is governed
     // by its own logic and should not propagate here.
-    readonly property color windowBackdrop: Qt.rgba(0, 0, 0, 0.6)
+    readonly property color windowBackdrop: Qt.rgba(0, 0, 0, 0.9)
     readonly property real _transparencyLayers: 0.0
 
     // Returns `c` tinted with the panel-layer alpha (currently 0.0 = fully
