@@ -93,7 +93,13 @@ Loader {
                 // Reject header lines like "Registered associations:" which contain spaces
                 if (trimmed.endsWith(".desktop") && !trimmed.includes(" ") && !seen[trimmed]) {
                     seen[trimmed] = true;
-                    apps.push({ desktopId: trimmed, name: _desktopIdToName(trimmed) });
+                    // Resolve the real themed app icon once, here, rather than in the
+                    // delegate binding (the list is small and AppIconProvider caches).
+                    apps.push({
+                        desktopId: trimmed,
+                        name: _desktopIdToName(trimmed),
+                        iconPath: AppIconProvider.iconForDesktopId(trimmed)
+                    });
                 }
             }
             appList = apps;
@@ -483,17 +489,28 @@ Loader {
                             Layout.fillWidth: true
                             Layout.preferredHeight: Math.min(contentHeight, 250)
                             clip: true
+                            spacing: FmTheme.spacing.sm
                             model: popupScope.filteredApps
                             currentIndex: popupScope.appIndex
                             boundsBehavior: Flickable.StopAtBounds
 
                             delegate: StyledRect {
+                                id: appDelegate
+
+                                // Read the per-row model data once, here, into qualified
+                                // properties — children reference appDelegate.* instead of
+                                // the unqualified context `modelData` (no ComponentBehavior:
+                                // Bound on this delegate, so a bare modelData is unresolvable).
+                                readonly property string appName: modelData.name ?? ""
+                                readonly property string appDesktopId: modelData.desktopId ?? ""
+                                readonly property string appIconPath: modelData.iconPath ?? ""
+
                                 width: appListView.width
                                 radius: FmTheme.rounding.sm
                                 color: index === popupScope.appIndex
                                     ? Qt.alpha(FmTheme.palette.primary, 0.12)
                                     : "transparent"
-                                implicitHeight: appRow.implicitHeight + FmTheme.padding.sm * 2
+                                implicitHeight: appRow.implicitHeight + FmTheme.padding.md * 2
 
                                 Behavior on color { CAnim {} }
 
@@ -505,27 +522,69 @@ Loader {
                                     anchors.verticalCenter: parent.verticalCenter
                                     anchors.leftMargin: FmTheme.padding.lg
                                     anchors.rightMargin: FmTheme.padding.lg
-                                    spacing: FmTheme.spacing.sm
+                                    spacing: FmTheme.spacing.lg
 
-                                    MaterialIcon {
-                                        text: "apps"
-                                        color: FmTheme.palette.onSurfaceVariant
-                                        font.pointSize: FmTheme.font.size.md
+                                    // Fixed-size icon cell — a real themed app icon when
+                                    // resolved, the generic "apps" glyph otherwise. The cell
+                                    // is HARD-pinned (min == preferred == max) so the layout
+                                    // cannot grow it toward a child's implicit size; that
+                                    // pinning is what keeps every app name's left edge aligned
+                                    // regardless of icon/glyph natural dimensions.
+                                    Item {
+                                        readonly property real cellSize: Math.round(FmTheme.font.size.md * 1.6)
+
+                                        Layout.minimumWidth: cellSize
+                                        Layout.preferredWidth: cellSize
+                                        Layout.maximumWidth: cellSize
+                                        Layout.minimumHeight: cellSize
+                                        Layout.preferredHeight: cellSize
+                                        Layout.maximumHeight: cellSize
+                                        Layout.alignment: Qt.AlignVCenter
+
+                                        Image {
+                                            anchors.fill: parent
+                                            source: appDelegate.appIconPath !== ""
+                                                ? "file://" + appDelegate.appIconPath
+                                                : ""
+                                            visible: appDelegate.appIconPath !== ""
+                                            sourceSize: Qt.size(width * 2, height * 2)
+                                            fillMode: Image.PreserveAspectFit
+                                            asynchronous: true
+                                            smooth: true
+                                        }
+
+                                        MaterialIcon {
+                                            anchors.centerIn: parent
+                                            visible: appDelegate.appIconPath === ""
+                                            text: "apps"
+                                            color: FmTheme.palette.onSurfaceVariant
+                                            font.pointSize: FmTheme.font.size.md
+                                        }
                                     }
 
-                                    ColumnLayout {
+                                    // Plain Column (not ColumnLayout): a nested ColumnLayout
+                                    // here was NOT being stretched by the RowLayout — it
+                                    // collapsed to its widest child (the desktopId) and the
+                                    // row's slack was distributed around it, centering the
+                                    // block so each row's name started at a different x. A
+                                    // plain Column is a regular Item, so `Layout.fillWidth`
+                                    // stretches it (exactly like the fillWidth StyledText in
+                                    // the actions delegate above) and it left-packs both lines
+                                    // at a constant x.
+                                    Column {
                                         Layout.fillWidth: true
-                                        spacing: 0
+                                        Layout.alignment: Qt.AlignVCenter
+                                        spacing: 1
 
                                         StyledText {
-                                            text: modelData.name
+                                            text: appDelegate.appName
                                             color: FmTheme.palette.onSurface
                                             font.pointSize: FmTheme.font.size.sm
                                             font.weight: Font.Medium
                                         }
 
                                         StyledText {
-                                            text: modelData.desktopId
+                                            text: appDelegate.appDesktopId
                                             color: FmTheme.palette.onSurfaceVariant
                                             font.pointSize: FmTheme.font.size.xs
                                             font.family: FmTheme.font.family.mono
@@ -535,7 +594,7 @@ Loader {
 
                                 StateLayer {
                                     onClicked: {
-                                        openWithProcess.command = ["gio", "launch", modelData.desktopId, popupScope.targetPath];
+                                        openWithProcess.command = ["gio", "launch", appDelegate.appDesktopId, popupScope.targetPath];
                                         openWithProcess.start();
                                         root.windowState.closeModal();
                                     }

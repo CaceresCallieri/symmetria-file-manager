@@ -62,6 +62,7 @@ QtObject {
     property QtObject spacing: QtObject {
         property real sm: 3
         property real md: 6
+        property real lg: 10
     }
 
     property QtObject padding: QtObject {

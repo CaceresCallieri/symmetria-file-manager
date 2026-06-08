@@ -44,6 +44,8 @@ target_link_libraries(FileInfoTest PRIVATE Qt6::Concurrent)
 add_model_test(PreviewImageHelperTest)
 target_link_libraries(PreviewImageHelperTest PRIVATE Qt6::Concurrent)
 
+add_model_test(AppIconProviderTest)
+
 add_model_test(ShellRunnerTest)
 
 add_model_test(FileWatcherTest)

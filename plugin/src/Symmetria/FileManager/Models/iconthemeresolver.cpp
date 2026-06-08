@@ -115,6 +115,7 @@ IconThemeResolver::ThemeInfo IconThemeResolver::parseTheme(const QString& themeN
     };
     QList<DirEntry> mimeDirs;
     QList<DirEntry> placesDirs;
+    QList<DirEntry> appsDirs;
 
     const auto dirList = directories.split(QLatin1Char(','), Qt::SkipEmptyParts);
     for (const auto& dir : dirList) {
@@ -125,8 +126,9 @@ IconThemeResolver::ThemeInfo IconThemeResolver::parseTheme(const QString& themeN
 
         const bool isMime = context.compare(QStringLiteral("MimeTypes"), Qt::CaseInsensitive) == 0;
         const bool isPlaces = context.compare(QStringLiteral("Places"), Qt::CaseInsensitive) == 0;
+        const bool isApps = context.compare(QStringLiteral("Applications"), Qt::CaseInsensitive) == 0;
 
-        if (!isMime && !isPlaces)
+        if (!isMime && !isPlaces && !isApps)
             continue;
 
         const bool isScalable = type.compare(QStringLiteral("Scalable"), Qt::CaseInsensitive) == 0;
@@ -134,8 +136,10 @@ IconThemeResolver::ThemeInfo IconThemeResolver::parseTheme(const QString& themeN
 
         if (isMime)
             mimeDirs.append(entry);
-        else
+        else if (isPlaces)
             placesDirs.append(entry);
+        else
+            appsDirs.append(entry);
     }
 
     // Sort: scalable first, then by descending size (prefer larger fixed icons).
@@ -146,15 +150,19 @@ IconThemeResolver::ThemeInfo IconThemeResolver::parseTheme(const QString& themeN
     };
     std::sort(mimeDirs.begin(), mimeDirs.end(), sortFn);
     std::sort(placesDirs.begin(), placesDirs.end(), sortFn);
+    std::sort(appsDirs.begin(), appsDirs.end(), sortFn);
 
     for (const auto& d : mimeDirs)
         info.mimeDirs.append(d.path);
     for (const auto& d : placesDirs)
         info.placesDirs.append(d.path);
+    for (const auto& d : appsDirs)
+        info.appsDirs.append(d.path);
 
     qCDebug(lcIconTheme) << "Parsed theme" << themeName
                            << "mimes:" << info.mimeDirs.size() << info.mimeDirs
                            << "places:" << info.placesDirs.size() << info.placesDirs
+                           << "apps:" << info.appsDirs.size() << info.appsDirs
                            << "inherits:" << info.inherits;
     return info;
 }
@@ -199,13 +207,29 @@ void IconThemeResolver::ensureInitialised()
     qCDebug(lcIconTheme) << "Active icon theme:" << s_activeTheme;
 }
 
-QString IconThemeResolver::findIcon(const ThemeInfo& theme, const QString& iconName)
+QString IconThemeResolver::findInTheme(const ThemeInfo& theme, const QString& iconName, Category cat)
 {
     if (theme.basePath.isEmpty())
         return {};
 
-    // Determine which directory list to search based on the icon name.
-    // "folder*" icons live in places; everything else in mimes.
+    if (cat == Category::Apps) {
+        // Application icons may ship as SVG, PNG, or (rarely) XPM — try each in
+        // every apps/ size dir (already preference-sorted: scalable, then largest).
+        static const QStringList exts = {
+            QStringLiteral(".svg"), QStringLiteral(".png"), QStringLiteral(".xpm")
+        };
+        for (const auto& dir : theme.appsDirs) {
+            for (const auto& ext : exts) {
+                const QString path = theme.basePath + QLatin1Char('/') + dir + QLatin1Char('/') + iconName + ext;
+                if (QFileInfo::exists(path))
+                    return path;
+            }
+        }
+        return {};
+    }
+
+    // MimePlaces: determine which directory list to search based on the icon name.
+    // "folder*" icons live in places; everything else in mimes. SVG only.
     const bool isPlacesIcon = iconName.startsWith(QStringLiteral("folder"))
                            || iconName == QStringLiteral("user-home")
                            || iconName == QStringLiteral("user-desktop")
@@ -230,8 +254,8 @@ QString IconThemeResolver::findIcon(const ThemeInfo& theme, const QString& iconN
     return {};
 }
 
-QString IconThemeResolver::findIconRecursive(const QString& themeName, const QString& iconName,
-                                             QSet<QString>& visited)
+QString IconThemeResolver::findRecursive(const QString& themeName, const QString& iconName,
+                                         Category cat, QSet<QString>& visited)
 {
     if (visited.contains(themeName))
         return {};
@@ -242,13 +266,13 @@ QString IconThemeResolver::findIconRecursive(const QString& themeName, const QSt
         s_themes.insert(themeName, parseTheme(themeName));
 
     const auto& theme = s_themes[themeName];
-    const QString result = findIcon(theme, iconName);
+    const QString result = findInTheme(theme, iconName, cat);
     if (!result.isEmpty())
         return result;
 
     // Walk the inheritance chain.
     for (const auto& parent : theme.inherits) {
-        const QString inherited = findIconRecursive(parent, iconName, visited);
+        const QString inherited = findRecursive(parent, iconName, cat, visited);
         if (!inherited.isEmpty())
             return inherited;
     }
@@ -272,10 +296,71 @@ QString IconThemeResolver::resolve(const QString& iconName)
 
     // Resolve through the theme inheritance chain.
     QSet<QString> visited;
-    const QString result = findIconRecursive(s_activeTheme, iconName, visited);
+    const QString result = findRecursive(s_activeTheme, iconName, Category::MimePlaces, visited);
 
     s_cache.insert(iconName, result);
     qCDebug(lcIconTheme) << "Resolved" << iconName << "->" << (result.isEmpty() ? QStringLiteral("(not found)") : result);
+    return result;
+}
+
+QString IconThemeResolver::resolveApp(const QString& iconName)
+{
+    if (iconName.isEmpty())
+        return {};
+
+    // An absolute Icon= path is used verbatim (Steam, Flatpak, some bundled apps
+    // write a full path rather than a theme name).
+    if (iconName.startsWith(QLatin1Char('/')))
+        return QFileInfo::exists(iconName) ? iconName : QString();
+
+    auto it = s_appCache.constFind(iconName);
+    if (it != s_appCache.constEnd())
+        return it.value();
+
+    // The Icon= key should be an extension-less name; some sloppy entries include
+    // one (e.g. "foo.png"). Strip a known image extension for theme lookups so we
+    // don't search for "foo.png.svg"; the literal form is still tried in pixmaps.
+    QString lookupName = iconName;
+    for (const auto& ext : {QStringLiteral(".png"), QStringLiteral(".svg"), QStringLiteral(".xpm")}) {
+        if (lookupName.endsWith(ext, Qt::CaseInsensitive)) {
+            lookupName.chop(ext.size());
+            break;
+        }
+    }
+
+    ensureInitialised();
+
+    QString result;
+    if (!s_activeTheme.isEmpty()) {
+        QSet<QString> visited;
+        result = findRecursive(s_activeTheme, lookupName, Category::Apps, visited);
+    }
+
+    // hicolor is the XDG-mandated implicit fallback theme; most application icons
+    // are installed there regardless of the user's active theme. Search it
+    // explicitly in case the active theme does not declare it via Inherits.
+    if (result.isEmpty()) {
+        QSet<QString> visited;
+        result = findRecursive(QStringLiteral("hicolor"), lookupName, Category::Apps, visited);
+    }
+
+    // Legacy flat /usr/share/pixmaps fallback (pre-theme-spec app icons).
+    if (result.isEmpty()) {
+        static const QStringList exts = {
+            QStringLiteral(".png"), QStringLiteral(".svg"), QStringLiteral(".xpm"), QString()
+        };
+        for (const auto& ext : exts) {
+            const QString path = QStringLiteral("/usr/share/pixmaps/") + iconName + ext;
+            if (QFileInfo::exists(path)) {
+                result = path;
+                break;
+            }
+        }
+    }
+
+    s_appCache.insert(iconName, result);
+    qCDebug(lcIconTheme) << "Resolved app icon" << iconName << "->"
+                         << (result.isEmpty() ? QStringLiteral("(not found)") : result);
     return result;
 }
 
