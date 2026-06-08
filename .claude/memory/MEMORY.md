@@ -1,5 +1,10 @@
 # Symmetria File Manager — Project Memory
 
+## ✅ Framework DECISION (2026-06-07): STAY ON QML — READ project_framework_evaluation FIRST after compaction
+- [Framework evaluation + DECISION](project_framework_evaluation.md) — **Resolved: keep the mature native Qt6/QML FM.** Tauri 2 pivot ABANDONED (web/WebKitGTK abstraction not worth it). Slint evaluated with a *measured* POC on the real Hyprland box and DECLINED — QML felt slightly better AND is already feature-complete, so a rewrite isn't worth it. Zed/GPUI ruled out (Hyprland window-map + compositor-CPU blockers, GPL fork). Full measurements + reasoning there.
+- [Tauri pivot (ARCHIVED)](project_tauri_pivot.md) — the now-abandoned Tauri experiment on the `tauri-pivot` branch / `app-tauri/` subdir. Reference only; NOT the active direction. Active FM work is the QML tree.
+- [Tauri testing workflow](feedback_tauri_testing_workflow.md) — ws7-silent test scripts (test-fm.sh / screenshot-ws7.sh); patterns still useful, but app-tauri is archived.
+
 ## Project Goal
 Build a keyboard-first graphical file manager as a FloatingWindow
 inside the Symmetria QuickShell desktop shell. Pure native Qt/QML/C++
