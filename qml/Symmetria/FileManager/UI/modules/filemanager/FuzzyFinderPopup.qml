@@ -87,6 +87,10 @@ Loader {
             scale: 0.1
             Component.onCompleted: scale = 1
 
+            Behavior on width {
+                Anim {}
+            }
+
             Behavior on scale {
                 NumberAnimation {
                     duration: FmTheme.animDuration
@@ -349,12 +353,17 @@ Loader {
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: FmTheme.spacing.sm
+                                // Compute the git status badge shape once and reuse it for
+                                // both the visible check and the status binding, avoiding
+                                // a double call to the _gitStatusObj switch statement.
+                                readonly property var _gitObj: popupScope._gitStatusObj(
+                                    popupScope.selectedEntry.gitStatus)
                                 MetaLabel { text: qsTr("Git") }
                                 Item { Layout.fillWidth: true }
                                 GitStatusBadge {
                                     id: gitBadge
-                                    visible: popupScope._gitStatusObj(popupScope.selectedEntry.gitStatus) !== null
-                                    status: popupScope._gitStatusObj(popupScope.selectedEntry.gitStatus) || ({ char: "?", color: FmTheme.palette.outline })
+                                    visible: parent._gitObj !== null
+                                    status: parent._gitObj || ({ char: "?", color: FmTheme.palette.outline })
                                 }
                                 MetaValue { text: "—"; visible: !gitBadge.visible }
                             }
@@ -392,14 +401,12 @@ Loader {
                                 boundsBehavior: Flickable.StopAtBounds
                                 clip: true
 
-                                TextEdit {
+                                Text {
                                     id: previewText
                                     width: parent.width
                                     text: previewHelper.highlightedContent
                                     textFormat: Text.RichText
-                                    readOnly: true
-                                    selectByMouse: false
-                                    wrapMode: TextEdit.NoWrap
+                                    wrapMode: Text.NoWrap
                                     color: FmTheme.palette.onSurfaceVariant
                                     font.pointSize: FmTheme.font.size.xs
                                     font.family: FmTheme.font.family.mono

@@ -38,7 +38,7 @@ systemctl --user restart symmetria-fm
 
 **Build dependencies (Arch):** `qt6-base qt6-declarative syntax-highlighting libarchive qxlsx-qt6 freexl qt6-imageformats rust`
 
-The fuzzy finder links the Rust **`fff`** engine (MIT), vendored as a git submodule at `plugin/third_party/fff` (pinned commit) and built via **Corrosion** (fetched by CMake at configure time). A Rust toolchain (`rust`/`cargo`) is therefore required. `build-plugin.sh` runs `git submodule update --init` automatically; a fresh clone otherwise needs `git submodule update --init --recursive`. fff's native deps (libgit2 via `git2`, LMDB) are vendored by their `-sys` crates — no extra system packages. To bump fff: `git -C plugin/third_party/fff checkout <rev>` then commit the submodule pointer.
+The fuzzy finder links the Rust **`fff`** engine (MIT), vendored as a git submodule at `plugin/third_party/fff` (pinned commit) and built via **Corrosion** (fetched by CMake at configure time). A Rust toolchain (`rust`/`cargo`) is therefore required. `build-plugin.sh` runs `git submodule update --init` automatically; a fresh clone otherwise needs `git submodule update --init --recursive`. fff's native deps (libgit2 via `git2`, LMDB) are vendored by their `-sys` crates — no extra system packages. To bump fff: `git -C plugin/third_party/fff checkout <rev>` then commit the submodule pointer. After checkout, re-run `cmake -B build` from `plugin/` so Corrosion rebuilds against the new source tree.
 
 ### Running Tests
 
@@ -57,7 +57,7 @@ To skip tests when doing a production build: `cmake -B build -DBUILD_TESTING=OFF
 
 ### CI
 
-GitHub Actions runs on every push/PR to `main` (`.github/workflows/ci.yml`). The workflow builds the C++ plugin and runs the QTest suite on Ubuntu 24.04. Qt 6.9 is installed via `jurplel/install-qt-action`; KF6SyntaxHighlighting and QXlsx are built from source and cached.
+GitHub Actions runs on every push/PR to `main` (`.github/workflows/ci.yml`). The workflow builds the C++ plugin and runs the QTest suite on Ubuntu 24.04. Qt 6.9 is installed via `jurplel/install-qt-action`; KF6SyntaxHighlighting and QXlsx are built from source and cached. The Rust toolchain is installed via `dtolnay/rust-toolchain@stable`; the submodule is checked out with `submodules: recursive`; the Cargo registry is cached by `actions/cache`.
 
 ### QML Changes
 
@@ -115,7 +115,7 @@ finding. C++ plugin changes use the ctest gate (see Build & Run → Running Test
 
 ### Plugin: `Symmetria.FileManager.Models` (C++ → QML)
 
-Five model classes in C++ namespace `symmetria::filemanager::models`:
+Six model classes in C++ namespace `symmetria::filemanager::models`:
 
 | Class | Purpose |
 |-------|---------|
@@ -124,6 +124,7 @@ Five model classes in C++ namespace `symmetria::filemanager::models`:
 | `SpreadsheetPreviewModel` | Reads .xlsx (QXlsx) and .xls (freexl) for preview |
 | `SyntaxHighlightHelper` | Syntax-highlighted HTML for text file previews via KF6 |
 | `PreviewImageHelper` | Image preview generation with background compositing + caching |
+| `FuzzyFinder` | Fuzzy file search backed by the Rust `fff` engine via its C ABI |
 
 ### Symmetria Shell Dependency (One-Sided)
 
@@ -316,8 +317,8 @@ Use `FileSystemModel.Alphabetical`, `.Modified`, `.Size`, `.Extension`, `.Natura
 
 **Fuzzy finder is backed by the Rust `fff` engine** (`fuzzyfinder.cpp`, QML element still `FuzzyFinder`). Non-obvious constraints a future change must respect:
 - **`extern "C"` around `#include "fff.h"`** — fff-c's cbindgen header has no `__cplusplus`/`extern "C"` guard, so without the wrapper the C++ compiler mangles every `fff_*` symbol and the link fails with undefined references. (Upstream fix would be `cpp_compat = true` in their cbindgen.toml.)
-- **One process-wide engine, not one per instance** (`FffEngine` singleton in `fuzzyfinder.cpp`). LMDB/heed refuses to open the same frecency-DB environment twice in a process ("environment already open"), so a per-`FuzzyFinder` engine would fail the moment a second finder/window opens. The singleton is created once and re-pointed with `fff_restart_index` on search-path change; it is never destroyed (process-lifetime). Trade-off: two finders open at once across windows share the one engine, so the last-acquired path wins — rare, transient, never crashes.
-- **`fff_search_mixed`, not `fff_search`** — the latter is files-only; mixed returns directories too (so directory navigation in the finder survives). Directory items carry a **trailing `/`** in their name/relativePath/fullPath.
+- **One process-wide engine, not one per instance** (`FffEngine` singleton in `fuzzyfinder.cpp`). LMDB/heed refuses to open the same frecency-DB environment twice in a process ("environment already open"), so a per-`FuzzyFinder` engine would fail the moment a second finder/window opens. The singleton is permanent and never destroyed; its internal engine handle is swapped via `fff_restart_index` when `searchPath` changes. Trade-off: two finders open at once across windows share the one engine, so the last-acquired path wins — rare, transient, never crashes.
+- **`fff_search_mixed`, not `fff_search`** — the latter is files-only; mixed returns directories too (so directory navigation in the finder survives). Directory items carry a **trailing `/`** in their `relativePath` and `fullPath` (e.g., `src/components/`). The `name` role (`display_name`) is the bare last segment without a trailing slash.
 - **`matchIndices` are recomputed in the C++ wrapper** (greedy subsequence) because fff's file-search result exposes no per-character match positions; the popup's highlighter depends on them.
 - **`showHidden` is inert** for this backend — `FffCreateOptions` has no hidden toggle; fff governs hidden/ignored files via its own ignore model. The property is kept only for QML binding compatibility.
-- **Frecency LMDB** lives at `~/.local/share/symmetria/fff/` (`frecency`/`history` dirs). `SYMMETRIA_FM_FRECENCY_DIR` overrides the location (tests isolate it into a temp dir; also a user relocation hook). `recordOpen(index, query)` → `fff_track_query` with the **absolute** path teaches frecency on file open.
+- **Frecency LMDB** lives at `~/.local/share/symmetria/fff/` (`frecency`/`history` dirs). `SYMMETRIA_FM_FRECENCY_DIR` overrides the location (tests isolate it into a temp dir; also a user relocation hook). The directory is created automatically by fff (via `fs::create_dir_all`) if it does not exist — no manual `mkdir` required. `recordOpen(index, query)` → `fff_track_query` with the **absolute** path teaches frecency on file open.

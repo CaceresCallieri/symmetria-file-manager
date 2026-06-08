@@ -2,9 +2,12 @@
 
 #include <qdir.h>
 #include <qfuturewatcher.h>
+#include <qlogging.h>
 #include <qmutex.h>
 #include <qstandardpaths.h>
 #include <qtconcurrentrun.h>
+
+#include <tuple>
 
 // fff-c's cbindgen header is plain C with no `extern "C"` guard, so it must be
 // wrapped to give the declarations C linkage — otherwise the C++ compiler mangles
@@ -16,6 +19,10 @@ extern "C" {
 namespace symmetria::filemanager::models {
 
 namespace {
+
+// fff-c's item_type field: 0 = file, 1 = directory (see fff.h line ~355).
+// No enum is provided in the C ABI; name the constant here to avoid magic integers.
+constexpr uint8_t kFffItemTypeDirectory = 1;
 
 // Greedy case-insensitive subsequence match of `query` against `path`, returning
 // the matched character positions in `path`. fff's file-search result carries no
@@ -102,6 +109,15 @@ public:
     // Ensure the engine exists and is indexing `basePath`. Returns the shared
     // handle (or null with `error` set). Runs on a worker thread; serialized so
     // the single LMDB env is never opened/mutated concurrently.
+    //
+    // The mutex is intentionally held across fff_wait_for_scan (up to 30s) rather
+    // than narrowed around the create/restart calls. Narrowing it would let a
+    // second concurrent acquire race in and call fff_create_instance_with against
+    // the same frecency env — the exact "environment already open in this program"
+    // LMDB failure this singleton exists to prevent. The wait only ever blocks a
+    // background worker thread (never the UI thread), and a second finder opening
+    // simultaneously is rare and transient, so the coarse lock is the correct
+    // trade-off. Do NOT narrow it. See CLAUDE.md "Critical Pitfalls".
     std::shared_ptr<void> acquire(const QString& basePath, QString& error) {
         QMutexLocker lock(&m_mutex);
 
@@ -136,7 +152,16 @@ public:
             fff_free_result(cr);
 
             FffResult* wr = fff_wait_for_scan(handle, 30000);
-            if (wr) fff_free_result(wr);
+            if (wr) {
+                // int_value: 1 = scan completed, 0 = timed out.
+                // A timeout means the initial index is still in progress; searches will
+                // return partial/frecency-only results until the scan finishes in background.
+                if (!wr->int_value)
+                    qWarning("FffEngine: initial scan timed out (30 s) for %s — "
+                             "results may be incomplete until the index finishes",
+                             basePath.toUtf8().constData());
+                fff_free_result(wr);
+            }
 
             // Never destroyed: the deleter exists for completeness but the static
             // singleton outlives the process, so it is effectively never invoked.
@@ -155,7 +180,12 @@ public:
                 return nullptr;
             }
             FffResult* wr = fff_wait_for_scan(m_engine.get(), 30000);
-            if (wr) fff_free_result(wr);
+            if (wr) {
+                if (!wr->int_value)
+                    qWarning("FffEngine: re-index scan timed out (30 s) for %s",
+                             basePath.toUtf8().constData());
+                fff_free_result(wr);
+            }
             m_currentBase = basePath;
         }
         return m_engine;
@@ -399,7 +429,7 @@ void FuzzyFinder::startSearch() {
                     SearchResultEntry e;
                     e.relativePath = QString::fromUtf8(it.relative_path);
                     e.name         = QString::fromUtf8(it.display_name);
-                    e.isDir        = (it.item_type == 1);
+                    e.isDir        = (it.item_type == kFffItemTypeDirectory);
                     e.fullPath     = base + QStringLiteral("/") + e.relativePath;
                     e.size         = static_cast<qint64>(it.size);
                     e.modified     = QDateTime::fromSecsSinceEpoch(static_cast<qint64>(it.modified));
@@ -447,7 +477,9 @@ void FuzzyFinder::recordOpen(int index, const QString& query) {
     const QByteArray p      = m_results.at(index).fullPath.toUtf8();
 
     // Fire-and-forget on a worker thread — frecency tracking must never block UI.
-    QtConcurrent::run([engine, q, p]() {
+    // The returned QFuture is deliberately discarded (cast to void to silence the
+    // [[nodiscard]] warning); we never await this write.
+    std::ignore = QtConcurrent::run([engine, q, p]() {
         FffResult* r = fff_track_query(engine.get(), q.constData(), p.constData());
         if (r) fff_free_result(r);
     });

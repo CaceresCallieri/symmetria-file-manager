@@ -15,6 +15,7 @@
 #include <QAbstractItemModelTester>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -32,9 +33,10 @@ private:
         const QString fullPath = basePath + u'/' + relativePath;
         QDir().mkpath(QFileInfo(fullPath).path());
         QFile f(fullPath);
-        f.open(QIODevice::WriteOnly);
-        f.write(contents);
-        f.close();
+        if (f.open(QIODevice::WriteOnly)) {
+            f.write(contents);
+            f.close();
+        }
     }
 
     // Wait for the async engine creation/index to finish (scanning -> false).
@@ -235,8 +237,10 @@ private slots:
         model.recordOpen(0, "openme");          // valid
         model.recordOpen(-1, "openme");         // out of range — no-op
         model.recordOpen(9999, "openme");       // out of range — no-op
-        QTest::qWait(200);                       // let the fire-and-forget task run
-
+        // No qWait needed: the model-unaffected assertion does not depend on the
+        // fire-and-forget frecency task completing. recordOpen() launches a
+        // QtConcurrent::run() that writes to LMDB independently; the model state
+        // is checked on the main thread before that task has any effect.
         QVERIFY(model.resultCount() > 0);        // model unaffected
     }
 
@@ -261,6 +265,11 @@ private slots:
 
     // Swapping searchPath before the first index finishes must discard the stale
     // engine — only the second directory's results survive.
+    //
+    // NOTE: FffEngine::acquire() serializes under a mutex, so the two acquire calls
+    // actually run sequentially (tmp1 completes, then tmp2 starts). What this test
+    // validates is that the generation counter correctly discards the tmp1 result even
+    // after sequential serialization — not true concurrent racing acquires.
     void staleSearchPathDiscarded() {
         QTemporaryDir tmp1;
         QVERIFY(tmp1.isValid());

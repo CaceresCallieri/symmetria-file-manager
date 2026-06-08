@@ -31,8 +31,18 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: cargo-${{ runner.os }}-${{ hashFiles('plugin/third_party/fff/Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
+          key: cargo-registry-${{ runner.os }}-${{ hashFiles('plugin/third_party/fff/Cargo.lock') }}
+          restore-keys: cargo-registry-${{ runner.os }}-
+
+      - name: Cache Cargo build artifacts
+        uses: actions/cache@v4
+        with:
+          # Corrosion writes Rust build artefacts into plugin/build/cargo/ (set via
+          # CORROSION_BUILD_DIR in Corrosion.cmake). Without this cache every CI run
+          # recompiles ~400 MB of Rust code even when fff source is unchanged.
+          path: plugin/build/cargo
+          key: cargo-build-${{ runner.os }}-${{ hashFiles('plugin/third_party/fff/Cargo.lock') }}
+          restore-keys: cargo-build-${{ runner.os }}-
 
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
