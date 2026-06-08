@@ -274,9 +274,10 @@ QString SyntaxHighlightHelper::buildHighlightedHtml(
             const QColor fg = range.format.foreground().color();
             const bool bold = (range.format.fontWeight() >= QFont::Bold);
             const bool italic = range.format.fontItalic();
+            const bool underline = range.format.fontUnderline();
             const QString escaped = blockText.mid(range.start, range.length).toHtmlEscaped();
 
-            if (fg.isValid() || bold || italic) {
+            if (fg.isValid() || bold || italic || underline) {
                 html += QStringLiteral("<span style=\"");
                 if (fg.isValid())
                     html += QStringLiteral("color:") + fg.name() + u';';
@@ -284,6 +285,8 @@ QString SyntaxHighlightHelper::buildHighlightedHtml(
                     html += QStringLiteral("font-weight:bold;");
                 if (italic)
                     html += QStringLiteral("font-style:italic;");
+                if (underline)
+                    html += QStringLiteral("text-decoration:underline;");
                 html += QStringLiteral("\">") + escaped + QStringLiteral("</span>");
             } else {
                 html += escaped;

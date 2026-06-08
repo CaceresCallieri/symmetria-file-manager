@@ -61,8 +61,8 @@ private slots:
 
         const QString html = helper.highlightedContent();
         QVERIFY(!html.isEmpty());
-        // The dark theme should NOT produce #000000 text colors — that's the
-        // symptom of reversed theme/definition order.
+        // The Wine preview theme should NOT produce #000000 text colors — that's the
+        // symptom of reversed theme/definition order (see QUIRKS.md §6).
         QVERIFY2(!html.contains("color:#000000"), "Black color detected — theme/definition order may be wrong");
     }
 
@@ -87,6 +87,21 @@ private slots:
         QVERIFY2(html.contains("color:#fdd888"),
             "Wine 'Function' color (markdown heading) missing — preview is not "
             "using the Wine theme (previewTheme() likely bypassed in loadFile)");
+    }
+
+    void previewThemeFallbackIsSafe()
+    {
+        // previewTheme() falls back to KF6's built-in DarkTheme when "Wine" fails
+        // to resolve. The embedded resource can't be unloaded at runtime, so we
+        // assert the fallback's two invariants directly: an unknown theme name is
+        // invalid (so the guard in previewTheme() actually triggers the fallback),
+        // and DarkTheme is always valid (so the fallback never yields black-on-black
+        // text). If either invariant breaks in a future KF6, the fallback is unsafe.
+        KSyntaxHighlighting::Repository repo;
+        QVERIFY2(!repo.theme(QStringLiteral("NoSuchTheme")).isValid(),
+            "an unknown theme name unexpectedly resolved — fallback guard would not trigger");
+        QVERIFY2(repo.defaultTheme(KSyntaxHighlighting::Repository::DarkTheme).isValid(),
+            "built-in DarkTheme is invalid — previewTheme() fallback would render unthemed");
     }
 
     void htmlContainsExpectedTags()
