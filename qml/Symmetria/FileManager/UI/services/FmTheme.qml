@@ -79,10 +79,12 @@ QtObject {
     // Solid-body model (macOS-Tahoe / GNOME-Files style): the Miller columns are
     // SOLID rounded surfaces (built in MillerColumns.qml), so transparency
     // survives only in the CHROME — the empty areas of the top/bottom bars around
-    // the clay pills, where the window backdrop shows through. The backdrop is a
-    // near-opaque black (~0.9 alpha) so that show-through is a subtle hint of
-    // wallpaper, not a wash. (Was 0.6 under the older Ghostty single-layer model,
-    // when the whole body was transparent onto the backdrop.)
+    // the clay pills and the gaps between cards, where the window backdrop shows
+    // through. The backdrop is pure black at 0.6 alpha — identical to Ghostty's
+    // `background = #000000` + `background-opacity = 0.6`
+    // (~/.config/ghostty/config) — so the FM's transparent regions and the
+    // terminal look the same wallpaper-darkness side by side. The solid column
+    // surfaces sit opaque on top; only the chrome and gaps reveal this backdrop.
     //
     // _transparencyLayers stays 0.0: the panels' internal backgrounds
     // (ParentPanel / FileList / PreviewPanel each call
@@ -94,7 +96,7 @@ QtObject {
     //
     // Decoupled from shell.json — Symmetria Shell's transparency is governed
     // by its own logic and should not propagate here.
-    readonly property color windowBackdrop: Qt.rgba(0, 0, 0, 0.9)
+    readonly property color windowBackdrop: Qt.rgba(0, 0, 0, 0.6)
     readonly property real _transparencyLayers: 0.0
 
     // Returns `c` tinted with the panel-layer alpha (currently 0.0 = fully
