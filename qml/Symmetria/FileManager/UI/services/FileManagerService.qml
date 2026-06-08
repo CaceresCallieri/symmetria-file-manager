@@ -160,18 +160,11 @@ QtObject {
         return !!_archiveMimeTypes[mimeType];
     }
 
-    function isTextFile(mimeType: string): bool {
-        if (mimeType.startsWith("text/")) return true;
-        return [
-            "application/json", "application/xml",
-            "application/x-shellscript", "application/x-yaml",
-            "application/toml", "application/javascript",
-            "application/typescript", "application/x-perl",
-            "application/x-ruby", "application/x-httpd-php",
-            "application/sql", "application/x-desktop",
-            "application/xhtml+xml",
-        ].includes(mimeType);
-    }
+    // NOTE: text-file classification is NOT done here. It lives in C++ as
+    // FileSystemEntry.isText (MIME inheritance from text/plain + a content sniff),
+    // the single source of truth — a QML mime-string list here would drift from it
+    // (it did: it predated the application/x-yaml → application/yaml rename, so YAML
+    // stopped previewing). Use `entry.isText` in the preview router instead.
 
     function isAudioFile(mimeType: string): bool {
         return mimeType.startsWith("audio/") || mimeType === "application/ogg";

@@ -143,6 +143,14 @@ If the plugin is not installed, Symmetria Shell's wallpaper picker and file dial
   has a real `FileSystemEntry` from its `FileSystemModel`; the finder has only a
   path, so `FuzzyFinderInfoPanel` mints one via the `FileInfo` element. Both
   debounce (150 ms) before driving the preview so fast j/k doesn't thrash it.
+- **Text classification is `FileSystemEntry.isText` (C++), the single source of
+  truth** — MIME inheritance from `text/plain` plus a NUL-byte content sniff for
+  unregistered/extensionless configs. The router uses it as the catch-all after
+  the specific binary types, so any non-binary file previews its contents (with
+  syntax highlighting only when a definition exists). Do NOT reintroduce a
+  QML-side mime-string list — the old one silently rotted (it predated the
+  `application/x-yaml` → `application/yaml` rename, which is why YAML stopped
+  previewing).
 
 ### State Architecture
 

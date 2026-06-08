@@ -168,6 +168,67 @@ private slots:
         QCOMPARE(e->isVideo(), false);
         QVERIFY(e->size() <= 0);
     }
+
+    void yamlIsTextViaMimeInheritance()
+    {
+        // Regression for the YAML-no-preview bug: Qt resolves *.yaml to
+        // application/yaml (NOT the legacy application/x-yaml), which inherits
+        // text/plain. isText must be true so the preview router shows it as text.
+        const QString path = writeText(m_tmpDir, "config.yaml", "key: value\nlist:\n  - a\n");
+
+        FileInfo fi;
+        fi.setPath(path);
+        QVERIFY(waitForReady(fi));
+
+        auto* e = fi.entry();
+        QVERIFY(e != nullptr);
+        QCOMPARE(e->isText(), true);
+        QCOMPARE(e->isImage(), false);
+        QCOMPARE(e->isDir(), false);
+    }
+
+    void plainTextIsText()
+    {
+        const QString path = writeText(m_tmpDir, "istext.txt", "hello\n");
+
+        FileInfo fi;
+        fi.setPath(path);
+        QVERIFY(waitForReady(fi));
+
+        QVERIFY(fi.entry() != nullptr);
+        QCOMPARE(fi.entry()->isText(), true);
+    }
+
+    void extensionlessConfigIsText()
+    {
+        // Config-ish files the glob can't place still resolve to text/plain via
+        // content detection (or the NUL-byte sniff fallback), so they preview
+        // their contents — the "always show text content" rule.
+        const QString path = writeText(m_tmpDir, "somerc", "# config\nsetting = 1\n");
+
+        FileInfo fi;
+        fi.setPath(path);
+        QVERIFY(waitForReady(fi));
+
+        QVERIFY(fi.entry() != nullptr);
+        QCOMPARE(fi.entry()->isText(), true);
+    }
+
+    void binaryImageIsNotText()
+    {
+        // A real binary (PNG) must NOT be misclassified as text — it keeps the
+        // image route, and the fallback card is reserved for NUL-containing
+        // unknowns. Guards the router's text-as-catch-all from swallowing binaries.
+        const QString path = writePng(m_tmpDir, "nottext.png");
+        QVERIFY(!path.isEmpty());
+
+        FileInfo fi;
+        fi.setPath(path);
+        QVERIFY(waitForReady(fi));
+
+        QVERIFY(fi.entry() != nullptr);
+        QCOMPARE(fi.entry()->isText(), false);
+    }
 };
 
 QTEST_MAIN(FileInfoTest)

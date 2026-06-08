@@ -52,12 +52,16 @@ Item {
             return _typeVideo;
         if (FileManagerService.isAudioFile(entry.mimeType))
             return _typeAudio;
-        if (FileManagerService.isTextFile(entry.mimeType))
-            return _typeText;
         if (FileManagerService.isArchiveFile(entry.mimeType))
             return _typeArchive;
         if (FileManagerService.isSpreadsheetFile(entry.mimeType))
             return _typeSpreadsheet;
+        // Text last — the catch-all for any non-binary file. `entry.isText` is
+        // computed in C++ (MIME inheritance from text/plain + a content sniff for
+        // unregistered/extensionless configs), so yaml/toml/csv/ini/etc. preview
+        // their contents even when no syntax definition exists for highlighting.
+        if (entry.isText)
+            return _typeText;
         return _typeFallback;
     }
 

@@ -2,6 +2,7 @@
 #include "iconthemeresolver.hpp"
 
 #include <qdiriterator.h>
+#include <qfile.h>
 #include <qfuturewatcher.h>
 #include <qtconcurrentrun.h>
 #include <sys/vfs.h>
@@ -77,6 +78,35 @@ unsigned long filesystemFsType(const QString& path) {
     return static_cast<unsigned long>(sfs.f_type);
 }
 
+// Reads the first 4 KiB and treats the file as text when it contains no NUL
+// byte. Used ONLY for types the MIME database can't classify, so unregistered /
+// extensionless configs (.ini, .conf, Dockerfile) still preview their contents.
+// Empty or unreadable files are NOT treated as text — the metadata fallback card
+// is more useful for a 0-byte unknown.
+static bool looksLikeText(const QString& path) {
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return false;
+    const QByteArray head = f.read(4096);
+    if (head.isEmpty())
+        return false;
+    return !head.contains('\0');
+}
+
+// True when a file's contents are plausibly text. Registered text formats are
+// detected structurally via MIME inheritance from text/plain (application/yaml →
+// text/plain, application/toml, text/csv, application/json, application/xml, …) —
+// no hand-maintained type list to drift as freedesktop renames types. Types the
+// database can't place (application/octet-stream or invalid) fall back to a
+// content sniff so extensionless configs still preview.
+static bool isTextLike(const QMimeType& mime, const QString& path) {
+    if (mime.inherits(QStringLiteral("text/plain")))
+        return true;
+    if (!mime.isValid() || mime.name() == QStringLiteral("application/octet-stream"))
+        return looksLikeText(path);
+    return false;
+}
+
 CachedEntryData buildCachedEntryData(
     const QString& path, const QString& relativePath, unsigned long parentFsType) {
     CachedEntryData data;
@@ -92,8 +122,10 @@ CachedEntryData buildCachedEntryData(
     // QMimeDatabase is thread-safe; QImageReader::canRead() is stack-local.
     if (!data.fileInfo.isDir()) {
         static const QMimeDatabase mimeDb;
-        data.mimeType = mimeDb.mimeTypeForFile(path).name();
+        const QMimeType mime = mimeDb.mimeTypeForFile(path);
+        data.mimeType = mime.name();
         data.isVideo = data.mimeType.startsWith(QStringLiteral("video/"));
+        data.isText = isTextLike(mime, path);
 
         if (path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)
             || path.endsWith(QStringLiteral(".png_"), Qt::CaseInsensitive)
@@ -127,6 +159,11 @@ FileSystemEntry::FileSystemEntry(const QString& path, const QString& relativePat
         return db.mimeTypeForFile(m_path).name();
       }())
     , m_isVideo(m_mimeType.startsWith(QStringLiteral("video/")))
+    , m_isText([this]() {
+        if (m_fileInfo.isDir()) return false;
+        static const QMimeDatabase db;
+        return isTextLike(db.mimeTypeForFile(m_path), m_path);
+      }())
     , m_iconPath(resolveIconPath(m_fileInfo, m_mimeType))
     , m_permissions(buildPermissions(m_fileInfo))
     , m_owner(m_fileInfo.owner())
@@ -140,6 +177,7 @@ FileSystemEntry::FileSystemEntry(CachedEntryData&& data, QObject* parent)
     , m_isImage(data.isImage)
     , m_mimeType(std::move(data.mimeType))
     , m_isVideo(data.isVideo)
+    , m_isText(data.isText)
     , m_iconPath(resolveIconPath(m_fileInfo, m_mimeType))
     , m_permissions(std::move(data.permissions))
     , m_owner(std::move(data.owner))
@@ -179,6 +217,7 @@ bool FileSystemEntry::isDir() const {
 
 bool FileSystemEntry::isImage() const { return m_isImage; }
 bool FileSystemEntry::isVideo() const { return m_isVideo; }
+bool FileSystemEntry::isText() const { return m_isText; }
 
 QDateTime FileSystemEntry::modifiedDate() const {
     return m_fileInfo.lastModified();

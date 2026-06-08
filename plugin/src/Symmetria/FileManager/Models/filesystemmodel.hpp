@@ -33,6 +33,7 @@ struct CachedEntryData {
     // Pre-computed in background thread to avoid GUI-thread I/O
     bool isImage = false;
     bool isVideo = false;
+    bool isText = false;
     QString mimeType;
 };
 
@@ -67,6 +68,11 @@ class FileSystemEntry : public QObject {
     Q_PROPERTY(bool isDir READ isDir CONSTANT)
     Q_PROPERTY(bool isImage READ isImage CONSTANT)
     Q_PROPERTY(bool isVideo READ isVideo CONSTANT)
+    // True for any file whose contents are plausibly text — registered text
+    // formats (via MIME inheritance from text/plain: yaml, toml, csv, json, …)
+    // OR unregistered/extensionless configs that sniff as NUL-free. Drives the
+    // preview router's text-preview fallback so such files always show contents.
+    Q_PROPERTY(bool isText READ isText CONSTANT)
     Q_PROPERTY(bool isSymlink READ isSymlink CONSTANT)
     Q_PROPERTY(bool isExecutable READ isExecutable CONSTANT)
     Q_PROPERTY(QDateTime modifiedDate READ modifiedDate CONSTANT)
@@ -91,6 +97,7 @@ public:
     [[nodiscard]] bool isDir() const;
     [[nodiscard]] bool isImage() const;
     [[nodiscard]] bool isVideo() const;
+    [[nodiscard]] bool isText() const;
     [[nodiscard]] bool isSymlink() const;
     [[nodiscard]] bool isExecutable() const;
     [[nodiscard]] QDateTime modifiedDate() const;
@@ -115,6 +122,7 @@ private:
     const bool m_isImage;
     const QString m_mimeType;    // Must precede m_isVideo and m_iconPath (init-order dependency)
     const bool m_isVideo;
+    const bool m_isText;
     const QString m_iconPath;
 
     const QString m_permissions; // Pre-computed Unix-style permission string (e.g. drwxr-xr-x)
