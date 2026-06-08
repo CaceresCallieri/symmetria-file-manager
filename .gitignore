@@ -33,3 +33,6 @@ compile_commands.json
 
 # macOS
 .DS_Store
+
+# Tooling scratch (playwright-cli writes this during agent browser checks)
+.playwright-cli/

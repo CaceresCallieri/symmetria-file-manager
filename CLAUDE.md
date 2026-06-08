@@ -91,6 +91,24 @@ symmetria-fm-cli open ~/Downloads
 # Inside Symmetria-IDE: <leader>e toggles the embedded overlay
 ```
 
+## Quality Gate (enforced by /seal and code-review)
+
+Project quality standards live in **`.claude/project-standards.md`**. Any change
+touching QML MUST pass the deterministic checker on its changed files:
+
+```bash
+tools/quality/check-qml.sh <changed .qml files>   # scoped mode for a commit
+tools/quality/check-qml.sh                          # full tree
+```
+
+It wraps `qmllint` (via `.qmllint.ini`) and adds god-file + dead-component
+detection (the "Knip + ESLint for QML"; no extra deps). The gate is **delta-based**:
+changed files must be clean (no `Warning`/`Error`, not a god file, no new dead
+component) and the full-tree baseline must not regress — see the baseline snapshot
+in `.claude/project-standards.md`. The **`/seal` and `code-review` workflows MUST
+run this on a change's QML and treat findings as blocking**, the same as a reviewer
+finding. C++ plugin changes use the ctest gate (see Build & Run → Running Tests).
+
 ## Architecture
 
 ### Plugin: `Symmetria.FileManager.Models` (C++ → QML)
