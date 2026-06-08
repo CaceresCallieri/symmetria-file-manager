@@ -15,8 +15,14 @@ Item {
     // the FileList's own margin inside its surface), so RenamePopup — which
     // anchors to these — must account for those offsets, not assume the file
     // list sits flush at (0,0).
-    readonly property real currentItemBottomY: centerColumn.y + currentPanel.y + currentPanel.currentItemBottomY
-    readonly property real currentColumnX: centerColumn.x
+    //
+    // Coordinate chain (all in MillerColumns root space):
+    //   rowLayout.y  — RowLayout's own top offset (anchors.margins = padding.md)
+    //   centerColumn.y — column's y within RowLayout (0: columns fill layout height)
+    //   currentPanel.y — FileList's inset within centerColumn (= padding.md)
+    //   currentPanel.currentItemBottomY — bottom of cursor item within FileList
+    readonly property real currentItemBottomY: rowLayout.y + centerColumn.y + currentPanel.y + currentPanel.currentItemBottomY
+    readonly property real currentColumnX: rowLayout.x + centerColumn.x
     readonly property real currentColumnWidth: centerColumn.width
     signal closeRequested()
 
@@ -26,6 +32,7 @@ Item {
     // surfaces. Content is inset (anchors.margins) so square rows/previews clear
     // the rounded corners. Column gaps + the chrome are where transparency lives.
     RowLayout {
+        id: rowLayout
         anchors.fill: parent
         // Outer margin = the general window margin (padding.md); the inter-column
         // gap is exactly HALF of it (padding.sm == padding.md / 2), so the edge
