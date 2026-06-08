@@ -105,6 +105,24 @@ Item {
         border.color: FmTheme.pillStrong.border
         border.width: root.ListView.isCurrentItem ? 1 : 0
         opacity: root.ListView.isCurrentItem ? 1 : 0
+
+        // Clay rim highlight — the top "lit-from-above" cue that defines the
+        // claymorphism look, matching the bars/cards. Inlined (NOT PillSurface)
+        // on purpose: this delegate must stay a plain, un-animated Rectangle so
+        // rapid j/k navigation stays stutter-free (see the note above). A
+        // per-row PillSurface would add color animation + two GPU shadow nodes
+        // to every visible row, re-introducing exactly that stutter. The drop
+        // shadow is also omitted deliberately — a shadow on a flush list row
+        // reads oddly; rim + border + matte fill carry the clay language here.
+        Rectangle {
+            anchors.fill: parent
+            radius: selectionHighlight.radius
+            color: "transparent"
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.08) }
+                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.0) }
+            }
+        }
     }
 
     // Clipboard indicator strip — left edge, above selection highlight.

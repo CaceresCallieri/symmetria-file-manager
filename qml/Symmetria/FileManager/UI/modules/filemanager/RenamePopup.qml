@@ -59,8 +59,9 @@ Loader {
             onClicked: root.windowState.closeModal()
         }
 
-        // Dialog card — positioned below the selected item, aligned to the file list column
-        StyledRect {
+        // Dialog card — claymorphism (shared PillCard), positioned below the
+        // selected item, aligned to the file list column
+        PillCard {
             id: renameDialog
 
             // Horizontal: align to the current file list column
@@ -74,8 +75,6 @@ Loader {
                 return Math.max(FmTheme.padding.sm, Math.min(desiredY, maxY));
             }
 
-            radius: FmTheme.rounding.lg
-            color: FmTheme.palette.surfaceContainerHigh
             implicitHeight: renameLayout.implicitHeight + FmTheme.padding.lg * 3
 
             // Block clicks from reaching the dismiss MouseArea

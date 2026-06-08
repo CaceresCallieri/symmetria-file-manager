@@ -37,13 +37,12 @@ Item {
         Anim {}
     }
 
-    // Matte pill background
-    Rectangle {
+    // Claymorphism card background (shared PillCard). Keeps the compact `sm`
+    // rounding — this is a small HUD, so the card's default `lg` would look
+    // overly bubbly here; the clay depth + rim still apply.
+    PillCard {
         anchors.fill: parent
         radius: FmTheme.rounding.sm
-        color: FmTheme.pillMedium.background
-        border.color: FmTheme.pillMedium.border
-        border.width: 1
     }
 
     ColumnLayout {

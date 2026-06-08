@@ -47,13 +47,11 @@ Loader {
             color: Qt.alpha(FmTheme.palette.shadow, 0.5)
         }
 
-        // === Dialog card ===
-        StyledRect {
+        // === Dialog card — claymorphism (shared PillCard) ===
+        PillCard {
             id: dialog
 
             anchors.centerIn: parent
-            radius: FmTheme.rounding.lg
-            color: FmTheme.palette.surfaceContainerHigh
 
             width: Math.min(parent.width - FmTheme.padding.lg * 4, 500)
             implicitHeight: dialogLayout.implicitHeight + FmTheme.padding.lg * 3

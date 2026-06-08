@@ -97,15 +97,11 @@ Item {
             }
         }
 
-        // Breadcrumb bar
-        StyledRect {
+        // Breadcrumb bar — claymorphism pill (shared with the shell)
+        PillSurface {
             id: breadcrumbContainer
 
             Layout.fillWidth: true
-            radius: FmTheme.rounding.full
-            color: FmTheme.pillMedium.background
-            border.color: FmTheme.pillMedium.border
-            border.width: 1
             implicitHeight: breadcrumbs.implicitHeight + Math.round(FmTheme.padding.sm / 2) * 2
 
             RowLayout {

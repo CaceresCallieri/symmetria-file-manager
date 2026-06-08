@@ -22,8 +22,9 @@ Item {
 
     implicitHeight: inner.implicitHeight + FmTheme.padding.sm * 4
 
-    // Matte pill container with fully rounded corners
-    StyledRect {
+    // Claymorphism pill container — matte fill + hairline border + convex
+    // depth (shadows + rim highlight) shared with the shell, via PillSurface.
+    PillSurface {
         id: pill
 
         anchors.fill: parent
@@ -31,10 +32,6 @@ Item {
         anchors.bottomMargin: FmTheme.padding.sm
         anchors.leftMargin: root._barHorizontalMargin
         anchors.rightMargin: root._barHorizontalMargin
-        radius: FmTheme.rounding.full
-        color: FmTheme.pillMedium.background
-        border.color: FmTheme.pillMedium.border
-        border.width: 1
 
         RowLayout {
             id: inner

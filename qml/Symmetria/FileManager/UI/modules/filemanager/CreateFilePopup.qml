@@ -37,14 +37,13 @@ Loader {
             onClicked: root.windowState.closeModal()
         }
 
-        // Dialog card — positioned at top-third of file list area
-        StyledRect {
+        // Dialog card — claymorphism (shared PillCard), positioned at top-third
+        // of file list area
+        PillCard {
             id: createDialog
 
             anchors.horizontalCenter: parent.horizontalCenter
             y: parent.height * 0.2
-            radius: FmTheme.rounding.lg
-            color: FmTheme.palette.surfaceContainerHigh
 
             width: Math.min(parent.width - FmTheme.padding.lg * 4, 360)
             implicitHeight: createLayout.implicitHeight + FmTheme.padding.lg * 3

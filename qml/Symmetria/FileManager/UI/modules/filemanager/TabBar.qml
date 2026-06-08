@@ -60,18 +60,19 @@ Item {
 
                 Behavior on width { Anim {} }
 
-                // Background: active tab gets matte pill, inactive gets subtle outline
-                StyledRect {
+                // Background: active tab raises into a claymorphism pill (matte
+                // fill + border + convex depth); inactive stays flat with a
+                // subtle outline. `elevated` gates the depth so the active tab
+                // reads as a raised chip — same clay language as the shell.
+                PillSurface {
                     anchors.fill: parent
-                    radius: FmTheme.rounding.full
+                    elevated: tabItem.isActive
                     color: tabItem.isActive ? FmTheme.pillMedium.background : "transparent"
-                    border.color: tabItem.isActive ? FmTheme.pillMedium.border : FmTheme.palette.outlineVariant
-                    border.width: 1
+                    borderColor: tabItem.isActive ? FmTheme.pillMedium.border : FmTheme.palette.outlineVariant
 
-                    // NOTE: Do NOT add a Behavior on color here — StyledRect already
-                    // animates color via CAnim internally. Overriding it with Anim (NumberAnimation)
-                    // breaks color interpolation and produces solid black (#000000) transitions.
-                    Behavior on border.color { CAnim {} }
+                    // color/border.color transitions are eased inside PillSurface
+                    // (StyledRect's internal CAnim + the baked border behavior);
+                    // the shadow fade is eased by PillSurface's per-shadow CAnim.
                 }
 
                 // Hover/click area for the entire tab
