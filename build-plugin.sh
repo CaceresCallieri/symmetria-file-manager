@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$(dirname "$0")/plugin"
+cd "$(dirname "$0")"
+# The fuzzy finder links the vendored Rust `fff` engine (submodule). Ensure it's
+# present before CMake/Corrosion tries to build it.
+git submodule update --init --recursive plugin/third_party/fff
+cd plugin
 cmake -B build
 cmake --build build --parallel $(nproc)
 sudo cmake --install build

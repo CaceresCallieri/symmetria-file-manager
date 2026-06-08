@@ -36,7 +36,9 @@ systemctl --user restart symmetria-fm
 - `CMAKE_INSTALL_PREFIX` defaults to `/usr` (via `CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT` guard) — combined with `INSTALL_QMLDIR=lib/qt6/qml`, the final path is `/usr/lib/qt6/qml/`
 - Pass `-DCMAKE_INSTALL_PREFIX=/custom/path` to override if needed
 
-**Build dependencies (Arch):** `qt6-base qt6-declarative syntax-highlighting libarchive qxlsx-qt6 freexl qt6-imageformats`
+**Build dependencies (Arch):** `qt6-base qt6-declarative syntax-highlighting libarchive qxlsx-qt6 freexl qt6-imageformats rust`
+
+The fuzzy finder links the Rust **`fff`** engine (MIT), vendored as a git submodule at `plugin/third_party/fff` (pinned commit) and built via **Corrosion** (fetched by CMake at configure time). A Rust toolchain (`rust`/`cargo`) is therefore required. `build-plugin.sh` runs `git submodule update --init` automatically; a fresh clone otherwise needs `git submodule update --init --recursive`. fff's native deps (libgit2 via `git2`, LMDB) are vendored by their `-sys` crates — no extra system packages. To bump fff: `git -C plugin/third_party/fff checkout <rev>` then commit the submodule pointer.
 
 ### Running Tests
 
@@ -311,3 +313,11 @@ Use `FileSystemModel.Alphabetical`, `.Modified`, `.Size`, `.Extension`, `.Natura
 **Vim chord detection** — Uses timer-based multi-key detection (500ms timeout), implemented in `qml/Symmetria/FileManager/UI/modules/filemanager/handlers/ChordHandler.js`.
 
 **Claymorphism shadows render outside the pill bounds** — `PillSurface`/`PillCard` cast `RectangularShadow`s that paint into the area *around* the pill, beyond the component's own rect. So (1) any ancestor with `clip: true` slices the soft shadow edges into a flat, chopped look, and (2) the host must leave margin around the pill for the shadow to occupy. If a shadow looks cut off, search the parent chain for a `clip` — do NOT shrink the blur. Full rationale in the `GOTCHA` block at the top of `components/PillSurface.qml`.
+
+**Fuzzy finder is backed by the Rust `fff` engine** (`fuzzyfinder.cpp`, QML element still `FuzzyFinder`). Non-obvious constraints a future change must respect:
+- **`extern "C"` around `#include "fff.h"`** — fff-c's cbindgen header has no `__cplusplus`/`extern "C"` guard, so without the wrapper the C++ compiler mangles every `fff_*` symbol and the link fails with undefined references. (Upstream fix would be `cpp_compat = true` in their cbindgen.toml.)
+- **One process-wide engine, not one per instance** (`FffEngine` singleton in `fuzzyfinder.cpp`). LMDB/heed refuses to open the same frecency-DB environment twice in a process ("environment already open"), so a per-`FuzzyFinder` engine would fail the moment a second finder/window opens. The singleton is created once and re-pointed with `fff_restart_index` on search-path change; it is never destroyed (process-lifetime). Trade-off: two finders open at once across windows share the one engine, so the last-acquired path wins — rare, transient, never crashes.
+- **`fff_search_mixed`, not `fff_search`** — the latter is files-only; mixed returns directories too (so directory navigation in the finder survives). Directory items carry a **trailing `/`** in their name/relativePath/fullPath.
+- **`matchIndices` are recomputed in the C++ wrapper** (greedy subsequence) because fff's file-search result exposes no per-character match positions; the popup's highlighter depends on them.
+- **`showHidden` is inert** for this backend — `FffCreateOptions` has no hidden toggle; fff governs hidden/ignored files via its own ignore model. The property is kept only for QML binding compatibility.
+- **Frecency LMDB** lives at `~/.local/share/symmetria/fff/` (`frecency`/`history` dirs). `SYMMETRIA_FM_FRECENCY_DIR` overrides the location (tests isolate it into a temp dir; also a user relocation hook). `recordOpen(index, query)` → `fff_track_query` with the **absolute** path teaches frecency on file open.

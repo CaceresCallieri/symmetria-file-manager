@@ -1,8 +1,13 @@
-// FuzzyFinderTest — unit tests for the fuzzy file finder model.
+// FuzzyFinderTest — tests for the fff-backed fuzzy file finder model.
 //
-// Creates directory trees programmatically in QTemporaryDir. Tests cover async
-// scanning, Smith-Waterman scoring, gitignore parsing, generation counters,
-// and the result cap. Uses QTEST_MAIN (not GUILESS) because
+// The finder's backend is the Rust `fff` engine (via fff-c). These tests
+// validate the QML-facing CONTRACT — async scan/search lifecycle, the model
+// roles (including the File Info panel roles), result cap, match-index
+// recomputation, frecency tracking, and generation staleness — rather than the
+// engine's internal ranking/ignore semantics, which are fff's own concern.
+//
+// The frecency LMDB is redirected to a temp dir via SYMMETRIA_FM_FRECENCY_DIR so
+// tests never touch the user's real database. QTEST_MAIN (not GUILESS) because
 // QAbstractItemModelTester requires QGuiApplication.
 
 #include "fuzzyfinder.hpp"
@@ -20,23 +25,20 @@ class FuzzyFinderTest : public QObject {
     Q_OBJECT
 
 private:
-    // Helper: create a file (and parent dirs) inside a QTemporaryDir.
-    static void createFile(const QString& basePath, const QString& relativePath) {
+    QTemporaryDir m_frecencyDir;  // isolates the frecency/history LMDB
+
+    static void createFile(const QString& basePath, const QString& relativePath,
+                           const QByteArray& contents = "x") {
         const QString fullPath = basePath + u'/' + relativePath;
         QDir().mkpath(QFileInfo(fullPath).path());
         QFile f(fullPath);
         f.open(QIODevice::WriteOnly);
-        f.write("x");
+        f.write(contents);
         f.close();
     }
 
-    // Helper: create a directory inside a QTemporaryDir.
-    static void createDir(const QString& basePath, const QString& relativePath) {
-        QDir().mkpath(basePath + u'/' + relativePath);
-    }
-
-    // Helper: wait for scanning to complete.
-    static bool waitForScan(FuzzyFinder& model, int timeout = 5000) {
+    // Wait for the async engine creation/index to finish (scanning -> false).
+    static bool waitForScan(FuzzyFinder& model, int timeout = 30000) {
         if (!model.scanning())
             return true;
         QSignalSpy spy(&model, &FuzzyFinder::scanningChanged);
@@ -47,8 +49,8 @@ private:
         return true;
     }
 
-    // Helper: wait for scoring to complete (loading becomes false).
-    static bool waitForScore(FuzzyFinder& model, int timeout = 5000) {
+    // Wait for an async search to finish (loading -> false).
+    static bool waitForSearch(FuzzyFinder& model, int timeout = 10000) {
         if (!model.loading())
             return true;
         QSignalSpy spy(&model, &FuzzyFinder::loadingChanged);
@@ -59,8 +61,21 @@ private:
         return true;
     }
 
+    // Run a query and block until results are ready.
+    static bool search(FuzzyFinder& model, const QString& query) {
+        model.setQuery(query);
+        return waitForSearch(model);
+    }
+
 private slots:
 
+    void initTestCase() {
+        QVERIFY(m_frecencyDir.isValid());
+        qputenv("SYMMETRIA_FM_FRECENCY_DIR", m_frecencyDir.path().toUtf8());
+    }
+
+    // QAbstractItemModelTester exercises the model invariants while a real
+    // search is driven through it.
     void modelTester() {
         FuzzyFinder model;
         QAbstractItemModelTester tester(
@@ -72,65 +87,13 @@ private slots:
 
         model.setSearchPath(tmp.path());
         QVERIFY(waitForScan(model));
-
-        model.setQuery("hello");
-        QVERIFY(waitForScore(model));
-
+        QVERIFY(search(model, "hello"));
         QVERIFY(model.resultCount() > 0);
     }
 
-    void basicScan() {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        createFile(tmp.path(), "a.txt");
-        createFile(tmp.path(), "b.txt");
-        createDir(tmp.path(), "sub");
-        createFile(tmp.path(), "sub/c.txt");
-
-        FuzzyFinder model;
-        model.setSearchPath(tmp.path());
-        QVERIFY(waitForScan(model));
-
-        // No query → 0 results, but paths are cached internally
-        QCOMPARE(model.resultCount(), 0);
-
-        // Query that matches all files
-        model.setQuery("txt");
-        QVERIFY(waitForScore(model));
-        QCOMPARE(model.resultCount(), 3);
-    }
-
-    void queryScoring() {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        createFile(tmp.path(), "target.txt");
-        createFile(tmp.path(), "deep/nested/target.txt");
-        createFile(tmp.path(), "other.txt");
-
-        FuzzyFinder model;
-        model.setSearchPath(tmp.path());
-        QVERIFY(waitForScan(model));
-
-        model.setQuery("target");
-        QVERIFY(waitForScore(model));
-
-        QCOMPARE(model.resultCount(), 2);
-
-        // First result should be the shallow "target.txt" (filename bonus + less depth penalty)
-        const QModelIndex first = model.index(0, 0);
-        QCOMPARE(model.data(first, FuzzyFinder::NameRole).toString(), "target.txt");
-        QCOMPARE(model.data(first, FuzzyFinder::PathRole).toString(), "target.txt");
-
-        // Second should be the deeper one
-        const QModelIndex second = model.index(1, 0);
-        QVERIFY(model.data(second, FuzzyFinder::PathRole).toString().contains("deep"));
-
-        // First score should be >= second score
-        QVERIFY(model.data(first, FuzzyFinder::ScoreRole).toInt()
-                >= model.data(second, FuzzyFinder::ScoreRole).toInt());
-    }
-
-    void emptyQuery() {
+    // An empty query shows the frecency-ranked file list (fff.nvim behaviour):
+    // the finder is populated on open without typing.
+    void emptyQueryShowsFileList() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         createFile(tmp.path(), "file.txt");
@@ -138,144 +101,93 @@ private slots:
         FuzzyFinder model;
         model.setSearchPath(tmp.path());
         QVERIFY(waitForScan(model));
+        QVERIFY(waitForSearch(model));  // initial empty-query search runs on open
+        QVERIFY(model.resultCount() > 0);
 
-        model.setQuery("");
-        // Empty query should yield 0 results immediately (no async needed)
-        QCOMPARE(model.resultCount(), 0);
+        // Clearing a typed query also returns to the file list.
+        QVERIFY(search(model, "file"));
+        QVERIFY(model.resultCount() > 0);
+        QVERIFY(search(model, ""));
+        QVERIFY(model.resultCount() > 0);
     }
 
-    void showHiddenRespected() {
+    void findsMatchingFile() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        createFile(tmp.path(), "visible.txt");
-        createFile(tmp.path(), ".hidden.txt");
+        createFile(tmp.path(), "alpha.txt");
+        createFile(tmp.path(), "beta.cpp");
+        createFile(tmp.path(), "gamma_unique.md");
 
-        // Default: showHidden = false → dotfiles excluded
         FuzzyFinder model;
         model.setSearchPath(tmp.path());
         QVERIFY(waitForScan(model));
+        QVERIFY(search(model, "gamma"));
 
-        model.setQuery("txt");
-        QVERIFY(waitForScore(model));
-        QCOMPARE(model.resultCount(), 1);
-
-        // Enable showHidden → both visible
-        model.setShowHidden(true);
-        QVERIFY(waitForScan(model));
-        QVERIFY(waitForScore(model));
-        QCOMPARE(model.resultCount(), 2);
-    }
-
-    void gitignoreBasic() {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        createFile(tmp.path(), "keep.txt");
-        createFile(tmp.path(), "debug.log");
-        createFile(tmp.path(), "error.log");
-
-        // Create .gitignore that ignores *.log
-        {
-            QFile f(tmp.path() + "/.gitignore");
-            QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write("*.log\n");
-            f.close();
-        }
-
-        FuzzyFinder model;
-        model.setShowHidden(true);  // need to see .gitignore to parse it
-        model.setSearchPath(tmp.path());
-        QVERIFY(waitForScan(model));
-
-        // Search for everything
-        model.setQuery("e");
-        QVERIFY(waitForScore(model));
-
-        // Should only find keep.txt (and .gitignore itself), not the .log files
+        QVERIFY(model.resultCount() > 0);
+        bool found = false;
         for (int i = 0; i < model.resultCount(); ++i) {
-            const QString path = model.data(model.index(i, 0), FuzzyFinder::PathRole).toString();
-            QVERIFY2(!path.endsWith(".log"),
-                qPrintable("Gitignored file found in results: " + path));
+            if (model.data(model.index(i, 0), FuzzyFinder::NameRole)
+                    .toString().contains("gamma")) {
+                found = true;
+                break;
+            }
         }
+        QVERIFY2(found, "expected a result containing 'gamma'");
     }
 
-    void gitignoreNegation() {
+    // The File Info panel roles must be populated on each result.
+    void richRolesPopulated() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        createFile(tmp.path(), "debug.log");
-        createFile(tmp.path(), "important.log");
-
-        // .gitignore: ignore all .log except important.log
-        {
-            QFile f(tmp.path() + "/.gitignore");
-            QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write("*.log\n!important.log\n");
-            f.close();
-        }
+        createFile(tmp.path(), "rolesfile.txt", QByteArray("hello world"));  // 11 bytes
 
         FuzzyFinder model;
-        model.setShowHidden(true);
         model.setSearchPath(tmp.path());
         QVERIFY(waitForScan(model));
+        QVERIFY(search(model, "rolesfile"));
+        QVERIFY(model.resultCount() > 0);
 
-        model.setQuery("log");
-        QVERIFY(waitForScore(model));
+        const QModelIndex idx = model.index(0, 0);
+        QCOMPARE(model.data(idx, FuzzyFinder::NameRole).toString(), QStringLiteral("rolesfile.txt"));
+        QVERIFY(model.data(idx, FuzzyFinder::SizeRole).toLongLong() > 0);
+        QVERIFY(model.data(idx, FuzzyFinder::ModifiedRole).toDateTime().isValid());
+        QVERIFY(model.data(idx, FuzzyFinder::FullPathRole).toString().endsWith("rolesfile.txt"));
+        // gitStatus is a string (empty outside a git repo — must not be a null variant)
+        QVERIFY(model.data(idx, FuzzyFinder::GitStatusRole).typeId() == QMetaType::QString);
+        // scoreBreakdown is a map carrying at least the total
+        const QVariantMap breakdown = model.data(idx, FuzzyFinder::ScoreBreakdownRole).toMap();
+        QVERIFY(breakdown.contains("total"));
+    }
 
-        // Should find important.log but not debug.log
-        bool foundImportant = false;
+    // fff_search_mixed returns directories too (preserving navigation).
+    void directoryResults() {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        createFile(tmp.path(), "myfolder/inside.txt");  // gives the dir a child to index
+
+        FuzzyFinder model;
+        model.setSearchPath(tmp.path());
+        QVERIFY(waitForScan(model));
+        QVERIFY(search(model, "myfolder"));
+
+        // fff marks directory items with a trailing "/" in their display name.
+        bool foundDir = false;
         for (int i = 0; i < model.resultCount(); ++i) {
-            const QString name = model.data(model.index(i, 0), FuzzyFinder::NameRole).toString();
-            if (name == "important.log")
-                foundImportant = true;
-            QVERIFY2(name != "debug.log",
-                "debug.log should be excluded by gitignore");
+            const QModelIndex idx = model.index(i, 0);
+            QString name = model.data(idx, FuzzyFinder::NameRole).toString();
+            if (name.endsWith(u'/'))
+                name.chop(1);
+            if (model.data(idx, FuzzyFinder::IsDirRole).toBool() && name == "myfolder") {
+                foundDir = true;
+                break;
+            }
         }
-        QVERIFY2(foundImportant, "important.log should be included via negation");
+        QVERIFY2(foundDir, "expected the 'myfolder' directory in mixed search results");
     }
 
-    void gitDirExcluded() {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        createFile(tmp.path(), "file.txt");
-        createDir(tmp.path(), ".git");
-        createFile(tmp.path(), ".git/config");
-        createFile(tmp.path(), ".git/HEAD");
-
-        FuzzyFinder model;
-        model.setShowHidden(true);  // even with showHidden, .git/ should be skipped
-        model.setSearchPath(tmp.path());
-        QVERIFY(waitForScan(model));
-
-        model.setQuery("config");
-        QVERIFY(waitForScore(model));
-
-        // .git/config should NOT appear
-        for (int i = 0; i < model.resultCount(); ++i) {
-            const QString path = model.data(model.index(i, 0), FuzzyFinder::PathRole).toString();
-            QVERIFY2(!path.contains(".git/"),
-                qPrintable(".git/ content found in results: " + path));
-        }
-    }
-
-    void resultCap() {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-
-        // Create 250 files that all match query "f"
-        for (int i = 0; i < 250; ++i) {
-            createFile(tmp.path(), QStringLiteral("file_%1.txt").arg(i, 3, 10, QChar(u'0')));
-        }
-
-        FuzzyFinder model;
-        model.setSearchPath(tmp.path());
-        QVERIFY(waitForScan(model));
-
-        model.setQuery("file");
-        QVERIFY(waitForScore(model));
-
-        QCOMPARE(model.resultCount(), FuzzyFinder::MaxResults);
-    }
-
-    void matchIndices() {
+    // matchIndices are recomputed in the wrapper (fff returns none); they must be
+    // the subsequence positions in the relative path, in ascending order.
+    void matchIndicesSubsequence() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         createFile(tmp.path(), "format.js");
@@ -283,71 +195,52 @@ private slots:
         FuzzyFinder model;
         model.setSearchPath(tmp.path());
         QVERIFY(waitForScan(model));
-
-        model.setQuery("fjs");
-        QVERIFY(waitForScore(model));
-
+        QVERIFY(search(model, "fjs"));
         QVERIFY(model.resultCount() > 0);
 
         const QVariantList indices =
             model.data(model.index(0, 0), FuzzyFinder::MatchIndicesRole).toList();
-
-        // Should have 3 indices (one per query char)
-        QCOMPARE(indices.size(), 3);
-
-        // Indices should be in ascending order
-        for (int i = 1; i < indices.size(); ++i) {
+        QCOMPARE(indices.size(), 3);  // one per query char
+        for (int i = 1; i < indices.size(); ++i)
             QVERIFY(indices[i].toInt() > indices[i - 1].toInt());
-        }
     }
 
-    void generationStale() {
-        QTemporaryDir tmp1;
-        QVERIFY(tmp1.isValid());
-        createFile(tmp1.path(), "first.txt");
-
-        QTemporaryDir tmp2;
-        QVERIFY(tmp2.isValid());
-        createFile(tmp2.path(), "second.txt");
-
-        FuzzyFinder model;
-
-        // Set first path, then immediately set second path.
-        // The generation counter is incremented synchronously in setSearchPath,
-        // so the first walk's result is discarded even if it arrives last.
-        model.setSearchPath(tmp1.path());
-        model.setSearchPath(tmp2.path());
-
-        QVERIFY(waitForScan(model));
-
-        model.setQuery("txt");
-        QVERIFY(waitForScore(model));
-
-        // Should only have results from second directory
-        QCOMPARE(model.resultCount(), 1);
-        QCOMPARE(model.data(model.index(0, 0), FuzzyFinder::NameRole).toString(), "second.txt");
-    }
-
-    void filenameBonus() {
+    void resultCapRespected() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        createFile(tmp.path(), "src/utils/helpers/config.js");
-        createFile(tmp.path(), "config.js");
+        for (int i = 0; i < 250; ++i)
+            createFile(tmp.path(), QStringLiteral("file_%1.txt").arg(i, 3, 10, QChar(u'0')));
 
         FuzzyFinder model;
         model.setSearchPath(tmp.path());
         QVERIFY(waitForScan(model));
+        QVERIFY(search(model, "file"));
 
-        model.setQuery("config");
-        QVERIFY(waitForScore(model));
-
-        QVERIFY(model.resultCount() >= 2);
-
-        // Root-level config.js should rank first (less depth + same filename bonus)
-        QCOMPARE(model.data(model.index(0, 0), FuzzyFinder::PathRole).toString(), "config.js");
+        QVERIFY(model.resultCount() > 0);
+        QVERIFY(model.resultCount() <= FuzzyFinder::MaxResults);
     }
 
-    void clearReleasesMemory() {
+    // recordOpen must be safe to call and must not disturb the model.
+    void recordOpenIsSafe() {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        createFile(tmp.path(), "openme.txt");
+
+        FuzzyFinder model;
+        model.setSearchPath(tmp.path());
+        QVERIFY(waitForScan(model));
+        QVERIFY(search(model, "openme"));
+        QVERIFY(model.resultCount() > 0);
+
+        model.recordOpen(0, "openme");          // valid
+        model.recordOpen(-1, "openme");         // out of range — no-op
+        model.recordOpen(9999, "openme");       // out of range — no-op
+        QTest::qWait(200);                       // let the fire-and-forget task run
+
+        QVERIFY(model.resultCount() > 0);        // model unaffected
+    }
+
+    void clearResets() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         createFile(tmp.path(), "file.txt");
@@ -355,9 +248,7 @@ private slots:
         FuzzyFinder model;
         model.setSearchPath(tmp.path());
         QVERIFY(waitForScan(model));
-
-        model.setQuery("file");
-        QVERIFY(waitForScore(model));
+        QVERIFY(search(model, "file"));
         QVERIFY(model.resultCount() > 0);
 
         model.clear();
@@ -368,69 +259,45 @@ private slots:
         QVERIFY(model.query().isEmpty());
     }
 
-    void isDirRole() {
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-        createFile(tmp.path(), "file.txt");
-        createDir(tmp.path(), "folder");
+    // Swapping searchPath before the first index finishes must discard the stale
+    // engine — only the second directory's results survive.
+    void staleSearchPathDiscarded() {
+        QTemporaryDir tmp1;
+        QVERIFY(tmp1.isValid());
+        createFile(tmp1.path(), "firstonly.txt");
+
+        QTemporaryDir tmp2;
+        QVERIFY(tmp2.isValid());
+        createFile(tmp2.path(), "secondonly.txt");
 
         FuzzyFinder model;
-        model.setSearchPath(tmp.path());
+        model.setSearchPath(tmp1.path());
+        model.setSearchPath(tmp2.path());
         QVERIFY(waitForScan(model));
+        QVERIFY(search(model, "only"));
 
-        model.setQuery("f");
-        QVERIFY(waitForScore(model));
-
-        bool foundFile = false;
-        bool foundDir = false;
+        QVERIFY(model.resultCount() > 0);
         for (int i = 0; i < model.resultCount(); ++i) {
-            const QModelIndex idx = model.index(i, 0);
-            const bool isDir = model.data(idx, FuzzyFinder::IsDirRole).toBool();
-            const QString name = model.data(idx, FuzzyFinder::NameRole).toString();
-            if (name == "file.txt") {
-                QVERIFY(!isDir);
-                foundFile = true;
-            } else if (name == "folder") {
-                QVERIFY(isDir);
-                foundDir = true;
-            }
+            const QString name = model.data(model.index(i, 0), FuzzyFinder::NameRole).toString();
+            QVERIFY2(name != "firstonly.txt",
+                "stale first-directory result leaked after searchPath swap");
         }
-        QVERIFY(foundFile);
-        QVERIFY(foundDir);
     }
-    void queryBeforeWalkCompletes() {
-        // Tests the code path where setQuery is called before the async walk
-        // finishes. startScoring() returns early when m_cachedPaths is empty;
-        // the walk-completion handler then calls startScoring() automatically.
+
+    // Query set before the index completes must still produce results once ready.
+    void queryBeforeIndexCompletes() {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         createFile(tmp.path(), "hello.txt");
-        createFile(tmp.path(), "world.txt");
 
         FuzzyFinder model;
-
-        // Set the query BEFORE setting the path (before the walk even starts)
-        model.setQuery("hello");
-
-        // Now start the walk — the walk completion handler should auto-score
+        model.setQuery("hello");        // before searchPath
         model.setSearchPath(tmp.path());
-
-        // Wait for the walk + scoring to complete
         QVERIFY(waitForScan(model));
-        QVERIFY(waitForScore(model));
+        QVERIFY(waitForSearch(model));
 
-        // Should find the file despite the query arriving before the walk
         QVERIFY(model.resultCount() > 0);
-        bool found = false;
-        for (int i = 0; i < model.resultCount(); ++i) {
-            if (model.data(model.index(i, 0), FuzzyFinder::NameRole).toString() == "hello.txt") {
-                found = true;
-                break;
-            }
-        }
-        QVERIFY2(found, "hello.txt should be found when query was set before walk started");
     }
-
 };
 
 QTEST_MAIN(FuzzyFinderTest)

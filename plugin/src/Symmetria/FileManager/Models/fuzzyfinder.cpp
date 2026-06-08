@@ -1,508 +1,186 @@
 #include "fuzzyfinder.hpp"
 
 #include <qdir.h>
-#include <qdiriterator.h>
-#include <qfileinfo.h>
 #include <qfuturewatcher.h>
-#include <qregularexpression.h>
+#include <qmutex.h>
+#include <qstandardpaths.h>
 #include <qtconcurrentrun.h>
 
-#include <algorithm>
+// fff-c's cbindgen header is plain C with no `extern "C"` guard, so it must be
+// wrapped to give the declarations C linkage — otherwise the C++ compiler mangles
+// the names and the link against libfff_c.so fails with undefined references.
+extern "C" {
+#include "fff.h"
+}
 
 namespace symmetria::filemanager::models {
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Gitignore parsing
-// ─────────────────────────────────────────────────────────────────────────────
-
-struct GitignoreRule {
-    QRegularExpression pattern;
-    bool negation      = false;  // line started with !
-    bool directoryOnly = false;  // line ended with /
-};
-
-struct GitignoreRuleSet {
-    QString basePath;
-    QVector<GitignoreRule> rules;
-};
-
-// Convert a gitignore glob pattern to a QRegularExpression.
-// Handles: *, **, ?, character classes [abc], leading /, trailing /, !
-static QRegularExpression globToRegex(const QString& glob, bool anchored) {
-    QString regex;
-    regex.reserve(glob.size() * 2);
-
-    int i = 0;
-    while (i < glob.size()) {
-        const QChar c = glob[i];
-
-        if (c == u'*') {
-            if (i + 1 < glob.size() && glob[i + 1] == u'*') {
-                // ** — match everything including /
-                if (i + 2 < glob.size() && glob[i + 2] == u'/') {
-                    regex += QStringLiteral("(.*/)?");
-                    i += 3;
-                } else {
-                    regex += QStringLiteral(".*");
-                    i += 2;
-                }
-            } else {
-                // * — match everything except /
-                regex += QStringLiteral("[^/]*");
-                i++;
-            }
-        } else if (c == u'?') {
-            regex += QStringLiteral("[^/]");
-            i++;
-        } else if (c == u'[') {
-            // Pass through character class as-is
-            regex += u'[';
-            i++;
-            while (i < glob.size() && glob[i] != u']') {
-                regex += glob[i];
-                i++;
-            }
-            if (i < glob.size()) {
-                regex += u']';
-                i++;
-            }
-        } else {
-            regex += QRegularExpression::escape(QString(c));
-            i++;
-        }
-    }
-
-    // Anchored patterns must match from the start; unanchored match any path segment.
-    // Both must match to end of string (or next /).
-    if (anchored) {
-        regex = u'^' + regex;
-    } else {
-        regex = QStringLiteral("(^|/)") + regex;
-    }
-    // Match the full remaining path (the pattern matches the complete relative path)
-    regex += u'$';
-
-    return QRegularExpression(regex);
-}
-
-// Parse a single .gitignore file into a rule set.
-// basePath is stored relative to the walk root (empty string for root-level).
-static GitignoreRuleSet parseGitignore(const QString& dirPath, const QString& rootPath) {
-    GitignoreRuleSet ruleSet;
-    // Store relative base path: "" for root dir, "sub" for sub/.gitignore, etc.
-    if (dirPath.size() > rootPath.size())
-        ruleSet.basePath = dirPath.mid(rootPath.size() + 1);  // skip trailing /
-
-    QFile file(dirPath + QStringLiteral("/.gitignore"));
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-        return ruleSet;
-
-    while (!file.atEnd()) {
-        QString line = QString::fromUtf8(file.readLine()).trimmed();
-
-        // Skip empty lines and comments
-        if (line.isEmpty() || line.startsWith(u'#'))
-            continue;
-
-        GitignoreRule rule;
-
-        // Negation
-        if (line.startsWith(u'!')) {
-            rule.negation = true;
-            line = line.mid(1);
-        }
-
-        // Directory-only
-        if (line.endsWith(u'/')) {
-            rule.directoryOnly = true;
-            line.chop(1);
-        }
-
-        // Leading / means anchored to the .gitignore's directory
-        bool anchored = false;
-        if (line.startsWith(u'/')) {
-            anchored = true;
-            line = line.mid(1);
-        }
-
-        // Patterns containing / (other than leading) are also anchored
-        if (!anchored && line.contains(u'/'))
-            anchored = true;
-
-        if (line.isEmpty())
-            continue;
-
-        rule.pattern = globToRegex(line, anchored);
-        if (rule.pattern.isValid())
-            ruleSet.rules.append(std::move(rule));
-    }
-
-    return ruleSet;
-}
-
-// Check if a relative path is ignored by the gitignore rule stack.
-// Rules are checked from most-specific (deepest directory) to least-specific.
-// Last matching rule wins; negation re-includes.
-static bool isIgnoredByGitignore(
-    const QString& relativePath,
-    bool isDir,
-    const QVector<GitignoreRuleSet>& ruleStack)
-{
-    bool ignored = false;
-
-    // Process from outermost to innermost — last match wins
-    for (const auto& ruleSet : ruleStack) {
-        // Compute path relative to this .gitignore's directory.
-        // basePath is relative to the walk root (e.g., "" for root, "sub" for sub/).
-        QString localPath = relativePath;
-        if (!ruleSet.basePath.isEmpty()) {
-            const QString prefix = ruleSet.basePath + u'/';
-            if (!relativePath.startsWith(prefix))
-                continue;
-            localPath = relativePath.mid(prefix.size());
-        }
-
-        for (const auto& rule : ruleSet.rules) {
-            if (rule.directoryOnly && !isDir)
-                continue;
-
-            if (rule.pattern.match(localPath).hasMatch()) {
-                ignored = !rule.negation;
-            }
-        }
-    }
-
-    return ignored;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Directory walking
-// ─────────────────────────────────────────────────────────────────────────────
-
-struct WalkResult {
-    QVector<CachedPath> paths;
-    QString error;
-};
-
-// Recursive directory walker with gitignore awareness.
-// Runs on a worker thread — no QObject access, pure data in/out.
-//
-// Returns true to continue walking, false to abort early (cap reached).
-// The caller cascades the abort up the recursion stack so the entire
-// remaining subtree is short-circuited as soon as MaxScanFiles is hit.
-static bool walkRecursive(
-    const QString& dirPath,
-    const QString& rootPath,
-    bool showHidden,
-    QVector<GitignoreRuleSet>& ruleStack,
-    QSet<QString>& visitedDirs,
-    QVector<CachedPath>& out)
-{
-    // Fast-path: skip QFileInfo + gitignore parse + entryInfoList for this subtree
-    // if the cap is already hit. The loop guard below handles mid-iteration caps;
-    // this guard avoids redundant work when the recursion itself triggered the cap.
-    if (out.size() >= FuzzyFinder::MaxScanFiles)
-        return false;
-
-    // Prevent symlink cycles
-    const QString canonical = QFileInfo(dirPath).canonicalFilePath();
-    if (canonical.isEmpty() || visitedDirs.contains(canonical))
-        return true;
-    visitedDirs.insert(canonical);
-
-    // Parse .gitignore at this level if it exists
-    const auto gitignore = parseGitignore(dirPath, rootPath);
-    const bool hasGitignore = !gitignore.rules.isEmpty();
-    if (hasGitignore)
-        ruleStack.append(gitignore);
-
-    QDir dir(dirPath);
-    QDir::Filters filters = QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot;
-    if (showHidden)
-        filters |= QDir::Hidden;
-
-    const auto entries = dir.entryInfoList(filters, QDir::Name);
-    const auto rootLen = rootPath.size() + 1;  // +1 for trailing /
-
-    for (const auto& info : entries) {
-        if (out.size() >= FuzzyFinder::MaxScanFiles) {
-            if (hasGitignore)
-                ruleStack.removeLast();
-            return false;
-        }
-
-        const QString name = info.fileName();
-        const QString fullPath = info.filePath();
-
-        // Always skip .git directory
-        if (name == QStringLiteral(".git") && info.isDir())
-            continue;
-
-        const QString relativePath = fullPath.mid(rootLen);
-        const bool isDir = info.isDir();
-
-        // Compute gitignore-relative path for matching.
-        // The ruleStack basePaths are relative to rootPath, so we use relativePath
-        // but each ruleSet.basePath is also relative to rootPath.
-        if (!ruleStack.isEmpty()) {
-            // Build path relative to root for gitignore matching
-            if (isIgnoredByGitignore(relativePath, isDir, ruleStack))
-                continue;
-        }
-
-        // Compute depth from relative path
-        int depth = 0;
-        for (const QChar& ch : relativePath) {
-            if (ch == u'/')
-                depth++;
-        }
-
-        out.append({relativePath, name, fullPath, isDir, depth});
-
-        if (isDir) {
-            if (!walkRecursive(fullPath, rootPath, showHidden, ruleStack, visitedDirs, out)) {
-                if (hasGitignore)
-                    ruleStack.removeLast();
-                return false;
-            }
-        }
-    }
-
-    if (hasGitignore)
-        ruleStack.removeLast();
-
-    return true;
-}
-
-static WalkResult walkDirectory(const QString& rootPath, bool showHidden) {
-    WalkResult result;
-
-    QFileInfo rootInfo(rootPath);
-    if (!rootInfo.exists() || !rootInfo.isDir()) {
-        result.error = QStringLiteral("Path does not exist or is not a directory");
-        return result;
-    }
-
-    QVector<GitignoreRuleSet> ruleStack;
-    QSet<QString> visitedDirs;
-
-    // Pre-compute the basePath for root-level gitignore rules as empty string
-    // (relative paths are already relative to rootPath)
-    const bool finished = walkRecursive(
-        rootPath, rootPath, showHidden, ruleStack, visitedDirs, result.paths);
-
-    if (!finished) {
-        result.error = QStringLiteral(
-            "Directory tree too large — indexed first %1 entries (files + directories). Open the finder "
-            "from a more specific subdirectory for complete results.")
-            .arg(FuzzyFinder::MaxScanFiles);
-    }
-
-    return result;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Smith-Waterman fuzzy scoring
-// ─────────────────────────────────────────────────────────────────────────────
-
-struct ScoreResult {
-    int          score = 0;
-    QVector<int> matchIndices;
-};
-
-static bool isWordBoundary(const QString& text, qsizetype pos) {
-    if (pos == 0)
-        return true;
-    const QChar prev = text[pos - 1];
-    const QChar curr = text[pos];
-    return prev == u'/' || prev == u'.' || prev == u'_' || prev == u'-' || prev == u' '
-        || (prev.isLower() && curr.isUpper());
-}
-
-// Smith-Waterman scoring with affine-gap-like bonuses.
-// Returns the best alignment score and the matched character positions.
-static ScoreResult smithWatermanScore(
-    const QString& text,
-    const QString& query,
-    const QString& filename,
-    int depth)
-{
-    const qsizetype tLen = text.size();
-    const qsizetype qLen = query.size();
-
-    if (qLen == 0 || tLen == 0)
-        return {};
-
-    // H[i][j] = best score aligning query[0..i-1] with text[0..j-1]
-    // Use flat arrays for performance
-    QVector<int> H(static_cast<int>((qLen + 1) * (tLen + 1)), 0);
-
-    auto idx = [tLen](qsizetype i, qsizetype j) -> int {
-        return static_cast<int>(i * (tLen + 1) + j);
-    };
-
-    int bestScore = 0;
-    qsizetype bestJ = 0;  // column of best score in last query row
-
-    const QString textLower = text.toLower();
-    const QString queryLower = query.toLower();
-
-    // H[i][j] = best score ending with query[i-1] matched to text[j-1].
-    // Only populated when characters match; zero otherwise.
-    // This guarantees that H[qLen][j] > 0 only if ALL query chars are aligned.
-    for (qsizetype i = 1; i <= qLen; ++i) {
-        // rowMax tracks max(H[i-1][0..j-1]) as j advances, eliminating the O(n) inner scan.
-        int rowMax = 0;
-        for (qsizetype j = 1; j <= tLen; ++j) {
-            // Update rowMax with H[i-1][j-1] before processing column j.
-            // This gives us max(H[i-1][0..j-1]) without a separate inner loop.
-            if (i > 1)
-                rowMax = std::max(rowMax, H[idx(i - 1, j - 1)]);
-
-            if (queryLower[i - 1] != textLower[j - 1]) {
-                // No match — cell stays 0 (default). Skip.
-                continue;
-            }
-
-            // Characters match (case-insensitive).
-            int matchScore = 16;  // base match
-
-            // Consecutive match bonus (previous query char aligned to previous text char)
-            if (i > 1 && j > 1 && H[idx(i - 1, j - 1)] > 0)
-                matchScore += 8;
-
-            // Word boundary bonus
-            if (isWordBoundary(text, j - 1))
-                matchScore += 10;
-
-            // First character bonus
-            if (i == 1 && isWordBoundary(text, j - 1))
-                matchScore += 8;
-
-            // Exact case bonus
-            if (query[i - 1] == text[j - 1])
-                matchScore += 2;
-
-            // For the first query char (i==1), no predecessor needed.
-            // For i>1, rowMax holds max(H[i-1][0..j-1]) — the best predecessor.
-            if (i == 1)
-                H[idx(i, j)] = matchScore;
-            else if (rowMax > 0)
-                H[idx(i, j)] = rowMax + matchScore;
-            // else: no valid predecessor for this query position → cell stays 0
-
-            // Track best score at the last query row
-            if (i == qLen && H[idx(i, j)] > bestScore) {
-                bestScore = H[idx(i, j)];
-                bestJ = j;
-            }
-        }
-    }
-
-    if (bestScore == 0)
-        return {};
-
-    // Traceback to find match indices.
-    // Walk backwards: at each query row i, find the j that was used (H[i][j] > 0)
-    // and that leads to the best score. Since each row only has entries where
-    // a match occurred, we find the cell that contributed to the final score.
+namespace {
+
+// Greedy case-insensitive subsequence match of `query` against `path`, returning
+// the matched character positions in `path`. fff's file-search result carries no
+// per-character match info, so we recompute it for highlighting. If `query` is
+// not a subsequence (e.g. it uses fff constraint syntax like "*.rs" or
+// "git:modified"), returns empty — the popup then renders the path un-highlighted.
+QVector<int> computeMatchIndices(const QString& path, const QString& query) {
     QVector<int> indices;
-    indices.reserve(static_cast<int>(qLen));
-    qsizetype j = bestJ;
-    for (qsizetype i = qLen; i >= 1; --i) {
-        // j is the text position used for query char i
-        indices.prepend(static_cast<int>(j - 1));  // 0-based index in text
+    if (query.isEmpty())
+        return indices;
 
-        if (i == 1)
-            break;
+    const QString p = path.toLower();
+    const QString q = query.toLower();
+    indices.reserve(static_cast<int>(q.size()));
 
-        // Find the predecessor: best H[i-1][k] for k < j
-        int bestPrev = 0;
-        qsizetype bestK = 0;
-        for (qsizetype k = 1; k < j; ++k) {
-            if (H[idx(i - 1, k)] > bestPrev) {
-                bestPrev = H[idx(i - 1, k)];
-                bestK = k;
-            }
+    qsizetype qi = 0;
+    for (qsizetype i = 0; i < p.size() && qi < q.size(); ++i) {
+        if (p[i] == q[qi]) {
+            indices.append(static_cast<int>(i));
+            ++qi;
         }
-        j = bestK;
     }
-
-    // Post-scoring bonuses
-
-    // Filename bonus: compare query against the filename portion
-    const QString filenameLower = filename.toLower();
-    if (filenameLower == queryLower) {
-        bestScore = bestScore * 140 / 100;  // +40% for exact filename match
-    } else if (filenameLower.contains(queryLower)) {
-        bestScore = bestScore * 116 / 100;  // +16% for substring in filename
-    }
-
-    // Path depth penalty
-    bestScore -= depth * 2;
-
-    if (bestScore < 1)
-        bestScore = 1;  // ensure positive score for any match
-
-    return {bestScore, indices};
+    if (qi < q.size())
+        indices.clear();  // not a full subsequence — no highlight
+    return indices;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Scoring pass — runs on worker thread
-// ─────────────────────────────────────────────────────────────────────────────
+QVariantMap makeBreakdownMap(const FffScore& sc) {
+    QVariantMap m;
+    m[QStringLiteral("total")]                = sc.total;
+    m[QStringLiteral("base")]                 = sc.base_score;
+    m[QStringLiteral("filenameBonus")]        = sc.filename_bonus;
+    m[QStringLiteral("specialFilenameBonus")] = sc.special_filename_bonus;
+    m[QStringLiteral("frecencyBoost")]        = sc.frecency_boost;
+    m[QStringLiteral("distancePenalty")]      = sc.distance_penalty;
+    m[QStringLiteral("currentFilePenalty")]   = sc.current_file_penalty;
+    m[QStringLiteral("comboBoost")]           = sc.combo_match_boost;
+    m[QStringLiteral("pathAlignmentBonus")]   = sc.path_alignment_bonus;
+    m[QStringLiteral("exactMatch")]           = sc.exact_match;
+    m[QStringLiteral("matchType")] =
+        sc.match_type ? QString::fromUtf8(sc.match_type) : QString();
+    return m;
+}
 
-struct ScorePassResult {
-    QVector<FuzzyMatchResult> results;
+// Result of the off-thread engine acquisition.
+struct CreateResult {
+    std::shared_ptr<void> engine;
+    QString               error;
 };
 
-static ScorePassResult scoreAllPaths(
-    const QVector<CachedPath>& paths,
-    const QString& query)
-{
-    ScorePassResult result;
-
-    QVector<FuzzyMatchResult> scored;
-    scored.reserve(paths.size() / 4);  // rough estimate of match ratio
-
-    for (const auto& cached : paths) {
-        auto sr = smithWatermanScore(cached.relativePath, query, cached.name, cached.depth);
-        if (sr.score > 0) {
-            scored.append({
-                cached.relativePath,
-                cached.name,
-                cached.fullPath,
-                cached.isDir,
-                sr.score,
-                std::move(sr.matchIndices),
-            });
-        }
-    }
-
-    // Partial sort: get top MaxResults by score (descending)
-    const int n = std::min(static_cast<int>(scored.size()), FuzzyFinder::MaxResults);
-    if (n > 0 && scored.size() > n) {
-        std::partial_sort(scored.begin(), scored.begin() + n, scored.end(),
-            [](const FuzzyMatchResult& a, const FuzzyMatchResult& b) {
-                return a.score > b.score;
-            });
-        scored.resize(n);
-    } else if (n > 0) {
-        std::sort(scored.begin(), scored.end(),
-            [](const FuzzyMatchResult& a, const FuzzyMatchResult& b) {
-                return a.score > b.score;
-            });
-    }
-
-    result.results = std::move(scored);
-    return result;
+// Frecency/history LMDB live alongside the file manager's logs. fff itself
+// create_dir_all's these paths, so we only pre-create the parent defensively.
+// SYMMETRIA_FM_FRECENCY_DIR overrides the location (used by tests to isolate the
+// DB into a temp dir; also a relocation hook for users).
+QString frecencyDbDir() {
+    const QByteArray override = qgetenv("SYMMETRIA_FM_FRECENCY_DIR");
+    if (!override.isEmpty())
+        return QString::fromUtf8(override);
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+           + QStringLiteral("/symmetria/fff");
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FuzzyFinder — QAbstractListModel implementation
-// ─────────────────────────────────────────────────────────────────────────────
+// Process-wide singleton fff engine.
+//
+// WHY a singleton: LMDB (heed) refuses to open the same frecency-DB environment
+// twice within one process ("environment already open in this program"). Creating
+// one fff instance per FuzzyFinder (per popup / per window) would therefore fail
+// the moment a second finder opens. fff is designed as ONE long-lived engine with
+// a warm index; we match that — open it once, then re-point it at a new directory
+// with fff_restart_index when the search path changes. The engine is intentionally
+// never destroyed (process-lifetime); the OS reclaims it at exit.
+//
+// KNOWN LIMITATION: two finders open simultaneously in different directories share
+// this one engine, so the last `acquire` wins the indexed path. That only matters
+// if two finder modals are open across two windows at once (rare, transient) and
+// never crashes — it just shows the other path's results until re-queried.
+class FffEngine {
+public:
+    static FffEngine& instance() {
+        static FffEngine self;
+        return self;
+    }
+
+    // Ensure the engine exists and is indexing `basePath`. Returns the shared
+    // handle (or null with `error` set). Runs on a worker thread; serialized so
+    // the single LMDB env is never opened/mutated concurrently.
+    std::shared_ptr<void> acquire(const QString& basePath, QString& error) {
+        QMutexLocker lock(&m_mutex);
+
+        if (!m_engine) {
+            const QString dbDir = frecencyDbDir();
+            QDir().mkpath(dbDir);
+            const QByteArray base     = basePath.toUtf8();
+            const QByteArray frecency = (dbDir + QStringLiteral("/frecency")).toUtf8();
+            const QByteArray history  = (dbDir + QStringLiteral("/history")).toUtf8();
+
+            FffCreateOptions opts{};
+            opts.version                  = FFF_CREATE_OPTIONS_VERSION;
+            opts.base_path                = base.constData();
+            opts.frecency_db_path         = frecency.constData();
+            opts.history_db_path          = history.constData();
+            opts.enable_mmap_cache        = false;
+            opts.enable_content_indexing  = false;
+            opts.watch                    = false;
+            opts.ai_mode                  = false;
+            opts.enable_fs_root_scanning  = true;
+            opts.enable_home_dir_scanning = true;
+
+            FffResult* cr = fff_create_instance_with(&opts);
+            if (!cr || !cr->success || !cr->handle) {
+                error = (cr && cr->error)
+                    ? QString::fromUtf8(cr->error)
+                    : QStringLiteral("Failed to create file-search engine");
+                if (cr) fff_free_result(cr);
+                return nullptr;
+            }
+            void* handle = cr->handle;
+            fff_free_result(cr);
+
+            FffResult* wr = fff_wait_for_scan(handle, 30000);
+            if (wr) fff_free_result(wr);
+
+            // Never destroyed: the deleter exists for completeness but the static
+            // singleton outlives the process, so it is effectively never invoked.
+            m_engine = std::shared_ptr<void>(handle, [](void* h) { if (h) fff_destroy(h); });
+            m_currentBase = basePath;
+            return m_engine;
+        }
+
+        if (m_currentBase != basePath) {
+            const QByteArray base = basePath.toUtf8();
+            FffResult* rr = fff_restart_index(m_engine.get(), base.constData());
+            const bool ok = rr && rr->success;
+            if (rr) fff_free_result(rr);
+            if (!ok) {
+                error = QStringLiteral("Failed to re-index %1").arg(basePath);
+                return nullptr;
+            }
+            FffResult* wr = fff_wait_for_scan(m_engine.get(), 30000);
+            if (wr) fff_free_result(wr);
+            m_currentBase = basePath;
+        }
+        return m_engine;
+    }
+
+private:
+    FffEngine() = default;
+    QMutex                m_mutex;
+    std::shared_ptr<void> m_engine;
+    QString               m_currentBase;
+};
+
+} // namespace
 
 FuzzyFinder::FuzzyFinder(QObject* parent)
     : QAbstractListModel(parent) {}
+
+FuzzyFinder::~FuzzyFinder() {
+    // Invalidate any in-flight async handlers. m_engine is just this instance's
+    // copy of the process-wide singleton handle; resetting it does NOT destroy the
+    // shared engine (the singleton keeps it alive for the process lifetime).
+    ++m_createGeneration;
+    ++m_searchGeneration;
+    m_engine.reset();
+}
 
 int FuzzyFinder::rowCount(const QModelIndex& parent) const {
     if (parent.isValid())
@@ -514,32 +192,46 @@ QVariant FuzzyFinder::data(const QModelIndex& index, int role) const {
     if (!index.isValid() || index.row() < 0 || index.row() >= static_cast<int>(m_results.size()))
         return {};
 
-    const auto& entry = m_results.at(index.row());
+    const auto& e = m_results.at(index.row());
     switch (role) {
-    case PathRole:         return entry.relativePath;
-    case NameRole:         return entry.name;
-    case IsDirRole:        return entry.isDir;
-    case ScoreRole:        return entry.score;
+    case PathRole:         return e.relativePath;
+    case NameRole:         return e.name;
+    case IsDirRole:        return e.isDir;
+    case ScoreRole:        return e.score;
     case MatchIndicesRole: {
         QVariantList list;
-        list.reserve(entry.matchIndices.size());
-        for (int idx : entry.matchIndices)
+        list.reserve(e.matchIndices.size());
+        for (int idx : e.matchIndices)
             list.append(idx);
         return list;
     }
-    case FullPathRole:     return entry.fullPath;
-    default:               return {};
+    case FullPathRole:       return e.fullPath;
+    case SizeRole:           return QVariant::fromValue<qlonglong>(e.size);
+    case ModifiedRole:       return e.modified;
+    case GitStatusRole:      return e.gitStatus;
+    case FrecencyTotalRole:  return QVariant::fromValue<qlonglong>(e.frecencyTotal);
+    case IsBinaryRole:       return e.isBinary;
+    case ScoreBreakdownRole: return e.scoreBreakdown;
+    case MatchTypeRole:      return e.matchType;
+    default:                 return {};
     }
 }
 
 QHash<int, QByteArray> FuzzyFinder::roleNames() const {
     return {
-        {PathRole,         "path"},
-        {NameRole,         "name"},
-        {IsDirRole,        "isDir"},
-        {ScoreRole,        "score"},
-        {MatchIndicesRole, "matchIndices"},
-        {FullPathRole,     "fullPath"},
+        {PathRole,           "path"},
+        {NameRole,           "name"},
+        {IsDirRole,          "isDir"},
+        {ScoreRole,          "score"},
+        {MatchIndicesRole,   "matchIndices"},
+        {FullPathRole,       "fullPath"},
+        {SizeRole,           "size"},
+        {ModifiedRole,       "modified"},
+        {GitStatusRole,      "gitStatus"},
+        {FrecencyTotalRole,  "frecencyTotal"},
+        {IsBinaryRole,       "isBinary"},
+        {ScoreBreakdownRole, "scoreBreakdown"},
+        {MatchTypeRole,      "matchType"},
     };
 }
 
@@ -550,7 +242,7 @@ void FuzzyFinder::setSearchPath(const QString& path) {
         return;
     m_searchPath = path;
     emit searchPathChanged();
-    startWalk();
+    startEngine();
 }
 
 QString FuzzyFinder::query() const { return m_query; }
@@ -560,7 +252,7 @@ void FuzzyFinder::setQuery(const QString& query) {
         return;
     m_query = query;
     emit queryChanged();
-    startScoring();
+    startSearch();
 }
 
 bool FuzzyFinder::showHidden() const { return m_showHidden; }
@@ -570,9 +262,9 @@ void FuzzyFinder::setShowHidden(bool show) {
         return;
     m_showHidden = show;
     emit showHiddenChanged();
-    // Re-walk with new visibility setting
-    if (!m_searchPath.isEmpty())
-        startWalk();
+    // No re-index: fff governs hidden/ignored files through its own ignore model
+    // (FffCreateOptions has no hidden toggle), so this property is currently inert
+    // for the fff backend. Kept for QML binding compatibility.
 }
 
 bool FuzzyFinder::scanning() const { return m_scanning; }
@@ -581,8 +273,8 @@ int FuzzyFinder::resultCount() const { return static_cast<int>(m_results.size())
 QString FuzzyFinder::error() const { return m_error; }
 
 void FuzzyFinder::clear() {
-    ++m_walkGeneration;
-    ++m_scoreGeneration;
+    ++m_createGeneration;
+    ++m_searchGeneration;
 
     if (!m_results.isEmpty()) {
         beginResetModel();
@@ -591,8 +283,7 @@ void FuzzyFinder::clear() {
         emit resultCountChanged();
     }
 
-    m_cachedPaths.clear();
-    m_cachedPaths.squeeze();
+    m_engine.reset();
     m_searchPath.clear();
     m_query.clear();
 
@@ -610,13 +301,11 @@ void FuzzyFinder::clear() {
     }
 }
 
-void FuzzyFinder::startWalk() {
-    const int generation = ++m_walkGeneration;
-    // Also invalidate any in-flight scoring
-    ++m_scoreGeneration;
+void FuzzyFinder::startEngine() {
+    const int generation = ++m_createGeneration;
+    ++m_searchGeneration;  // invalidate any in-flight scoring against the old engine
 
-    // Clear current cache and results
-    m_cachedPaths.clear();
+    m_engine.reset();
     if (!m_results.isEmpty()) {
         beginResetModel();
         m_results.clear();
@@ -628,8 +317,7 @@ void FuzzyFinder::startWalk() {
     m_error.clear();
 
     if (m_searchPath.isEmpty()) {
-        m_scanning = false;
-        emit scanningChanged();
+        if (m_scanning) { m_scanning = false; emit scanningChanged(); }
         if (hadError) emit errorChanged();
         return;
     }
@@ -639,81 +327,107 @@ void FuzzyFinder::startWalk() {
     if (hadError) emit errorChanged();
 
     const QString path = m_searchPath;
-    const bool hidden = m_showHidden;
-    const auto future = QtConcurrent::run([path, hidden]() {
-        return walkDirectory(path, hidden);
+    const auto future = QtConcurrent::run([path]() -> CreateResult {
+        // Acquire the process-wide engine (created once, re-pointed thereafter).
+        CreateResult out;
+        out.engine = FffEngine::instance().acquire(path, out.error);
+        return out;
     });
 
-    auto* watcher = new QFutureWatcher<WalkResult>(this);
-    connect(watcher, &QFutureWatcher<WalkResult>::finished, this,
+    auto* watcher = new QFutureWatcher<CreateResult>(this);
+    connect(watcher, &QFutureWatcher<CreateResult>::finished, this,
         [this, generation, watcher]() {
             watcher->deleteLater();
+            if (generation != m_createGeneration)
+                return;  // a newer searchPath superseded this create; drop it
 
-            if (generation != m_walkGeneration)
-                return;
+            CreateResult result = watcher->result();
 
-            const auto result = watcher->result();
-
-            m_cachedPaths = result.paths;
             m_scanning = false;
             emit scanningChanged();
 
-            if (!result.error.isEmpty()) {
+            if (!result.engine) {
                 m_error = result.error;
                 emit errorChanged();
+                return;
             }
 
-            // Auto-score if query is already set
-            if (!m_query.isEmpty())
-                startScoring();
+            m_engine = std::move(result.engine);
+            // Always search — an empty query yields the frecency-ranked file list
+            // that populates the finder on open.
+            startSearch();
         });
     watcher->setFuture(future);
 }
 
-void FuzzyFinder::startScoring() {
-    const int generation = ++m_scoreGeneration;
+void FuzzyFinder::startSearch() {
+    const int generation = ++m_searchGeneration;
 
-    if (m_query.isEmpty()) {
-        if (!m_results.isEmpty()) {
-            beginResetModel();
-            m_results.clear();
-            endResetModel();
-            emit resultCountChanged();
-        }
-        if (m_loading) {
-            m_loading = false;
-            emit loadingChanged();
-        }
-        return;
-    }
+    // NOTE: an empty query is NOT short-circuited — fff returns the frecency-ranked
+    // file list for it, which is what the finder shows on open (fff.nvim behaviour).
 
-    if (m_cachedPaths.isEmpty()) {
-        // Walk hasn't completed yet — query is stored, startWalk's completion
-        // handler will call startScoring() when ready
+    if (!m_engine) {
+        // Engine still indexing — startEngine's completion handler re-triggers us.
         return;
     }
 
     m_loading = true;
     emit loadingChanged();
 
-    const auto paths = m_cachedPaths;  // copy for thread safety
-    const QString query = m_query;
-    const auto future = QtConcurrent::run([paths, query]() {
-        return scoreAllPaths(paths, query);
-    });
+    auto          engine = m_engine;  // shared_ptr copy keeps the engine alive
+    const QString query  = m_query;
+    const QString base   = m_searchPath;
 
-    auto* watcher = new QFutureWatcher<ScorePassResult>(this);
-    connect(watcher, &QFutureWatcher<ScorePassResult>::finished, this,
+    const auto future = QtConcurrent::run(
+        [engine, query, base]() -> QVector<SearchResultEntry> {
+            QVector<SearchResultEntry> out;
+            const QByteArray q = query.toUtf8();
+
+            // page_size = MaxResults to match the old finder's cap.
+            FffResult* sr = fff_search_mixed(
+                engine.get(), q.constData(), nullptr,
+                /*max_threads*/ 0, /*page_index*/ 0, /*page_size*/ MaxResults,
+                /*combo_boost_multiplier*/ 0, /*min_combo_count*/ 0);
+
+            if (sr && sr->success && sr->handle) {
+                auto* res = static_cast<FffMixedSearchResult*>(sr->handle);
+                out.reserve(static_cast<int>(res->count));
+                for (uint32_t i = 0; i < res->count; ++i) {
+                    const FffMixedItem& it = res->items[i];
+                    const FffScore&     sc = res->scores[i];
+
+                    SearchResultEntry e;
+                    e.relativePath = QString::fromUtf8(it.relative_path);
+                    e.name         = QString::fromUtf8(it.display_name);
+                    e.isDir        = (it.item_type == 1);
+                    e.fullPath     = base + QStringLiteral("/") + e.relativePath;
+                    e.size         = static_cast<qint64>(it.size);
+                    e.modified     = QDateTime::fromSecsSinceEpoch(static_cast<qint64>(it.modified));
+                    e.gitStatus    = it.git_status ? QString::fromUtf8(it.git_status) : QString();
+                    e.frecencyTotal = static_cast<qint64>(it.total_frecency_score);
+                    e.isBinary     = it.is_binary;
+                    e.score        = sc.total;
+                    e.matchType    = sc.match_type ? QString::fromUtf8(sc.match_type) : QString();
+                    e.scoreBreakdown = makeBreakdownMap(sc);
+                    e.matchIndices = computeMatchIndices(e.relativePath, query);
+                    out.append(std::move(e));
+                }
+                fff_free_mixed_search_result(res);
+            }
+            if (sr)
+                fff_free_result(sr);
+            return out;
+        });
+
+    auto* watcher = new QFutureWatcher<QVector<SearchResultEntry>>(this);
+    connect(watcher, &QFutureWatcher<QVector<SearchResultEntry>>::finished, this,
         [this, generation, watcher]() {
             watcher->deleteLater();
-
-            if (generation != m_scoreGeneration)
+            if (generation != m_searchGeneration)
                 return;
 
-            const auto result = watcher->result();
-
             beginResetModel();
-            m_results = result.results;
+            m_results = watcher->result();
             endResetModel();
 
             m_loading = false;
@@ -721,6 +435,22 @@ void FuzzyFinder::startScoring() {
             emit resultCountChanged();
         });
     watcher->setFuture(future);
+}
+
+void FuzzyFinder::recordOpen(int index, const QString& query) {
+    if (!m_engine || index < 0 || index >= static_cast<int>(m_results.size()))
+        return;
+
+    auto             engine = m_engine;
+    const QByteArray q      = query.toUtf8();
+    // fff_track_query keys frecency on the absolute opened path.
+    const QByteArray p      = m_results.at(index).fullPath.toUtf8();
+
+    // Fire-and-forget on a worker thread — frecency tracking must never block UI.
+    QtConcurrent::run([engine, q, p]() {
+        FffResult* r = fff_track_query(engine.get(), q.constData(), p.constData());
+        if (r) fff_free_result(r);
+    });
 }
 
 } // namespace symmetria::filemanager::models

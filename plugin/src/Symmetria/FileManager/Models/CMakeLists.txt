@@ -22,6 +22,22 @@ target_link_libraries(symmetria-filemanager-models PRIVATE
     PkgConfig::LibArchive
     QXlsx::QXlsx
     PkgConfig::FreeXL
+    # Corrosion normalizes the crate target name `fff-c` -> `fff_c` (hyphens to
+    # underscores); the CRATES filter in the top CMakeLists still uses `fff-c`.
+    fff_c
+)
+
+# fff-c's cbindgen-generated C ABI header (FffCreateOptions, fff_search_mixed, ...)
+target_include_directories(symmetria-filemanager-models PRIVATE
+    "${CMAKE_SOURCE_DIR}/third_party/fff/crates/fff-c/include"
+)
+
+# libfff_c.so is co-installed next to this module (see install rule below), so
+# the loader must look beside the library. Without this, EVERY consumer of the
+# plugin (the FM, Symmetria Shell's wallpaper picker/file dialog, Symmetria-IDE)
+# would fail to load the whole module when libfff_c.so isn't on the default path.
+set_target_properties(symmetria-filemanager-models PROPERTIES
+    INSTALL_RPATH "$ORIGIN"
 )
 
 # Install module to QML import path
@@ -37,3 +53,8 @@ install(TARGETS symmetria-filemanager-models LIBRARY DESTINATION "${module_dir}"
 install(TARGETS "${module_plugin_target}" LIBRARY DESTINATION "${module_dir}" RUNTIME DESTINATION "${module_dir}" COMPONENT runtime)
 install(FILES "${module_qmldir}" DESTINATION "${module_dir}" COMPONENT runtime)
 install(FILES "${module_typeinfo}" DESTINATION "${module_dir}" COMPONENT dev)
+
+# Ship the Rust engine's shared object beside the plugin so $ORIGIN rpath resolves it.
+# Corrosion's target is an INTERFACE proxy (no TARGET_FILE), so install via its
+# dedicated helper rather than install(FILES ...).
+corrosion_install(TARGETS fff_c LIBRARY DESTINATION "${module_dir}" COMPONENT runtime)

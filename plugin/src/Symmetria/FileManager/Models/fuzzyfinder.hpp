@@ -2,49 +2,61 @@
 
 // FuzzyFinder — QML element for fzf-style recursive fuzzy file searching.
 //
-// Scans a directory tree asynchronously via QtConcurrent, caches all paths,
-// then scores them against a query string using Smith-Waterman subsequence
-// matching. Results are capped at 200 and exposed as a QAbstractListModel.
+// Backend: the MIT-licensed Rust `fff` engine (vendored at
+// third_party/fff), consumed through its `fff-c` C ABI. This class is a thin
+// QAbstractListModel wrapper that owns an `fff` instance and translates its
+// results into QML model roles. It REPLACED an in-house C++ Smith-Waterman
+// implementation after measurement showed fff's SIMD matcher + warm index is
+// 11–20× faster per keystroke on large trees and also returns git status,
+// frecency, size/mtime, and a full score breakdown in the same call.
 //
 // Key design decisions:
 //
-//   1. Walk-once / score-many — the directory scan (I/O-bound) runs once when
-//      searchPath changes. Subsequent query keystrokes only re-score the cached
-//      path list (CPU-bound), which keeps typing feel instant.
+//   1. Same QML contract as the old implementation — element name `FuzzyFinder`,
+//      the original properties (searchPath/query/showHidden/scanning/loading/
+//      resultCount/error) and roles (Path/Name/IsDir/Score/MatchIndices/FullPath)
+//      are preserved so FuzzyFinderPopup.qml needs no changes for parity. New
+//      roles (Size/Modified/GitStatus/FrecencyTotal/IsBinary/ScoreBreakdown/
+//      MatchType) feed the File Info side-panel.
 //
-//   2. Two generation counters — m_walkGeneration guards the async directory
-//      walk, m_scoreGeneration guards the async scoring pass. Both use the
-//      ArchivePreviewModel pattern: capture before dispatch, check on arrival.
+//   2. fff_search_mixed (not fff_search) — fff_search is files-only; the mixed
+//      search returns directories too (item_type), preserving the finder's
+//      directory-navigation behaviour.
 //
-//   3. Gitignore-aware traversal — parses .gitignore files at each directory
-//      level during the walk, stacking rules so children override parents.
-//      Always skips .git/ directories. Respects showHidden.
+//   3. matchIndices recomputed here — fff's file-search result carries no
+//      per-character match positions (only its grep result does). We recompute
+//      them with a cheap greedy subsequence match over the ≤200 visible rows so
+//      the popup's existing character-highlighting keeps working unchanged.
 //
-//   4. Smith-Waterman scoring — the same algorithm family as fzf and fff.nvim.
-//      Bonuses for word boundaries, consecutive matches, filename region, and
-//      exact case. Path depth penalty favours shallower results.
+//   4. shared_ptr engine handle — the fff instance is created off-thread and
+//      held in a std::shared_ptr<void> whose deleter calls fff_destroy. Each
+//      async search captures a copy, so the engine cannot be freed while a
+//      search is mid-flight on a worker thread (no use-after-free across the
+//      generation-counter handoff).
 
 #include <qabstractitemmodel.h>
+#include <qdatetime.h>
 #include <qobject.h>
 #include <qqmlintegration.h>
 
+#include <memory>
+
 namespace symmetria::filemanager::models {
 
-struct CachedPath {
-    QString relativePath;  // relative to searchPath ("src/utils/format.js")
-    QString name;          // filename component ("format.js")
-    QString fullPath;      // absolute path
-    bool    isDir;
-    int     depth;         // number of '/' in relativePath
-};
-
-struct FuzzyMatchResult {
-    QString      relativePath;
-    QString      name;
-    QString      fullPath;
-    bool         isDir;
-    int          score;
-    QVector<int> matchIndices;  // character positions in relativePath
+struct SearchResultEntry {
+    QString      relativePath;  // relative to searchPath ("src/utils/format.js")
+    QString      name;          // display name (filename, or last dir segment)
+    QString      fullPath;      // absolute path
+    bool         isDir = false;
+    int          score = 0;     // FffScore.total
+    QVector<int> matchIndices;  // recomputed char positions in relativePath
+    qint64       size = 0;
+    QDateTime    modified;
+    QString      gitStatus;     // fff git status string ("M ", "??", ...) or empty
+    qint64       frecencyTotal = 0;
+    bool         isBinary = false;
+    QVariantMap  scoreBreakdown;  // FffScore fields for the File Info panel
+    QString      matchType;       // "frecency", "exact", ...
 };
 
 class FuzzyFinder : public QAbstractListModel {
@@ -70,10 +82,19 @@ public:
         ScoreRole,
         MatchIndicesRole,
         FullPathRole,
+        // File Info panel roles
+        SizeRole,
+        ModifiedRole,
+        GitStatusRole,
+        FrecencyTotalRole,
+        IsBinaryRole,
+        ScoreBreakdownRole,
+        MatchTypeRole,
     };
     Q_ENUM(Roles)
 
     explicit FuzzyFinder(QObject* parent = nullptr);
+    ~FuzzyFinder() override;
 
     // QAbstractListModel overrides
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
@@ -96,13 +117,11 @@ public:
 
     Q_INVOKABLE void clear();
 
+    // Record that the result at `index` was opened for query `query`, so fff's
+    // frecency ranking learns. No-op for an out-of-range index or no engine.
+    Q_INVOKABLE void recordOpen(int index, const QString& query);
+
     static constexpr int MaxResults = 200;
-    // Hard cap on the recursive walk to keep enormous directories
-    // (~/Downloads with 270k files, monorepos with node_modules, etc.)
-    // from making the picker appear hung. When hit, the walker returns
-    // early with whatever was collected and sets `error` so the popup
-    // can warn the user that results are incomplete.
-    static constexpr int MaxScanFiles = 50000;
 
 signals:
     void searchPathChanged();
@@ -114,22 +133,25 @@ signals:
     void errorChanged();
 
 private:
-    void startWalk();
-    void startScoring();
+    void startEngine();  // (re)create the fff instance for m_searchPath, off-thread
+    void startSearch();  // run fff_search_mixed for m_query, off-thread
 
     QString m_searchPath;
     QString m_query;
     bool    m_showHidden = false;
 
-    QVector<CachedPath>       m_cachedPaths;
-    QVector<FuzzyMatchResult> m_results;
+    // fff instance handle, freed via fff_destroy by the shared_ptr deleter once
+    // the last in-flight search releases its captured copy.
+    std::shared_ptr<void> m_engine;
+
+    QVector<SearchResultEntry> m_results;
 
     bool    m_scanning = false;
     bool    m_loading = false;
     QString m_error;
 
-    int m_walkGeneration  = 0;
-    int m_scoreGeneration = 0;
+    int m_createGeneration = 0;
+    int m_searchGeneration = 0;
 };
 
 } // namespace symmetria::filemanager::models

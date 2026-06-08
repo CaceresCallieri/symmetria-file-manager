@@ -23,14 +23,41 @@ Loader {
 
         property int selectedIndex: 0
 
+        // Rich data for the highlighted row, populated from the model's roles.
+        // QAbstractListModel.data() is not reactive on selectedIndex, so we read
+        // it explicitly whenever the selection or the result set changes.
+        property var selectedEntry: ({})
+
         Component.onCompleted: fuzzyModel.searchPath = root.windowState.currentPath;
 
         Component.onDestruction: fuzzyModel.clear()
 
-        // === C++ fuzzy finder model ===
+        onSelectedIndexChanged: popupScope._refreshSelected()
+
+        // === Rust fff file-search model ===
         FuzzyFinder {
             id: fuzzyModel
             showHidden: Config.fileManager.showHidden
+        }
+
+        // Syntax-highlighted preview of the highlighted file (text files only).
+        SyntaxHighlightHelper {
+            id: previewHelper
+            filePath: (popupScope.selectedEntry && popupScope.selectedEntry.fullPath
+                       && !popupScope.selectedEntry.isDir && !popupScope.selectedEntry.isBinary)
+                      ? popupScope.selectedEntry.fullPath : ""
+        }
+
+        // Shared styles for the compact File Info metadata pairs.
+        component MetaLabel: StyledText {
+            color: FmTheme.palette.onSurfaceVariant
+            font.pointSize: FmTheme.font.size.xs
+        }
+        component MetaValue: StyledText {
+            color: FmTheme.palette.onSurface
+            font.pointSize: FmTheme.font.size.xs
+            font.family: FmTheme.font.family.mono
+            elide: Text.ElideRight
         }
 
         // === Scrim backdrop — click to cancel ===
@@ -51,7 +78,9 @@ Loader {
 
             anchors.centerIn: parent
 
-            width: Math.min(parent.width - FmTheme.padding.lg * 4, 560)
+            // Widen to make room for the File Info panel once there are results.
+            width: Math.min(parent.width - FmTheme.padding.lg * 4,
+                            fuzzyModel.resultCount > 0 ? 900 : 560)
             implicitHeight: Math.min(dialogLayout.implicitHeight + FmTheme.padding.lg * 3,
                                      parent.height - FmTheme.padding.lg * 4)
 
@@ -168,7 +197,7 @@ Loader {
                     }
 
                     StyledText {
-                        text: qsTr("Scanning\u2026")
+                        text: qsTr("Scanning…")
                         color: FmTheme.palette.primary
                         font.pointSize: FmTheme.font.size.xs
                         font.family: FmTheme.font.family.mono
@@ -178,77 +207,203 @@ Loader {
                     Item { Layout.fillWidth: true }
                 }
 
-                // Results ListView (virtualized — up to 200 items)
-                ListView {
-                    id: resultsList
-
+                // Results list (left) + File Info panel (right)
+                RowLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    Layout.preferredHeight: Math.min(contentHeight, 350)
-                    clip: true
+                    spacing: FmTheme.spacing.md
 
-                    model: fuzzyModel
-                    boundsBehavior: Flickable.StopAtBounds
+                    // === Results ListView (virtualized — up to 200 items) ===
+                    ListView {
+                        id: resultsList
 
-                    delegate: StyledRect {
-                        id: resultDelegate
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.minimumWidth: 240
+                        Layout.preferredHeight: 360
+                        clip: true
 
-                        required property int index
-                        required property string path
-                        required property string name
-                        required property bool isDir
-                        required property string fullPath
-                        required property var matchIndices
+                        model: fuzzyModel
+                        boundsBehavior: Flickable.StopAtBounds
 
-                        width: resultsList.width
-                        radius: FmTheme.rounding.sm
-                        color: resultDelegate.index === popupScope.selectedIndex
-                            ? Qt.alpha(FmTheme.palette.primary, 0.15)
-                            : "transparent"
-                        implicitHeight: resultRow.implicitHeight + FmTheme.padding.sm * 2
+                        delegate: StyledRect {
+                            id: resultDelegate
 
-                        Behavior on color {
-                            CAnim {}
-                        }
+                            required property int index
+                            required property string path
+                            required property string name
+                            required property bool isDir
+                            required property string fullPath
+                            required property var matchIndices
 
-                        RowLayout {
-                            id: resultRow
+                            width: resultsList.width
+                            radius: FmTheme.rounding.sm
+                            color: resultDelegate.index === popupScope.selectedIndex
+                                ? Qt.alpha(FmTheme.palette.primary, 0.15)
+                                : "transparent"
+                            implicitHeight: resultRow.implicitHeight + FmTheme.padding.sm * 2
 
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.leftMargin: FmTheme.padding.md
-                            anchors.rightMargin: FmTheme.padding.md
-                            spacing: FmTheme.spacing.md
-
-                            // File/folder icon
-                            MaterialIcon {
-                                text: resultDelegate.isDir ? "folder" : "description"
-                                color: resultDelegate.isDir
-                                    ? FmTheme.palette.primary
-                                    : FmTheme.palette.onSurfaceVariant
-                                font.pointSize: FmTheme.font.size.md
+                            Behavior on color {
+                                CAnim {}
                             }
 
-                            // Relative path with highlighted match characters
-                            StyledText {
+                            RowLayout {
+                                id: resultRow
+
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.leftMargin: FmTheme.padding.md
+                                anchors.rightMargin: FmTheme.padding.md
+                                spacing: FmTheme.spacing.md
+
+                                // File/folder icon
+                                MaterialIcon {
+                                    text: resultDelegate.isDir ? "folder" : "description"
+                                    color: resultDelegate.isDir
+                                        ? FmTheme.palette.primary
+                                        : FmTheme.palette.onSurfaceVariant
+                                    font.pointSize: FmTheme.font.size.md
+                                }
+
+                                // Relative path with highlighted match characters
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: popupScope._highlightPath(
+                                        resultDelegate.path, resultDelegate.matchIndices)
+                                    textFormat: Text.RichText
+                                    color: resultDelegate.index === popupScope.selectedIndex
+                                        ? FmTheme.palette.onSurface
+                                        : FmTheme.palette.onSurfaceVariant
+                                    font.pointSize: FmTheme.font.size.sm
+                                    font.family: FmTheme.font.family.mono
+                                    clip: true
+                                }
+                            }
+
+                            StateLayer {
+                                onClicked: {
+                                    popupScope.selectedIndex = resultDelegate.index;
+                                    popupScope._confirmSelection();
+                                }
+                            }
+                        }
+                    }
+
+                    // === File Info panel ===
+                    ColumnLayout {
+                        id: infoPanel
+
+                        // Hard-cap the width: without max/min, the long filename and
+                        // wide preview blow this column out to full width and starve
+                        // the results ListView (preferredWidth alone is only a hint).
+                        Layout.preferredWidth: 360
+                        Layout.minimumWidth: 360
+                        Layout.maximumWidth: 360
+                        Layout.fillWidth: false
+                        Layout.fillHeight: true
+                        visible: fuzzyModel.resultCount > 0
+                        spacing: FmTheme.spacing.sm
+
+                        // File name
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: popupScope.selectedEntry.name || ""
+                            color: FmTheme.palette.onSurface
+                            font.pointSize: FmTheme.font.size.sm
+                            font.weight: Font.DemiBold
+                            font.family: FmTheme.font.family.mono
+                            elide: Text.ElideMiddle
+                        }
+
+                        // Metadata — compact 2-up grid. Each cell is a
+                        // space-between label/value pair, two per row, so the four
+                        // facts occupy two tight rows and leave the preview more room.
+                        GridLayout {
+                            Layout.fillWidth: true
+                            columns: 2
+                            columnSpacing: FmTheme.spacing.md * 2
+                            rowSpacing: FmTheme.spacing.sm
+
+                            // Size
+                            RowLayout {
                                 Layout.fillWidth: true
-                                text: popupScope._highlightPath(
-                                    resultDelegate.path, resultDelegate.matchIndices)
-                                textFormat: Text.RichText
-                                color: resultDelegate.index === popupScope.selectedIndex
-                                    ? FmTheme.palette.onSurface
-                                    : FmTheme.palette.onSurfaceVariant
-                                font.pointSize: FmTheme.font.size.sm
-                                font.family: FmTheme.font.family.mono
-                                clip: true
+                                spacing: FmTheme.spacing.sm
+                                MetaLabel { text: qsTr("Size") }
+                                Item { Layout.fillWidth: true }
+                                MetaValue {
+                                    text: popupScope.selectedEntry.isDir
+                                          ? qsTr("dir")
+                                          : FileManagerService.formatSize(popupScope.selectedEntry.size || 0)
+                                }
+                            }
+                            // Type
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: FmTheme.spacing.sm
+                                MetaLabel { text: qsTr("Type") }
+                                Item { Layout.fillWidth: true }
+                                MetaValue { text: popupScope._typeLabel(popupScope.selectedEntry) }
+                            }
+                            // Git
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: FmTheme.spacing.sm
+                                MetaLabel { text: qsTr("Git") }
+                                Item { Layout.fillWidth: true }
+                                GitStatusBadge {
+                                    id: gitBadge
+                                    visible: popupScope._gitStatusObj(popupScope.selectedEntry.gitStatus) !== null
+                                    status: popupScope._gitStatusObj(popupScope.selectedEntry.gitStatus) || ({ char: "?", color: FmTheme.palette.outline })
+                                }
+                                MetaValue { text: "—"; visible: !gitBadge.visible }
+                            }
+                            // Modified
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: FmTheme.spacing.sm
+                                MetaLabel { text: qsTr("Modified") }
+                                Item { Layout.fillWidth: true }
+                                MetaValue {
+                                    text: popupScope.selectedEntry.modified
+                                          ? FileManagerService.formatDate(popupScope.selectedEntry.modified)
+                                          : "—"
+                                }
                             }
                         }
 
-                        StateLayer {
-                            onClicked: {
-                                popupScope.selectedIndex = resultDelegate.index;
-                                popupScope._confirmSelection();
+                        // Preview (text files) — fills ALL remaining panel height.
+                        // It is the only fillHeight child, so it absorbs every pixel
+                        // left below the compact metadata (no trailing spacer).
+                        StyledRect {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.topMargin: FmTheme.spacing.sm
+                            radius: FmTheme.rounding.sm
+                            color: Qt.alpha(FmTheme.palette.onSurface, 0.04)
+                            visible: previewHelper.hasContent
+                            clip: true
+
+                            Flickable {
+                                anchors.fill: parent
+                                anchors.margins: FmTheme.padding.sm
+                                contentWidth: width
+                                contentHeight: previewText.implicitHeight
+                                boundsBehavior: Flickable.StopAtBounds
+                                clip: true
+
+                                TextEdit {
+                                    id: previewText
+                                    width: parent.width
+                                    text: previewHelper.highlightedContent
+                                    textFormat: Text.RichText
+                                    readOnly: true
+                                    selectByMouse: false
+                                    wrapMode: TextEdit.NoWrap
+                                    color: FmTheme.palette.onSurfaceVariant
+                                    font.pointSize: FmTheme.font.size.xs
+                                    font.family: FmTheme.font.family.mono
+                                }
                             }
                         }
                     }
@@ -268,11 +423,7 @@ Loader {
                     horizontalAlignment: Text.AlignHCenter
                 }
 
-                // Walk-cap warning — shown when the walker hit MaxScanFiles.
-                // Uses M3 `error` token (not `tertiary`) so it actually stands
-                // out against the popup background; tertiary on this surface
-                // rendered too dark to read. Wraps so the full guidance
-                // ("open from a smaller subdir") stays legible at narrow widths.
+                // Engine/index error — shown when fff failed to create or index.
                 StyledText {
                     Layout.fillWidth: true
                     Layout.topMargin: FmTheme.spacing.sm
@@ -300,6 +451,10 @@ Loader {
             const targetIsDir = fuzzyModel.data(idx, FuzzyFinder.IsDirRole);
             const targetName = fuzzyModel.data(idx, FuzzyFinder.NameRole);
 
+            // Record the open so fff's frecency ranking learns. Synchronous read
+            // of the path happens inside recordOpen before the model is cleared.
+            fuzzyModel.recordOpen(popupScope.selectedIndex, searchInput.text);
+
             root.windowState.closeModal();
 
             if (targetIsDir) {
@@ -317,6 +472,54 @@ Loader {
                 // the rebuild fires. Swapping the order breaks cross-dir focus.
                 root.windowState.fuzzyFinderNavigated(targetName);
                 root.windowState.navigate(parentPath);
+            }
+        }
+
+        // Read the highlighted row's roles into selectedEntry (data() is not a
+        // reactive binding source, so this is called on selection/result changes).
+        function _refreshSelected(): void {
+            if (fuzzyModel.resultCount === 0 || popupScope.selectedIndex < 0
+                || popupScope.selectedIndex >= fuzzyModel.resultCount) {
+                popupScope.selectedEntry = ({});
+                return;
+            }
+            const idx = fuzzyModel.index(popupScope.selectedIndex, 0);
+            popupScope.selectedEntry = {
+                name:      fuzzyModel.data(idx, FuzzyFinder.NameRole),
+                fullPath:  fuzzyModel.data(idx, FuzzyFinder.FullPathRole),
+                isDir:     fuzzyModel.data(idx, FuzzyFinder.IsDirRole),
+                size:      fuzzyModel.data(idx, FuzzyFinder.SizeRole),
+                modified:  fuzzyModel.data(idx, FuzzyFinder.ModifiedRole),
+                gitStatus: fuzzyModel.data(idx, FuzzyFinder.GitStatusRole),
+                isBinary:  fuzzyModel.data(idx, FuzzyFinder.IsBinaryRole),
+            };
+        }
+
+        function _typeLabel(entry: var): string {
+            if (!entry || entry.name === undefined)
+                return "";
+            if (entry.isDir)
+                return qsTr("directory");
+            const name = entry.name + "";
+            const dot = name.lastIndexOf(".");
+            return (dot > 0 && dot < name.length - 1) ? name.substring(dot + 1) : qsTr("file");
+        }
+
+        // Map fff's git status string (porcelain-ish, e.g. "M ", "??", "A ") to the
+        // GitStatusBadge `{char, color, tooltip}` shape. Returns null when there is
+        // no status (badge hidden).
+        function _gitStatusObj(s: var): var {
+            if (!s || (s + "").trim().length === 0)
+                return null;
+            const code = (s + "").trim().charAt(0);
+            switch (code) {
+            case "M": return { char: "M", color: FmTheme.indicator.cut,       tooltip: qsTr("Modified") };
+            case "A": return { char: "A", color: FmTheme.indicator.selection, tooltip: qsTr("Added") };
+            case "D": return { char: "D", color: FmTheme.palette.error,        tooltip: qsTr("Deleted") };
+            case "R": return { char: "R", color: FmTheme.indicator.yank,       tooltip: qsTr("Renamed") };
+            case "?": return { char: "?", color: FmTheme.palette.outline,      tooltip: qsTr("Untracked") };
+            case "!": return { char: "!", color: FmTheme.palette.outline,      tooltip: qsTr("Ignored") };
+            default:  return { char: code, color: FmTheme.palette.outline,     tooltip: s + "" };
             }
         }
 
@@ -367,11 +570,13 @@ Loader {
             }
         }
 
-        // Reset selectedIndex when results change
+        // Reset selection when results change, and refresh the File Info panel
+        // (selectedIndex may stay 0 across a result reset, so refresh explicitly).
         Connections {
             target: fuzzyModel
             function onResultCountChanged() {
                 popupScope.selectedIndex = 0;
+                popupScope._refreshSelected();
             }
         }
     }

@@ -18,6 +18,27 @@ pkg_check_modules(LibArchive IMPORTED_TARGET libarchive REQUIRED)
 find_package(QXlsxQt6 REQUIRED)
 pkg_check_modules(FreeXL IMPORTED_TARGET freexl REQUIRED)
 
+# === Rust file-search engine (fff) via Corrosion ===
+# The fuzzy finder's backend is the MIT-licensed `fff` engine, vendored as a
+# submodule under third_party/fff and consumed through its `fff-c` C ABI
+# (header: third_party/fff/crates/fff-c/include/fff.h, cbindgen-generated).
+# Corrosion drives cargo from CMake so `cmake --build` builds libfff_c.so
+# alongside the C++ sources. We import ONLY the fff-c crate (CRATES fff-c) so
+# the workspace's Lua/MCP members are never built. PROFILE release is forced:
+# a debug build of the SIMD matcher would defeat the reason we adopted it.
+include(FetchContent)
+FetchContent_Declare(Corrosion
+    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+    GIT_TAG v0.6.1
+)
+FetchContent_MakeAvailable(Corrosion)
+
+corrosion_import_crate(
+    MANIFEST_PATH "${CMAKE_CURRENT_LIST_DIR}/third_party/fff/Cargo.toml"
+    CRATES fff-c
+    PROFILE release
+)
+
 set(QT_QML_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/qml")
 qt_standard_project_setup(REQUIRES 6.9)
 

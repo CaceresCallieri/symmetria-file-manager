@@ -18,6 +18,21 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The fuzzy finder links the vendored Rust `fff` engine (submodule).
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-${{ runner.os }}-${{ hashFiles('plugin/third_party/fff/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
 
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4

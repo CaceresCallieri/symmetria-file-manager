@@ -5,6 +5,9 @@
 - [Tauri pivot (ARCHIVED)](project_tauri_pivot.md) — the now-abandoned Tauri experiment on the `tauri-pivot` branch / `app-tauri/` subdir. Reference only; NOT the active direction. Active FM work is the QML tree.
 - [Tauri testing workflow](feedback_tauri_testing_workflow.md) — ws7-silent test scripts (test-fm.sh / screenshot-ws7.sh); patterns still useful, but app-tauri is archived.
 
+## 🦀 Rust beachhead (2026-06-08): fuzzy finder now uses the `fff` engine
+- [Rust fff finder](project_rust_fff_finder.md) — finder backend swapped to the MIT Rust `fff` engine (fff-c C ABI, vendored submodule) after a MEASURED 11–20× per-keystroke win + frecency/git/score data. The deliberate, surgical Rust beachhead (not a migration); shared with the future IDE via the Models plugin. First cut = engine + fff.nvim-style File Info panel. Gotchas in CLAUDE.md "Critical Pitfalls".
+
 ## Project Goal
 Build a keyboard-first graphical file manager as a FloatingWindow
 inside the Symmetria QuickShell desktop shell. Pure native Qt/QML/C++
