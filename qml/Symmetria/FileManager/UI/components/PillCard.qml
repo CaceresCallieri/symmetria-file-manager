@@ -19,6 +19,8 @@ import Symmetria.FileManager.UI
 // tabs) use PillSurface directly.
 
 PillSurface {
+    id: root
+
     radius: FmTheme.rounding.lg
 
     darkShadowOffsetX: 3
