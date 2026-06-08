@@ -201,9 +201,11 @@ private slots:
 
     void extensionlessConfigIsText()
     {
-        // Config-ish files the glob can't place still resolve to text/plain via
-        // content detection (or the NUL-byte sniff fallback), so they preview
-        // their contents — the "always show text content" rule.
+        // Config-ish files with no registered extension are classified as text/plain
+        // by QMimeDatabase's magic/content detection — isTextLike takes the MIME-inheritance
+        // branch (mime.inherits("text/plain")), NOT the NUL-byte sniff. The sniff only fires
+        // when Qt returns application/octet-stream, which content-magic prevents for readable
+        // text (libmagic identifies ASCII content as text/plain regardless of extension).
         const QString path = writeText(m_tmpDir, "somerc", "# config\nsetting = 1\n");
 
         FileInfo fi;

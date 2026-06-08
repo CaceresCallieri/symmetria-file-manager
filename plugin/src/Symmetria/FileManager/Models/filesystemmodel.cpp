@@ -79,8 +79,11 @@ unsigned long filesystemFsType(const QString& path) {
 }
 
 // Reads the first 4 KiB and treats the file as text when it contains no NUL
-// byte. Used ONLY for types the MIME database can't classify, so unregistered /
-// extensionless configs (.ini, .conf, Dockerfile) still preview their contents.
+// byte. Only reached when the MIME database returns application/octet-stream —
+// in practice this requires content that Qt's magic detection cannot identify as
+// text (i.e., non-ASCII binary with no known magic signature). Direct unit-test
+// isolation is impractical because libmagic classifies readable ASCII as
+// text/plain first, bypassing this sniff entirely.
 // Empty or unreadable files are NOT treated as text — the metadata fallback card
 // is more useful for a 0-byte unknown.
 static bool looksLikeText(const QString& path) {
@@ -159,6 +162,10 @@ FileSystemEntry::FileSystemEntry(const QString& path, const QString& relativePat
         return db.mimeTypeForFile(m_path).name();
       }())
     , m_isVideo(m_mimeType.startsWith(QStringLiteral("video/")))
+    // NOTE: mimeTypeForFile is called again here (m_mimeType above stores only the
+    // name string, not the QMimeType object the init-list can reuse). Since this ctor
+    // is dead code (production always goes through buildCachedEntryData → CachedData&&),
+    // the redundant lookup is accepted rather than adding a helper struct for one ctor.
     , m_isText([this]() {
         if (m_fileInfo.isDir()) return false;
         static const QMimeDatabase db;

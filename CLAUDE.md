@@ -51,7 +51,7 @@ cmake --build build --parallel $(nproc)
 QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
 ```
 
-Four test executables cover the async model classes: `FileSystemModelTest` (sorting, filtering, file watcher diffs), `ArchivePreviewModelTest` (entry caps, truncation, corruption handling), `SyntaxHighlightHelperTest` (highlighting output, binary detection, truncation), `FileInfoTest` (path → entry bridge, 6 cases). `QT_QPA_PLATFORM=offscreen` is required because `QTextDocument` and `QImageReader` need `QGuiApplication`.
+Four test executables cover the async model classes: `FileSystemModelTest` (sorting, filtering, file watcher diffs), `ArchivePreviewModelTest` (entry caps, truncation, corruption handling), `SyntaxHighlightHelperTest` (highlighting output, binary detection, truncation), `FileInfoTest` (path → entry bridge). `QT_QPA_PLATFORM=offscreen` is required because `QTextDocument` and `QImageReader` need `QGuiApplication`.
 
 To skip tests when doing a production build: `cmake -B build -DBUILD_TESTING=OFF`
 
@@ -144,8 +144,9 @@ If the plugin is not installed, Symmetria Shell's wallpaper picker and file dial
   path, so `FuzzyFinderInfoPanel` mints one via the `FileInfo` element. Both
   debounce (150 ms) before driving the preview so fast j/k doesn't thrash it.
 - **Text classification is `FileSystemEntry.isText` (C++), the single source of
-  truth** — MIME inheritance from `text/plain` plus a NUL-byte content sniff for
-  unregistered/extensionless configs. The router uses it as the catch-all after
+  truth** — MIME inheritance from `text/plain` plus a NUL-byte content sniff as a
+  fallback for unregistered/extensionless configs (when the MIME DB returns
+  `application/octet-stream` or an invalid type). The router uses it as the catch-all after
   the specific binary types, so any non-binary file previews its contents (with
   syntax highlighting only when a definition exists). Do NOT reintroduce a
   QML-side mime-string list — the old one silently rotted (it predated the
@@ -199,7 +200,7 @@ Declare properties in this order within every QML component:
 | C++ files | snake_case | `filesystemmodel.hpp` |
 | C++ namespace | `symmetria::filemanager::models` | — |
 | C++ member vars | `m_` prefix | `m_loading`, `m_entries` |
-| C++ bool properties | Bare adjective (no `is`/`get` prefix) | `loading`, `truncated`, `error` |
+| C++ bool properties | `FileSystemEntry` predicates: `is` prefix (`isText`, `isDir`, `isImage`); `FileSystemModel` state: bare adjective (`loading`, `truncated`) |  |
 
 ### Imports
 
