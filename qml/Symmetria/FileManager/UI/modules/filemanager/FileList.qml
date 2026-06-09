@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 
 import Symmetria.FileManager.UI
-import "FlashLogic.js" as FlashLogic
 import "handlers/SearchHandler.js" as SearchHandler
 import "handlers/FlashHandler.js" as FlashHandler
 import "handlers/ChordHandler.js" as ChordHandler
@@ -130,7 +129,7 @@ Item {
     }
 
     Connections {
-        target: windowState
+        target: root.windowState
 
         function onSearchQueryChanged() {
             SearchHandler.computeMatches(root, view, false);
@@ -151,7 +150,7 @@ Item {
         }
 
         function onActiveModalChanged() {
-            if (windowState.activeModal === windowState.modalNone)
+            if (root.windowState.activeModal === root.windowState.modalNone)
                 Qt.callLater(() => view.forceActiveFocus());
         }
 
@@ -351,13 +350,13 @@ Item {
         // Vim-style keyboard navigation
         Keys.onPressed: function(event) {
             // Block all keys while a modal popup is visible
-            if (windowState.activeModal !== windowState.modalNone) {
+            if (root.windowState.activeModal !== root.windowState.modalNone) {
                 event.accepted = true;
                 return;
             }
 
             // Bookmark sub-mode: capture a single letter for create/delete
-            if (windowState.bookmarkSubModeActive) {
+            if (root.windowState.bookmarkSubModeActive) {
                 ChordHandler.handleBookmarkSubMode(event, root);
                 return;
             }
@@ -365,13 +364,13 @@ Item {
             // Resolve active chord BEFORE picker suppression — otherwise a
             // chord like g,d is broken because 'd' gets suppressed before
             // the chord resolver can see it.
-            if (windowState.activeChordPrefix !== "") {
+            if (root.windowState.activeChordPrefix !== "") {
                 ChordHandler.resolveChord(event, root, view, clipboardCopyProcess);
                 return;
             }
 
             // Flash navigation mode: intercept all keys for search/label/jump
-            if (windowState.flashActive) {
+            if (root.windowState.flashActive) {
                 FlashHandler.handleKey(event, root, view);
                 return;
             }
@@ -382,10 +381,10 @@ Item {
 
         onActiveFocusChanged: {
             if (!activeFocus) {
-                if (windowState.activeChordPrefix !== "")
-                    windowState.activeChordPrefix = "";
-                if (windowState.bookmarkSubModeActive)
-                    windowState.bookmarkSubMode = "";
+                if (root.windowState.activeChordPrefix !== "")
+                    root.windowState.activeChordPrefix = "";
+                if (root.windowState.bookmarkSubModeActive)
+                    root.windowState.bookmarkSubMode = "";
             }
         }
     }
@@ -414,6 +413,18 @@ Item {
         property var _pendingCallback: null
 
         onExited: (exitCode, exitStatus) => {
+            // DIAGNOSTIC — see filemanager.log [FileList.cc] entries.
+            // Added 2026-05-15 to investigate non-deterministic "cc says copied
+            // but clipboard is empty" reports. Logs every exit (not just
+            // failures) so we can correlate the spurious "exitCode: 0
+            // exitStatus: 0" WARN cluster with the actual ShellRunner.NormalExit
+            // enum value. Remove once the failure mode is understood.
+            Logger.info("FileList.cc",
+                "EXIT exitCode=" + exitCode
+                + " exitStatus=" + exitStatus
+                + " NormalExit=" + ShellRunner.NormalExit
+                + " strictNormal=" + (exitStatus === ShellRunner.NormalExit)
+                + " stderr=" + JSON.stringify((stderrText || "").trim().substring(0, 200)));
             if (exitCode !== 0 || exitStatus !== ShellRunner.NormalExit)
                 Logger.warn("FileList", "wl-copy failed — exitCode: " + exitCode + " exitStatus: " + exitStatus);
             const cb = _pendingCallback;
