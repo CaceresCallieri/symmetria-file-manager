@@ -1,6 +1,10 @@
 pragma ComponentBehavior: Bound
 
 import Symmetria.FileManager.UI
+// DO NOT REMOVE: FlashHandler.js (non-pragma-library) reaches FlashLogic through this file's
+// import scope at runtime. The linter cannot see cross-JS scope deps and reports this as
+// unused — that is a false positive. Removing it silently breaks flash mode with a ReferenceError.
+import "FlashLogic.js" as FlashLogic // qmllint disable unused-imports
 import "handlers/SearchHandler.js" as SearchHandler
 import "handlers/FlashHandler.js" as FlashHandler
 import "handlers/ChordHandler.js" as ChordHandler
