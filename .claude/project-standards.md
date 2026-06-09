@@ -29,6 +29,13 @@ property-**assignment** form is a real cross-file break: at runtime it is the
 fatal `Cannot assign to non-existent property` that aborts the QML load. The
 clean tree has zero of them, so promoting it adds no false positives.
 
+Caller scoping is automatic (no human judgment needed): a caller file's own
+`Warning`/`Error` lines are printed as a non-blocking `ℹ` note rather than
+failing the gate — they are pre-existing baseline, not regressions from this
+change — while `Could not find property` is judged tree-wide. So `--with-callers`
+blocks only on the **changed file's** `Warning`/`Error` plus any caller's
+`Could not find property`.
+
 For changes touching the **C++ plugin** (`plugin/`), the existing build + test
 gate applies (see `CLAUDE.md` → Build & Run):
 

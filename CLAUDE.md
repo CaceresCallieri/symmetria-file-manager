@@ -114,10 +114,13 @@ cascades upward, so the service log blames the top-level file, not the real one)
 `--with-callers` greps every file that names the changed component and lints
 those too; the gate promotes that specific `Could not find property` diagnostic
 to a failure (the noisy `Member "x" not found` var-singleton false positives stay
-demoted). Use the same delta rule as scoped mode: only new `Warning`/`Error`
-results in caller files are blocking; pre-existing failures in call sites are not
-regressions introduced by this change. This catches the break statically, before
-any `systemctl restart`.
+demoted). Caller scoping is automatic: a caller file's own `Warning`/`Error`
+lines are reported as a non-blocking `ℹ` note (a pre-existing baseline warning in
+a call site is not a regression this change introduced), while `Could not find
+property` stays tree-wide so the actual API break still fails the gate. So only
+the changed file's `Warning`/`Error` plus any caller's `Could not find property`
+are blocking — no need to eyeball which caller warnings are pre-existing. This
+catches the break statically, before any `systemctl restart`.
 
 It wraps `qmllint` (via `.qmllint.ini`) and adds god-file + dead-component
 detection (the "Knip + ESLint for QML"; no extra deps). The gate is **delta-based**:

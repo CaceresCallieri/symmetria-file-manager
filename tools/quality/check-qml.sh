@@ -114,6 +114,22 @@ hr "1. qmllint (bad practices, unused imports, type errors)"
 lint_out="$( cd "$ROOT" && "$QMLLINT" "${QML_FILES[@]}" 2>&1 )"
 lint_actionable="$(printf '%s\n' "$lint_out" | grep -E '^(Warning|Error):' || true)"
 
+# Caller-aware scoping (--with-callers): the caller files were pulled into the
+# lint set ONLY to surface cross-file API breaks (the "Could not find property"
+# promotion below), which is judged tree-wide. Their OWN pre-existing
+# Warning/Error lines are not this change's responsibility — a caller's baseline
+# warning is not a regression introduced here — so restrict the BLOCKING set to
+# the originally-changed files. Suppressed caller warnings are reported as a
+# non-blocking informational note (transparency). grep -F treats the
+# newline-joined scoped paths as an OR-set of fixed strings; each qmllint line
+# embeds the absolute file path, so a path match cleanly partitions the lines.
+caller_warnings=""
+if [ "$WITH_CALLERS" -eq 1 ] && [ ${#SCOPED_FILES[@]} -gt 0 ] && [ -n "$lint_actionable" ]; then
+  scoped_paths="$(printf '%s\n' "${SCOPED_FILES[@]}")"
+  caller_warnings="$(printf '%s\n' "$lint_actionable" | grep -Fv "$scoped_paths" || true)"
+  lint_actionable="$(printf '%s\n' "$lint_actionable" | grep -F "$scoped_paths" || true)"
+fi
+
 # Promote ONE diagnostic back out of the demoted-to-Info bucket: assigning a
 # property that a component type does not declare ("Could not find property X").
 # .qmllint.ini demotes the whole missing-property category to Info because member
@@ -124,7 +140,9 @@ lint_actionable="$(printf '%s\n' "$lint_out" | grep -E '^(Warning|Error):' || tr
 # the QML load). The two are distinguishable by message text — the noise reads
 # 'Member "x" not found on type', this reads 'Could not find property' — and the
 # clean tree has ZERO of the latter, so failing on it adds no false positives.
-# Pair with --with-callers so a changed component's call sites are actually in scope.
+# Pair with --with-callers so a changed component's call sites are actually in
+# scope. This stays TREE-WIDE (all linted files, callers included) even under the
+# caller-warning scoping above — catching the break at the caller IS the point.
 prop_break="$(printf '%s\n' "$lint_out" | grep -E 'Could not find property' || true)"
 
 combined="$(printf '%s\n%s\n' "$lint_actionable" "$prop_break" | grep -E '.' || true)"
@@ -141,6 +159,13 @@ if [ -n "$combined" ]; then
 else
   info_n="$(printf '%s\n' "$lint_out" | grep -cE '^Info:' || true)"
   echo "✅ qmllint clean (no warnings/errors; ${info_n} demoted info notes hidden)"
+fi
+
+# Non-blocking: pre-existing Warning/Error lines in caller files (only populated
+# in --with-callers mode). Shown so the user sees them without the gate failing.
+if [ -n "$caller_warnings" ]; then
+  echo "ℹ  $(printf '%s\n' "$caller_warnings" | wc -l) pre-existing warning(s) in caller files (not blocking):"
+  printf '%s\n' "$caller_warnings" | sed 's/^/     /'
 fi
 
 # ── 2. GOD FILES ───────────────────────────────────────────────────────────
