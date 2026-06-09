@@ -59,8 +59,11 @@ Loader {
             anchors.centerIn: parent
 
             // Widen to make room for the File Info panel once there are results.
+            // Caps are the natural max; Math.min still clamps to the window on
+            // small screens. The Info panel is pinned at 360, so the extra width
+            // flows into the results list (more of each path visible).
             width: Math.min(parent.width - FmTheme.padding.lg * 4,
-                            fuzzyModel.resultCount > 0 ? 900 : 560)
+                            fuzzyModel.resultCount > 0 ? 1080 : 672)
             implicitHeight: Math.min(dialogLayout.implicitHeight + FmTheme.padding.lg * 3,
                                      parent.height - FmTheme.padding.lg * 4)
 
@@ -204,7 +207,7 @@ Loader {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         Layout.minimumWidth: 240
-                        Layout.preferredHeight: 360
+                        Layout.preferredHeight: 432
                         clip: true
 
                         model: fuzzyModel
