@@ -47,9 +47,10 @@ Gate on **not regressing**, and on the **changed files being clean**:
 - The full-tree counts MUST NOT increase. Reducing them is welcome.
 
 ### Baseline snapshot (full-tree, as of 2026-06-08)
-- qmllint: **88** actionable warnings (mostly `Unqualified access`,
+- qmllint: **87** actionable warnings (mostly `Unqualified access`,
   `Quick.layout-positioning`; one `incompatible-type` at `WindowState.qml:170`).
-- God files (>500 lines): **1** — `FileTreeView.qml` (1737).
+- God files (>500 lines): **0**. (`FileTreeView.qml` was decomposed from 1737
+  lines into TreeModel.js / TreeKeyHandler.js / FileTreeRow.qml; it is now 499.)
 - Dead components: **0**.
 
 Re-measure with `tools/quality/check-qml.sh` (full tree) and update this snapshot

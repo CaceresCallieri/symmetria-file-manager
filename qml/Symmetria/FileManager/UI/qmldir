@@ -44,6 +44,7 @@ DeleteConfirmPopup 1.0 modules/filemanager/DeleteConfirmPopup.qml
 FallbackPreview 1.0 modules/filemanager/FallbackPreview.qml
 FileList 1.0 modules/filemanager/FileList.qml
 FileListItem 1.0 modules/filemanager/FileListItem.qml
+FileTreeRow 1.0 modules/filemanager/FileTreeRow.qml
 FileTreeView 1.0 modules/filemanager/FileTreeView.qml
 FuzzyFinderInfoPanel 1.0 modules/filemanager/FuzzyFinderInfoPanel.qml
 FuzzyFinderPopup 1.0 modules/filemanager/FuzzyFinderPopup.qml

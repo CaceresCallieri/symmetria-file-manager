@@ -174,3 +174,32 @@ function recompute(root, view) {
             + " | labels: " + labelList);
     }
 }
+
+// Flash-label rendering — mirrors FileListItem._highlightFlash so the visual is
+// identical across the Miller and Tree views. Lives here (a non-`.pragma
+// library` handler) rather than in FlashLogic.js because it reads FmTheme
+// palette/font tokens, which resolve through the importing file's QML scope
+// (FileTreeView.qml and FileTreeRow.qml both import this handler and the UI
+// module that provides FmTheme). A `.pragma library` script has no QML scope
+// and could not see FmTheme.
+function htmlEscape(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function highlightFlash(name, query, label, matchStart) {
+    if (matchStart < 0 || query === "" || label === "")
+        return htmlEscape(name);
+    var before = name.substring(0, matchStart);
+    var match = name.substring(matchStart, matchStart + query.length);
+    var afterMatchStart = matchStart + query.length;
+    var replacedEnd = Math.min(afterMatchStart + label.length, name.length);
+    var after = name.substring(replacedEnd);
+    var querySpan = "<span style=\"background-color: " + FmTheme.palette.secondaryContainer
+                    + "; color: " + FmTheme.palette.onSecondaryContainer + ";\">"
+                    + htmlEscape(match) + "</span>";
+    var labelSpan = "<span style=\"background-color: " + FmTheme.palette.primary
+                    + "; color: " + FmTheme.palette.onPrimary
+                    + "; font-weight: 700; font-family: " + FmTheme.font.family.mono + ";\">"
+                    + htmlEscape(label) + "</span>";
+    return htmlEscape(before) + querySpan + labelSpan + htmlEscape(after);
+}
