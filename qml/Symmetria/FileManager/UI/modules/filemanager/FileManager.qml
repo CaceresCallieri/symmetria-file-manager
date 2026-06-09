@@ -66,12 +66,50 @@ Item {
 
     Component {
         id: treeComponent
-        FileTreeView {
-            rootPath: tabManager.activeTab ? tabManager.activeTab.currentPath : Paths.home
-            showHidden: Config.fileManager.showHidden
-            windowState: tabManager.activeTab
-            onFileActivated: function(path) { fmFileOpener.open(path, ""); }
-            onShowHiddenToggleRequested: Config.fileManager.showHidden = !Config.fileManager.showHidden
+        // Tree mode wrapped in a SOLID rounded card so it floats on the window
+        // backdrop exactly like a MillerColumns column (Tahoe/Files look). The
+        // chrome gap + surface live HERE, in the standalone host — NOT in the
+        // shared FileTreeView, whose flush, content-fit `implicitHeight` the IDE
+        // sidebar consumers depend on. The card mirrors MillerColumns' per-column
+        // StyledRect; FileTreeView's own background stays transparent
+        // (FmTheme.layer) and reveals this surface, just as FileList does over
+        // its column surface.
+        Item {
+            // Re-expose the outputs FileManager reads off `viewLoader.item` so
+            // this wrapper satisfies the same implicit interface MillerColumns does.
+            property alias fileCount: treeView.fileCount
+            property alias currentEntry: treeView.currentEntry
+            property alias currentItemBottomY: treeView.currentItemBottomY
+            property alias currentColumnX: treeView.currentColumnX
+            property alias currentColumnWidth: treeView.currentColumnWidth
+
+            // Chrome gap — the card floats `padding.md` inside the view cell,
+            // matching the Miller layout's outer margin.
+            Item {
+                anchors.fill: parent
+                anchors.margins: FmTheme.padding.md
+
+                StyledRect {
+                    anchors.fill: parent
+                    radius: FmTheme.rounding.lg
+                    color: FmTheme.palette.surfaceContainerLow
+                    border.color: FmTheme.overlay.subtle
+                    border.width: 1
+                }
+
+                // Inset `padding.md` over the surface so the rows clear the
+                // rounded corners (same inset MillerColumns gives FileList).
+                FileTreeView {
+                    id: treeView
+                    anchors.fill: parent
+                    anchors.margins: FmTheme.padding.md
+                    rootPath: tabManager.activeTab ? tabManager.activeTab.currentPath : Paths.home
+                    showHidden: Config.fileManager.showHidden
+                    windowState: tabManager.activeTab
+                    onFileActivated: function(path) { fmFileOpener.open(path, ""); }
+                    onShowHiddenToggleRequested: Config.fileManager.showHidden = !Config.fileManager.showHidden
+                }
+            }
         }
     }
 
