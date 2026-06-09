@@ -34,8 +34,13 @@ HostController::HostController(QObject* parent)
 
 HostController::~HostController()
 {
+    // close() clears the server name, so capture the socket path first —
+    // removing afterwards with fullServerName() would pass an empty string
+    // and log "QFile::remove: Empty or null file name" on every shutdown.
+    const QString serverPath = m_server.fullServerName();
     m_server.close();
-    QFile::remove(m_server.fullServerName());
+    if (!serverPath.isEmpty())
+        QFile::remove(serverPath);
 }
 
 QString HostController::socketPath()

@@ -98,7 +98,7 @@ Item {
 
                     text: (tabItem.index + 1) + " " + tabItem.tabLabel
                     color: tabItem.isActive ? FmTheme.palette.onSurface : FmTheme.palette.onSurfaceVariant
-                    font.pixelSize: FmTheme.font.size.sm
+                    font.pointSize: FmTheme.font.size.sm
 
                     Behavior on anchors.horizontalCenterOffset { Anim {} }
                 }
@@ -122,7 +122,7 @@ Item {
                         anchors.centerIn: parent
                         text: "close"
                         color: FmTheme.palette.onSurfaceVariant
-                        font.pixelSize: FmTheme.font.size.sm
+                        font.pointSize: FmTheme.font.size.sm
                     }
 
                     StateLayer {

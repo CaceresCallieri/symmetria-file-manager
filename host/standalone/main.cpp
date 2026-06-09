@@ -23,6 +23,11 @@
 int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);
+    // quitOnLastWindowClosed is deliberately left at its default (true): the
+    // daemon exits when the last FM window closes and systemd (Restart=always)
+    // brings up a fresh instance. This is a design decision — each session
+    // starts clean rather than resuming prior window state. Do NOT "fix" this
+    // by setting quitOnLastWindowClosed(false).
     QGuiApplication::setApplicationName(QStringLiteral("symmetria-fm"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("File Manager"));
     QGuiApplication::setOrganizationName(QStringLiteral("Symmetria"));
