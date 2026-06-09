@@ -34,8 +34,10 @@ StyledRect 1.0 components/StyledRect.qml
 StyledText 1.0 components/StyledText.qml
 
 # === Panel sub-components (also exposed for IDE consumers) ===
+ArchiveExtractionView 1.0 modules/filemanager/ArchiveExtractionView.qml
 ArchivePreview 1.0 modules/filemanager/ArchivePreview.qml
 AudioPreview 1.0 modules/filemanager/AudioPreview.qml
+ContextMenuActionsView 1.0 modules/filemanager/ContextMenuActionsView.qml
 ContextMenuPopup 1.0 modules/filemanager/ContextMenuPopup.qml
 CreateFilePopup 1.0 modules/filemanager/CreateFilePopup.qml
 DeleteConfirmPopup 1.0 modules/filemanager/DeleteConfirmPopup.qml
@@ -47,6 +49,7 @@ FuzzyFinderInfoPanel 1.0 modules/filemanager/FuzzyFinderInfoPanel.qml
 FuzzyFinderPopup 1.0 modules/filemanager/FuzzyFinderPopup.qml
 ImagePreview 1.0 modules/filemanager/ImagePreview.qml
 MillerColumns 1.0 modules/filemanager/MillerColumns.qml
+OpenWithView 1.0 modules/filemanager/OpenWithView.qml
 ParentPanel 1.0 modules/filemanager/ParentPanel.qml
 PathBar 1.0 modules/filemanager/PathBar.qml
 PreviewContent 1.0 modules/filemanager/PreviewContent.qml
