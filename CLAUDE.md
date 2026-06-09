@@ -126,17 +126,9 @@ Model classes in C++ namespace `symmetria::filemanager::models`:
 | `SyntaxHighlightHelper` | Syntax-highlighted HTML for text file previews via KF6 |
 | `PreviewImageHelper` | Image preview generation with background compositing + caching |
 | `FuzzyFinder` | Fuzzy file search backed by the Rust `fff` engine via its C ABI |
-| `AppIconProvider` | QML **singleton**: maps a `.desktop` id → themed app-icon **file path** for the "Open With" menu. Locates the `.desktop` across XDG application dirs, reads its `Icon=` key, and resolves it via `IconThemeResolver::resolveApp`. Cached per id |
+| `AppIconProvider` | Resolves a `.desktop` id to a themed app-icon file path for the "Open With" menu via `IconThemeResolver::resolveApp`; cached per id |
 
-**Icon resolution returns file PATHS, not `QIcon`s, by design.** Both
-`IconThemeResolver::resolve` (MIME/folder icons) and `::resolveApp` (application
-icons, the new `apps/` context path) hand-roll XDG theme lookup to return the real
-SVG/PNG path on disk — because QML `Image { source: "file://…" }` renders an SVG
-source crisply, whereas `QIcon::fromTheme(...).pixmap()` would rasterize and lose the
-vector. `resolveApp` walks the active theme's `apps/` dirs + inheritance chain, then
-falls back to `hicolor` (the XDG implicit theme where most app icons live) and the
-legacy flat `/usr/share/pixmaps`, trying `.svg`/`.png`/`.xpm`. Absolute `Icon=` paths
-are used verbatim. This is why a new app-icon type "just works" without touching QML.
+**Icon resolution returns file paths, not `QIcon`s, by design.** `IconThemeResolver::resolve` (MIME/folder icons) and `IconThemeResolver::resolveApp` (application icons, the `apps/` context path) hand-roll XDG theme lookup to return the real SVG/PNG path on disk — because QML `Image { source: "file://..." }` renders an SVG source crisply, whereas `QIcon::fromTheme(...).pixmap()` would rasterize and lose the vector. This is why a new `.desktop` app entry resolves automatically without QML changes.
 
 ### Symmetria Shell Dependency (One-Sided)
 
