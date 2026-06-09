@@ -192,6 +192,13 @@ Item {
     }
 
     StateLayer {
+        // Root is a plain Item (no radius), so StateLayer's parent?.radius
+        // fallback yields a square hover — shape it to match the selection
+        // pill above (same side insets, full rounding).
+        anchors.leftMargin: FmTheme.padding.sm
+        anchors.rightMargin: FmTheme.padding.sm
+        radius: FmTheme.rounding.full
+
         onClicked: root.ListView.view.currentIndex = root.index
 
         onDoubleClicked: root.activated()
