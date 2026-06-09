@@ -6,6 +6,10 @@
 // FlashLogic (`.pragma library`) is accessed via the importing file's scope.
 // Logger singleton is accessed via scope.
 
+// Per-importer cache. Non-library JS is NOT shared — each QML file that imports
+// this handler gets its own instance. FileTreeRow.qml imports this file for
+// highlightFlash only and never calls recompute(), so its _cachedAllEntries stays
+// permanently null and is harmless. Only the FileTreeView.qml import populates it.
 var _cachedAllEntries = null;
 
 function invalidateEntryCache() {
@@ -175,12 +179,13 @@ function recompute(root, view) {
     }
 }
 
-// Flash-label rendering — mirrors FileListItem._highlightFlash so the visual is
-// identical across the Miller and Tree views. Lives here (a non-`.pragma
-// library` handler) rather than in FlashLogic.js because it reads FmTheme
-// palette/font tokens, which resolve through the importing file's QML scope
-// (FileTreeView.qml and FileTreeRow.qml both import this handler and the UI
-// module that provides FmTheme). A `.pragma library` script has no QML scope
+// Flash-label rendering — kept intentionally identical to FileListItem._highlightFlash
+// so the visual is the same across Miller and Tree views. Both are independent copies
+// pending consolidation into a shared FlashRenderHelper.js (tracked as tech-debt).
+// Lives here (a non-`.pragma library` handler) rather than in FlashLogic.js because
+// it reads FmTheme palette/font tokens, which resolve through the importing file's
+// QML scope (FileTreeView.qml and FileTreeRow.qml both import this handler and the
+// UI module that provides FmTheme). A `.pragma library` script has no QML scope
 // and could not see FmTheme.
 function htmlEscape(s) {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
