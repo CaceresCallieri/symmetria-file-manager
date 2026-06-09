@@ -70,7 +70,7 @@ Item {
             Layout.fillWidth: true
             Layout.topMargin: FmTheme.padding.sm
             Layout.bottomMargin: FmTheme.padding.sm
-            height: 1
+            implicitHeight: 1
             color: FmTheme.palette.outlineVariant
         }
 

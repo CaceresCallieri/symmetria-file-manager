@@ -104,16 +104,20 @@ tools/quality/check-qml.sh --with-callers <changed component>   # + lint every c
 tools/quality/check-qml.sh                                       # full tree
 ```
 
-**When you change a shared component's public API** (add/remove/rename a
-`property`/`signal` other files set), run with `--with-callers`. A property a
-caller assigns but the component no longer declares is a type error qmllint only
-sees at the **call site**, not in the component — at runtime it's the fatal
+**When you change any QML component file's public API** (add, remove, or rename a
+`property` or `signal` declaration that other QML files assign or bind), run
+`check-qml.sh --with-callers <changed-component.qml>`. A property a caller assigns
+but the component no longer declares is a type error qmllint only sees at the
+**call site**, not in the component — at runtime it's the fatal
 `Cannot assign to non-existent property` that aborts the whole QML load (it
 cascades upward, so the service log blames the top-level file, not the real one).
 `--with-callers` greps every file that names the changed component and lints
 those too; the gate promotes that specific `Could not find property` diagnostic
 to a failure (the noisy `Member "x" not found` var-singleton false positives stay
-demoted). This catches the break statically, before any `systemctl restart`.
+demoted). Use the same delta rule as scoped mode: only new `Warning`/`Error`
+results in caller files are blocking; pre-existing failures in call sites are not
+regressions introduced by this change. This catches the break statically, before
+any `systemctl restart`.
 
 It wraps `qmllint` (via `.qmllint.ini`) and adds god-file + dead-component
 detection (the "Knip + ESLint for QML"; no extra deps). The gate is **delta-based**:

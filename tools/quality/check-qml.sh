@@ -56,6 +56,14 @@ for arg in "$@"; do
   esac
 done
 
+# --with-callers requires at least one .qml file to chase. Warn early rather
+# than silently falling through to full-tree mode and doing nothing useful.
+if [ "$WITH_CALLERS" -eq 1 ] && [ ${#SCOPED_FILES[@]} -eq 0 ]; then
+  echo "error: --with-callers requires at least one .qml file argument" >&2
+  echo "usage: $0 --with-callers <changed-component.qml> [...]" >&2
+  exit 1
+fi
+
 status=0
 hr() { printf '\n\033[1m── %s ──\033[0m\n' "$1"; }
 

@@ -1,7 +1,10 @@
+pragma ComponentBehavior: Bound
+
 import Symmetria.FileManager.UI
 import Symmetria.FileManager.Models
 import QtQuick
 import QtQuick.Layouts
+import "handlers/HighlightUtils.js" as HighlightUtils
 
 Item {
     id: root
@@ -27,21 +30,17 @@ Item {
         let pos = 0;
         let matchPos;
         while ((matchPos = lowerName.indexOf(lowerQuery, pos)) !== -1) {
-            result += root._htmlEscape(name.substring(pos, matchPos));
-            result += spanOpen + root._htmlEscape(name.substring(matchPos, matchPos + qLen)) + spanClose;
+            result += HighlightUtils.htmlEscape(name.substring(pos, matchPos));
+            result += spanOpen + HighlightUtils.htmlEscape(name.substring(matchPos, matchPos + qLen)) + spanClose;
             pos = matchPos + qLen;
         }
-        result += root._htmlEscape(name.substring(pos));
+        result += HighlightUtils.htmlEscape(name.substring(pos));
         return result;
-    }
-
-    function _htmlEscape(str: string): string {
-        return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     }
 
     function _highlightFlash(name: string, query: string, label: string, matchStart: int): string {
         if (matchStart < 0 || query === "" || label === "")
-            return root._htmlEscape(name);
+            return HighlightUtils.htmlEscape(name);
 
         const before = name.substring(0, matchStart);
         const match = name.substring(matchStart, matchStart + query.length);
@@ -51,14 +50,14 @@ Item {
 
         const querySpan = "<span style=\"background-color: " + FmTheme.palette.secondaryContainer
                         + "; color: " + FmTheme.palette.onSecondaryContainer + ";\">"
-                        + root._htmlEscape(match) + "</span>";
+                        + HighlightUtils.htmlEscape(match) + "</span>";
 
         const labelSpan = "<span style=\"background-color: " + FmTheme.palette.primary
                         + "; color: " + FmTheme.palette.onPrimary
                         + "; font-weight: 700; font-family: " + FmTheme.font.family.mono + ";\">"
-                        + root._htmlEscape(label) + "</span>";
+                        + HighlightUtils.htmlEscape(label) + "</span>";
 
-        return root._htmlEscape(before) + querySpan + labelSpan + root._htmlEscape(after);
+        return HighlightUtils.htmlEscape(before) + querySpan + labelSpan + HighlightUtils.htmlEscape(after);
     }
 
     property bool isSearchMatch: false

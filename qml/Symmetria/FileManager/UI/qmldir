@@ -48,6 +48,7 @@ FileTreeRow 1.0 modules/filemanager/FileTreeRow.qml
 FileTreeView 1.0 modules/filemanager/FileTreeView.qml
 FuzzyFinderInfoPanel 1.0 modules/filemanager/FuzzyFinderInfoPanel.qml
 FuzzyFinderPopup 1.0 modules/filemanager/FuzzyFinderPopup.qml
+FuzzyFinderResultDelegate 1.0 modules/filemanager/FuzzyFinderResultDelegate.qml
 ImagePreview 1.0 modules/filemanager/ImagePreview.qml
 MillerColumns 1.0 modules/filemanager/MillerColumns.qml
 OpenWithView 1.0 modules/filemanager/OpenWithView.qml
