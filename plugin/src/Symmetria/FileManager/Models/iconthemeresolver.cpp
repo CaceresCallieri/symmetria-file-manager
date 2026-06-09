@@ -4,6 +4,7 @@
 #include <qfile.h>
 #include <qfileinfo.h>
 #include <qicon.h>
+#include <qmimedatabase.h>
 #include <qstandardpaths.h>
 #include <qtextstream.h>
 #include <qset.h>
@@ -278,6 +279,27 @@ QString IconThemeResolver::findRecursive(const QString& themeName, const QString
     }
 
     return {};
+}
+
+QString IconThemeResolver::resolveForFile(const QFileInfo& fileInfo, const QString& mimeType)
+{
+    if (fileInfo.isDir())
+        return resolve(QStringLiteral("folder"));
+
+    static const QMimeDatabase db;
+    const auto mime = db.mimeTypeForName(mimeType);
+
+    QString icon = resolve(mime.iconName());
+    if (icon.isEmpty())
+        icon = resolve(mime.genericIconName());
+    if (icon.isEmpty()) {
+        for (const auto& parentName : mime.parentMimeTypes()) {
+            icon = resolve(db.mimeTypeForName(parentName).iconName());
+            if (!icon.isEmpty())
+                break;
+        }
+    }
+    return icon;
 }
 
 QString IconThemeResolver::resolve(const QString& iconName)

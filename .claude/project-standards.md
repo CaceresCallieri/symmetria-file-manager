@@ -14,6 +14,21 @@ fix it before the fixes-commit:
 tools/quality/check-qml.sh <each changed .qml file>
 ```
 
+When a changed file is a **shared component whose public API changed** (a
+`property`/`signal` other files bind), add `--with-callers`:
+
+```bash
+tools/quality/check-qml.sh --with-callers <changed component .qml>
+```
+
+This expands the scope to every file that references the component by name and
+fails on `Could not find property "X"` — a caller assigning a property the
+component no longer declares. That diagnostic is normally demoted to Info (the
+`missing-property` category is noisy for `var`-typed singletons), but the
+property-**assignment** form is a real cross-file break: at runtime it is the
+fatal `Cannot assign to non-existent property` that aborts the QML load. The
+clean tree has zero of them, so promoting it adds no false positives.
+
 For changes touching the **C++ plugin** (`plugin/`), the existing build + test
 gate applies (see `CLAUDE.md` → Build & Run):
 

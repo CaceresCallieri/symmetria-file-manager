@@ -219,6 +219,26 @@ Loader {
                             required property bool isDir
                             required property string fullPath
                             required property var matchIndices
+                            required property string iconPath
+
+                            // Path with any trailing dir-slash removed, plus the
+                            // index at which the filename segment begins — the
+                            // single split point both label halves are sliced at.
+                            readonly property string _trimmedPath:
+                                popupScope._trimTrailingSlash(resultDelegate.path, resultDelegate.isDir)
+                            readonly property int _nameStart:
+                                Math.max(0, _trimmedPath.length - resultDelegate.name.length)
+
+                            // Highlighting forces RichText, which Qt's Text cannot
+                            // reliably elide — so the two labels switch between
+                            // RichText+clip (matches) and PlainText+elide (no match),
+                            // mirroring FileListItem. Raw substrings feed the plain
+                            // case (the highlighter HTML-escapes, which would leak
+                            // literal &amp; into un-highlighted text).
+                            readonly property bool _hasMatch:
+                                resultDelegate.matchIndices && resultDelegate.matchIndices.length > 0
+                            readonly property string _nameText: _trimmedPath.substring(_nameStart)
+                            readonly property string _prefixText: _trimmedPath.substring(0, _nameStart)
 
                             width: resultsList.width
                             radius: FmTheme.rounding.sm
@@ -241,27 +261,68 @@ Loader {
                                 anchors.rightMargin: FmTheme.padding.md
                                 spacing: FmTheme.spacing.md
 
-                                // File/folder icon
-                                MaterialIcon {
-                                    text: resultDelegate.isDir ? "folder" : "description"
-                                    color: resultDelegate.isDir
+                                // Themed file/folder icon (real Symmetria icon when
+                                // iconMode is "system"; Material glyph otherwise).
+                                FileIcon {
+                                    iconPath: resultDelegate.iconPath
+                                    materialIconName: resultDelegate.isDir ? "folder" : "description"
+                                    materialColor: resultDelegate.isDir
                                         ? FmTheme.palette.primary
                                         : FmTheme.palette.onSurfaceVariant
-                                    font.pointSize: FmTheme.font.size.md
+                                    materialFill: resultDelegate.isDir ? 1 : 0
+                                    materialPointSize: FmTheme.font.size.md
+                                    Layout.preferredWidth: implicitWidth
+                                    Layout.preferredHeight: implicitHeight
                                 }
 
-                                // Relative path with highlighted match characters
+                                // Filename — emphasised (bold, full-contrast). Capped
+                                // so a pathological name can't crowd out the parent
+                                // path; clip (match) or ElideRight (no match) keeps it
+                                // strictly inside that cap — never painting over the path.
                                 StyledText {
-                                    Layout.fillWidth: true
-                                    text: popupScope._highlightPath(
-                                        resultDelegate.path, resultDelegate.matchIndices)
-                                    textFormat: Text.RichText
+                                    Layout.fillWidth: false
+                                    Layout.maximumWidth: resultRow.width * 0.55
+                                    text: resultDelegate._hasMatch
+                                        ? popupScope._highlightRange(
+                                            resultDelegate._trimmedPath, resultDelegate.matchIndices,
+                                            resultDelegate._nameStart, resultDelegate._trimmedPath.length)
+                                        : resultDelegate._nameText
+                                    textFormat: resultDelegate._hasMatch ? Text.RichText : Text.PlainText
+                                    clip: resultDelegate._hasMatch
+                                    elide: resultDelegate._hasMatch ? Text.ElideNone : Text.ElideRight
                                     color: resultDelegate.index === popupScope.selectedIndex
                                         ? FmTheme.palette.onSurface
                                         : FmTheme.palette.onSurfaceVariant
                                     font.pointSize: FmTheme.font.size.sm
                                     font.family: FmTheme.font.family.mono
-                                    clip: true
+                                    font.weight: Font.DemiBold
+                                }
+
+                                // Parent path — de-emphasised (smaller, dim, italic).
+                                // No match → ElideLeft (keeps the directories nearest
+                                // the file). Match → RichText can't elide, so clip; the
+                                // fillWidth box bounds it so it can't overflow either.
+                                StyledText {
+                                    // MUST stay visible even when empty (root-level
+                                    // files have no parent path). It is the row's only
+                                    // Layout.fillWidth item; hiding it removes the slack
+                                    // consumer, and QtQuick.Layouts then floats the
+                                    // (fillWidth:false) filename to CENTER instead of
+                                    // left. Empty text renders nothing but keeps the row
+                                    // left-packed. See the FileIcon-era layout fix.
+                                    Layout.fillWidth: true
+                                    text: resultDelegate._hasMatch
+                                        ? popupScope._highlightRange(
+                                            resultDelegate._trimmedPath, resultDelegate.matchIndices,
+                                            0, resultDelegate._nameStart)
+                                        : resultDelegate._prefixText
+                                    textFormat: resultDelegate._hasMatch ? Text.RichText : Text.PlainText
+                                    clip: resultDelegate._hasMatch
+                                    elide: resultDelegate._hasMatch ? Text.ElideNone : Text.ElideLeft
+                                    color: FmTheme.palette.onSurfaceVariant
+                                    font.pointSize: FmTheme.font.size.xs
+                                    font.family: FmTheme.font.family.mono
+                                    font.italic: true
                                 }
                             }
 
@@ -377,30 +438,42 @@ Loader {
             };
         }
 
-        function _highlightPath(path: string, indices: var): string {
-            if (!indices || indices.length === 0)
-                return _htmlEscape(path);
+        // A directory's path/fullPath carries a trailing "/" (fff convention);
+        // its name role is the bare last segment. Strip the slash so the name
+        // split lines up — for files the path is returned unchanged.
+        function _trimTrailingSlash(path: string, isDir: bool): string {
+            return (isDir && path.endsWith("/")) ? path.slice(0, -1) : path;
+        }
+
+        // Emit highlighted HTML for the slice text[start, end). `indices` are
+        // absolute character positions into `text` (the fuzzy-match positions),
+        // so the same index set drives both the filename and parent-path halves
+        // without re-basing — each call just renders its own range.
+        function _highlightRange(text: string, indices: var, start: int, end: int): string {
+            const hasIndices = indices && indices.length > 0;
+
+            // Build a set of highlighted positions for O(1) lookup.
+            const highlighted = {};
+            if (hasIndices)
+                for (let i = 0; i < indices.length; i++)
+                    highlighted[indices[i]] = true;
 
             const spanOpen = "<span style=\"background-color: " + FmTheme.palette.secondaryContainer
                            + "; color: " + FmTheme.palette.onSecondaryContainer + ";\">";
             const spanClose = "</span>";
 
-            // Build a set of highlighted positions for O(1) lookup
-            const highlighted = {};
-            for (let i = 0; i < indices.length; i++)
-                highlighted[indices[i]] = true;
-
             let result = "";
             let inSpan = false;
-            for (let i = 0; i < path.length; i++) {
-                if (highlighted[i] && !inSpan) {
+            for (let i = start; i < end; i++) {
+                const on = hasIndices && highlighted[i] === true;
+                if (on && !inSpan) {
                     result += spanOpen;
                     inSpan = true;
-                } else if (!highlighted[i] && inSpan) {
+                } else if (!on && inSpan) {
                     result += spanClose;
                     inSpan = false;
                 }
-                result += _htmlEscape(path[i]);
+                result += _htmlEscape(text[i]);
             }
             if (inSpan)
                 result += spanClose;

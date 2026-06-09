@@ -1,5 +1,6 @@
 #pragma once
 
+#include <qfileinfo.h>
 #include <qhash.h>
 #include <qset.h>
 #include <qstring.h>
@@ -23,6 +24,17 @@ public:
     /// `/usr/share/pixmaps`. Absolute `Icon=` paths are returned verbatim if they
     /// exist. Empty if nothing matches.
     static QString resolveApp(const QString& iconName);
+
+    /// Resolves a file's themed icon path from its `QFileInfo` plus its
+    /// pre-computed MIME type *name* (e.g. "text/x-python"). Directories resolve
+    /// to the "folder" icon; files try the MIME icon, then the generic icon,
+    /// then each parent MIME's icon in turn. Returns "" if nothing matches.
+    ///
+    /// Single source of truth for file → icon-path derivation, shared by
+    /// `FileSystemEntry` (reuses its already-computed MIME) and `FuzzyFinder`
+    /// (looks the MIME up on demand). Main-thread only — wraps `resolve()`,
+    /// whose static caches are unsynchronized.
+    static QString resolveForFile(const QFileInfo& fileInfo, const QString& mimeType);
 
 private:
     // Which icon-theme context dirs (and file extensions) a lookup searches.

@@ -4,9 +4,12 @@ import Symmetria.FileManager.UI
 Item {
     id: root
 
-    // entry is always a FileSystemEntry QObject from the C++ plugin (Symmetria.FileManager.Models).
-    // Typed as QtObject here because FileIcon lives in components/ which does not import the plugin.
-    required property QtObject entry
+    // Absolute path to a themed icon file ("" → fall back to the Material glyph).
+    // A plain string rather than a FileSystemEntry so any caller that can supply a
+    // path works: FileListItem passes entry.iconPath, the fuzzy finder passes its
+    // model's iconPath role. FileIcon lives in components/ and does not import the
+    // plugin, so it could not type an entry object anyway.
+    property string iconPath: ""
     required property string materialIconName
 
     property color materialColor: FmTheme.palette.onSurfaceVariant
@@ -17,7 +20,7 @@ Item {
     property int materialWeight: -1
 
     readonly property bool useSystemIcon: Config.fileManager.iconMode === "system"
-                                          && (root.entry?.iconPath ?? "") !== ""
+                                          && root.iconPath !== ""
 
     implicitWidth: FmTheme.font.size.xl * 1.5
     implicitHeight: FmTheme.font.size.xl * 1.5
@@ -26,8 +29,7 @@ Item {
         anchors.centerIn: parent
         width: root.width
         height: root.height
-        // Use optional chaining to guard against entry being null during model resets.
-        source: root.useSystemIcon ? "file://" + (root.entry?.iconPath ?? "") : ""
+        source: root.useSystemIcon ? "file://" + root.iconPath : ""
         visible: root.useSystemIcon
         sourceSize: Qt.size(width * 2, height * 2)
         fillMode: Image.PreserveAspectFit

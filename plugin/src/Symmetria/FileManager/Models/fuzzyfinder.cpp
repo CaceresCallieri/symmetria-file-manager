@@ -1,8 +1,11 @@
 #include "fuzzyfinder.hpp"
+#include "iconthemeresolver.hpp"
 
 #include <qdir.h>
+#include <qfileinfo.h>
 #include <qfuturewatcher.h>
 #include <qlogging.h>
+#include <qmimedatabase.h>
 #include <qmutex.h>
 #include <qstandardpaths.h>
 #include <qtconcurrentrun.h>
@@ -243,6 +246,23 @@ QVariant FuzzyFinder::data(const QModelIndex& index, int role) const {
     case IsBinaryRole:       return e.isBinary;
     case ScoreBreakdownRole: return e.scoreBreakdown;
     case MatchTypeRole:      return e.matchType;
+    case IconPathRole: {
+        // Lazy, main-thread resolution (the view calls data() on the GUI thread),
+        // memoised into the mutable fields. Directories short-circuit inside
+        // resolveForFile; files look up their MIME on demand since the scan does
+        // not carry one. Empty mimeType for a dir is fine — it is never read.
+        if (!e.iconResolved) {
+            const QFileInfo info(e.fullPath);
+            QString mimeType;
+            if (!e.isDir) {
+                static const QMimeDatabase db;
+                mimeType = db.mimeTypeForFile(info).name();
+            }
+            e.iconPath = IconThemeResolver::resolveForFile(info, mimeType);
+            e.iconResolved = true;
+        }
+        return e.iconPath;
+    }
     default:                 return {};
     }
 }
@@ -262,6 +282,7 @@ QHash<int, QByteArray> FuzzyFinder::roleNames() const {
         {IsBinaryRole,       "isBinary"},
         {ScoreBreakdownRole, "scoreBreakdown"},
         {MatchTypeRole,      "matchType"},
+        {IconPathRole,       "iconPath"},
     };
 }
 

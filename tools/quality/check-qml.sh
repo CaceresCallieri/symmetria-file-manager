@@ -20,6 +20,14 @@
 #   tools/quality/check-qml.sh a.qml b.qml           # SCOPED: lint/god-check only these files
 #                                                    #   (used by /seal on a commit's changed QML;
 #                                                    #    dead-component scan stays full-tree)
+#   tools/quality/check-qml.sh --with-callers a.qml  # SCOPED + every file that references the
+#                                                    #   changed component(s) by name. Use when a
+#                                                    #   change edits a SHARED component's public API
+#                                                    #   (a property/signal callers depend on): a
+#                                                    #   removed/renamed property is a type error the
+#                                                    #   linter only sees at the CALL site, not in the
+#                                                    #   component itself. Catches the cross-file break
+#                                                    #   statically, before any service restart.
 #   tools/quality/check-qml.sh --format              # also report qmlformat drift
 #   QML_GODFILE_LINES=400 tools/quality/check-qml.sh # stricter god-file bar
 #
@@ -32,10 +40,12 @@ QMLLINT="/usr/lib/qt6/bin/qmllint"
 QMLFORMAT="/usr/lib/qt6/bin/qmlformat"
 GODFILE_LINES="${QML_GODFILE_LINES:-500}"
 DO_FORMAT=0
+WITH_CALLERS=0
 SCOPED_FILES=()
 for arg in "$@"; do
   case "$arg" in
     --format) DO_FORMAT=1 ;;
+    --with-callers) WITH_CALLERS=1 ;;
     *.qml)
       if [ -f "$arg" ]; then
         SCOPED_FILES+=("$(cd "$(dirname "$arg")" && pwd)/$(basename "$arg")")
@@ -54,7 +64,34 @@ hr() { printf '\n\033[1m── %s ──\033[0m\n' "$1"; }
 # scan always runs over the whole tree (orphaning can only be judged globally).
 if [ ${#SCOPED_FILES[@]} -gt 0 ]; then
   QML_FILES=("${SCOPED_FILES[@]}")
-  echo "Scanning ${#QML_FILES[@]} specified .qml file(s) [scoped mode]"
+  if [ "$WITH_CALLERS" -eq 1 ]; then
+    # Expand the scope to every file that references a changed component by name.
+    # A component's name is its PascalCase basename; QML instantiates it by that
+    # bare name (e.g. `FileIcon { ... }`), so a whole-word grep across the tree
+    # finds the call sites. We deliberately over-include (a comment mention also
+    # matches) — linting a few extra files is harmless; MISSING a caller is the
+    # bug this mode exists to prevent.
+    declare -A _seen=()
+    for f in "${SCOPED_FILES[@]}"; do _seen["$f"]=1; done
+    added=0
+    for f in "${SCOPED_FILES[@]}"; do
+      comp="$(basename "$f" .qml)"
+      # Only component-like (PascalCase) names act as shared types worth chasing.
+      case "$comp" in [A-Z]*) ;; *) continue ;; esac
+      while IFS= read -r caller; do
+        [ -n "$caller" ] || continue
+        abs="$(cd "$(dirname "$caller")" && pwd)/$(basename "$caller")"
+        if [ -z "${_seen[$abs]:-}" ]; then
+          _seen["$abs"]=1
+          QML_FILES+=("$abs")
+          added=$((added + 1))
+        fi
+      done < <(grep -rlE "\\b${comp}\\b" "$QML_DIR" --include='*.qml' 2>/dev/null)
+    done
+    echo "Scanning ${#QML_FILES[@]} .qml file(s): ${#SCOPED_FILES[@]} changed + ${added} caller(s) [scoped + callers mode]"
+  else
+    echo "Scanning ${#QML_FILES[@]} specified .qml file(s) [scoped mode]"
+  fi
 else
   mapfile -t QML_FILES < <(find "$QML_DIR" -name '*.qml' | sort)
   echo "Scanning ${#QML_FILES[@]} .qml files under qml/ [full tree]"
@@ -68,9 +105,30 @@ hr "1. qmllint (bad practices, unused imports, type errors)"
 # judge only Warning/Error lines.
 lint_out="$( cd "$ROOT" && "$QMLLINT" "${QML_FILES[@]}" 2>&1 )"
 lint_actionable="$(printf '%s\n' "$lint_out" | grep -E '^(Warning|Error):' || true)"
-if [ -n "$lint_actionable" ]; then
-  printf '%s\n' "$lint_actionable"
-  echo "❌ qmllint: $(printf '%s\n' "$lint_actionable" | wc -l) warning/error line(s)"
+
+# Promote ONE diagnostic back out of the demoted-to-Info bucket: assigning a
+# property that a component type does not declare ("Could not find property X").
+# .qmllint.ini demotes the whole missing-property category to Info because member
+# READS on var-typed singletons (FmTheme.palette.*) are unavoidable false
+# positives — but the property-ASSIGNMENT form is a REAL cross-file API break: a
+# caller setting a property that was removed/renamed on a shared component (at
+# runtime this is the fatal "Cannot assign to non-existent property" that aborts
+# the QML load). The two are distinguishable by message text — the noise reads
+# 'Member "x" not found on type', this reads 'Could not find property' — and the
+# clean tree has ZERO of the latter, so failing on it adds no false positives.
+# Pair with --with-callers so a changed component's call sites are actually in scope.
+prop_break="$(printf '%s\n' "$lint_out" | grep -E 'Could not find property' || true)"
+
+combined="$(printf '%s\n%s\n' "$lint_actionable" "$prop_break" | grep -E '.' || true)"
+if [ -n "$combined" ]; then
+  [ -n "$lint_actionable" ] && printf '%s\n' "$lint_actionable"
+  if [ -n "$prop_break" ]; then
+    printf '%s\n' "$prop_break"
+    echo "   ↑ assignment to a property the component type does not declare."
+    echo "     Likely a removed/renamed property on a shared component — fix the"
+    echo "     call site(s), or re-add the property. (Run with --with-callers.)"
+  fi
+  echo "❌ qmllint: $(printf '%s\n' "$combined" | wc -l) warning/error line(s)"
   status=1
 else
   info_n="$(printf '%s\n' "$lint_out" | grep -cE '^Info:' || true)"

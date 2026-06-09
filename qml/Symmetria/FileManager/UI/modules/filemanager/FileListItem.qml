@@ -208,7 +208,7 @@ Item {
 
         // File/folder icon
         FileIcon {
-            entry: root.modelData
+            iconPath: root.modelData?.iconPath ?? ""
             materialIconName: {
                 if (!root.modelData)
                     return "description";

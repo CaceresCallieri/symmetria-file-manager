@@ -57,6 +57,13 @@ struct SearchResultEntry {
     bool         isBinary = false;
     QVariantMap  scoreBreakdown;  // FffScore fields for the File Info panel
     QString      matchType;       // "frecency", "exact", ...
+
+    // Themed icon path, resolved lazily on first IconPathRole read (main thread —
+    // see data()). Built off-thread during the scan would race IconThemeResolver's
+    // unsynchronized static caches, so it is deliberately deferred and memoised
+    // here, mirroring FileSystemEntry's mutable lazy-init for the same reason.
+    mutable QString iconPath;
+    mutable bool    iconResolved = false;
 };
 
 class FuzzyFinder : public QAbstractListModel {
@@ -90,6 +97,7 @@ public:
         IsBinaryRole,
         ScoreBreakdownRole,
         MatchTypeRole,
+        IconPathRole,
     };
     Q_ENUM(Roles)
 

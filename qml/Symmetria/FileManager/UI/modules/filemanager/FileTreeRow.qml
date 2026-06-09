@@ -41,6 +41,20 @@ Item {
     width: ListView.view ? ListView.view.width : 0
     implicitHeight: Config.fileManager.sizes.itemHeight * root.compactScale
 
+    // Zebra striping — even rows get a faint FLAT gray lift over the card
+    // surface; odd rows stay transparent and reveal it. Mirrors FileListItem so
+    // the tree matches the Miller list. Declared FIRST so it sits beneath the
+    // search-match tint and the current-item highlight. Plain, un-animated
+    // Rectangle on purpose — same j/k-stutter constraint as the highlight; do
+    // NOT add a Behavior or gradient (see CLAUDE.md → Theme & Typography).
+    Rectangle {
+        anchors.fill: parent
+        anchors.leftMargin: FmTheme.padding.sm
+        anchors.rightMargin: FmTheme.padding.sm
+        radius: FmTheme.rounding.sm
+        color: root.index % 2 === 0 ? FmTheme.overlay.subtle : "transparent"
+    }
+
     // Search-match tint (rendered beneath the current-item highlight)
     Rectangle {
         anchors.fill: parent
@@ -100,7 +114,7 @@ Item {
             width: FmTheme.font.size.xl * 1.5 * root.compactScale
             height: FmTheme.font.size.xl * 1.5 * root.compactScale
             materialPointSize: FmTheme.font.size.xl * root.compactScale
-            entry: root.modelData ? root.modelData.entry : null
+            iconPath: root.modelData?.entry?.iconPath ?? ""
             materialIconName: {
                 if (!root.modelData) return "description";
                 const e = root.modelData.entry;

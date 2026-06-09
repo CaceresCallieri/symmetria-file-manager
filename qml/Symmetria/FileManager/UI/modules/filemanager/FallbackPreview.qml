@@ -20,7 +20,7 @@ Item {
         // Mime-based icon via centralized FileManagerService.iconNameForMime()
         FileIcon {
             Layout.alignment: Qt.AlignHCenter
-            entry: root.entry
+            iconPath: root.entry?.iconPath ?? ""
             implicitWidth: FmTheme.font.size.xxl * 4
             implicitHeight: FmTheme.font.size.xxl * 4
             materialIconName: {

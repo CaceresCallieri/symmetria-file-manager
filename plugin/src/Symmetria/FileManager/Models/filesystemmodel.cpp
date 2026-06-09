@@ -25,29 +25,6 @@ namespace symmetria::filemanager::models {
 // Forward declaration — defined after the accessors to keep related code together.
 static QString buildPermissions(const QFileInfo& info);
 
-// Resolves the XDG icon path from a pre-computed MIME type string.
-// Runs on the main thread (IconThemeResolver uses unsynchronized static caches)
-// but is cheap: no remote I/O, results cached after first lookup per icon name.
-static QString resolveIconPath(const QFileInfo& fileInfo, const QString& mimeType) {
-    if (fileInfo.isDir())
-        return IconThemeResolver::resolve(QStringLiteral("folder"));
-
-    static const QMimeDatabase db;
-    const auto mime = db.mimeTypeForName(mimeType);
-
-    QString icon = IconThemeResolver::resolve(mime.iconName());
-    if (icon.isEmpty())
-        icon = IconThemeResolver::resolve(mime.genericIconName());
-    if (icon.isEmpty()) {
-        for (const auto& parentName : mime.parentMimeTypes()) {
-            icon = IconThemeResolver::resolve(db.mimeTypeForName(parentName).iconName());
-            if (!icon.isEmpty())
-                break;
-        }
-    }
-    return icon;
-}
-
 // Detect FUSE/NFS/CIFS mount points by comparing the filesystem type of a
 // directory entry against its parent.  A directory is a remote mount point when
 // its own statfs returns a network/FUSE magic number AND that differs from the
@@ -171,7 +148,7 @@ FileSystemEntry::FileSystemEntry(const QString& path, const QString& relativePat
         static const QMimeDatabase db;
         return isTextLike(db.mimeTypeForFile(m_path), m_path);
       }())
-    , m_iconPath(resolveIconPath(m_fileInfo, m_mimeType))
+    , m_iconPath(IconThemeResolver::resolveForFile(m_fileInfo, m_mimeType))
     , m_permissions(buildPermissions(m_fileInfo))
     , m_owner(m_fileInfo.owner())
     , m_isRemoteMount(false) {}
@@ -185,7 +162,7 @@ FileSystemEntry::FileSystemEntry(CachedEntryData&& data, QObject* parent)
     , m_mimeType(std::move(data.mimeType))
     , m_isVideo(data.isVideo)
     , m_isText(data.isText)
-    , m_iconPath(resolveIconPath(m_fileInfo, m_mimeType))
+    , m_iconPath(IconThemeResolver::resolveForFile(m_fileInfo, m_mimeType))
     , m_permissions(std::move(data.permissions))
     , m_owner(std::move(data.owner))
     , m_isRemoteMount(data.isRemoteMount) {}
