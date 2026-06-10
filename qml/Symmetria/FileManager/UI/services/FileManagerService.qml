@@ -46,6 +46,12 @@ QtObject {
     // would end the transient unit and get cgroup-killed all the same), and
     // --collect garbage-collects the unit once a later copy replaces the
     // selection and wl-copy exits.
+    //   --user      run in the user bus (not system)
+    //   --collect   auto-remove the transient unit after wl-copy exits
+    //   --quiet     suppress the generated unit name from stderr
+    //   --foreground  (wl-copy flag) keep wl-copy in the foreground so it
+    //                 stays in the transient unit's cgroup; a forked child
+    //                 would escape the unit and be killed the same old way
     function clipboardCopyCommand(text: string): var {
         return ["systemd-run", "--user", "--collect", "--quiet", "--",
                 "wl-copy", "--foreground", "--", text];
