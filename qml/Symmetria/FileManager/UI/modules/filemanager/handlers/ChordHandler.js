@@ -89,37 +89,22 @@ function _executeChord(prefix, keyChar, root, view, clipboardCopyProcess) {
             break;
         }
     } else if (prefix === "c") {
-        // DIAGNOSTIC — see filemanager.log [FileList.cc] entries.
-        // Added 2026-05-15 to investigate non-deterministic "cc says copied
-        // but clipboard is empty" reports after shell clipboard-toast changes.
-        // Remove once the failure mode is understood.
-        if (clipboardCopyProcess.running) {
-            Logger.info("FileList.cc", "DROP keyChar=" + keyChar
-                + " — previous wl-copy still running (silent drop)");
+        if (clipboardCopyProcess.running)
             return;
-        }
         var hasSelection = windowState.selectedCount > 0;
-        if (!hasSelection && !root.currentEntry) {
-            Logger.info("FileList.cc", "DROP keyChar=" + keyChar
-                + " — no selection and no currentEntry");
+        if (!hasSelection && !root.currentEntry)
             return;
-        }
         // "d" copies the current directory regardless of selection state
         if (keyChar === "d") {
-            Logger.info("FileList.cc", "START key=cd path=" + windowState.currentPath
-                + " (len=" + (windowState.currentPath || "").length + ")");
-            clipboardCopyProcess.command = ["wl-copy", "--", windowState.currentPath];
+            clipboardCopyProcess.command = FileManagerService.clipboardCopyCommand(windowState.currentPath);
             clipboardCopyProcess.start();
             return;
         }
         var textToCopy;
         if (hasSelection) {
             var paths = windowState.getSelectedPathsArray();
-            if (paths.length === 0) {
-                Logger.info("FileList.cc", "DROP keyChar=" + keyChar
-                    + " — selectedCount>0 but getSelectedPathsArray() empty");
+            if (paths.length === 0)
                 return;
-            }
             switch (keyChar) {
             case "c":
                 textToCopy = paths.join("\n");
@@ -148,14 +133,7 @@ function _executeChord(prefix, keyChar, root, view, clipboardCopyProcess) {
                 return;
             }
         }
-        var ttcLen = (textToCopy === undefined || textToCopy === null) ? -1 : textToCopy.length;
-        var preview = ttcLen <= 0 ? String(textToCopy)
-            : (ttcLen > 120 ? textToCopy.substring(0, 120) + "…" : textToCopy);
-        Logger.info("FileList.cc", "START key=c" + keyChar
-            + " hasSelection=" + hasSelection
-            + " ttcLen=" + ttcLen
-            + " preview=" + JSON.stringify(preview));
-        clipboardCopyProcess.command = ["wl-copy", "--", textToCopy];
+        clipboardCopyProcess.command = FileManagerService.clipboardCopyCommand(textToCopy);
         clipboardCopyProcess.start();
     } else if (prefix === ",") {
         if (keyChar === "")

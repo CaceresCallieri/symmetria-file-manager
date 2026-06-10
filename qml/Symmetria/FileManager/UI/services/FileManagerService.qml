@@ -34,6 +34,23 @@ QtObject {
         clipboardMode = "";
     }
 
+    // GOTCHA: Wayland clipboards are served live by the copying client — the
+    // compositor holds no copy; whoever ran wl-copy must stay alive to answer
+    // paste requests. A plain wl-copy spawned from this daemon lands in the
+    // symmetria-fm.service cgroup, and the daemon deliberately exits when the
+    // last window closes (main.cpp), so systemd's KillMode=control-group
+    // killed the clipboard holder — "cc copied but paste is empty" whenever a
+    // copy was followed by closing the FM window (root cause of the 2026-06
+    // clipboard bug). systemd-run detaches the holder into its own transient
+    // user unit; --foreground stops wl-copy from forking (a forked child
+    // would end the transient unit and get cgroup-killed all the same), and
+    // --collect garbage-collects the unit once a later copy replaces the
+    // selection and wl-copy exits.
+    function clipboardCopyCommand(text: string): var {
+        return ["systemd-run", "--user", "--collect", "--quiet", "--",
+                "wl-copy", "--foreground", "--", text];
+    }
+
     // === Picker mode (portal file chooser) — one picker at a time globally ===
     property bool pickerMode: false
     property string pickerFifoPath: ""

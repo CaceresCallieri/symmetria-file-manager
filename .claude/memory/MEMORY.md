@@ -88,6 +88,9 @@ implementation inspired by Yazi's UX philosophy — no Yazi runtime dependency.
 - Threading: FileManager → MillerColumns/PathBar/StatusBar → FileList/ParentPanel/WhichKeyPopup/Popups
 - WindowFactory passes `initialPath` to each window via `createObject(dummy, { "initialPath": path })`
 
+## 🐛 Clipboard bug ROOT CAUSE FOUND (2026-06-09)
+- [Clipboard bug root cause](project_clipboard_bug_root_cause.md) — "cc copies but paste fails": wl-copy's serving fork dies when the FM window closes (daemon quits by design → systemd kills the cgroup). Fix pending user decision; remove the DIAGNOSTIC logging once fixed.
+
 ## Workflow Feedback
 - [Always clear QML cache after edits](feedback_clear_qml_cache.md) — run `rm -rf ~/.cache/quickshell/qmlcache` yourself after any QML edit, don't leave it to the user
 - [Keyboard features can't be tested via synthetic input](feedback_keyboard_testing_synthetic_input.md) — hyprctl sendshortcut/wtype don't reach the Qt surface; verify chords/nav via real keyboard or QTest
