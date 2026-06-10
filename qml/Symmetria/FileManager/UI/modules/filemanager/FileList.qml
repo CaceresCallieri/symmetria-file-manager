@@ -417,6 +417,8 @@ Item {
         // so callers can safely proceed after the clipboard write.
         property var _pendingCallback: null
 
+        // Monitors systemd-run launcher exit, not wl-copy's eventual exit —
+        // exitCode=0 means the transient unit was created and wl-copy was started.
         onExited: (exitCode, exitStatus) => {
             if (exitCode !== 0 || exitStatus !== ShellRunner.NormalExit)
                 Logger.warn("FileList", "clipboard copy launch failed — exitCode: " + exitCode + " exitStatus: " + exitStatus);
