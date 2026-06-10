@@ -412,25 +412,14 @@ Item {
     ShellRunner {
         id: clipboardCopyProcess
 
-        // Callback set by _copyPickerPathToClipboard() — called once wl-copy
-        // exits so callers can safely proceed after the clipboard write.
+        // Callback set by _copyPickerPathToClipboard() — called once the
+        // systemd-run launcher exits (the detached wl-copy unit is started)
+        // so callers can safely proceed after the clipboard write.
         property var _pendingCallback: null
 
         onExited: (exitCode, exitStatus) => {
-            // DIAGNOSTIC — see filemanager.log [FileList.cc] entries.
-            // Added 2026-05-15 to investigate non-deterministic "cc says copied
-            // but clipboard is empty" reports. Logs every exit (not just
-            // failures) so we can correlate the spurious "exitCode: 0
-            // exitStatus: 0" WARN cluster with the actual ShellRunner.NormalExit
-            // enum value. Remove once the failure mode is understood.
-            Logger.info("FileList.cc",
-                "EXIT exitCode=" + exitCode
-                + " exitStatus=" + exitStatus
-                + " NormalExit=" + ShellRunner.NormalExit
-                + " strictNormal=" + (exitStatus === ShellRunner.NormalExit)
-                + " stderr=" + JSON.stringify((stderrText || "").trim().substring(0, 200)));
             if (exitCode !== 0 || exitStatus !== ShellRunner.NormalExit)
-                Logger.warn("FileList", "wl-copy failed — exitCode: " + exitCode + " exitStatus: " + exitStatus);
+                Logger.warn("FileList", "clipboard copy launch failed — exitCode: " + exitCode + " exitStatus: " + exitStatus);
             const cb = _pendingCallback;
             _pendingCallback = null;
             if (cb)

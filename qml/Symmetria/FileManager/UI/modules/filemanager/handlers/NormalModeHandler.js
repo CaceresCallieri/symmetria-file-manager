@@ -385,7 +385,7 @@ function _copyPickerPathToClipboard(root, clipboardCopyProcess, onDone) {
     if (!text)
         return;
     clipboardCopyProcess._pendingCallback = onDone;
-    clipboardCopyProcess.command = ["wl-copy", "--", text];
+    clipboardCopyProcess.command = FileManagerService.clipboardCopyCommand(text);
     clipboardCopyProcess.start();
 }
 
