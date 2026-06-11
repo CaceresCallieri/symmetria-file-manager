@@ -19,7 +19,7 @@
 //                                model refreshes (no-op where unsupported)
 //
 // Key-ownership split: this handler claims only the UNMODIFIED operation keys
-// (plus Ctrl+V paste and the picker-specific Ctrl+R). Modified forms stay
+// (plus Ctrl+V paste, and Ctrl+R only in picker save-mode). Modified forms stay
 // view-owned because their meaning legitimately differs per view — Ctrl+D /
 // Shift+D are half-page / history in both, but Shift+R is rename-with-extension
 // in Miller and refresh-all in the tree. Returning false hands the key back to

@@ -85,6 +85,8 @@ Item {
             // for RenamePopup.
             readonly property real currentItemBottomY: treeView.currentItemBottomY + FmTheme.padding.md * 2
             readonly property real currentColumnX: treeView.currentColumnX + FmTheme.padding.md * 2
+            // No offset — treeView.width is already the inset content width;
+            // only the X/Y origins need shifting into wrapper coordinates.
             readonly property real currentColumnWidth: treeView.currentColumnWidth
 
             // Chrome gap — the card floats `padding.md` inside the view cell,

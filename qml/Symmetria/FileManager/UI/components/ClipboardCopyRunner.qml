@@ -8,9 +8,7 @@ import Symmetria.FileManager.UI
 import Symmetria.FileManager.Models
 
 ShellRunner {
-    // Callback set by callers (e.g. NormalModeHandler._copyPickerPathToClipboard)
-    // — called once the systemd-run launcher exits (the detached wl-copy unit is
-    // started) so callers can safely proceed after the clipboard write.
+    // Optional completion callback — see the file header.
     property var _pendingCallback: null
 
     // Monitors systemd-run launcher exit, not wl-copy's eventual exit —
