@@ -9,6 +9,10 @@ import "handlers/SearchHandler.js" as SearchHandler
 import "handlers/FlashHandler.js" as FlashHandler
 import "handlers/ChordHandler.js" as ChordHandler
 import "handlers/NormalModeHandler.js" as NormalModeHandler
+// NormalModeHandler.js reaches FileOpsHandler through this file's import scope
+// at runtime (same cross-JS mechanism as FlashLogic above) — the linter cannot
+// see that and reports it unused.
+import "handlers/FileOpsHandler.js" as FileOpsHandler // qmllint disable unused-imports
 import Symmetria.FileManager.Models
 import QtQuick
 import QtQuick.Controls
@@ -102,6 +106,18 @@ Item {
         if (view.currentIndex < 0 || view.count === 0) return 0;
         const itemY = view.currentIndex * Config.fileManager.sizes.itemHeight - view.contentY;
         return itemY + Config.fileManager.sizes.itemHeight + FmTheme.padding.sm;
+    }
+
+    // --- FileOpsHandler contract (shared with FileTreeView) ---
+
+    // Where paste/create land: the directory this list is showing.
+    function fileOpsTargetDir(): string {
+        return windowState.currentPath;
+    }
+
+    // Focus `name` once the model refreshes after a paste.
+    function setPendingPasteFocus(name: string): void {
+        _pendingFocusName = name;
     }
 
     function _saveCursorAndNavigate(navigateFn: var): void {
@@ -249,21 +265,13 @@ Item {
 
         // Re-parented to view.parent so the scrollbar lives outside the ListView's
         // clipping rect and can be positioned independently in the right margin gap.
-        ScrollBar.vertical: ScrollBar {
+        ScrollBar.vertical: SlimScrollBar {
             policy: ScrollBar.AlwaysOn
             parent: view.parent
             anchors.top: view.top
             anchors.bottom: view.bottom
             anchors.right: parent.right
             anchors.rightMargin: FmTheme.padding.sm + 3 // right-aligns the 6px bar with 3px clearance from the window edge
-            width: 6
-
-            contentItem: Rectangle {
-                implicitWidth: 6
-                radius: width / 2
-                color: FmTheme.palette.onSurfaceVariant
-                opacity: 0.4
-            }
         }
 
         model: FileSystemModel {
@@ -397,35 +405,12 @@ Item {
         id: fileOpener
     }
 
-    ShellRunner {
+    PasteRunner {
         id: pasteProcess
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0 && exitStatus === ShellRunner.NormalExit) {
-                FileManagerService.clearClipboard();
-            } else {
-                Logger.warn("FileList", "paste failed — exitCode: " + exitCode + " exitStatus: " + exitStatus);
-                root._pendingFocusName = "";
-            }
-        }
+        onPasteFailed: root._pendingFocusName = ""
     }
 
-    ShellRunner {
+    ClipboardCopyRunner {
         id: clipboardCopyProcess
-
-        // Callback set by _copyPickerPathToClipboard() — called once the
-        // systemd-run launcher exits (the detached wl-copy unit is started)
-        // so callers can safely proceed after the clipboard write.
-        property var _pendingCallback: null
-
-        // Monitors systemd-run launcher exit, not wl-copy's eventual exit —
-        // exitCode=0 means the transient unit was created and wl-copy was started.
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode !== 0 || exitStatus !== ShellRunner.NormalExit)
-                Logger.warn("FileList", "clipboard copy launch failed — exitCode: " + exitCode + " exitStatus: " + exitStatus);
-            const cb = _pendingCallback;
-            _pendingCallback = null;
-            if (cb)
-                cb();
-        }
     }
 }

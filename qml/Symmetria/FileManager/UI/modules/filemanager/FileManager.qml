@@ -79,9 +79,13 @@ Item {
             // this wrapper satisfies the same implicit interface MillerColumns does.
             property alias fileCount: treeView.fileCount
             property alias currentEntry: treeView.currentEntry
-            property alias currentItemBottomY: treeView.currentItemBottomY
-            property alias currentColumnX: treeView.currentColumnX
-            property alias currentColumnWidth: treeView.currentColumnWidth
+            // The tree's positional props are relative to the FileTreeView,
+            // which sits two `padding.md` insets deep in this wrapper (chrome
+            // gap + card inset) — offset them back into wrapper coordinates
+            // for RenamePopup.
+            readonly property real currentItemBottomY: treeView.currentItemBottomY + FmTheme.padding.md * 2
+            readonly property real currentColumnX: treeView.currentColumnX + FmTheme.padding.md * 2
+            readonly property real currentColumnWidth: treeView.currentColumnWidth
 
             // Chrome gap — the card floats `padding.md` inside the view cell,
             // matching the Miller layout's outer margin.
@@ -108,6 +112,16 @@ Item {
                     windowState: tabManager.activeTab
                     onFileActivated: function(path) { fmFileOpener.open(path, ""); }
                     onShowHiddenToggleRequested: Config.fileManager.showHidden = !Config.fileManager.showHidden
+                }
+
+                // Chord hints (g/c/, which-key). Miller shows this over the
+                // parent panel; the tree has no side column, so it overlays
+                // the tree card itself. Renders only while a chord or
+                // bookmark sub-mode is active (opacity-gated internally).
+                WhichKeyPopup {
+                    anchors.fill: parent
+                    anchors.margins: FmTheme.padding.md
+                    windowState: tabManager.activeTab
                 }
             }
         }

@@ -1,47 +1,21 @@
-// Normal-mode key handling: picker suppression + main switch + helpers.
+// Normal-mode key handling for the Miller-columns view: shared file-operation
+// dispatch (FileOpsHandler) first, then the view-owned navigation switch.
 //
 // Non-library JS — shares the QML component scope of FileList.qml.
 // Singletons accessed via scope: FileManagerService, Config, Paths, Logger.
+// Sibling handlers accessed via scope: FileOpsHandler (operation keys —
+// delete/rename/create/yank/cut/paste/select/chord-starts live THERE, not here).
 // Component IDs accessed via scope: fsModel.
-
-// Keys suppressed in picker mode (clipboard operations don't belong in a file chooser).
-// Note: Key_C is intentionally absent — it starts the harmless "copy path" chord.
-// Note: Key_V (Ctrl+V paste) is suppressed separately below — only the Ctrl-modified form
-// is blocked; bare V is unbound, so it cannot live in this array alongside modifier-agnostic keys.
-// Create (A), Rename (R), and Delete (D) are allowed — common workflows in file dialogs.
-var _PICKER_SUPPRESSED_KEYS = [Qt.Key_Y, Qt.Key_X, Qt.Key_P, Qt.Key_Space,
-    Qt.Key_T, Qt.Key_BracketLeft, Qt.Key_BracketRight];
 
 function handleKey(event, root, view, pasteProcess, clipboardCopyProcess) {
     var windowState = root.windowState;
     var key = event.key;
     var mods = event.modifiers;
 
-    // Picker mode: Escape cancels, suppress clipboard operations
-    if (FileManagerService.pickerMode) {
-        if (key === Qt.Key_Escape) {
-            // Multi-select: first Escape clears marks, second cancels picker
-            if (FileManagerService.pickerMultiple && windowState.selectedCount > 0)
-                windowState.clearSelection();
-            else
-                FileManagerService.cancelPickerMode();
-            event.accepted = true;
-            return;
-        }
-        // Suppress clipboard operations — they don't belong in a picker.
-        // Space is exempt when multi-select is active (marking files before confirm).
-        if (_PICKER_SUPPRESSED_KEYS.indexOf(key) !== -1
-                && !(key === Qt.Key_Space && FileManagerService.pickerMultiple)
-                && !(key === Qt.Key_P && (mods & Qt.ControlModifier))) {
-            event.accepted = true;
-            return;
-        }
-        // Suppress Ctrl+V (paste) in picker mode
-        if (key === Qt.Key_V && (mods & Qt.ControlModifier)) {
-            event.accepted = true;
-            return;
-        }
-    }
+    // Shared file operations + picker suppression — single source of truth
+    // for both Miller and tree views. Consumes the event when it handles it.
+    if (FileOpsHandler.tryHandle(event, root, view, pasteProcess))
+        return;
 
     switch (key) {
     case Qt.Key_J:
@@ -92,26 +66,19 @@ function handleKey(event, root, view, pasteProcess, clipboardCopyProcess) {
         break;
 
     case Qt.Key_G:
+        // Bare g (chord start) is handled by FileOpsHandler; only Shift+G lands here.
         if (mods & Qt.ShiftModifier) {
             // G — jump to last
             if (view.count > 0) {
                 view.currentIndex = view.count - 1;
                 view.positionViewAtIndex(view.count - 1, ListView.End);
             }
-        } else {
-            // g — start "go to" chord, show which-key popup
-            windowState.activeChordPrefix = "g";
         }
         event.accepted = true;
         break;
 
-    case Qt.Key_C:
-        // c — start "copy to clipboard" chord
-        windowState.activeChordPrefix = "c";
-        event.accepted = true;
-        break;
-
     case Qt.Key_D:
+        // Bare d (delete) is handled by FileOpsHandler; only modified forms land here.
         if (mods & Qt.ControlModifier) {
             // Ctrl+D — half-page down
             if (view.count > 0) {
@@ -121,14 +88,6 @@ function handleKey(event, root, view, pasteProcess, clipboardCopyProcess) {
         } else if (mods & Qt.ShiftModifier) {
             // Shift+D — navigate history forward (mirrors the PathBar forward button)
             root._saveCursorAndNavigate(function() { windowState.forward(); });
-        } else {
-            // d — trash file(s) (request confirmation)
-            if (windowState.selectedCount > 0) {
-                windowState.requestDelete(windowState.getSelectedPathsArray());
-                windowState.clearSelection();
-            } else if (root.currentEntry) {
-                windowState.requestDelete([root.currentEntry.path]);
-            }
         }
         event.accepted = true;
         break;
@@ -201,41 +160,12 @@ function handleKey(event, root, view, pasteProcess, clipboardCopyProcess) {
         event.accepted = true;
         break;
 
-    case Qt.Key_Y:
-        if (windowState.selectedCount > 0) {
-            FileManagerService.yank(windowState.getSelectedPathsArray());
-            windowState.clearSelection();
-        } else if (root.currentEntry) {
-            FileManagerService.yank([root.currentEntry.path]);
-        }
-        event.accepted = true;
-        break;
-
-    case Qt.Key_X:
-        if (windowState.selectedCount > 0) {
-            FileManagerService.cut(windowState.getSelectedPathsArray());
-            windowState.clearSelection();
-        } else if (root.currentEntry) {
-            FileManagerService.cut([root.currentEntry.path]);
-        }
-        event.accepted = true;
-        break;
-
     case Qt.Key_P:
+        // Bare p (paste) is handled by FileOpsHandler; only Ctrl+P lands here.
         if (mods & Qt.ControlModifier) {
             windowState.audioPlaybackToggle();
-        } else {
-            _executePaste(root, pasteProcess);
-        }
-        event.accepted = true;
-        break;
-
-    case Qt.Key_V:
-        if (mods & Qt.ControlModifier) {
-            _executePaste(root, pasteProcess);
             event.accepted = true;
         }
-        // bare V is unbound — let event propagate
         break;
 
     case Qt.Key_N:
@@ -248,27 +178,9 @@ function handleKey(event, root, view, pasteProcess, clipboardCopyProcess) {
         }
         break;
 
-    case Qt.Key_Space:
-        if (root.currentEntry) {
-            // In picker mode, only allow selecting the correct type:
-            // directory picker → dirs only, file picker → files only.
-            if (FileManagerService.pickerMode && !FileManagerService.pickerSaveMode) {
-                if (FileManagerService.pickerDirectory && !root.currentEntry.isDir)
-                    break;
-                if (!FileManagerService.pickerDirectory && root.currentEntry.isDir)
-                    break;
-            }
-            windowState.toggleSelection(root.currentEntry.path);
-            // Advance cursor after toggling, like Yazi
-            if (view.currentIndex < view.count - 1)
-                view.currentIndex++;
-        }
-        event.accepted = true;
-        break;
-
     case Qt.Key_Escape:
-        if (windowState.selectedCount > 0)
-            windowState.clearSelection();
+        // Selection clearing is handled by FileOpsHandler; swallow the rest so
+        // a stray Escape doesn't propagate beyond the file list.
         event.accepted = true;
         break;
 
@@ -284,22 +196,11 @@ function handleKey(event, root, view, pasteProcess, clipboardCopyProcess) {
         event.accepted = true;
         break;
 
-    case Qt.Key_A:
-        windowState.requestCreate();
-        event.accepted = true;
-        break;
-
     case Qt.Key_R:
-        if ((mods & Qt.ControlModifier) && FileManagerService.pickerSaveMode) {
-            // Ctrl+R in save mode: activate inline save-name editing in status bar
-            FileManagerService.saveNameEditing = true;
-            event.accepted = true;
-            break;
-        }
-        if (root.currentEntry) {
-            var includeExt = (mods & Qt.ShiftModifier) !== 0;
-            windowState.requestRename(root.currentEntry.path, includeExt);
-        }
+        // Bare r and picker Ctrl+R are handled by FileOpsHandler; Shift+R
+        // (rename including extension) is the Miller-specific form.
+        if ((mods & Qt.ShiftModifier) && root.currentEntry)
+            windowState.requestRename(root.currentEntry.path, true);
         event.accepted = true;
         break;
 
@@ -312,11 +213,6 @@ function handleKey(event, root, view, pasteProcess, clipboardCopyProcess) {
             windowState.toggleViewMode();
             event.accepted = true;
         }
-        break;
-
-    case Qt.Key_Comma:
-        windowState.activeChordPrefix = ",";
-        event.accepted = true;
         break;
 
     // === Tab management ===
@@ -387,25 +283,6 @@ function _copyPickerPathToClipboard(root, clipboardCopyProcess, onDone) {
     clipboardCopyProcess._pendingCallback = onDone;
     clipboardCopyProcess.command = FileManagerService.clipboardCopyCommand(text);
     clipboardCopyProcess.start();
-}
-
-function _executePaste(root, pasteProcess) {
-    if (FileManagerService.clipboardPaths.length === 0 || pasteProcess.running)
-        return;
-
-    var paths = FileManagerService.clipboardPaths;
-    var destDir = root.windowState.currentPath;
-
-    // Focus the first pasted item after model refreshes
-    root._pendingFocusName = Paths.basename(paths[0]);
-
-    // cp and mv both accept multiple source args before a single destination
-    if (FileManagerService.clipboardMode === "yank")
-        pasteProcess.command = ["cp", "-r", "--"].concat(paths).concat([destDir]);
-    else
-        pasteProcess.command = ["mv", "--"].concat(paths).concat([destDir]);
-
-    pasteProcess.start();
 }
 
 function _halfPageCount(view) {

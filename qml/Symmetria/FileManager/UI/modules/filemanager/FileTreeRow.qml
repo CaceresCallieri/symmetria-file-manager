@@ -205,6 +205,23 @@ Item {
         }
     }
 
+    // Clipboard indicator strip — left edge, mirrors FileListItem so yank/cut
+    // marks stay visible when the user switches views mid-operation.
+    IndicatorStrip {
+        stripColor: FileManagerService.clipboardMode === "cut" ? FmTheme.indicator.cut : FmTheme.indicator.yank
+        // Read _clipboardSet directly so QML tracks the dependency and
+        // re-evaluates when the set object reference changes.
+        active: !!FileManagerService._clipboardSet[root.modelData?.path ?? ""]
+    }
+
+    // Selection indicator strip — left edge, yellow. Takes precedence visually
+    // when both are present (selection is the active user intent).
+    IndicatorStrip {
+        stripColor: FmTheme.indicator.selection
+        active: root.windowState && root.windowState.selectedPaths
+                ? !!root.windowState.selectedPaths[root.modelData?.path ?? ""] : false
+    }
+
     StateLayer {
         // Root is a plain Item (no radius), so StateLayer's parent?.radius
         // fallback yields a square hover — shape it to match the zebra /

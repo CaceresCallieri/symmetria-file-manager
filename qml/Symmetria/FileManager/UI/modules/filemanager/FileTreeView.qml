@@ -22,9 +22,14 @@ pragma ComponentBehavior: Bound
 // rows). The values and rationale live in TreeModel.js; each hit emits one
 // Logger.info so we can diagnose without exposing knobs.
 //
-// Out of scope for v1: drag-drop, inline rename/create/delete, multi-select,
-// right-click menu, persistent expansion across restarts (the expandedPaths
-// prop is reserved for v2).
+// File operations (delete/rename/create/yank/cut/paste/multi-select + chords)
+// are dispatched through the shared FileOpsHandler/ChordHandler and require a
+// non-null `windowState` — embedded consumers without one (IDE sidebar) stay
+// navigation-only. Paste/create target the hovered directory itself, or the
+// hovered file's parent (see fileOpsTargetDir).
+//
+// Out of scope for v1: drag-drop, right-click menu, persistent expansion
+// across restarts (the expandedPaths prop is reserved for v2).
 //
 // IMPLEMENTATION NOTE: the expansion state machine lives in TreeModel.js, the
 // keyboard dispatcher in TreeKeyHandler.js, the row delegate in FileTreeRow.qml.
@@ -43,6 +48,11 @@ import "handlers/TreeFlashHandler.js" as TreeFlashHandler // qmllint disable unu
 import "handlers/TreeModel.js" as TreeModel
 import "handlers/TreeKeyHandler.js" as TreeKeyHandler
 import "handlers/SearchHandler.js" as SearchHandler
+// ChordHandler + FileOpsHandler are reached by TreeKeyHandler.js through this
+// file's scope at runtime (same cross-JS mechanism as TreeFlashHandler above) —
+// the linter cannot see that and reports them unused.
+import "handlers/ChordHandler.js" as ChordHandler // qmllint disable unused-imports
+import "handlers/FileOpsHandler.js" as FileOpsHandler // qmllint disable unused-imports
 import QtQuick
 import QtQuick.Controls
 
@@ -71,81 +81,44 @@ Item {
     property int maxExpandDepth: 8
 
     // Viewport-driven (lazy) auto-expand. When true, `initialExpandDepth` is
-    // ignored: at mount we expand only the root, then walk the row list
-    // expanding one un-expanded directory at a time, re-checking after each
-    // settle, until the rendered row count covers the viewport (plus an
-    // overscroll buffer of `_lazyExpandBufferRows` rows). After mount, when
-    // the user scrolls within `_lazyExpandBufferRows` of the rendered
-    // content's tail, we expand one more directory; same handler also fires
-    // on viewport-height + compactScale changes.
-    //
-    // Win vs `initialExpandDepth: -1`: the eager cascade instantiates one
-    // `FileSystemModel` + `QFileSystemWatcher` per expanded directory — on
-    // medium-to-large repos (bambin: ~480 dirs) it cap-trips at the
-    // `_autoExpandModelCeiling` of 100 dirs whose visible-row payoff is
-    // small (~30 rows fit in the IDE sidebar). Lazy expand follows the
-    // user's attention instead of fanning out blindly.
-    //
-    // Single-shot diagnostic emit per mount logs the count of directories
-    // actually expanded so we can tell at a glance whether option 4 is
-    // pulling its weight on a given repo.
+    // ignored: the mount expands one un-expanded directory at a time until the
+    // rendered rows cover the viewport (plus an overscroll buffer); scrolling
+    // near the tail, viewport-height and compactScale changes expand one more.
+    // Rationale for lazy vs the eager BFS cascade lives at
+    // TreeModel.advanceLazyExpand.
     property bool lazyExpand: false
 
-    // Optional restore-on-mount expanded-path list. `null` / empty array
-    // (default) preserves existing behaviour (lazyExpand or BFS cascade
-    // depending on the other props). When set to a non-empty list of absolute
-    // path strings, the mount cascade is REPLACED by a depth-driven async chain
-    // that expands exactly those paths in ancestor-first order, restoring the
-    // tree shape from a previous session. Paths not under `rootPath` are
-    // silently skipped (a stale cache pointing at a moved repo must not blow up
-    // the mount). Mutually exclusive with `lazyExpand` and `initialExpandDepth`
-    // for the duration of THIS mount; afterwards `lazyExpand` re-arms naturally
-    // on the next scroll. The replay mechanics — parent-settled dispatch,
-    // `_generation` invalidation, the skipped-level rescue, and mount-settle
-    // ordering — live in TreeModel.beginMount / advanceRestoreFor.
+    // Optional restore-on-mount expanded-path list. A non-empty list of
+    // absolute paths REPLACES the mount cascade with an ancestor-first replay
+    // restoring a previous session's tree shape; paths not under `rootPath`
+    // are silently skipped (a stale cache must not blow up the mount).
+    // Overrides `lazyExpand`/`initialExpandDepth` for THIS mount only;
+    // `lazyExpand` re-arms on the next scroll. Replay mechanics live in
+    // TreeModel.beginMount / advanceRestoreFor.
     property var restoreExpandedPaths: null
 
-    // Optional per-row badge data source. The FM stays git-agnostic — this is
-    // a duck-typed extension point. Consumers (e.g. Symmetria-IDE) supply an
-    // object with `statusForPath(path) -> {char, color, textColor?, tooltip?,
-    // adds?, dels?}` or null, plus a `statusChanged()` signal that fires
-    // whenever any path's status changes. Set to null (default) renders no
-    // badges and has zero overhead — every status binding short-circuits on
-    // the null check. The optional `adds` / `dels` integers, when either is ≥1,
-    // render as a small `+N -M` accessory after the badge — used by IDE-side
-    // consumers to surface per-file line-change counts inline.
-    //
-    // The same provider object is intended to answer for both files and
-    // directories — directories get aggregate status (e.g. "·" if any
-    // descendant has changes), letting the user see active subtrees at a
-    // glance without expanding them.
+    // Optional per-row badge data source — duck-typed so the FM stays
+    // git-agnostic. Consumers (e.g. Symmetria-IDE) supply `statusForPath(path)
+    // -> {char, color, textColor?, tooltip?, adds?, dels?}` or null, plus a
+    // `statusChanged()` signal. The provider answers for files AND directories
+    // (aggregate status, so active subtrees read at a glance); adds/dels ≥ 1
+    // render as a `+N -M` accessory. null (default) = no badges, zero overhead.
     property var statusProvider: null
 
-    // Optional absolute-path membership map of pre-computed ignored entries.
-    // `null` (default) means the FM falls back to its per-directory
-    // `git check-ignore --stdin` shell pipeline through `Gitignore.qml`. When
-    // set to a `{absPath: true, ...}` map (e.g. the IDE's GitController computing
-    // the whole repo in one `git ls-files` pass), the per-directory subprocess
-    // spawn is short-circuited entirely — we just consult the map. This is the
-    // dominant mount-time win on medium-to-large repos: the Gitignore service
-    // serialises one shell process per expanded directory (~30–40ms each), which
-    // a single repo-wide git pass replaces. Consulted only during fan-out gating
-    // + initial expansion; consumers reassign the prop when their set changes.
-    // Compatible with `respectGitignore: true` — when both are set, the map wins.
+    // Optional `{absPath: true, ...}` map of pre-computed ignored entries (e.g.
+    // the IDE computing the whole repo in one `git ls-files` pass). When set,
+    // the per-expanded-directory `git check-ignore` subprocess via Gitignore.qml
+    // (~30–40ms each, serialised — the dominant mount-time cost on medium
+    // repos) is short-circuited entirely. Wins over `respectGitignore` when
+    // both are set; consumers reassign the prop when their set changes.
     property var ignoredPathSet: null
 
-    // Optional absolute-path membership filter. `null` (default) preserves
-    // existing behaviour (full tree visible). When set to a JS map of the
-    // shape `{absPath: true, ...}`, rows whose `entry.path` is NOT in the
-    // map are hidden, AND the auto-expand fan-out skips directories absent
-    // from the map. The filter map MUST include rootPath itself, every
-    // leaf path the consumer wants visible, AND every ancestor up to
-    // rootPath — the FM does NOT compute ancestor closure (keeps the gate
-    // O(1) per row). Consumers fold ancestors in at build time.
-    //
-    // Intentionally NOT git-specific: any consumer wanting to narrow the
-    // tree by an arbitrary path set (search results, tag-filtered views,
-    // fuzzy-finder previews) reuses the same prop.
+    // Optional `{absPath: true, ...}` membership filter — not git-specific
+    // (search results, tag views, fuzzy previews all reuse it). Rows NOT in
+    // the map are hidden and auto-expand skips absent directories. The map
+    // MUST include rootPath, every visible leaf AND every ancestor between —
+    // the FM does NOT compute ancestor closure (keeps the gate O(1) per row);
+    // consumers fold ancestors in at build time.
     property var pathFilter: null
 
     // Density multiplier applied to every size in the row delegate (row height,
@@ -160,11 +133,17 @@ Item {
     readonly property var currentEntry: currentRow ? currentRow.entry : null
     readonly property int fileCount: _rows.length
 
-    // Stub positional props — MillerColumns exposes these for RenamePopup positioning;
-    // FileTreeView always returns 0 since inline rename is out of scope for v1.
-    readonly property real currentItemBottomY: 0
+    // Positional props for RenamePopup — same contract MillerColumns exposes.
+    // Y of the bottom edge of the current row, relative to FileTreeView root.
+    readonly property real currentItemBottomY: {
+        if (view.currentIndex < 0 || _rows.length === 0) return 0;
+        const rowHeight = Config.fileManager.sizes.itemHeight * compactScale;
+        const itemY = view.currentIndex * rowHeight - view.contentY;
+        return view.y + itemY + rowHeight + FmTheme.padding.sm;
+    }
+    // The tree is a single full-width column.
     readonly property real currentColumnX: 0
-    readonly property real currentColumnWidth: 0
+    readonly property real currentColumnWidth: width
 
     property var _models: ({})
     property var _expanded: ({})
@@ -199,15 +178,12 @@ Item {
     // settling. Gates the recursive fan-out so manual expansion after mount
     // doesn't trigger further auto-expansion.
     property bool _autoExpandActive: false
-    // Independent gate for the lazyExpand cycle. Mutually exclusive with
-    // `_autoExpandActive` per mount: lazyExpand bypasses the BFS fan-out
-    // entirely and walks `_rows` instead. Set true at mount AND on scroll-
-    // driven re-trigger; cleared in `_advanceLazyExpand` when the viewport
-    // is filled or no more un-expanded dirs remain.
+    // Independent gate for the lazyExpand cycle (mutually exclusive with
+    // `_autoExpandActive` per mount — lazy walks `_rows`, not the BFS fan-out).
+    // Set at mount AND on scroll-driven re-trigger; cleared in
+    // TreeModel.advanceLazyExpand when the viewport fills or candidates run out.
     property bool _lazyExpandActive: false
-    // Count of dirs the lazyExpand cycle has expanded since mount started —
-    // diagnostic, dumped once in the `tree mount settled` line so we can
-    // tell at a glance how aggressively viewport-fill ran on a given repo.
+    // Diagnostic count of lazy-expanded dirs, dumped in `tree mount settled`.
     property int _lazyExpandCount: 0
 
     // Restore-cycle state (mutually exclusive with _autoExpandActive and
@@ -271,6 +247,29 @@ Item {
         view.forceActiveFocus();
     }
 
+    // --- FileOpsHandler / ChordHandler contract (shared with FileList) ---
+
+    // Where paste/create land: the hovered directory itself, or the hovered
+    // file's parent. Falls back to the tree root when the tree is empty.
+    function fileOpsTargetDir(): string {
+        const row = currentRow;
+        if (!row) return rootPath;
+        return row.isDir ? row.path : Paths.parentDir(row.path);
+    }
+
+    // No-op: a pasted item may land at any depth, so there is no single "next
+    // entries change" to consume a pending focus name against (the
+    // _pendingFocusName property is reserved for depth-0 rootPath navigations).
+    function setPendingPasteFocus(name: string): void {
+    }
+
+    // Save the cursor row before a windowState navigation (bookmark chords) so
+    // returning to this path restores it. Same contract as FileList's.
+    function _saveCursorAndNavigate(navigateFn: var): void {
+        windowState.saveCursor(windowState.currentPath, view.currentIndex);
+        navigateFn();
+    }
+
     implicitWidth: 280
     // Honest height: report the visible content's actual height so
     // layouts that don't `fillHeight` can grow this component to its
@@ -302,19 +301,14 @@ Item {
         TreeModel.refreshAllExpanded(root);
     }
 
-    // pathFilter changes are expected to be frequent (e.g. a git-status
-    // watcher emitting a new filter map every time the working tree
-    // changes). Two-pass rebuild: (1) refresh visible rows against the
-    // new set — cheap, only touches what's already expanded; (2) if
-    // auto-expand is configured AND we still have a filter, re-arm the
-    // cascade against every settled model so newly-arrived in-set paths
-    // under unexplored dirs become reachable. The existing
-    // _autoExpandModelCeiling + _autoExpandFanoutCap still bound the
-    // worst case, so a pathological filter can't blow up I/O.
-    //
-    // We do NOT touch _expanded / _models / _pending — paths already
-    // expanded stay expanded; paths the user manually collapsed stay
-    // collapsed; in-flight expansions race to completion. Each is the
+    // pathFilter changes are expected to be frequent (a git-status watcher
+    // emits a new map per working-tree change). Two-pass: (1) refresh visible
+    // rows against the new set (cheap); (2) if auto-expand is configured AND a
+    // filter remains, re-arm the cascade against every settled model so
+    // newly-arrived in-set paths under unexplored dirs become reachable — the
+    // TreeModel guardrail caps still bound worst-case I/O. We do NOT touch
+    // _expanded / _models / _pending: expanded stays expanded, user-collapsed
+    // stays collapsed, in-flight expansions race to completion — each is the
     // correct behaviour individually.
     onPathFilterChanged: {
         TreeModel.rebuildRows(root);
@@ -357,6 +351,12 @@ Item {
         interval: 500
         onTriggered: root._pendingG = false
     }
+
+    // File-operation processes driven by FileOpsHandler / ChordHandler via
+    // TreeKeyHandler's scope. No pasteFailed cleanup needed — the tree sets no
+    // optimistic paste state (see setPendingPasteFocus).
+    PasteRunner { id: pasteProcess }
+    ClipboardCopyRunner { id: clipboardCopyProcess }
 
     Connections {
         target: root.windowState
@@ -457,27 +457,14 @@ Item {
 
         Component.onCompleted: view.forceActiveFocus()
 
-        ScrollBar.vertical: ScrollBar {
+        ScrollBar.vertical: SlimScrollBar {
             policy: ScrollBar.AsNeeded
-            width: 6
-            // Explicit overflow gate. `AsNeeded` controls when the thumb
-            // is shown, but a custom contentItem with a constant
-            // opacity (0.4 below) renders independently — so the track
-            // would paint as a faint 6px gutter even when the
-            // flickable has no overflow. Gating the entire ScrollBar's
-            // visibility on real overflow makes the gutter disappear
-            // for content-fit consumers (e.g. the IDE's Active Changes
-            // pane, whose enclosing FileTreeView sizes to its content
-            // via the root `implicitHeight: view.contentHeight + …`).
-            // 0.5px epsilon absorbs subpixel rounding from
-            // compactScale row-height multiplications.
+            // Explicit overflow gate: the custom thumb renders at constant
+            // opacity regardless of `AsNeeded`, so without this the track
+            // paints as a faint gutter for content-fit consumers (e.g. the
+            // IDE's Active Changes pane). 0.5px epsilon absorbs subpixel
+            // rounding from compactScale row-height multiplications.
             visible: view.contentHeight > view.height + 0.5
-            contentItem: Rectangle {
-                implicitWidth: 6
-                radius: width / 2
-                color: FmTheme.palette.onSurfaceVariant
-                opacity: 0.4
-            }
         }
 
         delegate: FileTreeRow {
@@ -494,6 +481,17 @@ Item {
 
         Keys.onPressed: function(event) {
             TreeKeyHandler.handleKey(event, root, view);
+        }
+
+        // Cancel a half-entered chord / bookmark sub-mode when focus leaves
+        // the tree (e.g. a popup steals it) — mirrors FileList.qml.
+        onActiveFocusChanged: {
+            if (!activeFocus && root.windowState) {
+                if (root.windowState.activeChordPrefix !== "")
+                    root.windowState.activeChordPrefix = "";
+                if (root.windowState.bookmarkSubModeActive)
+                    root.windowState.bookmarkSubMode = "";
+            }
         }
     }
 }
