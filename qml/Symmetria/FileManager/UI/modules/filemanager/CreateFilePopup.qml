@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import Symmetria.FileManager.UI
 import Symmetria.FileManager.Models
 import QtQuick
@@ -21,15 +23,17 @@ Loader {
 
         // Snapshot path on creation — this component is destroyed/recreated each
         // time the Loader reactivates (active flips false→true), so onCompleted
-        // always captures the correct path even though currentPath may change
-        // while the popup is visible.
+        // always captures the correct path even though the target may change
+        // while the popup is visible. createTargetDir is set by requestCreate
+        // (Miller: currentPath; tree: hovered dir); the currentPath fallback
+        // covers any non-keyboard caller that opens the modal directly.
         property string basePath
 
         // Internal state: populated by _attemptCreate, consumed by _runCreate
         property string _currentInput: ""
         property bool _isDirectory: false
 
-        Component.onCompleted: basePath = root.windowState.currentPath
+        Component.onCompleted: basePath = root.windowState.createTargetDir || root.windowState.currentPath
 
         // Click outside the card to dismiss — NO dark scrim
         MouseArea {
@@ -206,11 +210,11 @@ Loader {
                     // Already exists — show inline error and move the cursor to
                     // the conflicting entry in the background so the user sees
                     // what they're colliding with while the popup stays open.
-                    const topLevelName = _currentInput.split("/")[0];
+                    const topLevelName = popupScope._currentInput.split("/")[0];
                     errorLabel.text = qsTr("'%1' already exists").arg(topLevelName);
                     root.windowState.createCompleted(topLevelName);
                 } else {
-                    _runCreate();
+                    popupScope._runCreate();
                 }
             }
         }

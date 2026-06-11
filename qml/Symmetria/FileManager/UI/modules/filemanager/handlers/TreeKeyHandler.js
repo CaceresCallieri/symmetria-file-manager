@@ -5,9 +5,12 @@
 // `view`; sibling handlers and component ids resolve via the importing file's
 // scope (same mechanism as TreeFlashHandler reaching FlashLogic).
 //
-// Component IDs accessed via scope: ggTimer (the 500ms `gg`-chord timer).
+// Component IDs accessed via scope: ggTimer (the windowState-less `gg`-chord
+//   timer), pasteProcess, clipboardCopyProcess (ShellRunner wrappers).
 // Sibling handlers accessed via scope: TreeModel (expand/collapse/toggle/
-//   activate/jumpToParent/halfPageCount/refreshAll), TreeFlashHandler (handleKey).
+//   activate/jumpToParent/halfPageCount/refreshAll), TreeFlashHandler (handleKey),
+//   ChordHandler (chord resolution + bookmark sub-mode), FileOpsHandler (the
+//   shared file-operation dispatch — operation keys live THERE, not here).
 // Singletons accessed via scope: Qt.
 
 function handleKey(event, root, view) {
@@ -25,6 +28,20 @@ function handleKey(event, root, view) {
         return;
     }
 
+    // Bookmark sub-mode: capture a single letter for create/delete
+    if (root.windowState && root.windowState.bookmarkSubModeActive) {
+        ChordHandler.handleBookmarkSubMode(event, root);
+        return;
+    }
+
+    // Resolve active chord (g=navigate, c=copy-path, ,=sort) — mirrors
+    // FileList.qml's ordering: chords resolve before anything else so a
+    // chord's second key can't be swallowed by another handler.
+    if (root.windowState && root.windowState.activeChordPrefix !== "") {
+        ChordHandler.resolveChord(event, root, view, clipboardCopyProcess);
+        return;
+    }
+
     if (key === Qt.Key_E && (mods & Qt.ControlModifier)) {
         if (root.windowState) root.windowState.toggleViewMode();
         event.accepted = true;
@@ -37,6 +54,13 @@ function handleKey(event, root, view) {
         TreeFlashHandler.handleKey(event, root, view);
         return;
     }
+
+    // Shared file operations (delete/rename/create/yank/cut/paste/select +
+    // chord starts) + picker suppression — single source of truth with the
+    // Miller view. Requires a windowState; embedded consumers without one
+    // (IDE sidebar) stay navigation-only.
+    if (root.windowState && FileOpsHandler.tryHandle(event, root, view, pasteProcess))
+        return;
 
     switch (key) {
     case Qt.Key_J:
@@ -52,6 +76,11 @@ function handleKey(event, root, view) {
         break;
 
     case Qt.Key_G:
+        // With a windowState, bare g is claimed by FileOpsHandler as the "g"
+        // chord start (bookmarks + which-key, gg handled by ChordHandler), so
+        // only Shift+G lands here. The timer-based gg below is the fallback
+        // for embedded consumers with no windowState (IDE sidebar), where the
+        // chord system doesn't exist.
         if (mods & Qt.ShiftModifier) {
             if (view.count > 0) view.currentIndex = view.count - 1;
             root._pendingG = false;
@@ -107,6 +136,7 @@ function handleKey(event, root, view) {
         break;
 
     case Qt.Key_D:
+        // Bare d (delete) is claimed by FileOpsHandler when a windowState exists.
         if ((mods & Qt.ControlModifier) && view.count > 0) {
             view.currentIndex = Math.min(view.currentIndex + TreeModel.halfPageCount(), view.count - 1);
             view.positionViewAtIndex(view.currentIndex, ListView.Contain);
@@ -134,6 +164,9 @@ function handleKey(event, root, view) {
     }
 
     case Qt.Key_R:
+        // Bare r (rename) is claimed by FileOpsHandler; Shift+R stays the
+        // tree's refresh-all (the rename popup's Tab toggles extension
+        // selection, so rename-with-extension isn't lost).
         if (mods & Qt.ShiftModifier) {
             TreeModel.refreshAll(root);
             event.accepted = true;

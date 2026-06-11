@@ -140,55 +140,18 @@ Item {
     }
 
     // Clipboard indicator strip — left edge, above selection highlight.
-    // Colors are hardcoded instead of using FmTheme palette tokens because
-    // palette tokens change with wallpaper-derived color schemes, so
-    // indicator colors must stay fixed to remain visually distinguishable.
-    Item {
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        width: 5
-        clip: true
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: parent.width + FmTheme.rounding.sm
-            radius: FmTheme.rounding.sm
-            color: FileManagerService.clipboardMode === "cut" ? FmTheme.indicator.cut : FmTheme.indicator.yank
-            // Read _clipboardSet directly so QML tracks the dependency and
-            // re-evaluates when the set object reference changes.
-            opacity: FileManagerService._clipboardSet[root.modelData?.path ?? ""]
-                     ? 0.85 : 0
-
-            Behavior on opacity { Anim {} }
-        }
+    IndicatorStrip {
+        stripColor: FileManagerService.clipboardMode === "cut" ? FmTheme.indicator.cut : FmTheme.indicator.yank
+        // Read _clipboardSet directly so QML tracks the dependency and
+        // re-evaluates when the set object reference changes.
+        active: !!FileManagerService._clipboardSet[root.modelData?.path ?? ""]
     }
 
-    // Selection indicator strip — left edge, yellow.
-    // Same visual pattern as the clipboard strip but takes precedence visually
+    // Selection indicator strip — left edge, yellow. Takes precedence visually
     // when both are present (selection is the active user intent).
-    // Hardcoded color for the same reason as clipboard: palette tokens change
-    // with wallpaper-derived color schemes, so this must stay fixed.
-    Item {
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        width: 5
-        clip: true
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: parent.width + FmTheme.rounding.sm
-            radius: FmTheme.rounding.sm
-            color: FmTheme.indicator.selection
-            opacity: root.isSelected ? 0.85 : 0
-
-            Behavior on opacity { Anim {} }
-        }
+    IndicatorStrip {
+        stripColor: FmTheme.indicator.selection
+        active: root.isSelected
     }
 
     StateLayer {

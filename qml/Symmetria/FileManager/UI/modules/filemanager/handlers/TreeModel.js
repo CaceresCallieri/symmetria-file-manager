@@ -511,6 +511,15 @@ function autoExpandChildrenOf(root, parentPath, parentExpansions) {
 // Cycle re-arm from scroll/resize/density events comes through kickLazyExpand
 // below — keep the two entry points distinct so recursive re-entry can't loop on
 // an already-active cycle.
+//
+// Why lazy beats `initialExpandDepth: -1` (the eager BFS cascade): the cascade
+// instantiates one FileSystemModel + QFileSystemWatcher per expanded directory —
+// on medium-to-large repos (bambin: ~480 dirs) it cap-trips at MODEL_CEILING
+// (100 dirs) whose visible-row payoff is small (~30 rows fit in the IDE
+// sidebar). Lazy expand follows the user's attention instead of fanning out
+// blindly. The single-shot `tree mount settled` diagnostic logs
+// `_lazyExpandCount` so we can tell at a glance whether the lazy cycle is
+// pulling its weight on a given repo.
 function advanceLazyExpand(root) {
     if (!shouldExpandMore(root)) {
         root._lazyExpandActive = false;

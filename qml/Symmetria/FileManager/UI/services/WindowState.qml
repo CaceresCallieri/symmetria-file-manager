@@ -167,7 +167,10 @@ QtObject {
     // === Transient status message (auto-clears after 2s) ===
     property string transientMessage: ""
 
-    property Timer _transientTimer: Qt.createQmlObject(
+    // var (not Timer) on purpose: Qt.createQmlObject is typed as returning
+    // QObject, so a Timer-typed property trips qmllint's incompatible-type
+    // check even though the created object IS a Timer.
+    property var _transientTimer: Qt.createQmlObject(
         'import QtQuick; Timer { interval: 2000 }', root, "transientTimer")
 
     function showTransientMessage(msg: string): void {
@@ -290,6 +293,10 @@ QtObject {
 
     // --- Modal data (read by popup components) ---
     property var deleteConfirmPaths: []
+    // Directory the create popup writes into. Passed explicitly because the
+    // views disagree on what "here" means: Miller creates in currentPath, the
+    // tree in the hovered directory (or the hovered file's parent).
+    property string createTargetDir: ""
     property string renameTargetPath: ""
     property bool renameIncludeExtension: false
     property string contextMenuTargetPath: ""
@@ -304,7 +311,8 @@ QtObject {
         activeModal = modalDelete;
     }
 
-    function requestCreate(): void {
+    function requestCreate(targetDir: string): void {
+        createTargetDir = targetDir;
         activeModal = modalCreate;
     }
 
@@ -333,6 +341,7 @@ QtObject {
     function closeModal(): void {
         activeModal = modalNone;
         deleteConfirmPaths = [];
+        createTargetDir = "";
         renameTargetPath = "";
         renameIncludeExtension = false;
         contextMenuTargetPath = "";
