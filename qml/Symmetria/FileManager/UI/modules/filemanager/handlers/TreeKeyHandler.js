@@ -59,6 +59,11 @@ function handleKey(event, root, view) {
     // chord starts) + picker suppression — single source of truth with the
     // Miller view. Requires a windowState; embedded consumers without one
     // (IDE sidebar) stay navigation-only.
+    //
+    // Escape with no selection intentionally falls through unhandled here
+    // (FileOpsHandler returns false, and the switch below has no Escape
+    // case) so it propagates to the host's close-window handling — the
+    // tree's pre-existing behavior.
     if (root.windowState && FileOpsHandler.tryHandle(event, root, view, pasteProcess))
         return;
 

@@ -215,7 +215,10 @@ Item {
     }
 
     // Selection indicator strip — left edge, yellow. Takes precedence visually
-    // when both are present (selection is the active user intent).
+    // when both are present (selection is the active user intent). Unlike
+    // FileListItem (which takes an `isSelected` bound input from FileList's
+    // delegate site), this row reads selectedPaths directly — it already holds
+    // a windowState reference, so an extra pass-through input adds nothing.
     IndicatorStrip {
         stripColor: FmTheme.indicator.selection
         active: root.windowState && root.windowState.selectedPaths
