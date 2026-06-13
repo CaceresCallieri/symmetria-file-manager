@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 // Headless root: instantiates no windows at startup. Windows are spawned
 // dynamically when hostController emits openRequested / openOverlayRequested
 // / createPickerRequested.
@@ -91,7 +93,17 @@ QtObject {
 
     function _spawnPicker(options: var): void {
         if (root._pickerWindow) {
-            Logger.warn("HostController", "picker already active — ignoring request");
+            // Reject immediately instead of silently dropping: without a FIFO
+            // response the requesting app's dialog call hangs until the portal's
+            // 300s timeout (Electron apps may crash outright), and the user gets
+            // no feedback. Cancelling the new request and raising the existing
+            // picker makes the conflict visible and recoverable.
+            Logger.warn("HostController", "picker already active — cancelling new request, raising existing picker");
+            if (options.fifo) {
+                fifoRejectProcess.fifoPath = options.fifo;
+                fifoRejectProcess.start();
+            }
+            root._pickerWindow.requestActivate();
             return;
         }
         // Diagnostic: confirm the portal-supplied parent_window handle reaches the
@@ -111,7 +123,9 @@ QtObject {
     }
 
     property Connections _hostConn: Connections {
-        target: hostController
+        // hostController is a C++ context property (main.cpp setContextProperty),
+        // invisible to qmllint's static analysis.
+        target: hostController // qmllint disable unqualified
         function onOpenRequested(initialPath: string): void {
             root._spawnFileManager(initialPath);
         }
@@ -125,6 +139,16 @@ QtObject {
         }
         function onCreatePickerRequested(options: var): void {
             root._spawnPicker(options);
+        }
+        function onClosePickerRequested(fifoPath: string): void {
+            // Portal relayed org.freedesktop.impl.portal.Request.Close — the
+            // requesting app cancelled or died. Only honour it for the picker
+            // that owns this fifo; closing routes through the window's
+            // onClosing, which cancels picker mode and answers the FIFO.
+            if (root._pickerWindow && FileManagerService.pickerFifoPath === fifoPath) {
+                Logger.info("HostController", "closing picker on portal Request.Close");
+                root._pickerWindow.close();
+            }
         }
     }
 
@@ -216,6 +240,42 @@ QtObject {
             Logger.error("HostController", "FIFO cancel timeout — forcing close");
             fifoCancelProcess.kill();
             root._closePickerWindow();
+        }
+    }
+
+    // Cancels a busy-rejected request's FIFO. Deliberately separate from
+    // fifoCancelProcess: that runner closes the ACTIVE picker window on exit,
+    // which is exactly what a busy rejection must NOT do (the existing picker
+    // stays open; only the new request is answered with a cancellation).
+    property ShellRunner _fifoRejectProcess: ShellRunner {
+        id: fifoRejectProcess
+
+        property string fifoPath: ""
+
+        command: ["python3", "-c",
+                  "import sys; open(sys.argv[1], 'w').write('__PICKER_CANCELLED__')",
+                  fifoPath]
+
+        onRunningChanged: {
+            if (running) fifoRejectTimeout.start();
+            else fifoRejectTimeout.stop();
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            fifoRejectTimeout.stop();
+            if (exitCode !== 0)
+                Logger.error("HostController", "FIFO reject write failed, exitCode: " + exitCode);
+            else
+                Logger.info("HostController", "Busy rejection sent to FIFO");
+        }
+    }
+
+    property Timer _fifoRejectTimeout: Timer {
+        id: fifoRejectTimeout
+        interval: 5000
+        onTriggered: {
+            Logger.error("HostController", "FIFO reject write timeout — killing writer");
+            fifoRejectProcess.kill();
         }
     }
 
