@@ -51,18 +51,26 @@ function tryHandle(event, root, view, pasteProcess) {
             event.accepted = true;
             return true;
         }
-        // Suppress clipboard operations — they don't belong in a picker.
-        // Space is exempt when multi-select is active (marking files before confirm).
-        if (_PICKER_SUPPRESSED_KEYS.indexOf(key) !== -1
-                && !(key === Qt.Key_Space && FileManagerService.pickerMultiple)
-                && !(key === Qt.Key_P && (mods & Qt.ControlModifier))) {
-            event.accepted = true;
-            return true;
-        }
-        // Suppress Ctrl+V (paste) in picker mode
-        if (key === Qt.Key_V && (mods & Qt.ControlModifier)) {
-            event.accepted = true;
-            return true;
+        // The clipboard/multi-select/tab suppression below is the picker's
+        // "file chooser, not file manager" stance. A host that opts into
+        // pickerFileOps wants a FULL file manager riding the picker's
+        // open/cancel routing, so skip suppression entirely for it — every
+        // suppressed key falls through to its normal handler. (Escape above
+        // stays unconditional so dismiss still works in both flavors.)
+        if (!FileManagerService.pickerFileOps) {
+            // Suppress clipboard operations — they don't belong in a picker.
+            // Space is exempt when multi-select is active (marking files before confirm).
+            if (_PICKER_SUPPRESSED_KEYS.indexOf(key) !== -1
+                    && !(key === Qt.Key_Space && FileManagerService.pickerMultiple)
+                    && !(key === Qt.Key_P && (mods & Qt.ControlModifier))) {
+                event.accepted = true;
+                return true;
+            }
+            // Suppress Ctrl+V (paste) in picker mode
+            if (key === Qt.Key_V && (mods & Qt.ControlModifier)) {
+                event.accepted = true;
+                return true;
+            }
         }
     }
 
