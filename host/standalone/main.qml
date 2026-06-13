@@ -29,6 +29,17 @@ QtObject {
     // strand a request on the portal's 300s timeout — the very hang this fixes).
     property var _pendingRejectFifos: []
 
+    // True from the moment a reject writer is asked to start until it settles
+    // (normal exit, failed start, or timeout-kill). _drainRejects gates on
+    // THIS, not fifoRejectProcess.running, because ShellRunner.start() is a
+    // no-op during its m_starting window — the interval between start() and
+    // the started() signal where running is still false (shellrunner.cpp).
+    // A running-only gate let a reject arriving in that window overwrite the
+    // in-flight writer's fifoPath and silently no-op its own start(),
+    // stranding a request on the portal's 300s timeout — the very hang the
+    // queue exists to prevent, just relocated into the launch window.
+    property bool _rejectBusy: false
+
     property Component _fileManagerWindowComponent: Component {
         id: fileManagerWindowComponent
 
@@ -213,6 +224,17 @@ QtObject {
                 Logger.info("HostController", "Picker result sent to FIFO");
             root._closePickerWindow();
         }
+
+        onErrorOccurred: (error) => {
+            // FailedToStart emits errorOccurred with NO following exited
+            // (shellrunner.cpp), so close the picker window here too —
+            // otherwise a failed result writer leaves it open with the
+            // requesting app hanging on the 300s timeout. _closePickerWindow
+            // is idempotent, so a later exited (e.g. on Crashed) is harmless.
+            fifoWriteTimeout.stop();
+            Logger.error("HostController", "FIFO write writer error: " + error);
+            root._closePickerWindow();
+        }
     }
 
     property Timer _fifoWriteTimeout: Timer {
@@ -247,6 +269,14 @@ QtObject {
                 Logger.info("HostController", "Picker cancellation sent to FIFO");
             root._closePickerWindow();
         }
+
+        onErrorOccurred: (error) => {
+            // Same FailedToStart guard as the result writer: no exited
+            // follows, so force the picker window closed here (idempotent).
+            fifoCancelTimeout.stop();
+            Logger.error("HostController", "FIFO cancel writer error: " + error);
+            root._closePickerWindow();
+        }
     }
 
     property Timer _fifoCancelTimeout: Timer {
@@ -278,12 +308,22 @@ QtObject {
         }
 
         onExited: (exitCode, exitStatus) => {
-            fifoRejectTimeout.stop();
             if (exitCode !== 0)
                 Logger.error("HostController", "FIFO reject write failed, exitCode: " + exitCode);
             else
                 Logger.info("HostController", "Busy rejection sent to FIFO");
-            root._drainRejects();
+            root._settleReject();
+        }
+
+        onErrorOccurred: (error) => {
+            // FailedToStart (python3 missing, fork failure) emits errorOccurred
+            // with NO following exited (shellrunner.cpp), so without advancing
+            // here the whole reject queue would stall — every pending request
+            // stranded on the 300s timeout. Settle so the next reject drains.
+            // Best-effort: this request's sentinel didn't land, but it falls
+            // back to its own reader timeout rather than wedging the queue.
+            Logger.error("HostController", "FIFO reject writer error: " + error);
+            root._settleReject();
         }
     }
 
@@ -292,10 +332,13 @@ QtObject {
         interval: 5000
         onTriggered: {
             Logger.error("HostController", "FIFO reject write timeout — killing writer");
+            // kill() makes the still-running writer emit exited, which settles
+            // and drains the next reject. We deliberately do NOT settle/drain
+            // here: this timer only runs while the writer is running (gated in
+            // onRunningChanged), so the kill's exited always follows. Draining
+            // here too could advance the queue before that exited arrives and
+            // let the stale exit settle the NEXT writer.
             fifoRejectProcess.kill();
-            // onExited fires after the kill and drains the next queued reject;
-            // attempt here too in case the writer was already gone.
-            root._drainRejects();
         }
     }
 
@@ -304,15 +347,29 @@ QtObject {
             root._pickerWindow.close();
     }
 
-    // Starts the next queued busy-reject write if the shared writer is idle.
-    // Invoked when a reject is enqueued and again on each writer exit, so a
+    // Starts the next queued busy-reject write if no writer is in flight.
+    // Invoked when a reject is enqueued and again as each writer settles, so a
     // burst of rejected requests drains sequentially without two of them
     // racing on fifoRejectProcess.fifoPath.
     function _drainRejects(): void {
-        if (fifoRejectProcess.running || root._pendingRejectFifos.length === 0)
+        if (root._rejectBusy || root._pendingRejectFifos.length === 0)
             return;
+        root._rejectBusy = true;
         fifoRejectProcess.fifoPath = root._pendingRejectFifos.shift();
         fifoRejectProcess.start();
+    }
+
+    // Settles the current reject writer and advances the queue, exactly once
+    // per writer whichever terminal signal arrives first: normal exit, a
+    // failed start (errorOccurred with NO following exited — shellrunner.cpp),
+    // or the timeout-kill's exit. The _rejectBusy gate makes it idempotent so
+    // a single writer can't double-drain.
+    function _settleReject(): void {
+        if (!root._rejectBusy)
+            return;
+        root._rejectBusy = false;
+        fifoRejectTimeout.stop();
+        root._drainRejects();
     }
 
     Component.onCompleted: {
