@@ -67,6 +67,14 @@ QtObject {
     property bool pickerSaveMode: false
     property string pickerSuggestedName: ""
     property bool saveNameEditing: false
+    // Opt-in escape hatch for embedding hosts (e.g. the Symmetria IDE) that
+    // want a FULL file manager riding the picker's open/cancel routing rather
+    // than a bare file chooser. When true, FileOpsHandler.js skips picker
+    // mode's default clipboard/multi-select/tab suppression, so yank/cut/
+    // paste/space-marking/tabs all work while Enter→pickerCompleted and
+    // Esc→cancel stay intact. Defaults false → the XDG portal picker and any
+    // other startPickerMode caller keep the suppress-clipboard-ops behavior.
+    property bool pickerFileOps: false
 
     signal pickerCompleted(fifoPath: string, paths: var)
     signal pickerCancelled(fifoPath: string)
@@ -82,6 +90,7 @@ QtObject {
         pickerDirectory = options.directory || false;
         pickerSaveMode = options.saveMode || false;
         pickerSuggestedName = options.suggestedName || "";
+        pickerFileOps = options.fileOps || false;
         // Navigation to currentFolder is handled by WindowFactory when creating
         // the picker window — it passes the path as initialPath to the window.
     }
@@ -148,6 +157,7 @@ QtObject {
         pickerSaveMode = false;
         pickerSuggestedName = "";
         saveNameEditing = false;
+        pickerFileOps = false;
     }
 
     // === Utilities (stateless, shared) ===
