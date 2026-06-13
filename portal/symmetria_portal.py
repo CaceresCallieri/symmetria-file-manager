@@ -144,9 +144,12 @@ class PortalRequest(ServiceInterface):
     @method(name="Close")
     def close(self):
         log.info("Request.Close received — dismissing picker for %s", self._fifo_path)
-        # The daemon closes the picker window; its cancel path writes the
-        # cancellation sentinel to the FIFO, which resolves the pending
-        # read_fifo() in the FileChooser method as a normal cancel.
+        # Intentionally fire-and-forget: Close returns to the router immediately
+        # while the daemon asynchronously closes the picker window and writes
+        # the cancellation sentinel to the FIFO, which resolves the pending
+        # read_fifo() in the FileChooser method as a normal cancel. Do NOT make
+        # this await the dismissal — read_fifo() runs on this same event loop,
+        # so blocking here would deadlock against the response it waits for.
         launch_fm_ipc("closePicker", json.dumps({"fifo": self._fifo_path}))
 
 
@@ -168,6 +171,9 @@ class FileChooserBackend(ServiceInterface):
         fifo_path = create_fifo()
         log.info("Created FIFO: %s", fifo_path)
 
+        # `handle` is a per-request object path the router allocates uniquely
+        # (…/request/<sender>/<token>), so concurrent requests never collide on
+        # the same export path — each gets its own Request object.
         request = PortalRequest(fifo_path)
         try:
             self._bus.export(handle, request)
@@ -189,12 +195,14 @@ class FileChooserBackend(ServiceInterface):
             if request is not None:
                 try:
                     self._bus.unexport(handle, request)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    # A leaked export is the exact failure this whole change
+                    # defends against, so surface it rather than swallow.
+                    log.warning("Failed to unexport Request at %s: %s", handle, exc)
             try:
                 os.unlink(fifo_path)
-            except OSError:
-                pass
+            except OSError as exc:
+                log.debug("Could not unlink FIFO %s: %s", fifo_path, exc)
 
     @method(name="OpenFile")
     async def open_file(

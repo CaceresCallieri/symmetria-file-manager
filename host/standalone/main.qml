@@ -17,6 +17,18 @@ QtObject {
 
     property var _pickerWindow: null
 
+    // Sentinel written to a picker's FIFO to signal cancellation — single
+    // source of truth shared by the cancel and busy-reject writers below
+    // (mirrors the portal backend's CANCELLED_SENTINEL).
+    readonly property string _cancelledSentinel: "__PICKER_CANCELLED__"
+
+    // Busy-reject FIFOs awaiting the cancel-sentinel writer. Rejects drain one
+    // at a time through the single fifoRejectProcess: enqueueing here and
+    // calling _drainRejects() avoids clobbering an in-flight writer's fifoPath
+    // when several dialogs arrive while a picker is already open (which would
+    // strand a request on the portal's 300s timeout — the very hang this fixes).
+    property var _pendingRejectFifos: []
+
     property Component _fileManagerWindowComponent: Component {
         id: fileManagerWindowComponent
 
@@ -100,8 +112,12 @@ QtObject {
             // picker makes the conflict visible and recoverable.
             Logger.warn("HostController", "picker already active — cancelling new request, raising existing picker");
             if (options.fifo) {
-                fifoRejectProcess.fifoPath = options.fifo;
-                fifoRejectProcess.start();
+                // options.fifo was already validated server-side by server.cpp's
+                // validateFifoPath before createPickerRequested fired (same
+                // guarantee the result-writer note below relies on), so it is
+                // safe to hand straight to the writer.
+                root._pendingRejectFifos.push(options.fifo);
+                root._drainRejects();
             }
             root._pickerWindow.requestActivate();
             return;
@@ -215,8 +231,8 @@ QtObject {
         property string fifoPath: ""
 
         command: ["python3", "-c",
-                  "import sys; open(sys.argv[1], 'w').write('__PICKER_CANCELLED__')",
-                  fifoPath]
+                  "import sys; open(sys.argv[2], 'w').write(sys.argv[1])",
+                  root._cancelledSentinel, fifoPath]
 
         onRunningChanged: {
             if (running) fifoCancelTimeout.start();
@@ -253,8 +269,8 @@ QtObject {
         property string fifoPath: ""
 
         command: ["python3", "-c",
-                  "import sys; open(sys.argv[1], 'w').write('__PICKER_CANCELLED__')",
-                  fifoPath]
+                  "import sys; open(sys.argv[2], 'w').write(sys.argv[1])",
+                  root._cancelledSentinel, fifoPath]
 
         onRunningChanged: {
             if (running) fifoRejectTimeout.start();
@@ -267,6 +283,7 @@ QtObject {
                 Logger.error("HostController", "FIFO reject write failed, exitCode: " + exitCode);
             else
                 Logger.info("HostController", "Busy rejection sent to FIFO");
+            root._drainRejects();
         }
     }
 
@@ -276,12 +293,26 @@ QtObject {
         onTriggered: {
             Logger.error("HostController", "FIFO reject write timeout — killing writer");
             fifoRejectProcess.kill();
+            // onExited fires after the kill and drains the next queued reject;
+            // attempt here too in case the writer was already gone.
+            root._drainRejects();
         }
     }
 
     function _closePickerWindow(): void {
         if (root._pickerWindow)
             root._pickerWindow.close();
+    }
+
+    // Starts the next queued busy-reject write if the shared writer is idle.
+    // Invoked when a reject is enqueued and again on each writer exit, so a
+    // burst of rejected requests drains sequentially without two of them
+    // racing on fifoRejectProcess.fifoPath.
+    function _drainRejects(): void {
+        if (fifoRejectProcess.running || root._pendingRejectFifos.length === 0)
+            return;
+        fifoRejectProcess.fifoPath = root._pendingRejectFifos.shift();
+        fifoRejectProcess.start();
     }
 
     Component.onCompleted: {
