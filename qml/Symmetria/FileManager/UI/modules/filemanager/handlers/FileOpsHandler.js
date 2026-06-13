@@ -158,7 +158,11 @@ function tryHandle(event, root, view, pasteProcess) {
         if (root.currentEntry) {
             // In picker mode, only allow selecting the correct type:
             // directory picker → dirs only, file picker → files only.
+            // pickerFileOps (full-ops host) opts out of the type filter — a
+            // full file manager marks any entry regardless of type (e.g. a
+            // directory to yank/cut), so the chooser restriction is skipped.
             if (FileManagerService.pickerMode && !FileManagerService.pickerSaveMode
+                    && !FileManagerService.pickerFileOps
                     && FileManagerService.pickerDirectory !== root.currentEntry.isDir) {
                 event.accepted = true;
                 return true;
