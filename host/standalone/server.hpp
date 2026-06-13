@@ -38,6 +38,7 @@ signals:
     void openRequested(const QString& initialPath);
     void openOverlayRequested(const QString& initialPath);
     void createPickerRequested(const QVariantMap& options);
+    void closePickerRequested(const QString& fifoPath);
 
 private:
     void onNewConnection();

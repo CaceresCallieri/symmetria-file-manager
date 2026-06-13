@@ -39,7 +39,7 @@ FIFO_PREFIX = "/tmp/symmetria-picker-"
 FIFO_TIMEOUT_SECONDS = 300  # 5 minutes max wait for user interaction
 CANCELLED_SENTINEL = "__PICKER_CANCELLED__"
 
-PICKER_IPC_CMD = ["symmetria-fm-cli", "createPicker"]
+FM_CLI = "symmetria-fm-cli"
 
 
 def decode_byte_array_path(variant_value) -> str:
@@ -105,16 +105,16 @@ def create_fifo() -> str:
     return path
 
 
-def launch_picker_ipc(options_json: str) -> None:
-    """Fire-and-forget IPC call to open the picker window.
+def launch_fm_ipc(method_name: str, args_json: str) -> None:
+    """Fire-and-forget IPC call to the symmetria-fm daemon.
 
     Uses Popen + communicate() in a daemon thread so the process is fully
     reaped and no zombie is left behind, without blocking the event loop.
     The CLI exits within milliseconds (one socket write + reply read), so
     the daemon thread is short-lived.
     """
-    cmd = PICKER_IPC_CMD + [options_json]
-    log.info("Launching picker: %s", " ".join(cmd))
+    cmd = [FM_CLI, method_name, args_json]
+    log.info("Launching %s: %s", method_name, " ".join(cmd))
 
     def _run():
         proc = subprocess.Popen(
@@ -128,11 +128,73 @@ def launch_picker_ipc(options_json: str) -> None:
     thread.start()
 
 
+class PortalRequest(ServiceInterface):
+    """org.freedesktop.impl.portal.Request, exported at the handle path.
+
+    The portal router calls Close when the requesting app cancels the dialog
+    or exits. Backends MUST export this object — without it the router gets
+    a D-Bus error and our picker window leaks open, blocking all subsequent
+    dialog requests (single-picker lock in the daemon's main.qml).
+    """
+
+    def __init__(self, fifo_path: str):
+        super().__init__("org.freedesktop.impl.portal.Request")
+        self._fifo_path = fifo_path
+
+    @method(name="Close")
+    def close(self):
+        log.info("Request.Close received — dismissing picker for %s", self._fifo_path)
+        # The daemon closes the picker window; its cancel path writes the
+        # cancellation sentinel to the FIFO, which resolves the pending
+        # read_fifo() in the FileChooser method as a normal cancel.
+        launch_fm_ipc("closePicker", json.dumps({"fifo": self._fifo_path}))
+
+
 class FileChooserBackend(ServiceInterface):
     """Implements org.freedesktop.impl.portal.FileChooser."""
 
-    def __init__(self):
+    def __init__(self, bus: MessageBus):
         super().__init__("org.freedesktop.impl.portal.FileChooser")
+        self._bus = bus
+
+    async def _run_picker_request(self, handle: str, picker_options: dict):
+        """Shared picker round-trip: FIFO + Request export + IPC + response.
+
+        Creates the response FIFO, exports the Request object at the router's
+        handle path, asks the daemon to spawn the picker, and waits for the
+        user's answer. Returns the raw FIFO payload string, or None if the
+        picker was cancelled. Raises asyncio.TimeoutError on user inaction.
+        """
+        fifo_path = create_fifo()
+        log.info("Created FIFO: %s", fifo_path)
+
+        request = PortalRequest(fifo_path)
+        try:
+            self._bus.export(handle, request)
+        except Exception as exc:
+            # Non-fatal: the dialog still works, only app-initiated Close is lost.
+            log.warning("Could not export Request at %s: %s", handle, exc)
+            request = None
+
+        try:
+            launch_fm_ipc("createPicker",
+                          json.dumps({**picker_options, "fifo": fifo_path}))
+
+            result = await read_fifo(fifo_path, FIFO_TIMEOUT_SECONDS)
+            result = result.strip()
+            if not result or result == CANCELLED_SENTINEL:
+                return None
+            return result
+        finally:
+            if request is not None:
+                try:
+                    self._bus.unexport(handle, request)
+                except Exception:
+                    pass
+            try:
+                os.unlink(fifo_path)
+            except OSError:
+                pass
 
     @method(name="OpenFile")
     async def open_file(
@@ -155,13 +217,9 @@ class FileChooserBackend(ServiceInterface):
         # calling app's folder hint is meaningful (e.g. "open an image from where
         # you last looked"), so we honour it or fall back to empty (home dir).
 
-        fifo_path = create_fifo()
-        log.info("Created FIFO: %s", fifo_path)
-
         try:
-            picker_options = json.dumps({
+            result = await self._run_picker_request(handle, {
                 "title": title or "Select a File",
-                "fifo": fifo_path,
                 "multiple": multiple,
                 "directory": directory,
                 "acceptLabel": accept_label,
@@ -169,12 +227,7 @@ class FileChooserBackend(ServiceInterface):
                 "parentWindow": parent_window,
             })
 
-            launch_picker_ipc(picker_options)
-
-            result = await read_fifo(fifo_path, FIFO_TIMEOUT_SECONDS)
-            result = result.strip()
-
-            if not result or result == CANCELLED_SENTINEL:
+            if result is None:
                 log.info("Picker cancelled")
                 return [1, {}]
 
@@ -191,11 +244,6 @@ class FileChooserBackend(ServiceInterface):
         except Exception as exc:
             log.error("Picker error: %s", exc)
             return [2, {}]
-        finally:
-            try:
-                os.unlink(fifo_path)
-            except OSError:
-                pass
 
     @method(name="SaveFile")
     async def save_file(
@@ -229,13 +277,9 @@ class FileChooserBackend(ServiceInterface):
 
         log.info("SaveFile: name=%r, folder=%r", current_name, current_folder)
 
-        fifo_path = create_fifo()
-        log.info("Created FIFO: %s", fifo_path)
-
         try:
-            picker_options = json.dumps({
+            result = await self._run_picker_request(handle, {
                 "title": title or "Save File",
-                "fifo": fifo_path,
                 "multiple": False,
                 "directory": False,
                 "saveMode": True,
@@ -245,12 +289,7 @@ class FileChooserBackend(ServiceInterface):
                 "parentWindow": parent_window,
             })
 
-            launch_picker_ipc(picker_options)
-
-            result = await read_fifo(fifo_path, FIFO_TIMEOUT_SECONDS)
-            result = result.strip()
-
-            if not result or result == CANCELLED_SENTINEL:
+            if result is None:
                 log.info("Save picker cancelled")
                 return [1, {}]
 
@@ -273,11 +312,6 @@ class FileChooserBackend(ServiceInterface):
         except Exception as exc:
             log.error("Save picker error: %s", exc)
             return [2, {}]
-        finally:
-            try:
-                os.unlink(fifo_path)
-            except OSError:
-                pass
 
     @method(name="SaveFiles")
     async def save_files(
@@ -299,13 +333,9 @@ class FileChooserBackend(ServiceInterface):
         if not current_folder or os.path.normpath(current_folder) == HOME_DIR:
             current_folder = DOWNLOADS_DIR
 
-        fifo_path = create_fifo()
-        log.info("Created FIFO: %s", fifo_path)
-
         try:
-            picker_options = json.dumps({
+            result = await self._run_picker_request(handle, {
                 "title": title or "Save Files",
-                "fifo": fifo_path,
                 "multiple": False,
                 "directory": True,
                 "saveMode": True,
@@ -314,12 +344,7 @@ class FileChooserBackend(ServiceInterface):
                 "parentWindow": parent_window,
             })
 
-            launch_picker_ipc(picker_options)
-
-            result = await read_fifo(fifo_path, FIFO_TIMEOUT_SECONDS)
-            result = result.strip()
-
-            if not result or result == CANCELLED_SENTINEL:
+            if result is None:
                 log.info("SaveFiles picker cancelled")
                 return [1, {}]
 
@@ -335,16 +360,11 @@ class FileChooserBackend(ServiceInterface):
         except Exception as exc:
             log.error("SaveFiles error: %s", exc)
             return [2, {}]
-        finally:
-            try:
-                os.unlink(fifo_path)
-            except OSError:
-                pass
 
 
 async def main():
     bus = await MessageBus().connect()
-    backend = FileChooserBackend()
+    backend = FileChooserBackend(bus)
     bus.export("/org/freedesktop/portal/desktop", backend)
 
     bus_name = "org.freedesktop.impl.portal.desktop.symmetria"

@@ -134,6 +134,19 @@ void HostController::handleCommand(QLocalSocket* client, const QJsonObject& cmd)
         }
         emit createPickerRequested(toVariantMap(args));
         reply(true);
+    } else if (method == QStringLiteral("closePicker")) {
+        // Sent by the portal backend when the requesting app cancels or dies
+        // (org.freedesktop.impl.portal.Request.Close). The fifo path names
+        // which pending picker to dismiss; main.qml only honours it if it
+        // matches the active picker's fifo.
+        const QString fifoPath = args.value(QStringLiteral("fifo")).toString();
+        if (!validateFifoPath(fifoPath)) {
+            qWarning() << "HostController: rejected closePicker with invalid fifo path:" << fifoPath;
+            reply(false, QStringLiteral("invalid_fifo_path"));
+            return;
+        }
+        emit closePickerRequested(fifoPath);
+        reply(true);
     } else {
         qWarning() << "HostController: unknown method:" << method;
         reply(false, QStringLiteral("unknown_method"));
