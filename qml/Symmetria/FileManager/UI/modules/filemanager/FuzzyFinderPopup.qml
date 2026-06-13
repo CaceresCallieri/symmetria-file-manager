@@ -10,6 +10,17 @@ Loader {
 
     property WindowState windowState
 
+    // Embedder seam (Symmetria IDE). When true, confirming a selection
+    // emits `activated(path, isDir)` INSTEAD of the FM-native flow
+    // (navigate to the parent dir + focus the file in the list). Hosts
+    // that open files in their own surface — the IDE routes files to
+    // nvim via RPC — set this and handle the signal; the FM's own
+    // instance keeps the default. Frecency recordOpen() fires on both
+    // paths so the shared fff ranking keeps learning regardless of host.
+    property bool externalActivation: false
+
+    signal activated(string path, bool isDir)
+
     anchors.fill: parent
 
     opacity: windowState && windowState.activeModal === windowState.modalFuzzyFinder ? 1 : 0
@@ -288,6 +299,14 @@ Loader {
             fuzzyModel.recordOpen(popupScope.selectedIndex, searchInput.text);
 
             root.windowState.closeModal();
+
+            // Embedder seam: hand the selection to the host and stop —
+            // no FM-side navigation. Emitted AFTER closeModal() so the
+            // host's focus handling sees the modal already gone.
+            if (root.externalActivation) {
+                root.activated(targetFullPath, targetIsDir);
+                return;
+            }
 
             if (targetIsDir) {
                 root.windowState.navigate(targetFullPath);
