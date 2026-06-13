@@ -3,6 +3,17 @@ Description=Symmetria File Manager IPC Service
 
 [Service]
 ExecStart=/usr/bin/symmetria-fm
+# Strip Hyprland's stale initial-workspace token before exec. This is a
+# long-lived daemon: systemd starts it once at login on whatever workspace was
+# active then, and it inherits HL_INITIAL_WORKSPACE_TOKEN from the session env.
+# Hyprland reads that token from /proc/<pid>/environ and, with
+# misc:initial_workspace_tracking=1 (its default), routes the daemon's FIRST
+# spawned window to the token's recorded workspace instead of the active one —
+# so the very first file-manager window after login always landed on workspace 1.
+# The unset MUST happen before exec: /proc/<pid>/environ is the exec-time
+# environment block, so an in-process unsetenv() in main.cpp would be too late.
+# See Hyprland issue #5919.
+UnsetEnvironment=HL_INITIAL_WORKSPACE_TOKEN
 Restart=always
 RestartSec=2
 
