@@ -9,10 +9,11 @@ import "handlers/SearchHandler.js" as SearchHandler
 import "handlers/FlashHandler.js" as FlashHandler
 import "handlers/ChordHandler.js" as ChordHandler
 import "handlers/NormalModeHandler.js" as NormalModeHandler
-// NormalModeHandler.js reaches FileOpsHandler through this file's import scope
-// at runtime (same cross-JS mechanism as FlashLogic above) — the linter cannot
-// see that and reports it unused.
-import "handlers/FileOpsHandler.js" as FileOpsHandler // qmllint disable unused-imports
+// NormalModeHandler.js builds the dispatch ctx and delegates to KeyRegistry; the
+// registry's Miller run-bodies in turn reach NormalModeHandler/FlashHandler
+// through this file's import scope at runtime (same cross-JS mechanism as
+// FlashLogic above) — the linter cannot see that and reports these unused.
+import "handlers/KeyRegistry.js" as KeyRegistry // qmllint disable unused-imports
 import Symmetria.FileManager.Models
 import QtQuick
 import QtQuick.Controls

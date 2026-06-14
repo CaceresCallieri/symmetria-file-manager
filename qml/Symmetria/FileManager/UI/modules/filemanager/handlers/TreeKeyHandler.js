@@ -55,18 +55,33 @@ function handleKey(event, root, view) {
         return;
     }
 
-    // Shared file operations (delete/rename/create/yank/cut/paste/select +
-    // chord starts) + picker suppression — single source of truth with the
-    // Miller view. Requires a windowState; embedded consumers without one
-    // (IDE sidebar) stay navigation-only.
-    //
-    // Escape with no selection intentionally falls through unhandled here
-    // (FileOpsHandler returns false, and the switch below has no Escape
-    // case) so it propagates to the host's close-window handling — the
-    // tree's pre-existing behavior.
-    if (root.windowState && FileOpsHandler.tryHandle(event, root, view, pasteProcess))
+    // FULL file-manager path: a windowState means the registry owns dispatch
+    // (file ops + navigation + picker suppression, shared with the Miller view
+    // via KeyRegistry). dispatch() leaves event.accepted false when no binding
+    // matches, so an unconsumed key (e.g. Escape with no selection — the tree
+    // deliberately has no escapeSwallow binding) still propagates to the host's
+    // close-window handling, preserving the tree's pre-existing behavior.
+    if (root.windowState) {
+        var ctx = {
+            root: root,
+            view: view,
+            windowState: root.windowState,
+            viewKind: "tree",
+            pasteProcess: pasteProcess,
+            clipboardCopyProcess: clipboardCopyProcess,
+            services: { fileManager: FileManagerService, config: Config, paths: Paths },
+            activateCurrent: function() { TreeModel.activate(root, root.currentRow); },
+            halfPageCount: function() { return TreeModel.halfPageCount(); },
+            nav: function(fn) { fn(); },  // tree: passthrough (no cursor-save, matching the old switch)
+            invalidateFlashCache: function() { TreeFlashHandler.invalidateEntryCache(); }
+        };
+        KeyRegistry.dispatch(event, ctx);
         return;
+    }
 
+    // EMBEDDED path (no windowState — IDE sidebar): navigation-only legacy
+    // switch + the gg-chord timer. The registry and chord systems don't exist
+    // for this consumer, so this stays its authoritative handler.
     switch (key) {
     case Qt.Key_J:
     case Qt.Key_Down:

@@ -412,6 +412,28 @@ Item {
                 elide: Text.ElideMiddle
                 Layout.maximumWidth: root.width * 0.3
             }
+
+            // Far-right: keyboard help affordance (mouse path to the ? cheat-sheet).
+            // Normal-mode only so it doesn't crowd the search/flash/picker layouts.
+            MaterialIcon {
+                id: helpIcon
+
+                visible: root._normalVisible && root.windowState
+                text: "help"
+                color: helpMouse.containsMouse ? FmTheme.palette.primary : FmTheme.palette.onSurfaceVariant
+                font.pointSize: FmTheme.font.size.sm
+
+                Behavior on color { CAnim {} }
+
+                MouseArea {
+                    id: helpMouse
+                    anchors.fill: parent
+                    anchors.margins: -FmTheme.padding.sm
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.windowState.openHelp()
+                }
+            }
         }
     }
 }

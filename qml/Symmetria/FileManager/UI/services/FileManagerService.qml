@@ -69,8 +69,9 @@ QtObject {
     property bool saveNameEditing: false
     // Opt-in escape hatch for embedding hosts (e.g. the Symmetria IDE) that
     // want a FULL file manager riding the picker's open/cancel routing rather
-    // than a bare file chooser. When true, FileOpsHandler.js skips picker
-    // mode's default clipboard/multi-select/tab suppression, so yank/cut/
+    // than a bare file chooser. When true, KeyRegistry's dispatch picker
+    // pre-pass skips picker mode's default clipboard/multi-select/tab
+    // suppression, so yank/cut/
     // paste/space-marking/tabs all work while Enter→pickerCompleted and
     // Esc→cancel stay intact. Defaults false → the XDG portal picker and any
     // other startPickerMode caller keep the suppress-clipboard-ops behavior.

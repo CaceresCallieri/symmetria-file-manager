@@ -51,3 +51,24 @@ add_model_test(ShellRunnerTest)
 add_model_test(FileWatcherTest)
 
 add_model_test(EnvTest)
+
+# --- QML keybinding-registry test (Qt Quick Test) ---------------------------
+# Unlike the C++ model tests above, this exercises KeyRegistry.js directly via a
+# QML TestCase. The registry takes its singletons through ctx.services (DI), so
+# the test imports ONLY the .js + QtQuick and drives it with stubs — no UI module
+# load. The QML lives in the repo source tree, found via the -input argument.
+find_package(Qt6 REQUIRED COMPONENTS QuickTest)
+add_executable(KeyRegistryTest tst_keyregistry.cpp)
+target_link_libraries(KeyRegistryTest PRIVATE
+    Qt6::QuickTest
+    Qt6::Qml
+    Qt6::Gui
+)
+add_test(NAME KeyRegistryTest
+    COMMAND KeyRegistryTest -input "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+# Qt Quick Test needs a QGuiApplication; offscreen keeps it headless in CI.
+set_tests_properties(KeyRegistryTest PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 60
+)

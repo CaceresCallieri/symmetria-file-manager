@@ -48,11 +48,13 @@ import "handlers/TreeFlashHandler.js" as TreeFlashHandler // qmllint disable unu
 import "handlers/TreeModel.js" as TreeModel
 import "handlers/TreeKeyHandler.js" as TreeKeyHandler
 import "handlers/SearchHandler.js" as SearchHandler
-// ChordHandler + FileOpsHandler are reached by TreeKeyHandler.js through this
-// file's scope at runtime (same cross-JS mechanism as TreeFlashHandler above) —
-// the linter cannot see that and reports them unused.
+// KeyRegistry (the shared dispatch table) and ChordHandler are reached by
+// TreeKeyHandler.js through this file's scope at runtime (same cross-JS mechanism
+// as TreeFlashHandler above) — the linter cannot see that and reports them
+// unused. KeyRegistry's tree run-bodies likewise reach TreeModel /
+// TreeFlashHandler back through this scope.
+import "handlers/KeyRegistry.js" as KeyRegistry // qmllint disable unused-imports
 import "handlers/ChordHandler.js" as ChordHandler // qmllint disable unused-imports
-import "handlers/FileOpsHandler.js" as FileOpsHandler // qmllint disable unused-imports
 import QtQuick
 import QtQuick.Controls
 

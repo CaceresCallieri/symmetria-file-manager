@@ -8,6 +8,9 @@
 ## 🦀 Rust beachhead (2026-06-08): fuzzy finder now uses the `fff` engine
 - [Rust fff finder](project_rust_fff_finder.md) — finder backend swapped to the MIT Rust `fff` engine (fff-c C ABI, vendored submodule) after a MEASURED 11–20× per-keystroke win + frecency/git/score data. The deliberate, surgical Rust beachhead (not a migration); shared with the future IDE via the Models plugin. First cut = engine + fff.nvim-style File Info panel. Gotchas in CLAUDE.md "Critical Pitfalls".
 
+## ⌨️ Keybinding registry (2026-06-14): normal-mode keys are now DATA
+- [Keybinding registry](project_keybinding_registry.md) — migrated scattered key `switch` statements to a declarative `KeyRegistry.js` that feeds BOTH dispatch and a new `?` help popup (`HelpPopup.qml`). DI via `ctx.services` makes dispatch hermetically testable (`KeyRegistryTest` — first QML test in the project). `FileOpsHandler.js` deleted. Full architecture in CLAUDE.md → "Keyboard Event Handling".
+
 ## 🪟 Hyprland integration fixes
 - [First-window-on-workspace-1 bug](project_first_window_workspace_bug.md) — FIXED: FM's first window after login landed on workspace 1 because the daemon inherited a stale `HL_INITIAL_WORKSPACE_TOKEN`; fixed via `UnsetEnvironment=` in `symmetria-fm.service`. Note: TWO unsynced copies of that unit (repo + dotfiles).
 
@@ -99,6 +102,7 @@ implementation inspired by Yazi's UX philosophy — no Yazi runtime dependency.
 - [Keyboard features can't be tested via synthetic input](feedback_keyboard_testing_synthetic_input.md) — hyprctl sendshortcut/wtype don't reach the Qt surface; verify chords/nav via real keyboard or QTest
 - [QML dev tooling already verified complete](feedback_qml_dev_tooling_verified.md) — qmlls6 LSP + qmltypes + qmllint all working in Neovim; don't re-investigate; Qt's AI Assistant is Qt-Creator-only (irrelevant here)
 - [Deploy new UI components before linting](feedback_ui_module_deploy_for_qmllint.md) — a NEW component in Symmetria.FileManager.UI fails the gate ("anchors unresolved" on consumers) until `sudo cmake --install plugin/build` refreshes the /usr/lib snapshot qmllint resolves from
+- [Autonomous restart consent (task-scoped)](feedback_autonomous_restart_consent.md) — for the keybinding-registry work the user granted full autonomy incl. restarting symmetria-fm; consent is task-scoped, does NOT extend to the QuickShell shell or future tasks
 
 ## QML Quirks (see QUIRKS.md)
 - [QML Loader quirks](feedback_qml_loader_quirks.md) — anchors.margins silently fails in Loader sourceComponents; always use explicit x/y/width/height and explicit imports
