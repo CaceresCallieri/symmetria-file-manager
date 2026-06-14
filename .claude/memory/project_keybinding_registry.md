@@ -26,10 +26,15 @@ works in both views AND self-documents. Full architecture is in CLAUDE.md →
 - `FileOpsHandler.js` was DELETED — its picker suppression became the dispatch
   pre-pass and its ops/paste became registry rows.
 
-**Deliberate, negligible behavior change:** modified-Enter (Ctrl/Shift+Enter) in
-the TREE no longer just "activates" (the old tree switch matched Enter mods-
-agnostically). Bare Enter still activates. Picker Shift+Enter (copy-path-then-
-confirm) and Ctrl+R-in-save-mode WERE preserved as explicit bindings.
+**Deliberate, negligible behavior changes** (don't "fix" these as regressions):
+- modified-Enter (Ctrl/Shift+Enter) in the TREE no longer just "activates" (the
+  old tree switch matched Enter mods-agnostically). Bare Enter still activates.
+- Miller Ctrl+R *outside* picker-save-mode is no longer swallowed — the old
+  Miller switch accepted every `Key_R`; now Ctrl+R only matches when
+  `pickerSaveMode` is true (edit-save-name), so otherwise it falls through
+  unconsumed. Harmless (nothing upstream binds Ctrl+R).
+- Picker Shift+Enter (copy-path-then-confirm) and Ctrl+R-in-save-mode WERE
+  preserved as explicit bindings.
 
 **Status / caveats:**
 - Verified: full `check-qml.sh` (baseline 63, no regression), all `ctest`

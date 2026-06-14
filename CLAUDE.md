@@ -296,42 +296,37 @@ Loader {
 
 ### Keyboard Event Handling
 
-- **Normal-mode keybindings are DATA, not code** — a declarative array in
-  `handlers/KeyRegistry.js` is the single source of truth. Both the dispatcher
-  AND the `?` help popup (`HelpPopup.qml`) read it, so a binding added there works
-  and self-documents in one place. Rows split into `CORE` (shared), `MILLER_ONLY`,
-  `TREE_ONLY`; view-divergent behavior is injected via a `ctx` adapter
-  (`activateCurrent`/`halfPageCount`/`nav`/`invalidateFlashCache`). Add a binding →
-  it works in both views AND appears in the cheat-sheet; `KeyRegistryTest`
-  (Qt Quick Test) fails if a row lacks help metadata or two unconditional rows
-  collide on the same key+mods.
-- **`KeyRegistry.js` is deliberately NOT `pragma library`** — a library has no QML
-  scope and can't see `Qt`/singletons (see `TreeFlashHandler.js`). It's imported
-  by both `FileList.qml` and `FileTreeView.qml`; its references resolve in each
-  importer's scope (TREE_ONLY runs reach `TreeModel.*`, MILLER_ONLY runs reach
-  `NormalModeHandler.*`, CORE runs touch only shared symbols). Singletons the
-  dispatch DECISION/run-bodies need are dependency-injected via `ctx.services`
-  (`fileManager`/`config`/`paths`) so `dispatch()` is hermetically testable with
-  stubs — no UI-module load.
-- **The dispatch cascade owns precedence and is unchanged**: each view's
-  `Keys.onPressed` runs modal → bookmark sub-mode → chord RESOLUTION → flash →
-  then `KeyRegistry.dispatch`. Those four are MODES, not bindings, and stay
-  imperative handlers (they contribute static "Modes" rows to the help).
-  `dispatch()` internally runs: bare-modifier skip → picker suppression pre-pass
-  (ported from the old FileOpsHandler) → binding scan. A binding whose `when()` is
-  false does NOT consume the key (it falls through — this preserves n/N and the
-  tree's Escape-propagates-to-close behavior).
+- **Normal-mode keybindings are data in `handlers/KeyRegistry.js`** — one
+  declarative array is the single source of truth, read by BOTH the dispatcher
+  and the `?` help popup (`HelpPopup.qml`). Add a `CORE` binding → it works in
+  both views and appears in the cheat-sheet; view-specific ops go in `MILLER_ONLY`
+  / `TREE_ONLY`. That file's own header documents the binding shape, the `ctx`
+  adapter, and why it is *not* a `pragma library` — read it there, don't restate
+  it here. `KeyRegistryTest` (Qt Quick Test) fails if a row lacks help metadata,
+  uses a `group` HelpPopup can't render, or collides with another unconditional
+  row on the same key+mods.
+- **The dispatch cascade owns precedence and stays imperative** — each view's
+  `Keys.onPressed` runs modal → bookmark sub-mode → chord RESOLUTION → flash, and
+  only its final step delegates to `KeyRegistry.dispatch` (the tree path adds a
+  `Ctrl+E` view-toggle before flash; see `TreeKeyHandler.js`). Those are modes,
+  not bindings. **Load-bearing rule:** chord resolution must run in the cascade
+  *before* `dispatch`'s internal picker-suppression pre-pass — don't move it into
+  the registry. A binding whose `when()` is false does NOT consume its key (it
+  falls through — preserving n/N and the tree's Escape-propagates-to-close).
+- **`?` is itself an ordinary `CORE` row** (`help.open` → `openHelp()`); the
+  status-bar `?` button calls the same `openHelp()`, so there is no special-case
+  to hunt for outside the registry array.
 - **Chords**: prefix keys (g/c/,) are registry rows that set `activeChordPrefix`;
   RESOLUTION and the sub-menu table stay in `ChordHandler.js` + `WindowState`'s
-  `chordBindings` (rendered by BOTH `WhichKeyPopup` HUD and `HelpPopup`). Timer-
-  based 500ms detection, NOT Symmetria's KeyChords module.
+  `chordBindings` (rendered by BOTH the `WhichKeyPopup` HUD and `HelpPopup`).
+  Timer-based 500ms detection, NOT Symmetria's KeyChords module.
 - **The windowState-less embedded tree path** (IDE sidebar) bypasses the registry
-  entirely — `TreeKeyHandler` keeps a legacy navigation-only switch + the `gg`
-  timer for that consumer; only when `root.windowState` exists does it dispatch.
+  entirely — `TreeKeyHandler` keeps a legacy navigation-only switch + `gg` timer
+  for that consumer; only when `root.windowState` exists does it dispatch.
 - **Escape priority** (stack-based, last-entered-first-exited): chord → search →
   flash nav → picker → close window. Miller swallows a stray Escape
-  (`miller.escapeSwallow` binding); the tree intentionally has no such binding so
-  Escape propagates to the host's close-window handling.
+  (`miller.escapeSwallow`); the tree intentionally has no such binding, so Escape
+  propagates to the host's close-window handling.
 - Picker mode suppresses certain keys (Y/X/P/Space/T/[/]) via the `dispatch`
   pre-pass; gated OFF for `pickerFileOps` embedding hosts.
 

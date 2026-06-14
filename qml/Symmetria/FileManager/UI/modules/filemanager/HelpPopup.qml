@@ -22,10 +22,13 @@ Loader {
 
     anchors.fill: parent
 
-    opacity: windowState && windowState.activeModal === windowState.modalHelp ? 1 : 0
-    // Drive `active` from the source property, not animated opacity — avoids a
-    // race where the Loader activates mid-fade-out with an already-closed state.
-    active: windowState && windowState.activeModal === windowState.modalHelp
+    // Single source for visibility; `active` is driven from THIS (not the
+    // animated opacity) to avoid a race where the Loader activates mid-fade-out
+    // with an already-closed state.
+    readonly property bool _shown: windowState && windowState.activeModal === windowState.modalHelp
+
+    opacity: _shown ? 1 : 0
+    active: _shown
     asynchronous: true
 
     sourceComponent: FocusScope {
@@ -56,8 +59,10 @@ Loader {
         // same source the live WhichKeyPopup HUD reads — one definition, two
         // surfaces.
         function _sectionsFor(kind: string): var {
-            const order = ["Navigation", "History", "File", "Clipboard", "Selection",
-                           "Search & jump", "View", "Tabs", "Tools", "Help"];
+            // Group order is owned by KeyRegistry.HELP_GROUPS (single source);
+            // "Chords" is dropped here because the chord tree is rendered
+            // separately from chordBindings (see _chordSections).
+            const order = KeyRegistry.HELP_GROUPS.filter(function(g) { return g !== "Chords"; });
             const binds = KeyRegistry.bindingsFor(kind).filter(function(b) {
                 return b.group !== "Chords" && !KeyRegistry.isSuppressedInPicker(b, FileManagerService);
             });

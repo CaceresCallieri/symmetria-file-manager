@@ -9,8 +9,9 @@
 //   timer), pasteProcess, clipboardCopyProcess (ShellRunner wrappers).
 // Sibling handlers accessed via scope: TreeModel (expand/collapse/toggle/
 //   activate/jumpToParent/halfPageCount/refreshAll), TreeFlashHandler (handleKey),
-//   ChordHandler (chord resolution + bookmark sub-mode), FileOpsHandler (the
-//   shared file-operation dispatch — operation keys live THERE, not here).
+//   ChordHandler (chord resolution + bookmark sub-mode), KeyRegistry (the
+//   shared dispatch table used when windowState exists — operation keys live
+//   THERE, not in this embedded-only switch).
 // Singletons accessed via scope: Qt.
 
 function handleKey(event, root, view) {
@@ -96,7 +97,7 @@ function handleKey(event, root, view) {
         break;
 
     case Qt.Key_G:
-        // With a windowState, bare g is claimed by FileOpsHandler as the "g"
+        // With a windowState, bare g is claimed by the registry as the "g"
         // chord start (bookmarks + which-key, gg handled by ChordHandler), so
         // only Shift+G lands here. The timer-based gg below is the fallback
         // for embedded consumers with no windowState (IDE sidebar), where the
@@ -156,7 +157,7 @@ function handleKey(event, root, view) {
         break;
 
     case Qt.Key_D:
-        // Bare d (delete) is claimed by FileOpsHandler when a windowState exists.
+        // Bare d (delete) is claimed by the registry when a windowState exists.
         if ((mods & Qt.ControlModifier) && view.count > 0) {
             view.currentIndex = Math.min(view.currentIndex + TreeModel.halfPageCount(), view.count - 1);
             view.positionViewAtIndex(view.currentIndex, ListView.Contain);
@@ -184,7 +185,7 @@ function handleKey(event, root, view) {
     }
 
     case Qt.Key_R:
-        // Bare r (rename) is claimed by FileOpsHandler; Shift+R stays the
+        // Bare r (rename) is claimed by the registry; Shift+R stays the
         // tree's refresh-all (the rename popup's Tab toggles extension
         // selection, so rename-with-extension isn't lost).
         if (mods & Qt.ShiftModifier) {

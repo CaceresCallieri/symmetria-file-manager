@@ -418,17 +418,18 @@ Item {
             MaterialIcon {
                 id: helpIcon
 
-                visible: root._normalVisible && root.windowState
+                visible: root._normalVisible && root.windowState !== null
                 text: "help"
                 color: helpMouse.containsMouse ? FmTheme.palette.primary : FmTheme.palette.onSurfaceVariant
                 font.pointSize: FmTheme.font.size.sm
 
                 Behavior on color { CAnim {} }
 
+                // Hit area bounded to the glyph box — no negative margins, which
+                // would spill the clickable region over the adjacent path label.
                 MouseArea {
                     id: helpMouse
                     anchors.fill: parent
-                    anchors.margins: -FmTheme.padding.sm
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.windowState.openHelp()
