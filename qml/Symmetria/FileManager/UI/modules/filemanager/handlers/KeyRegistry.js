@@ -407,6 +407,15 @@ function bindingsFor(viewKind) {
     return CORE.concat(viewKind === "tree" ? TREE_ONLY : MILLER_ONLY);
 }
 
+// Canonical help-section order. HelpPopup renders the registry's groups in
+// THIS order, and the KeyRegistryTest asserts every binding's `group` is one of
+// these — so a binding given an unknown group can't silently vanish from the
+// cheat-sheet (which would re-create the very drift this registry prevents).
+// "Chords" is rendered as expanded sub-menus from chordBindings, not as the
+// registry's bare chord-prefix rows, so HelpPopup filters it out of this list.
+var HELP_GROUPS = ["Navigation", "History", "File", "Clipboard", "Selection",
+    "Search & jump", "Chords", "View", "Tabs", "Tools", "Help"];
+
 // Static "Modes" help rows for the text-input modes that are NOT registry
 // bindings (so the help is complete). Pure data — no run().
 var MODES = [
@@ -502,8 +511,14 @@ function isSuppressedInPicker(binding, fileManager) {
     for (var i = 0; i < binding.keys.length; i++) {
         var k = binding.keys[i];
         if (_PICKER_SUPPRESSED_KEYS.indexOf(k) !== -1) {
-            // Space is exempt under multi-select (marking before confirm).
+            // Mirror the pre-pass exemptions EXACTLY so the sheet never lies:
+            // Space stays live under multi-select (marking before confirm), and
+            // Ctrl+P (audio toggle) is exempt — only bare `p` (paste) is
+            // suppressed. Without these continues the help would hide a binding
+            // that actually still works in the picker.
             if (k === Qt.Key_Space && fileManager.pickerMultiple)
+                continue;
+            if (k === Qt.Key_P && binding.mods === "Ctrl")
                 continue;
             return true;
         }

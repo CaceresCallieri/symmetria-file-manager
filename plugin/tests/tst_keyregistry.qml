@@ -102,6 +102,13 @@ TestCase {
         return KeyRegistry.CORE.concat(KeyRegistry.MILLER_ONLY).concat(KeyRegistry.TREE_ONLY);
     }
 
+    function _bindingById(id) {
+        var all = _allBindings();
+        for (var i = 0; i < all.length; i++)
+            if (all[i].id === id) return all[i];
+        return null;
+    }
+
     // --- 1. Well-formedness ----------------------------------------------------
 
     function test_every_binding_has_complete_metadata() {
@@ -248,5 +255,48 @@ TestCase {
                "yank suppressed in a normal picker");
         verify(!KeyRegistry.isSuppressedInPicker(yank, { pickerMode: true, pickerFileOps: true, pickerMultiple: false }),
                "full-ops picker host does not suppress");
+    }
+
+    // The help predicate must mirror the dispatch pre-pass EXACTLY, so the
+    // cheat-sheet never hides a binding that is actually still live in a picker
+    // (and never advertises one that is suppressed).
+    function test_picker_help_matches_prepass() {
+        var picker = { pickerMode: true, pickerFileOps: false, pickerMultiple: false };
+        verify(KeyRegistry.isSuppressedInPicker(_bindingById("clip.pasteCtrl"), picker),
+               "Ctrl+V paste is suppressed → hidden from the sheet");
+        verify(KeyRegistry.isSuppressedInPicker(_bindingById("clip.paste"), picker),
+               "bare p paste is suppressed → hidden from the sheet");
+        verify(!KeyRegistry.isSuppressedInPicker(_bindingById("miller.audioToggle"), picker),
+               "Ctrl+P audio toggle is exempt in the pre-pass → must stay on the sheet");
+        verify(KeyRegistry.isSuppressedInPicker(_bindingById("sel.toggle"), picker),
+               "Space marking is suppressed in a single-select picker");
+        var multi = { pickerMode: true, pickerFileOps: false, pickerMultiple: true };
+        verify(!KeyRegistry.isSuppressedInPicker(_bindingById("sel.toggle"), multi),
+               "Space marking is live under multi-select → stays on the sheet");
+    }
+
+    // Dispatch-level confirmation of the same pre-pass exemptions: Ctrl+P reaches
+    // its run-body in a picker, while Ctrl+V is consumed-but-suppressed.
+    function test_dispatch_picker_exemptions() {
+        var ctxP = _ctx("miller", { pickerMode: true });
+        verify(KeyRegistry.dispatch(_event(Qt.Key_P, Qt.ControlModifier), ctxP), "Ctrl+P consumed in picker");
+        var sawAudio = false;
+        for (var i = 0; i < ctxP._calls.length; i++)
+            if (ctxP._calls[i][0] === "audio") sawAudio = true;
+        verify(sawAudio, "Ctrl+P reaches audioPlaybackToggle in picker (exempt from suppression)");
+
+        var ctxV = _ctx("miller", { pickerMode: true });
+        verify(KeyRegistry.dispatch(_event(Qt.Key_V, Qt.ControlModifier), ctxV), "Ctrl+V consumed in picker");
+        for (var j = 0; j < ctxV._calls.length; j++)
+            verify(ctxV._calls[j][0] !== "paste", "Ctrl+V paste must be suppressed in picker");
+    }
+
+    // Every binding's group must be one HelpPopup knows how to render — otherwise
+    // it dispatches but silently vanishes from the cheat-sheet (drift).
+    function test_every_group_is_renderable() {
+        var all = _allBindings();
+        for (var i = 0; i < all.length; i++)
+            verify(KeyRegistry.HELP_GROUPS.indexOf(all[i].group) !== -1,
+                   "binding " + all[i].id + " has group '" + all[i].group + "' not in HELP_GROUPS");
     }
 }
