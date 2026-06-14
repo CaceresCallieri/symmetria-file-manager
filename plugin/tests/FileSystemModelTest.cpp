@@ -444,6 +444,11 @@ private slots:
         QCOMPARE(model.rowCount(), 1);
         QCOMPARE(entrySize(model, "download.bin"), qint64(0));
 
+        // White-box: prove the per-file watch is the load-bearing trigger. An
+        // append does not bump the parent directory's mtime, so the directory
+        // watch stays silent — only this file watch can drive the refresh below.
+        QVERIFY(model.m_watcher.files().contains(file));
+
         // Append bytes to the SAME path (no rename) — emits IN_MODIFY only, which
         // reaches the model solely through the per-file watch, not the dir watch.
         QSignalSpy entriesSpy(&model, &FileSystemModel::entriesChanged);
@@ -459,6 +464,36 @@ private slots:
         QVERIFY(waitForEntries(model));
         QCOMPARE(model.rowCount(), 1);
         QCOMPARE(entrySize(model, "download.bin"), qint64(4096));
+    }
+
+    // Regression: per-file watches must be released when navigating away.
+    // updateWatcher() originally removed only watched directories(), so the file
+    // watches syncFileWatches() adds would accumulate across navigation — wasting
+    // the inotify budget and rescanning on writes in directories the user has left.
+    void fileWatchesDoNotLeakAcrossNavigation()
+    {
+        QTemporaryDir dirA;
+        QVERIFY(dirA.isValid());
+        const QString fileA = dirA.path() + "/a.txt";
+        QVERIFY(createFile(fileA, 1));
+
+        QTemporaryDir dirB;
+        QVERIFY(dirB.isValid());
+        const QString fileB = dirB.path() + "/b.txt";
+        QVERIFY(createFile(fileB, 1));
+
+        FileSystemModel model;
+        model.setWatchChanges(true);
+        model.setPath(dirA.path());
+        QVERIFY(waitForEntries(model));
+        QVERIFY(model.m_watcher.files().contains(fileA));
+
+        // Navigate away — dirA's file watch must be dropped, not carried over.
+        model.setPath(dirB.path());
+        QVERIFY(waitForEntries(model));
+        const QStringList watched = model.m_watcher.files();
+        QVERIFY(watched.contains(fileB));
+        QVERIFY(!watched.contains(fileA));
     }
 
     // Regression: "pasted files appear 2-3x until you re-navigate".

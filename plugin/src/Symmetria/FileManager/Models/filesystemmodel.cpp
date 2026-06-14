@@ -286,7 +286,9 @@ FileSystemModel::FileSystemModel(QObject* parent)
     m_fileChangedDebounce.setSingleShot(true);
     m_fileChangedDebounce.setInterval(250);
     connect(&m_fileChangedDebounce, &QTimer::timeout, this, [this]() {
-        if (!m_path.isEmpty()) {
+        // Guard on m_watchChanges too: a fileChanged that landed just before
+        // watching was disabled must not drive a rescan after the fact.
+        if (m_watchChanges && !m_path.isEmpty()) {
             updateEntriesForDir(m_path);
         }
     });
@@ -502,6 +504,11 @@ void FileSystemModel::updateWatcher() {
     if (!watched.isEmpty()) {
         m_watcher.removePaths(watched);
     }
+
+    // Discard any debounce pending from the previous directory/state — updateWatcher()
+    // runs on every state change (setPath/setRecursive/setWatchChanges/…), so a stale
+    // fileChanged from before the change must not trigger a rescan afterwards.
+    m_fileChangedDebounce.stop();
 
     if (!m_watchChanges || m_path.isEmpty()) {
         return;
@@ -738,6 +745,9 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
         // it was first listed). These must be rebuilt with a fresh stat. Qt's
         // directory inotify watch never reports this (IN_MODIFY is not in its
         // mask); the trigger comes from the per-file watch in syncFileWatches().
+        // Limitation: an in-place overwrite to the SAME size within the same mtime
+        // tick (coarse-granularity mounts) is not detected — stat-diffing has no
+        // signal there short of hashing contents, which is too costly to do here.
         QSet<QString> modified;
         for (auto it = newStats.cbegin(); it != newStats.cend(); ++it) {
             const auto oldIt = oldStats.constFind(it.key());
@@ -756,6 +766,9 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
         // A modified path is both removed (drop the stale entry) and added
         // (re-inserted with a fresh stat) — applyChanges() removes before it
         // inserts, so the rebuilt entry takes the old one's place.
+        // `removed` is intentionally non-const: it is std::move()d into the promise
+        // result below. Do not make it const — that would silently turn the move
+        // into a copy.
         QSet<QString> removed = (oldPaths - newPaths) | modified;
         const QSet<QString> added = (newPaths - oldPaths) | modified;
 
