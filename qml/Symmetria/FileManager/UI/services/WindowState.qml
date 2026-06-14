@@ -288,6 +288,7 @@ QtObject {
     readonly property int modalContextMenu: 4
     readonly property int modalZoxide: 5
     readonly property int modalFuzzyFinder: 6
+    readonly property int modalHelp: 7
 
     property int activeModal: modalNone
 
@@ -336,6 +337,12 @@ QtObject {
 
     function requestFuzzyFinder(): void {
         activeModal = modalFuzzyFinder;
+    }
+
+    // Keyboard cheat-sheet (HelpPopup). No payload — the popup reads the
+    // KeyRegistry directly, so this just flips the modal gate.
+    function openHelp(): void {
+        activeModal = modalHelp;
     }
 
     function closeModal(): void {

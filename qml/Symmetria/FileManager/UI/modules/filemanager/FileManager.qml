@@ -163,6 +163,10 @@ Item {
         anchors.fill: parent
         windowState: tabManager.activeTab
     }
+    HelpPopup {
+        anchors.fill: parent
+        windowState: tabManager.activeTab
+    }
 
     // Train zoxide's frecency database on every directory visit.
     // Fire-and-forget: exit code is irrelevant.
