@@ -11,6 +11,7 @@
 #include <qcollator.h>
 #include <qqmlintegration.h>
 #include <qqmllist.h>
+#include <qtimer.h>
 
 // Forward-declared at global scope so FileSystemModel can friend it for
 // white-box testing (see the friend declaration below). Without this prior
@@ -219,8 +220,17 @@ signals:
     void loadingChanged();
 
 private:
+    // Upper bound on per-file inotify watches added by syncFileWatches(). Beyond
+    // this the directory watch alone is used (add/remove still tracked; in-place
+    // content growth of an existing file won't live-refresh). Protects the
+    // /proc/sys/fs/inotify/max_user_watches budget in pathologically large dirs.
+    static constexpr int kMaxFileWatches = 2048;
+
     QDir m_dir;
     QFileSystemWatcher m_watcher;
+    // Coalesces the burst of fileChanged signals a growing file emits (one per
+    // write) into at most one rescan per interval — see onFileChanged().
+    QTimer m_fileChangedDebounce;
     QList<FileSystemEntry*> m_entries;
     QHash<QString, QFuture<QPair<QSet<QString>, QList<CachedEntryData>>>> m_futures;
 
@@ -233,6 +243,10 @@ private:
     Filter m_filter;
     QStringList m_nameFilters;
     bool m_loading = false;
+    // Latches once syncFileWatches() first hits kMaxFileWatches, so the
+    // "per-file refresh disabled" warning is logged once per model, not on
+    // every rescan of an oversized directory.
+    bool m_fileWatchCapWarned = false;
 
     void watchDirIfRecursive(const QString& path);
     void resort();
@@ -240,6 +254,16 @@ private:
     void updateWatcher();
     void updateEntries();
     void updateEntriesForDir(const QString& dir);
+    // Throttled rescan trigger for in-place content changes. Qt's directory
+    // inotify mask omits IN_MODIFY, so a file growing on disk (e.g. an in-progress
+    // download written straight to its final name) emits no directoryChanged.
+    // syncFileWatches() adds a per-file watch so fileChanged fires; this slot
+    // coalesces the resulting burst into a debounced updateEntriesForDir().
+    void onFileChanged(const QString& path);
+    // Reconciles the watcher's per-file watch set with the current file entries
+    // (non-recursive, capped). Called after every applyChanges() so atomic
+    // replaces and new files are (re-)armed.
+    void syncFileWatches();
     // Called from the watcher path and directly by FileSystemModelTest (white-box).
     // Precondition: addedEntries paths should be distinct (production callers use
     // QSet subtraction; within-batch dupes are also handled defensively).

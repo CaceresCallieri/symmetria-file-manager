@@ -64,6 +64,18 @@ private:
         return entry && entry->isDir();
     }
 
+    // Return the cached size of the named entry, or -1 if not present.
+    static qint64 entrySize(FileSystemModel& model, const QString& name)
+    {
+        for (int i = 0; i < model.rowCount(); ++i) {
+            const QVariant v = model.data(model.index(i, 0), Qt::UserRole);
+            const auto* entry = v.value<FileSystemEntry*>();
+            if (entry && entry->name() == name)
+                return entry->size();
+        }
+        return -1;
+    }
+
 private slots:
     void modelTester()
     {
@@ -409,6 +421,44 @@ private slots:
 
         const QStringList names = entryNames(model);
         QCOMPARE(names, QStringList{"keep.txt"});
+    }
+
+    // Regression: a file written in place after it was first listed — e.g. a
+    // download streamed straight to its final name — stayed frozen at its
+    // first-seen size (0 bytes) until re-navigation. Two root causes: Qt's
+    // directory inotify watch omits IN_MODIFY (so growth emitted no
+    // directoryChanged), and the diff compared only the SET of paths (so a
+    // same-path size change was a no-op). The fix adds a per-file watch (fires
+    // fileChanged on growth) plus size/mtime diffing that rebuilds the entry.
+    void growingFileRefreshesSize()
+    {
+        QTemporaryDir tmpDir;
+        QVERIFY(tmpDir.isValid());
+        const QString file = tmpDir.path() + "/download.bin";
+        QVERIFY(createFile(file, 0)); // first listed at 0 bytes
+
+        FileSystemModel model;
+        model.setWatchChanges(true);
+        model.setPath(tmpDir.path());
+        QVERIFY(waitForEntries(model));
+        QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(entrySize(model, "download.bin"), qint64(0));
+
+        // Append bytes to the SAME path (no rename) — emits IN_MODIFY only, which
+        // reaches the model solely through the per-file watch, not the dir watch.
+        QSignalSpy entriesSpy(&model, &FileSystemModel::entriesChanged);
+        {
+            QFile f(file);
+            QVERIFY(f.open(QIODevice::Append));
+            QCOMPARE(f.write(QByteArray(4096, 'x')), qint64(4096));
+            f.close();
+        }
+
+        // fileChanged → debounced rescan → modified-path detection → rebuild.
+        QVERIFY(entriesSpy.wait(5000));
+        QVERIFY(waitForEntries(model));
+        QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(entrySize(model, "download.bin"), qint64(4096));
     }
 
     // Regression: "pasted files appear 2-3x until you re-navigate".

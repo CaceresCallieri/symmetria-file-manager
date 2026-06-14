@@ -278,6 +278,18 @@ FileSystemModel::FileSystemModel(QObject* parent)
     , m_filter(NoFilter) {
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &FileSystemModel::watchDirIfRecursive);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &FileSystemModel::updateEntriesForDir);
+    connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, &FileSystemModel::onFileChanged);
+
+    // Single-shot, restarted on demand by onFileChanged(). 250ms keeps a busy
+    // download to ~4 rescans/sec while still surfacing the final size promptly
+    // once writes stop.
+    m_fileChangedDebounce.setSingleShot(true);
+    m_fileChangedDebounce.setInterval(250);
+    connect(&m_fileChangedDebounce, &QTimer::timeout, this, [this]() {
+        if (!m_path.isEmpty()) {
+            updateEntriesForDir(m_path);
+        }
+    });
 }
 
 int FileSystemModel::rowCount(const QModelIndex& parent) const {
@@ -482,8 +494,13 @@ void FileSystemModel::update() {
 }
 
 void FileSystemModel::updateWatcher() {
-    if (!m_watcher.directories().isEmpty()) {
-        m_watcher.removePaths(m_watcher.directories());
+    // Drop BOTH directory and per-file watches. The old code removed only
+    // directories(), so per-file watches added by syncFileWatches() would leak
+    // across navigation. File watches for the new directory are (re-)armed by the
+    // subsequent scan via applyChanges() → syncFileWatches().
+    const QStringList watched = m_watcher.directories() + m_watcher.files();
+    if (!watched.isEmpty()) {
+        m_watcher.removePaths(watched);
     }
 
     if (!m_watchChanges || m_path.isEmpty()) {
@@ -492,6 +509,79 @@ void FileSystemModel::updateWatcher() {
 
     m_watcher.addPath(m_path);
     watchDirIfRecursive(m_path);
+}
+
+void FileSystemModel::onFileChanged(const QString& /*path*/) {
+    // A growing file emits one fileChanged per write. Start the debounce only if
+    // it isn't already pending so a continuous download settles into ~one rescan
+    // per interval; the trailing write after the timer fires schedules a final
+    // rescan that captures the settled size.
+    if (!m_fileChangedDebounce.isActive()) {
+        m_fileChangedDebounce.start();
+    }
+}
+
+void FileSystemModel::syncFileWatches() {
+    // Per-file watches are scoped to the flat current directory: in recursive
+    // mode the file count is unbounded and the directory watch already covers the
+    // subtree. When watching is off / no path / recursive, ensure no file watches
+    // linger (they would otherwise leak across a mode switch).
+    const QStringList watchedFiles = m_watcher.files();
+    if (!m_watchChanges || m_recursive || m_path.isEmpty()) {
+        if (!watchedFiles.isEmpty()) {
+            m_watcher.removePaths(watchedFiles);
+        }
+        return;
+    }
+
+    QStringList desired;
+    desired.reserve(static_cast<int>(m_entries.size()));
+    for (const auto& entry : std::as_const(m_entries)) {
+        // Directories are handled by the directory watch; only regular files can
+        // grow in place without emitting a directoryChanged signal.
+        if (!entry->isDir()) {
+            desired << entry->path();
+        }
+    }
+
+    if (desired.size() > kMaxFileWatches) {
+        // Fall back to directory-only watching (add/remove still tracked; only
+        // in-place content refresh is lost). Warn once per model — not silently.
+        if (!watchedFiles.isEmpty()) {
+            m_watcher.removePaths(watchedFiles);
+        }
+        if (!m_fileWatchCapWarned) {
+            m_fileWatchCapWarned = true;
+            qWarning("FileSystemModel: %lld files exceeds per-file watch cap (%d); "
+                     "in-place content refresh disabled for '%s'",
+                     static_cast<long long>(desired.size()), kMaxFileWatches,
+                     qUtf8Printable(m_path));
+        }
+        return;
+    }
+
+    const QSet<QString> desiredSet(desired.cbegin(), desired.cend());
+    const QSet<QString> watchedSet(watchedFiles.cbegin(), watchedFiles.cend());
+
+    QStringList toRemove;
+    for (const auto& f : watchedFiles) {
+        if (!desiredSet.contains(f)) {
+            toRemove << f;
+        }
+    }
+    if (!toRemove.isEmpty()) {
+        m_watcher.removePaths(toRemove);
+    }
+
+    QStringList toAdd;
+    for (const auto& f : desired) {
+        if (!watchedSet.contains(f)) {
+            toAdd << f;
+        }
+    }
+    if (!toAdd.isEmpty()) {
+        m_watcher.addPaths(toAdd);
+    }
 }
 
 void FileSystemModel::updateEntries() {
@@ -543,8 +633,18 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
     const QDir currentDir = m_dir;
 
     QSet<QString> oldPaths;
+    // Snapshot each current entry's (size, mtime) so the worker can detect files
+    // modified in place — a path present in both scans whose size or mtime changed
+    // (the in-progress-download case). entry->size()/modifiedDate() read the
+    // cached QFileInfo, i.e. the value as of the last scan, which is exactly the
+    // baseline we want to diff the fresh stat against.
+    QHash<QString, QPair<qint64, qint64>> oldStats;
+    oldStats.reserve(static_cast<int>(m_entries.size()));
     for (const auto& entry : std::as_const(m_entries)) {
         oldPaths << entry->path();
+        oldStats.insert(
+            entry->path(),
+            qMakePair(entry->size(), entry->modifiedDate().toMSecsSinceEpoch()));
     }
 
     const auto future = QtConcurrent::run([=](QPromise<QPair<QSet<QString>, QList<CachedEntryData>>>& promise) {
@@ -594,6 +694,10 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
         }
 
         QSet<QString> newPaths;
+        // Current (size, mtime) per listed path — diffed against oldStats to find
+        // files modified in place. Sourced from the iterator's own QFileInfo so no
+        // extra stat() is issued beyond what the listing already performs.
+        QHash<QString, QPair<qint64, qint64>> newStats;
         while (iter->hasNext()) {
             if (promise.isCanceled()) {
                 return;
@@ -615,19 +719,45 @@ void FileSystemModel::updateEntriesForDir(const QString& dir) {
             }
 
             newPaths.insert(path);
+            // Only collect per-file stats when modified-detection can actually
+            // act on them — i.e. non-recursive mode, where syncFileWatches() arms
+            // the per-file watches that trigger this. In recursive mode no per-file
+            // watch exists, so the extra stat()/entry/scan (a network round-trip on
+            // SSHFS/FUSE) would be pure waste.
+            if (!recursive) {
+                const QFileInfo info = iter->fileInfo();
+                newStats.insert(path, qMakePair(info.size(), info.lastModified().toMSecsSinceEpoch()));
+            }
         }
 
         if (promise.isCanceled())
             return;
-        if (newPaths == oldPaths) {
+
+        // Paths present in both scans whose size or mtime changed — the entry's
+        // cached QFileInfo is stale (e.g. a download that grew from 0 bytes after
+        // it was first listed). These must be rebuilt with a fresh stat. Qt's
+        // directory inotify watch never reports this (IN_MODIFY is not in its
+        // mask); the trigger comes from the per-file watch in syncFileWatches().
+        QSet<QString> modified;
+        for (auto it = newStats.cbegin(); it != newStats.cend(); ++it) {
+            const auto oldIt = oldStats.constFind(it.key());
+            if (oldIt != oldStats.cend() && *oldIt != it.value()) {
+                modified.insert(it.key());
+            }
+        }
+
+        if (newPaths == oldPaths && modified.isEmpty()) {
             // No changes — emit an empty result so the watcher always fires and
             // clears m_loading on the main thread, even when nothing changed.
             promise.addResult(qMakePair(QSet<QString>{}, QList<CachedEntryData>{}));
             return;
         }
 
-        const QSet<QString> removed = oldPaths - newPaths;
-        const QSet<QString> added = newPaths - oldPaths;
+        // A modified path is both removed (drop the stale entry) and added
+        // (re-inserted with a fresh stat) — applyChanges() removes before it
+        // inserts, so the rebuilt entry takes the old one's place.
+        QSet<QString> removed = (oldPaths - newPaths) | modified;
+        const QSet<QString> added = (newPaths - oldPaths) | modified;
 
         // Build CachedEntryData in the background thread so that stat() calls
         // (which block on SSHFS/FUSE) never run on the main/GUI thread.
@@ -747,6 +877,11 @@ void FileSystemModel::applyChanges(const QSet<QString>& removedPaths, QList<Cach
     } else if (!removedPaths.isEmpty()) {
         emit entriesChanged();
     }
+
+    // Re-arm per-file watches against the now-current entry set. Cheap (set
+    // diff) and idempotent, so it is safe to run even on a no-op scan; this is
+    // also what re-establishes a watch after an atomic replace drops it.
+    syncFileWatches();
 }
 
 bool FileSystemModel::compareEntries(const FileSystemEntry* a, const FileSystemEntry* b) const {
