@@ -683,6 +683,13 @@ function rebuildRows(root) {
     // restore also keeps the cursor stable across file-watcher mutations
     // (inserts/removes that shift indices around the cursor).
     var prevPath = root.currentRow ? root.currentRow.path : "";
+    // Capture the scroll offset and cursor index BEFORE reassigning the model.
+    // Reassigning ListView.model to a fresh array zeroes contentY, so we have to
+    // re-establish the viewport afterwards. We anchor on the SCROLL OFFSET, not
+    // on the cursor (see the restore block below for why).
+    var prevContentY = view.contentY;
+    var prevCursorIndex = view.currentIndex;
+    var rowHeight = Config.fileManager.sizes.itemHeight * root.compactScale;
 
     var newRows = [];
     var visited = ({});
@@ -724,10 +731,12 @@ function rebuildRows(root) {
     // the popup always navigates to the file's parent, so the picked file
     // is a direct child of the new rootPath.
     var restored = -1;
+    var viaPendingFocus = false;
     if (root._pendingFocusName !== "") {
         for (var f = 0; f < newRows.length; f++) {
             if (newRows[f].name === root._pendingFocusName && newRows[f].depth === 0) {
                 restored = f;
+                viaPendingFocus = true;
                 break;
             }
         }
@@ -744,7 +753,44 @@ function rebuildRows(root) {
     }
     if (restored >= 0) {
         view.currentIndex = restored;
-        view.positionViewAtIndex(restored, ListView.Contain);
+        if (viaPendingFocus || prevCursorIndex < 0 || rowHeight <= 0) {
+            // Fuzzy-finder navigation (and the no-prior-cursor fallback) is an
+            // EXPLICIT jump to a row — bring it into view as before.
+            view.positionViewAtIndex(restored, ListView.Contain);
+        } else {
+            // REGRESSION GUARD — do NOT replace this with
+            // positionViewAtIndex(restored, ListView.Contain).
+            //
+            // rebuildRows fires on lazy-expand, which is itself driven by the
+            // user scrolling (onContentYChanged -> kickLazyExpand). During a
+            // mouse/trackpad scroll the cursor stays parked where it was while
+            // the viewport moves away from it; Contain would then force-scroll
+            // the off-screen cursor back into view, snapping the tree upward on
+            // every scroll tick (the "scroll jumps back up" bug). Keyboard nav
+            // never hit this because it moves the cursor WITH the scroll, so the
+            // cursor was always already contained.
+            //
+            // Instead, anchor on the scroll OFFSET. Reassigning the model zeroed
+            // contentY, so we recompute it from the offset we captured before the
+            // swap, shifted by the number of rows the rebuild inserted/removed
+            // ABOVE the cursor. That row-delta is exactly the cursor's index
+            // shift (restored - prevCursorIndex); rows are uniform-height, so
+            // multiplying by rowHeight gives the pixel compensation. This keeps
+            // the visible content stationary whether the expansion happened above
+            // or below the viewport. contentHeight lags a model swap by a layout
+            // cycle, so the clamp ceiling is derived from the new row count
+            // rather than view.contentHeight.
+            //
+            // forceLayout() before the assignment is load-bearing: a fresh model
+            // leaves contentHeight stale (delegates not yet created), and a raw
+            // contentY assignment gets clamped against that stale, smaller height
+            // — which would still snap partway up. forceLayout flushes the model
+            // change synchronously so the assignment lands on final geometry.
+            view.forceLayout();
+            var shift = (restored - prevCursorIndex) * rowHeight;
+            var maxY = Math.max(0, newRows.length * rowHeight - view.height);
+            view.contentY = Math.max(0, Math.min(prevContentY + shift, maxY));
+        }
     } else if (view.currentIndex >= newRows.length) {
         view.currentIndex = Math.max(0, newRows.length - 1);
     }
