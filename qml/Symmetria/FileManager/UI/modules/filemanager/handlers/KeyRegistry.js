@@ -61,6 +61,19 @@
 //   when() gates EXECUTION only (a false when() returns "not consumed" so the key
 //   falls through, exactly like today's n/N guards) — it does NOT hide the row
 //   from help. View scoping is by membership in CORE / MILLER_ONLY / TREE_ONLY.
+//
+// ── SYMBOL KEYS MUST USE mods: "*" (load-bearing) ────────────────────────────
+//   A binding on a PUNCTUATION/SYMBOL glyph (`/ ? ~ - = [ ] . ,` …) must use
+//   mods: "*", NOT mods: "". The modifiers that PRODUCE a glyph are
+//   layout-dependent: on the Spanish Latin-American layout `/` is Shift+7 and
+//   `=` is Shift+0, so the event arrives as e.g. Qt.Key_Slash + ShiftModifier.
+//   A strict mods: "" match rejects it and the key silently does nothing — this
+//   is exactly the regression that broke `/`-search after the registry landed
+//   (the old switch matched on event.key alone, ignoring modifiers). Letter and
+//   real chord bindings (Ctrl/Shift/Alt + key) keep their precise mods because
+//   THERE the modifier is the user's intent, not a side effect of the layout.
+//   The (key,mods) collision test guards "*" from clashing with a real chord.
+//   tst_keyregistry.qml fires these glyphs WITH Shift to lock the rule in.
 
 // Keys suppressed in picker mode — ported from FileOpsHandler.js. Clipboard ops
 // don't belong in a file chooser. Key_C is intentionally absent (it starts the
@@ -217,7 +230,12 @@ var CORE = [
       run: function(ctx) { ctx.windowState.clearSelection(); } },
 
     // Search & jump
-    { id: "search.start", keys: [Qt.Key_Slash], mods: "", keycap: "/",
+    // mods: "*" (not "") — `/` is a SYMBOL key whose producing modifiers are
+    // LAYOUT-DEPENDENT. On the Spanish Latin-American layout `/` is Shift+7, so
+    // the event arrives as Qt.Key_Slash WITH Qt.ShiftModifier; a strict mods: ""
+    // match would reject it and search would silently do nothing. See the
+    // "Symbol keys" note in the header — all glyph bindings (`/ - = [ ]`) use "*".
+    { id: "search.start", keys: [Qt.Key_Slash], mods: "*", keycap: "/",
       label: "Search", icon: "search", group: "Search & jump",
       run: function(ctx) { ctx.root._preSearchIndex = ctx.view.currentIndex; ctx.windowState.startSearch(); } },
     { id: "match.next", keys: [Qt.Key_N], mods: "", keycap: "n",
@@ -250,7 +268,9 @@ var CORE = [
     { id: "chord.copy", keys: [Qt.Key_C], mods: "", keycap: "c",
       label: "Copy to clipboard…", icon: "content_copy", group: "Chords",
       run: function(ctx) { ctx.windowState.activeChordPrefix = "c"; } },
-    { id: "chord.sort", keys: [Qt.Key_Comma], mods: "", keycap: ",",
+    // mods: "*" — symbol key (see search.start). Base-level on latam, but the
+    // "all symbol glyphs use *" invariant keeps it layout-robust; no chord uses ,.
+    { id: "chord.sort", keys: [Qt.Key_Comma], mods: "*", keycap: ",",
       label: "Sort by…", icon: "sort", group: "Chords",
       run: function(ctx) { ctx.windowState.activeChordPrefix = ","; } },
 
@@ -304,10 +324,13 @@ var MILLER_ONLY = [
     { id: "miller.home", keys: [Qt.Key_AsciiTilde], mods: "*", keycap: "~",
       label: "Go home", icon: "home", group: "History",
       run: function(ctx) { ctx.nav(function() { ctx.windowState.navigate(ctx.services.paths.home); }); } },
-    { id: "miller.back", keys: [Qt.Key_Minus], mods: "", keycap: "-",
+    // mods: "*" — symbol keys (see search.start). On latam `=` is Shift+0 and
+    // `-` is base, but both are glyph bindings so neither should care about the
+    // producing modifier; no chord uses `-`/`=`, so "*" can't collide.
+    { id: "miller.back", keys: [Qt.Key_Minus], mods: "*", keycap: "-",
       label: "Back", icon: "arrow_back", group: "History",
       run: function(ctx) { ctx.nav(function() { ctx.windowState.back(); }); } },
-    { id: "miller.forward", keys: [Qt.Key_Equal], mods: "", keycap: "=",
+    { id: "miller.forward", keys: [Qt.Key_Equal], mods: "*", keycap: "=",
       label: "Forward", icon: "arrow_forward", group: "History",
       run: function(ctx) { ctx.nav(function() { ctx.windowState.forward(); }); } },
 
@@ -317,7 +340,9 @@ var MILLER_ONLY = [
       run: function(ctx) { if (ctx.root.currentEntry) ctx.windowState.requestRename(ctx.root.currentEntry.path, true); } },
 
     // View
-    { id: "miller.toggleHidden", keys: [Qt.Key_Period], mods: "", keycap: ".",
+    // mods: "*" — symbol key (see search.start); base-level on latam, kept
+    // robust per the "all symbol glyphs use *" invariant.
+    { id: "miller.toggleHidden", keys: [Qt.Key_Period], mods: "*", keycap: ".",
       label: "Toggle hidden files", icon: "visibility", group: "View",
       run: function(ctx) { ctx.services.config.fileManager.showHidden = !ctx.services.config.fileManager.showHidden; ctx.services.config.save(); } },
 
@@ -346,10 +371,13 @@ var MILLER_ONLY = [
           if (!ctx.root.tabManager.closeTab(ctx.root.tabManager.activeIndex))
               ctx.root.closeRequested();
       } },
-    { id: "miller.tabPrev", keys: [Qt.Key_BracketLeft], mods: "", keycap: "[",
+    // mods: "*" — symbol keys (see search.start). On latam `[`/`]` need Shift or
+    // AltGr; the Ctrl+Tab / Ctrl+Shift+Tab tab-cycling bindings below use
+    // different KEYS (Tab/Backtab), so "*" here can't collide with them.
+    { id: "miller.tabPrev", keys: [Qt.Key_BracketLeft], mods: "*", keycap: "[",
       label: "Previous tab", icon: "chevron_left", group: "Tabs",
       run: function(ctx) { if (ctx.root.tabManager) ctx.root.tabManager.prevTab(); } },
-    { id: "miller.tabNext", keys: [Qt.Key_BracketRight], mods: "", keycap: "]",
+    { id: "miller.tabNext", keys: [Qt.Key_BracketRight], mods: "*", keycap: "]",
       label: "Next tab", icon: "chevron_right", group: "Tabs",
       run: function(ctx) { if (ctx.root.tabManager) ctx.root.tabManager.nextTab(); } },
     { id: "miller.tabNextCtrl", keys: [Qt.Key_Tab], mods: "Ctrl", keycap: "⌃⇥",
@@ -393,7 +421,9 @@ var TREE_ONLY = [
     { id: "tree.toggleHidden", keys: [Qt.Key_H], mods: "Shift", keycap: "⇧H",
       label: "Toggle hidden files", icon: "visibility", group: "View",
       run: function(ctx) { ctx.root.showHiddenToggleRequested(); } },
-    { id: "tree.toggleGitignore", keys: [Qt.Key_Period], mods: "", keycap: ".",
+    // mods: "*" — symbol key (see search.start); base-level on latam, kept
+    // robust per the "all symbol glyphs use *" invariant.
+    { id: "tree.toggleGitignore", keys: [Qt.Key_Period], mods: "*", keycap: ".",
       label: "Toggle .gitignore filter", icon: "rule", group: "View",
       run: function(ctx) { ctx.root.respectGitignore = !ctx.root.respectGitignore; } },
     { id: "tree.refreshAll", keys: [Qt.Key_R], mods: "Shift", keycap: "⇧R",

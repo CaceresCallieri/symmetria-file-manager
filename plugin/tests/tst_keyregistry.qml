@@ -178,7 +178,29 @@ TestCase {
             { tag: "ctrl+e → view toggle",       key: Qt.Key_E,        mods: Qt.ControlModifier, view: "tree",   expect: "view.toggle" },
             { tag: "? → help",                   key: Qt.Key_Question, mods: Qt.ShiftModifier,  view: "miller", expect: "help.open" },
             { tag: "g → go chord",               key: Qt.Key_G,        mods: 0,                 view: "miller", expect: "chord.go" },
-            { tag: "shift+g → bottom",           key: Qt.Key_G,        mods: Qt.ShiftModifier,  view: "miller", expect: "nav.bottom" }
+            { tag: "shift+g → bottom",           key: Qt.Key_G,        mods: Qt.ShiftModifier,  view: "miller", expect: "nav.bottom" },
+
+            // --- Symbol keys carry layout-dependent modifiers (regression) -----
+            // On the Spanish Latin-American layout `/` = Shift+7, `=` = Shift+0,
+            // and `[`/`]` need Shift/AltGr. These bindings therefore use
+            // mods: "*", so they MUST still route when the event carries Shift.
+            // A revert to mods: "" (the original bug — `/`-search did nothing on
+            // a latam keyboard) fails these. The bare-modifier (mods: 0) variants
+            // are covered implicitly: "*" matches any modifier set.
+            { tag: "/ → search (no mods)",       key: Qt.Key_Slash,        mods: 0,                view: "miller", expect: "search.start" },
+            { tag: "shift+/ → search (miller)",  key: Qt.Key_Slash,        mods: Qt.ShiftModifier, view: "miller", expect: "search.start" },
+            { tag: "shift+/ → search (tree)",    key: Qt.Key_Slash,        mods: Qt.ShiftModifier, view: "tree",   expect: "search.start" },
+            { tag: "shift+= → forward",          key: Qt.Key_Equal,        mods: Qt.ShiftModifier, view: "miller", expect: "miller.forward" },
+            { tag: "shift+- → back",             key: Qt.Key_Minus,        mods: Qt.ShiftModifier, view: "miller", expect: "miller.back" },
+            { tag: "shift+[ → prev tab",         key: Qt.Key_BracketLeft,  mods: Qt.ShiftModifier, view: "miller", expect: "miller.tabPrev" },
+            { tag: "shift+] → next tab",         key: Qt.Key_BracketRight, mods: Qt.ShiftModifier, view: "miller", expect: "miller.tabNext" },
+            // `.` and `,` are base-level on latam but use mods: "*" for the
+            // "all symbol glyphs are modifier-tolerant" invariant — assert a
+            // modifier-carrying event still routes (guards against a "" revert).
+            { tag: "shift+. → hidden (miller)",  key: Qt.Key_Period,       mods: Qt.ShiftModifier, view: "miller", expect: "miller.toggleHidden" },
+            { tag: "shift+. → gitignore (tree)", key: Qt.Key_Period,       mods: Qt.ShiftModifier, view: "tree",   expect: "tree.toggleGitignore" },
+            { tag: ", → sort chord",             key: Qt.Key_Comma,        mods: 0,                view: "miller", expect: "chord.sort" },
+            { tag: "shift+, → sort chord",       key: Qt.Key_Comma,        mods: Qt.ShiftModifier, view: "miller", expect: "chord.sort" }
         ];
     }
 
