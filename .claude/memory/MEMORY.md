@@ -10,6 +10,7 @@
 
 ## ⌨️ Keybinding registry (2026-06-14): normal-mode keys are now DATA
 - [Keybinding registry](project_keybinding_registry.md) — migrated scattered key `switch` statements to a declarative `KeyRegistry.js` that feeds BOTH dispatch and a new `?` help popup (`HelpPopup.qml`). DI via `ctx.services` makes dispatch hermetically testable (`KeyRegistryTest` — first QML test in the project). `FileOpsHandler.js` deleted. Full architecture in CLAUDE.md → "Keyboard Event Handling".
+- [latam keyboard ⇒ symbol keys need mods:"*"](project_latam_keyboard_symbol_keys.md) — user runs the latam layout (`/`=Shift+7), so symbol-glyph bindings arrive WITH modifiers; `mods:""` silently breaks them (this broke `/`-search after the registry migration). All symbol bindings now use `mods:"*"`, enforced by tests.
 
 ## 🪟 Hyprland integration fixes
 - [First-window-on-workspace-1 bug](project_first_window_workspace_bug.md) — FIXED: FM's first window after login landed on workspace 1 because the daemon inherited a stale `HL_INITIAL_WORKSPACE_TOKEN`; fixed via `UnsetEnvironment=` in `symmetria-fm.service`. Note: TWO unsynced copies of that unit (repo + dotfiles).
