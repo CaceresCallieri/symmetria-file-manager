@@ -644,15 +644,24 @@ function kickLazyExpand(root) {
     advanceLazyExpand(root);
 }
 
+// Pixel height of one tree row. Rows are uniform, so this is the single
+// index<->pixel conversion factor for all viewport math (shouldExpandMore's
+// visible-bottom calc and rebuildRows' scroll anchoring). MUST stay equal to
+// the delegate's rendered height (FileTreeRow.qml's implicitHeight, which is
+// itemHeight * compactScale) — any drift silently corrupts scroll positioning.
+function rowHeight(root) {
+    return Config.fileManager.sizes.itemHeight * root.compactScale;
+}
+
 // Returns true when the rendered tree has fewer rows below the visible viewport
 // bottom than _lazyExpandBufferRows. Synchronous on `_rows` length + cached row
 // height — does NOT depend on `view.contentHeight`, which lags `_rows` mutations
 // by a layout cycle.
 function shouldExpandMore(root) {
     if (Object.keys(root._pending).length > 0) return false;
-    var rowHeight = Config.fileManager.sizes.itemHeight * root.compactScale;
-    if (rowHeight <= 0) return false;
-    var visibleBottomRow = Math.ceil((view.contentY + view.height) / rowHeight);
+    var rh = rowHeight(root);
+    if (rh <= 0) return false;
+    var visibleBottomRow = Math.ceil((view.contentY + view.height) / rh);
     var rowsBeyond = root._rows.length - visibleBottomRow;
     return rowsBeyond < LAZY_BUFFER_ROWS;
 }
@@ -683,13 +692,20 @@ function rebuildRows(root) {
     // restore also keeps the cursor stable across file-watcher mutations
     // (inserts/removes that shift indices around the cursor).
     var prevPath = root.currentRow ? root.currentRow.path : "";
-    // Capture the scroll offset and cursor index BEFORE reassigning the model.
-    // Reassigning ListView.model to a fresh array zeroes contentY, so we have to
-    // re-establish the viewport afterwards. We anchor on the SCROLL OFFSET, not
-    // on the cursor (see the restore block below for why).
+    // Capture the viewport-top anchor BEFORE reassigning the model. Reassigning
+    // ListView.model to a fresh array zeroes contentY, so we must re-establish
+    // the scroll position afterwards. We anchor on the ROW AT THE VIEWPORT TOP
+    // (not the cursor — see the restore block below for why): record its path
+    // and the sub-row pixel offset, then after the rebuild we scroll so that
+    // same row sits at the same place. This keeps whatever the user is looking
+    // at visually stationary regardless of where rows were inserted/removed.
     var prevContentY = view.contentY;
-    var prevCursorIndex = view.currentIndex;
-    var rowHeight = Config.fileManager.sizes.itemHeight * root.compactScale;
+    var rh = rowHeight(root);
+    var prevTopIndex = rh > 0 ? Math.floor(prevContentY / rh) : 0;
+    var prevSubRowOffset = prevContentY - prevTopIndex * rh;
+    // root._rows is still the OLD array here (reassigned below).
+    var prevTopPath = (root._rows && prevTopIndex >= 0 && prevTopIndex < root._rows.length)
+        ? root._rows[prevTopIndex].path : "";
 
     var newRows = [];
     var visited = ({});
@@ -751,48 +767,60 @@ function rebuildRows(root) {
             if (newRows[g].path === prevPath) { restored = g; break; }
         }
     }
+    // --- Cursor restoration (currentIndex) — independent of the viewport ---
     if (restored >= 0) {
         view.currentIndex = restored;
-        if (viaPendingFocus || prevCursorIndex < 0 || rowHeight <= 0) {
-            // Fuzzy-finder navigation (and the no-prior-cursor fallback) is an
-            // EXPLICIT jump to a row — bring it into view as before.
-            view.positionViewAtIndex(restored, ListView.Contain);
-        } else {
-            // REGRESSION GUARD — do NOT replace this with
-            // positionViewAtIndex(restored, ListView.Contain).
-            //
-            // rebuildRows fires on lazy-expand, which is itself driven by the
-            // user scrolling (onContentYChanged -> kickLazyExpand). During a
-            // mouse/trackpad scroll the cursor stays parked where it was while
-            // the viewport moves away from it; Contain would then force-scroll
-            // the off-screen cursor back into view, snapping the tree upward on
-            // every scroll tick (the "scroll jumps back up" bug). Keyboard nav
-            // never hit this because it moves the cursor WITH the scroll, so the
-            // cursor was always already contained.
-            //
-            // Instead, anchor on the scroll OFFSET. Reassigning the model zeroed
-            // contentY, so we recompute it from the offset we captured before the
-            // swap, shifted by the number of rows the rebuild inserted/removed
-            // ABOVE the cursor. That row-delta is exactly the cursor's index
-            // shift (restored - prevCursorIndex); rows are uniform-height, so
-            // multiplying by rowHeight gives the pixel compensation. This keeps
-            // the visible content stationary whether the expansion happened above
-            // or below the viewport. contentHeight lags a model swap by a layout
-            // cycle, so the clamp ceiling is derived from the new row count
-            // rather than view.contentHeight.
-            //
-            // forceLayout() before the assignment is load-bearing: a fresh model
-            // leaves contentHeight stale (delegates not yet created), and a raw
-            // contentY assignment gets clamped against that stale, smaller height
-            // — which would still snap partway up. forceLayout flushes the model
-            // change synchronously so the assignment lands on final geometry.
-            view.forceLayout();
-            var shift = (restored - prevCursorIndex) * rowHeight;
-            var maxY = Math.max(0, newRows.length * rowHeight - view.height);
-            view.contentY = Math.max(0, Math.min(prevContentY + shift, maxY));
-        }
     } else if (view.currentIndex >= newRows.length) {
         view.currentIndex = Math.max(0, newRows.length - 1);
+    }
+
+    // --- Viewport restoration (contentY) ---
+    // Reassigning the model zeroed contentY; re-establish the scroll position.
+    if (viaPendingFocus && restored >= 0) {
+        // Fuzzy-finder navigation is an EXPLICIT jump to a row — bring it into
+        // view rather than preserving the old scroll position.
+        view.positionViewAtIndex(restored, ListView.Contain);
+    } else if (rh > 0) {
+        // REGRESSION GUARD — do NOT re-anchor the viewport on the CURSOR (e.g.
+        // positionViewAtIndex(currentIndex, ListView.Contain)).
+        //
+        // rebuildRows fires on lazy-expand, which is driven by the user
+        // scrolling (onContentYChanged -> kickLazyExpand). Anchoring the
+        // restored viewport on the cursor snaps the tree upward on every scroll
+        // tick: during a mouse/trackpad scroll the cursor stays parked while the
+        // viewport moves away, so Contain force-scrolls the off-screen cursor
+        // back into view (the original "scroll jumps back up" bug). Keyboard nav
+        // never hit it because it moves the cursor WITH the scroll.
+        //
+        // Anchor on the row that was at the VIEWPORT TOP instead: find that
+        // row's new index and restore the same sub-row pixel offset. This is
+        // correct no matter where rows were inserted/removed — above, below, or
+        // straddling the viewport. (A cursor-index delta only accounts for rows
+        // above the cursor, so it mis-anchors when an expansion lands between the
+        // viewport top and the cursor.)
+        //
+        // forceLayout() first is load-bearing: a fresh model leaves
+        // contentHeight stale (delegates not yet created), so BOTH the contentY
+        // assignment and the maxY clamp would otherwise run against stale
+        // geometry and still snap partway. forceLayout flushes the model change
+        // synchronously, so view.contentHeight is final and authoritative for
+        // the clamp (no need to reconstruct it from row count).
+        view.forceLayout();
+        var maxY = Math.max(0, view.contentHeight - view.height);
+        var newTopIndex = -1;
+        if (prevTopPath !== "") {
+            for (var t = 0; t < newRows.length; t++) {
+                if (newRows[t].path === prevTopPath) { newTopIndex = t; break; }
+            }
+        }
+        if (newTopIndex >= 0) {
+            // Put the old top row back at the same pixel position.
+            view.contentY = Math.max(0, Math.min(newTopIndex * rh + prevSubRowOffset, maxY));
+        } else {
+            // The old top row was collapsed away — preserve the raw offset so
+            // the view at least doesn't snap to the top.
+            view.contentY = Math.max(0, Math.min(prevContentY, maxY));
+        }
     }
 
     // Re-compute search matches against the new row list — expand/collapse
