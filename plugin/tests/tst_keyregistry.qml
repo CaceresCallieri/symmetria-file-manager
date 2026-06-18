@@ -119,6 +119,12 @@ TestCase {
             verify(typeof b.id === "string" && b.id.length > 0, "id missing at index " + i);
             verify(Array.isArray(b.keys) && b.keys.length > 0, "keys missing: " + b.id);
             verify(typeof b.mods === "string", "mods missing: " + b.id);
+            // mods must be a value _requiredMask/matchKey understands. A typo like
+            // "shift" (wrong case) or "any" passes the string check but makes
+            // _requiredMask return -1 → the binding silently never matches. Catch
+            // it here, the same silent-miss class as the layout-modifier bug.
+            verify(["", "Ctrl", "Shift", "Alt", "Ctrl+Shift", "*"].indexOf(b.mods) !== -1,
+                   "illegal mods value on " + b.id + ": '" + b.mods + "'");
             verify(typeof b.keycap === "string" && b.keycap.length > 0, "keycap missing: " + b.id);
             verify(typeof b.label === "string" && b.label.length > 0, "label missing: " + b.id);
             verify(typeof b.icon === "string" && b.icon.length > 0, "icon missing: " + b.id);
@@ -141,15 +147,24 @@ TestCase {
     // by order + guard (e.g. Escape: sel.clear when selected, else escapeSwallow).
     function _assertNoCollision(viewKind) {
         var list = KeyRegistry.bindingsFor(viewKind);
+        // A "*" binding matches ANY modifier set for its key, so at runtime it
+        // shadows a specific-mods binding on the SAME key (matchKey returns true
+        // for "*" first). Comparing raw sigs would miss that — "K|*" != "K|Ctrl".
+        // Expand "*" into every concrete combo it implicitly claims so the exact
+        // check below catches a "*"-vs-specific (or "*"-vs-"*") shadow too.
+        var CONCRETE = ["", "Ctrl", "Shift", "Alt", "Ctrl+Shift"];
         var seen = ({});
         for (var i = 0; i < list.length; i++) {
             var b = list[i];
             if (b.when)
                 continue;
             for (var k = 0; k < b.keys.length; k++) {
-                var sig = b.keys[k] + "|" + b.mods;
-                verify(!seen[sig], viewKind + " (key,mods) collision " + sig + ": " + seen[sig] + " vs " + b.id);
-                seen[sig] = b.id;
+                var combos = b.mods === "*" ? CONCRETE : [b.mods];
+                for (var c = 0; c < combos.length; c++) {
+                    var sig = b.keys[k] + "|" + combos[c];
+                    verify(!seen[sig], viewKind + " (key,mods) collision " + sig + ": " + seen[sig] + " vs " + b.id);
+                    seen[sig] = b.id;
+                }
             }
         }
     }

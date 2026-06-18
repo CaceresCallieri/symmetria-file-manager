@@ -234,7 +234,7 @@ var CORE = [
     // LAYOUT-DEPENDENT. On the Spanish Latin-American layout `/` is Shift+7, so
     // the event arrives as Qt.Key_Slash WITH Qt.ShiftModifier; a strict mods: ""
     // match would reject it and search would silently do nothing. See the
-    // "Symbol keys" note in the header — all glyph bindings (`/ - = [ ]`) use "*".
+    // "Symbol keys" note in the header — all glyph bindings (`/ - = [ ] . ,`) use "*".
     { id: "search.start", keys: [Qt.Key_Slash], mods: "*", keycap: "/",
       label: "Search", icon: "search", group: "Search & jump",
       run: function(ctx) { ctx.root._preSearchIndex = ctx.view.currentIndex; ctx.windowState.startSearch(); } },
