@@ -160,6 +160,17 @@ QtObject {
     property string activeChordPrefix: ""
     readonly property bool chordActive: activeChordPrefix !== ""
 
+    // Whether the cursor's current entry is an image. Published by the active
+    // view (FileList / FileTreeView) so the "c" chord can offer the
+    // image-to-clipboard (ci) row only when the cursor sits on an image.
+    property bool currentEntryIsImage: false
+
+    // Called by the active view on cursor move / tab switch — single source of
+    // the image-chord gate so the two views don't duplicate the predicate.
+    function syncImageCursor(entry: var): void {
+        currentEntryIsImage = !!(entry && entry.isImage);
+    }
+
     // === Bookmark sub-mode (entered via gn / gx) ===
     property string bookmarkSubMode: ""        // "" | "create" | "delete"
     readonly property bool bookmarkSubModeActive: bookmarkSubMode !== ""
@@ -243,6 +254,17 @@ QtObject {
         gBinds.push({ isSeparator: true });
         gBinds.push({ key: "n", label: "New bookmark", icon: "bookmark_add", isAction: true });
         gBinds.push({ key: "x", label: "Delete bookmark", icon: "bookmark_remove", isAction: true });
+
+        // Image-to-clipboard (ci): offered only when the cursor sits on an
+        // image, so the which-key HUD and ? help hide it otherwise. Reassign
+        // the "c" group (don't mutate _staticChordBindings) the same way "g" is.
+        if (currentEntryIsImage) {
+            base["c"] = Object.assign({}, _staticChordBindings["c"], {
+                binds: _staticChordBindings["c"].binds.concat([
+                    { key: "i", label: "Image to clipboard", icon: "image" }
+                ])
+            });
+        }
 
         return base;
     }

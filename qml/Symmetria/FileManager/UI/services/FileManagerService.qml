@@ -52,9 +52,28 @@ QtObject {
     //   --foreground  (wl-copy flag) keep wl-copy in the foreground so it
     //                 stays in the transient unit's cgroup; a forked child
     //                 would escape the unit and be killed the same old way
+    //
+    // Both copy commands below share this launcher prefix.
+    readonly property var _clipboardLauncherPrefix: ["systemd-run", "--user", "--collect", "--quiet", "--"]
+
     function clipboardCopyCommand(text: string): var {
-        return ["systemd-run", "--user", "--collect", "--quiet", "--",
-                "wl-copy", "--foreground", "--", text];
+        return root._clipboardLauncherPrefix.concat(["wl-copy", "--foreground", "--", text]);
+    }
+
+    // Copy a file's raw BYTES onto the clipboard under the given MIME type
+    // (e.g. image/png), so the picture itself can be pasted into an editor or
+    // chat — not its path. wl-copy reads the bytes from stdin; ShellRunner is
+    // argv-only (no shell `<` redirection), so route through `sh -c` with the
+    // mime type and path passed as POSITIONAL args ($1/$2) instead of
+    // interpolated into the script text — that keeps filenames containing
+    // spaces, quotes or `$` injection-safe. `exec` replaces sh with wl-copy so
+    // the transient unit's cgroup tracks wl-copy directly (same --foreground
+    // rationale as above — no surviving sh parent to escape the unit).
+    function clipboardCopyFileCommand(mimeType: string, filePath: string): var {
+        return root._clipboardLauncherPrefix.concat([
+            "sh", "-c", 'exec wl-copy --foreground --type "$1" < "$2"',
+            "sh", mimeType, filePath
+        ]);
     }
 
     // === Picker mode (portal file chooser) — one picker at a time globally ===

@@ -94,6 +94,23 @@ function _executeChord(prefix, keyChar, root, view, clipboardCopyProcess) {
         var hasSelection = windowState.selectedCount > 0;
         if (!hasSelection && !root.currentEntry)
             return;
+        // "i" copies the hovered IMAGE's bytes onto the clipboard (paste the
+        // picture itself, not its path). Always operates on the cursor entry —
+        // the Wayland clipboard holds a single selection — so it ignores
+        // multi-select. The which-key menu hides this row for non-images
+        // (chordBindings gates it on currentEntryIsImage); the guard here only
+        // catches a blind-typed "ci" on a non-image.
+        if (keyChar === "i") {
+            var imageEntry = root.currentEntry;
+            if (!imageEntry || !imageEntry.isImage) {
+                windowState.showTransientMessage("Not an image");
+                return;
+            }
+            clipboardCopyProcess.command =
+                FileManagerService.clipboardCopyFileCommand(imageEntry.mimeType, imageEntry.path);
+            clipboardCopyProcess.start();
+            return;
+        }
         // "d" copies the current directory regardless of selection state
         if (keyChar === "d") {
             clipboardCopyProcess.command = FileManagerService.clipboardCopyCommand(windowState.currentPath);

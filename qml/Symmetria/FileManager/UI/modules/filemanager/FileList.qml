@@ -61,6 +61,10 @@ Item {
     // flash session entered after the preview has loaded sees current entries.
     onPreviewDirectoryEntriesChanged: FlashHandler.invalidateEntryCache()
 
+    // Publish whether the cursor sits on an image so WindowState can gate the
+    // ci (image-to-clipboard) chord row to images only.
+    onCurrentEntryChanged: if (windowState) windowState.syncImageCursor(currentEntry)
+
     // Save cursor before tab switch so it can be restored when returning
     Connections {
         target: root.tabManager
@@ -88,6 +92,8 @@ Item {
     // so we must restore the cursor directly. If the path differs, onPathChanged will handle it.
     onWindowStateChanged: {
         if (windowState) {
+            // Re-sync the new tab's image-chord gate to this view's cursor.
+            windowState.syncImageCursor(currentEntry);
             const newPath = windowState.currentPath;
             if (newPath === fsModel.path && view.count > 0) {
                 // Same directory AND model already populated — restore cursor immediately.

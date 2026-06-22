@@ -134,6 +134,7 @@ Item {
     readonly property var currentRow: (view.currentIndex >= 0 && view.currentIndex < _rows.length) ? _rows[view.currentIndex] : null
     readonly property var currentEntry: currentRow ? currentRow.entry : null
     readonly property int fileCount: _rows.length
+    onCurrentEntryChanged: if (windowState) windowState.syncImageCursor(currentEntry) // gate ci chord to images
 
     // Positional props for RenamePopup — same contract MillerColumns exposes.
     // Y of the bottom edge of the current row, relative to FileTreeView root.
