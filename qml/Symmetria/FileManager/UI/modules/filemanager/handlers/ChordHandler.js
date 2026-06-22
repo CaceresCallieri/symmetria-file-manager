@@ -106,6 +106,17 @@ function _executeChord(prefix, keyChar, root, view, clipboardCopyProcess) {
                 windowState.showTransientMessage("Not an image");
                 return;
             }
+            // isImage is a content/extension sniff (QImageReader, plus
+            // .rpgmvp/.png_/.icns), independent of the MIME type — so an
+            // "image" can carry a non-image MIME (e.g. RPG-Maker .rpgmvp →
+            // application/octet-stream, whose raw bytes aren't even valid PNG).
+            // Only copy bytes when the MIME is a real image/* type the
+            // clipboard can advertise; otherwise the paste target gets
+            // unusable/mislabeled data.
+            if ((imageEntry.mimeType || "").indexOf("image/") !== 0) {
+                windowState.showTransientMessage("Can't copy this image format");
+                return;
+            }
             clipboardCopyProcess.command =
                 FileManagerService.clipboardCopyFileCommand(imageEntry.mimeType, imageEntry.path);
             clipboardCopyProcess.start();
