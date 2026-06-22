@@ -64,11 +64,31 @@ target_link_libraries(KeyRegistryTest PRIVATE
     Qt6::Qml
     Qt6::Gui
 )
+# -input points at the specific .qml file (not the dir): Qt Quick Test scans a
+# directory recursively, so a bare dir would make every QML-test executable run
+# every tst_*.qml here. Scoping each to its file keeps the executables disjoint.
 add_test(NAME KeyRegistryTest
-    COMMAND KeyRegistryTest -input "${CMAKE_CURRENT_SOURCE_DIR}"
+    COMMAND KeyRegistryTest -input "${CMAKE_CURRENT_SOURCE_DIR}/tst_keyregistry.qml"
 )
 # Qt Quick Test needs a QGuiApplication; offscreen keeps it headless in CI.
 set_tests_properties(KeyRegistryTest PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 60
+)
+
+# --- QML image-chord gate test (Qt Quick Test) ------------------------------
+# Same hermetic pattern as KeyRegistryTest: imports ImageChord.js + QtQuick/QtTest
+# only, never the UI module, so it runs in CI where the UI module isn't installed.
+add_executable(ChordBindingsTest tst_chordbindings.cpp)
+target_link_libraries(ChordBindingsTest PRIVATE
+    Qt6::QuickTest
+    Qt6::Qml
+    Qt6::Gui
+)
+add_test(NAME ChordBindingsTest
+    COMMAND ChordBindingsTest -input "${CMAKE_CURRENT_SOURCE_DIR}/tst_chordbindings.qml"
+)
+set_tests_properties(ChordBindingsTest PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     TIMEOUT 60
 )

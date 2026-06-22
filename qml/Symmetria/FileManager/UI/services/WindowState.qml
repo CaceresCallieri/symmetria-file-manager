@@ -1,4 +1,5 @@
 import QtQuick
+import "ImageChord.js" as ImageChord
 
 QtObject {
     id: root
@@ -168,7 +169,7 @@ QtObject {
     // Called by the active view on cursor move / tab switch — single source of
     // the image-chord gate so the two views don't duplicate the predicate.
     function syncImageCursor(entry: var): void {
-        currentEntryIsImage = !!(entry && entry.isImage);
+        currentEntryIsImage = ImageChord.entryIsImage(entry);
     }
 
     // === Bookmark sub-mode (entered via gn / gx) ===
@@ -256,15 +257,10 @@ QtObject {
         gBinds.push({ key: "x", label: "Delete bookmark", icon: "bookmark_remove", isAction: true });
 
         // Image-to-clipboard (ci): offered only when the cursor sits on an
-        // image, so the which-key HUD and ? help hide it otherwise. Reassign
-        // the "c" group (don't mutate _staticChordBindings) the same way "g" is.
-        if (currentEntryIsImage) {
-            base["c"] = Object.assign({}, _staticChordBindings["c"], {
-                binds: _staticChordBindings["c"].binds.concat([
-                    { key: "i", label: "Image to clipboard", icon: "image" }
-                ])
-            });
-        }
+        // image, so the which-key HUD and ? help hide it otherwise. The helper
+        // reassigns the "c" group without mutating _staticChordBindings (see
+        // ImageChord.copyGroupWithImageRow); tested by tst_chordbindings.qml.
+        base["c"] = ImageChord.copyGroupWithImageRow(_staticChordBindings["c"], currentEntryIsImage);
 
         return base;
     }
