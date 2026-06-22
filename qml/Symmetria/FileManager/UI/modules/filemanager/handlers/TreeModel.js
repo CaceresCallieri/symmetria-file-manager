@@ -892,3 +892,48 @@ function activate(root, row) {
     if (row.isDir) toggle(root, row.path);
     else root.fileActivated(row.path);
 }
+
+// onPathFilterChanged re-arm. pathFilter changes are frequent (a git-status
+// watcher emits a new map per working-tree change). When auto-expand is
+// configured AND a filter remains, re-arm the cascade against every settled
+// model so newly-arrived in-set paths under unexplored dirs become reachable —
+// the autoExpandChildrenOf guardrail caps still bound worst-case I/O. We do NOT
+// touch _expanded / _models / _pending: expanded stays expanded, user-collapsed
+// stays collapsed, in-flight expansions race to completion. No-op when
+// auto-expand is off or no filter is present.
+function rearmAutoExpandForFilter(root) {
+    if (root.initialExpandDepth === 0 || !root.pathFilter) return;
+    root._autoExpandActive = true;
+    root._autoExpandCeilingLogged = false;
+    root._autoExpandFanoutLogged = false;
+    root._autoExpandModelCeilingLogged = false;
+    for (var parent in root._models) {
+        var taken = root._autoExpandPending[parent] !== undefined
+            ? root._autoExpandPending[parent]
+            : 0;
+        autoExpandChildrenOf(root, parent, taken);
+    }
+    if (Object.keys(root._pending).length === 0)
+        root._autoExpandActive = false;
+}
+
+// Fuzzy finder picked a file in some directory. The popup emits its signal
+// BEFORE calling navigate(parentPath) so we capture the name first; if the
+// parent is reached via tree retarget, rebuildRows consumes _pendingFocusName
+// once the children land. The same-dir case (file's parent === current
+// rootPath) bypasses that path because navigate() is a no-op on an unchanged
+// path, so we focus immediately here.
+//   depth === 0: only direct children of rootPath — the popup always navigates
+//   to the file's parent before emitting, so the picked file is guaranteed to
+//   be a depth-0 row in the CURRENT tree.
+function focusFuzzyResult(root, filename) {
+    root._pendingFocusName = filename;
+    for (var i = 0; i < root._rows.length; i++) {
+        if (root._rows[i].name === filename && root._rows[i].depth === 0) {
+            view.currentIndex = i;
+            view.positionViewAtIndex(i, ListView.Contain);
+            root._pendingFocusName = "";
+            return;
+        }
+    }
+}

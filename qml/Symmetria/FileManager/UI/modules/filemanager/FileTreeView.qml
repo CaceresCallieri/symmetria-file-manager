@@ -134,7 +134,16 @@ Item {
     readonly property var currentRow: (view.currentIndex >= 0 && view.currentIndex < _rows.length) ? _rows[view.currentIndex] : null
     readonly property var currentEntry: currentRow ? currentRow.entry : null
     readonly property int fileCount: _rows.length
-    onCurrentEntryChanged: if (windowState) windowState.syncImageCursor(currentEntry) // gate ci chord to images
+
+    // Keep WindowState's image-chord gate (the ci row) reconciled to this
+    // view's cursor. Three triggers are needed: cursor moves (onCurrentEntry),
+    // tab switch rebinds windowState (onWindowState — each tab's gate defaults
+    // false), and creation when toggling into the tree (Component.onCompleted —
+    // onCurrentEntryChanged does NOT fire for the initial value). No-op for the
+    // windowState-less embedded tree (IDE sidebar), which has no chords.
+    onCurrentEntryChanged: if (windowState) windowState.syncImageCursor(currentEntry)
+    onWindowStateChanged: if (windowState) windowState.syncImageCursor(currentEntry)
+    Component.onCompleted: if (windowState) windowState.syncImageCursor(currentEntry)
 
     // Positional props for RenamePopup — same contract MillerColumns exposes.
     // Y of the bottom edge of the current row, relative to FileTreeView root.
@@ -318,21 +327,7 @@ Item {
         // NOTE: the lazyExpand path is intentionally NOT re-armed here — no
         // current consumer combines lazyExpand:true with pathFilter. If one
         // does, add a TreeModel.kickLazyExpand(root) call after rebuildRows().
-        if (initialExpandDepth !== 0 && pathFilter) {
-            root._autoExpandActive = true;
-            root._autoExpandCeilingLogged = false;
-            root._autoExpandFanoutLogged = false;
-            root._autoExpandModelCeilingLogged = false;
-            for (const parent in root._models) {
-                const taken = root._autoExpandPending[parent] !== undefined
-                    ? root._autoExpandPending[parent]
-                    : 0;
-                TreeModel.autoExpandChildrenOf(root, parent, taken);
-            }
-            if (Object.keys(root._pending).length === 0) {
-                root._autoExpandActive = false;
-            }
-        }
+        TreeModel.rearmAutoExpandForFilter(root);
     }
 
     // compactScale changes the row pixel height, which moves the visible
@@ -386,25 +381,10 @@ Item {
                 Qt.callLater(() => view.forceActiveFocus());
         }
 
-        // Fuzzy finder picked a file in some directory. The popup emits this
-        // signal BEFORE calling navigate(parentPath) so we capture the name
-        // first; if the parent is reached via tree retarget, _rebuildRows
-        // consumes _pendingFocusName once the children land. The same-dir
-        // case (file's parent === current rootPath) bypasses that path because
-        // navigate() is a no-op on an unchanged path, so we focus immediately.
+        // Focus the fuzzy-finder's pick (or stash its name for rebuildRows when
+        // it lands under a not-yet-built parent). Mechanics in TreeModel.focusFuzzyResult.
         function onFuzzyFinderNavigated(filename: string): void {
-            root._pendingFocusName = filename;
-            // depth === 0: only direct children of rootPath — the popup always
-            // navigates to the file's parent before emitting this signal, so the
-            // picked file is guaranteed to be a depth-0 row in the CURRENT tree.
-            for (let i = 0; i < root._rows.length; i++) {
-                if (root._rows[i].name === filename && root._rows[i].depth === 0) {
-                    view.currentIndex = i;
-                    view.positionViewAtIndex(i, ListView.Contain);
-                    root._pendingFocusName = "";
-                    return;
-                }
-            }
+            TreeModel.focusFuzzyResult(root, filename);
         }
     }
 

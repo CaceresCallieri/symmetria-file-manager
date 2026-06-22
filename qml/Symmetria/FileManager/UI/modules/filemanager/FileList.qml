@@ -62,8 +62,11 @@ Item {
     onPreviewDirectoryEntriesChanged: FlashHandler.invalidateEntryCache()
 
     // Publish whether the cursor sits on an image so WindowState can gate the
-    // ci (image-to-clipboard) chord row to images only.
+    // ci (image-to-clipboard) chord row to images only. Synced on cursor move,
+    // on tab switch (onWindowStateChanged below), and at creation when toggling
+    // into Miller view (onCurrentEntryChanged does NOT fire for the initial value).
     onCurrentEntryChanged: if (windowState) windowState.syncImageCursor(currentEntry)
+    Component.onCompleted: if (windowState) windowState.syncImageCursor(currentEntry)
 
     // Save cursor before tab switch so it can be restored when returning
     Connections {
