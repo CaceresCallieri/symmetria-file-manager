@@ -167,13 +167,16 @@ ColumnLayout {
             return null;
         const code = (s + "").trim().charAt(0);
         switch (code) {
-        case "M": return { char: "M", color: FmTheme.gitStatus.modifiedAmber, tooltip: qsTr("Modified") };
-        case "A": return { char: "A", color: FmTheme.gitStatus.addedGreen,    tooltip: qsTr("Added") };
-        case "D": return { char: "D", color: FmTheme.gitStatus.deletedRed,    tooltip: qsTr("Deleted") };
-        case "R": return { char: "R", color: FmTheme.gitStatus.renamedOrange, tooltip: qsTr("Renamed") };
-        case "?": return { char: "?", color: FmTheme.gitStatus.untrackedBlue, tooltip: qsTr("Untracked") };
-        case "!": return { char: "!", color: FmTheme.gitStatus.ignoredGray,   tooltip: qsTr("Ignored") };
-        default:  return { char: code, color: FmTheme.palette.outline,        tooltip: s + "" };
+        case "M": return { char: "M", color: FmTheme.gitStatus.modifiedAmber,     tooltip: qsTr("Modified") };
+        case "T": return { char: "T", color: FmTheme.gitStatus.modifiedAmber,     tooltip: qsTr("Type changed") };
+        case "A": return { char: "A", color: FmTheme.gitStatus.addedGreen,        tooltip: qsTr("Added") };
+        case "D": return { char: "D", color: FmTheme.gitStatus.deletedRed,        tooltip: qsTr("Deleted") };
+        case "R": return { char: "R", color: FmTheme.gitStatus.renamedOrange,     tooltip: qsTr("Renamed") };
+        case "C": return { char: "C", color: FmTheme.gitStatus.renamedOrange,     tooltip: qsTr("Copied") };
+        case "?": return { char: "?", color: FmTheme.gitStatus.untrackedBlue,     tooltip: qsTr("Untracked") };
+        case "U": return { char: "U", color: FmTheme.gitStatus.conflictedMagenta, tooltip: qsTr("Conflicted") };
+        case "!": return { char: "!", color: FmTheme.gitStatus.ignoredGray,       tooltip: qsTr("Ignored") };
+        default:  return { char: code, color: FmTheme.palette.outline,            tooltip: s + "" };
         }
     }
 }
