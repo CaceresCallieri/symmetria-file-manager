@@ -157,18 +157,23 @@ ColumnLayout {
     // Map fff's git status string (porcelain-ish, e.g. "M ", "??", "A ") to the
     // GitStatusBadge `{char, color, tooltip}` shape. Returns null when there is
     // no status (badge hidden).
+    //
+    // Colours resolve to the operation-based `FmTheme.gitStatus.*` palette (NOT
+    // the clipboard `indicator.*`/`palette.*` tokens this used before 2026-06-27)
+    // so this surface renders git status identically to the IDE's badge provider
+    // (Main.qml `_colorForOperation`) — both key on the char and share one palette.
     function _gitStatusObj(s: var): var {
         if (!s || (s + "").trim().length === 0)
             return null;
         const code = (s + "").trim().charAt(0);
         switch (code) {
-        case "M": return { char: "M", color: FmTheme.indicator.cut,       tooltip: qsTr("Modified") };
-        case "A": return { char: "A", color: FmTheme.indicator.selection, tooltip: qsTr("Added") };
-        case "D": return { char: "D", color: FmTheme.palette.error,        tooltip: qsTr("Deleted") };
-        case "R": return { char: "R", color: FmTheme.indicator.yank,       tooltip: qsTr("Renamed") };
-        case "?": return { char: "?", color: FmTheme.palette.outline,      tooltip: qsTr("Untracked") };
-        case "!": return { char: "!", color: FmTheme.palette.outline,      tooltip: qsTr("Ignored") };
-        default:  return { char: code, color: FmTheme.palette.outline,     tooltip: s + "" };
+        case "M": return { char: "M", color: FmTheme.gitStatus.modifiedAmber, tooltip: qsTr("Modified") };
+        case "A": return { char: "A", color: FmTheme.gitStatus.addedGreen,    tooltip: qsTr("Added") };
+        case "D": return { char: "D", color: FmTheme.gitStatus.deletedRed,    tooltip: qsTr("Deleted") };
+        case "R": return { char: "R", color: FmTheme.gitStatus.renamedOrange, tooltip: qsTr("Renamed") };
+        case "?": return { char: "?", color: FmTheme.gitStatus.untrackedBlue, tooltip: qsTr("Untracked") };
+        case "!": return { char: "!", color: FmTheme.gitStatus.ignoredGray,   tooltip: qsTr("Ignored") };
+        default:  return { char: code, color: FmTheme.palette.outline,        tooltip: s + "" };
         }
     }
 }

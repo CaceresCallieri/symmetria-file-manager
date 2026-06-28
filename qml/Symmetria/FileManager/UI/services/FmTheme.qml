@@ -148,20 +148,35 @@ QtObject {
     // === Git status badge colors ===
     // Named palette consumed by GitStatusBadge. Intentionally NOT palette-derived
     // for the same reason as `indicator`: badge semantics must be stable across
-    // wallpaper changes (red = unstaged, green = staged is a learned convention
-    // — users shouldn't have to relearn it because the desktop tint shifted).
+    // wallpaper changes — a learned colour convention shouldn't shift because the
+    // desktop tint changed.
     //
-    // The FM does NOT decide which badge corresponds to which color — that's
-    // the statusProvider's job. The FM just exposes named slots so providers
-    // can pick coherent values without inventing hex literals.
+    // OPERATION-based grammar (NOT index-state): colour encodes the KIND of change
+    // (added / modified / deleted / renamed / …), keyed on the porcelain status
+    // CHAR by the statusProvider, NOT whether the change is staged. This matches
+    // VS Code / GitHub and — the reason for the 2026-06-27 switch from the old
+    // staged-green/unstaged-red scheme — keeps modified (amber) visually distinct
+    // from deleted (red), which the index-state scheme collapsed into one red. The
+    // staged/unstaged axis, when it matters, is carried by a separate surface (the
+    // IDE's Active Changes summary groups by side via dot icons, not badge colour).
+    //
+    // The FM does NOT decide which badge corresponds to which color — that's the
+    // statusProvider's job (IDE: Main.qml `_colorForOperation`; FM standalone:
+    // FuzzyFinderInfoPanel `_gitStatusObj` — both key on the char and resolve to
+    // these slots, so the two surfaces render git status identically). The FM just
+    // exposes named slots so providers avoid inventing hex literals.
     property QtObject gitStatus: QtObject {
-        property color unstagedRed: "#e06c75"      // modified or deleted in worktree
-        property color stagedGreen: "#98c379"      // staged add/modify/delete
-        property color untrackedBlue: "#61afef"    // new untracked files
-        property color renamedYellow: "#e5c07b"    // renames / copies
-        property color conflictedMagenta: "#c678dd" // merge conflicts
-        property color ignoredGray: "#5c6370"      // ignored (rarely rendered)
-        property color badgeText: "#1a1818"        // text on saturated background
+        property color addedGreen: "#98c379"        // added (A) — new tracked content
+        property color modifiedAmber: "#e0a93a"     // modified (M/T) — golden amber; deeper/warmer
+                                                    // than One-Dark's pale yellow (#e5c07b) so it
+                                                    // reads clearly as "amber" and stays distinct
+                                                    // from renamedOrange and the neutral fallback.
+        property color deletedRed: "#e06c75"        // deleted (D) — removed content
+        property color untrackedBlue: "#61afef"     // untracked (?) — not tracked yet
+        property color renamedOrange: "#d19a66"     // renamed/copied (R/C) — moved content
+        property color conflictedMagenta: "#c678dd" // conflicted (U) — merge conflicts
+        property color ignoredGray: "#5c6370"       // ignored (!) — rarely rendered
+        property color badgeText: "#1a1818"         // text on saturated background
         // Inline line-delta text colors. Distinct from staged/unstaged
         // badge fills (which are saturated for use as backgrounds) —
         // these are slightly muted so they read cleanly as TEXT on the
