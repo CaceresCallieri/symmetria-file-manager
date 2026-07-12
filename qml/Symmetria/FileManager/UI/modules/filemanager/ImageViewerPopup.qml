@@ -134,6 +134,7 @@ Loader {
             showHidden: Config.fileManager.showHidden
             sortBy: root.windowState ? root.windowState.sortBy : FileSystemModel.Alphabetical
             sortReverse: root.windowState ? root.windowState.sortReverse : false
+            watchChanges: true
         }
 
         // Resolves formats needing cached decode (rpgmv, icns…) in C++; normal

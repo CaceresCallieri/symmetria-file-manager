@@ -121,6 +121,7 @@ Item {
 
     FileOpener {
         id: fileOpener
+        windowState: root.windowState
     }
 
     // Re-sync when the current path changes (parent path may stay the same

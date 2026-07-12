@@ -887,12 +887,20 @@ function jumpToParent(root) {
     }
 }
 
+// A row's mimeType, or "" when its FileSystemEntry is somehow absent (falls
+// back to external open). Shared by activateFile() below and
+// TreeKeyHandler.js's Shift+O openExternal ctx function — the one place that
+// knows how to pull a MIME out of a tree row.
+function rowMimeType(row) {
+    return row.entry ? row.entry.mimeType : "";
+}
+
 // Single emit point for file activation — derives the MIME from the row's
 // FileSystemEntry so every activation path (Enter, l/Right, double-click)
 // carries it to FileOpener's in-app image routing. Falls back to "" (external
 // open) if the entry is somehow absent.
 function activateFile(root, row) {
-    root.fileActivated(row.path, row.entry ? row.entry.mimeType : "");
+    root.fileActivated(row.path, rowMimeType(row));
 }
 
 function activate(root, row) {

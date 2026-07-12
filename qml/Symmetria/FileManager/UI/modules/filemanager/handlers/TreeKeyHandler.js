@@ -75,7 +75,7 @@ function handleKey(event, root, view) {
             openExternal: function() {
                 var row = root.currentRow;
                 if (row && !row.isDir)
-                    root.openExternallyRequested(row.path, row.entry ? row.entry.mimeType : "");
+                    root.openExternallyRequested(row.path, TreeModel.rowMimeType(row));
             },
             halfPageCount: function() { return TreeModel.halfPageCount(); },
             nav: function(fn) { fn(); },  // tree: passthrough (no cursor-save, matching the old switch)
