@@ -48,10 +48,17 @@ void PdfDocumentModel::setSource(const QString& path) {
 }
 
 int PdfDocumentModel::pageCount() const {
+    // Locked reads: applyResult() writes document/pageSizes under this same
+    // mutex from the GUI thread. Both sides are GUI-thread-only today so this
+    // is currently uncontended, but PdfRenderContext is documented as the
+    // shared thread-safe handle — every access to its fields should honor
+    // that contract rather than relying on incidental thread confinement.
+    QMutexLocker locker(&m_context->mutex);
     return static_cast<int>(m_context->pageSizes.size());
 }
 
 bool PdfDocumentModel::ready() const {
+    QMutexLocker locker(&m_context->mutex);
     return m_context->document != nullptr;
 }
 
@@ -60,6 +67,7 @@ bool PdfDocumentModel::loading() const { return m_loading; }
 QString PdfDocumentModel::errorString() const { return m_error; }
 
 QSizeF PdfDocumentModel::pageSize(int page) const {
+    QMutexLocker locker(&m_context->mutex);
     if (page < 0 || static_cast<size_t>(page) >= m_context->pageSizes.size())
         return {};
     return m_context->pageSizes[static_cast<size_t>(page)];
@@ -72,9 +80,13 @@ std::shared_ptr<PdfRenderContext> PdfDocumentModel::renderContext() const {
 void PdfDocumentModel::applyResult(const LoadResult& result) {
     {
         // Swap under the render mutex — an in-flight PdfPageItem render holds
-        // the lock while rasterizing from the OLD document; the swap waits for
-        // it, and the old Document itself stays alive until that worker drops
-        // its shared_ptr copy.
+        // the lock for its whole call, so the swap blocks until that render
+        // finishes and cannot yank the Document out from under it. A worker
+        // that hasn't reached the lock yet does not hold a reference to the
+        // OLD Document at all (it only captured the shared PdfRenderContext,
+        // and reads `context->document` fresh once it acquires the lock) —
+        // safety here comes from that mutex ordering, not from the worker
+        // keeping the old shared_ptr alive.
         QMutexLocker locker(&m_context->mutex);
         m_context->document = result.document;
         m_context->pageSizes = result.pageSizes;
@@ -105,6 +117,12 @@ void PdfDocumentModel::loadDocument() {
         m_loading = true;
         emit loadingChanged();
     }
+    // Clear any stale error from a previous failed load now, not when the new
+    // result lands — errorString() is otherwise briefly wrong for a caller
+    // that reads it while loading==true (QML gates its error UI on
+    // !loading, so this is currently invisible, but the getter itself
+    // shouldn't lie).
+    m_error.clear();
 
     const auto capturedSource = m_source;
     m_watcher = new QFutureWatcher<LoadResult>(this);
