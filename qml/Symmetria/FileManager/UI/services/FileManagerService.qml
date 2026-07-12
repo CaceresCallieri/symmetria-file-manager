@@ -34,6 +34,12 @@ QtObject {
         clipboardMode = "";
     }
 
+    // === Detached process launching (shared utility) ===
+    // Not clipboard-specific despite living in this section — FileOpener's
+    // app launches (open()/execute()) route through detachedCommand() too.
+    // Kept here rather than moved to "Utilities" below because the GOTCHA
+    // context was discovered via the clipboard bug and clipboardCopyCommand()/
+    // clipboardCopyFileCommand() are still its heaviest consumers.
     // GOTCHA: anything spawned by this daemon lands in the symmetria-fm.service
     // cgroup, and the daemon deliberately exits when the last window closes
     // (main.cpp), so systemd's KillMode=control-group kills every child with it.

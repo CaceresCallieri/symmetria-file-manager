@@ -37,6 +37,9 @@ Item {
         _handlerCheck.start();
     }
 
+    // Direct script execution (e.g. .sh files) — bypasses the handler-check
+    // step below entirely and always launches via xdg-terminal-exec, since a
+    // script has no MIME-type default-handler .desktop entry to look up.
     function execute(path: string): void {
         _launchDetached(["xdg-terminal-exec", path]);
     }
