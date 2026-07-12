@@ -34,30 +34,37 @@ QtObject {
         clipboardMode = "";
     }
 
-    // GOTCHA: Wayland clipboards are served live by the copying client — the
-    // compositor holds no copy; whoever ran wl-copy must stay alive to answer
-    // paste requests. A plain wl-copy spawned from this daemon lands in the
-    // symmetria-fm.service cgroup, and the daemon deliberately exits when the
-    // last window closes (main.cpp), so systemd's KillMode=control-group
-    // killed the clipboard holder — "cc copied but paste is empty" whenever a
-    // copy was followed by closing the FM window (root cause of the 2026-06
-    // clipboard bug). systemd-run detaches the holder into its own transient
-    // user unit; --foreground stops wl-copy from forking (a forked child
-    // would end the transient unit and get cgroup-killed all the same), and
-    // --collect garbage-collects the unit once a later copy replaces the
-    // selection and wl-copy exits.
+    // GOTCHA: anything spawned by this daemon lands in the symmetria-fm.service
+    // cgroup, and the daemon deliberately exits when the last window closes
+    // (main.cpp), so systemd's KillMode=control-group kills every child with it.
+    // Two real bugs shared this root cause:
+    //   - clipboard (2026-06): Wayland clipboards are served live by the copying
+    //     client — the compositor holds no copy, so whoever ran wl-copy must stay
+    //     alive to answer paste requests. "cc copied but paste is empty" whenever
+    //     a copy was followed by closing the FM window.
+    //   - file opening (2026-07): viewers launched via xdg-open (swayimg, sioyek…)
+    //     died together with the FM window that spawned them.
+    // systemd-run detaches the child into its own transient user unit, out of
+    // the daemon's cgroup. As a bonus it returns as soon as the unit starts, so
+    // a tracked ShellRunner is freed immediately instead of staying busy for the
+    // child's whole lifetime (the old "can't open a second image" bug).
     //   --user      run in the user bus (not system)
-    //   --collect   auto-remove the transient unit after wl-copy exits
+    //   --collect   auto-remove the transient unit after the child exits
     //   --quiet     suppress the generated unit name from stderr
-    //   --foreground  (wl-copy flag) keep wl-copy in the foreground so it
-    //                 stays in the transient unit's cgroup; a forked child
-    //                 would escape the unit and be killed the same old way
-    //
-    // Both copy commands below share this launcher prefix.
-    readonly property var _clipboardLauncherPrefix: ["systemd-run", "--user", "--collect", "--quiet", "--"]
+    readonly property var _detachedLaunchPrefix: ["systemd-run", "--user", "--collect", "--quiet", "--"]
 
+    // Wrap an argv in the detached launcher. Every long-lived child the FM
+    // spawns (clipboard holders, file openers) must go through this — see the
+    // cgroup GOTCHA above.
+    function detachedCommand(argv: var): var {
+        return root._detachedLaunchPrefix.concat(argv);
+    }
+
+    // --foreground (wl-copy flag): keep wl-copy in the foreground so it stays
+    // in the transient unit's cgroup; a forked child would escape the unit and
+    // get cgroup-killed the same old way.
     function clipboardCopyCommand(text: string): var {
-        return root._clipboardLauncherPrefix.concat(["wl-copy", "--foreground", "--", text]);
+        return root.detachedCommand(["wl-copy", "--foreground", "--", text]);
     }
 
     // Copy a file's raw BYTES onto the clipboard under the given MIME type
@@ -70,7 +77,7 @@ QtObject {
     // the transient unit's cgroup tracks wl-copy directly (same --foreground
     // rationale as above — no surviving sh parent to escape the unit).
     function clipboardCopyFileCommand(mimeType: string, filePath: string): var {
-        return root._clipboardLauncherPrefix.concat([
+        return root.detachedCommand([
             "sh", "-c", 'exec wl-copy --foreground --type "$1" < "$2"',
             "sh", mimeType, filePath
         ]);
