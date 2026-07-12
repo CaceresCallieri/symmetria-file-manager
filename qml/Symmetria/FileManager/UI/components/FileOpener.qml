@@ -21,12 +21,17 @@ Item {
     // (keyboard-first UI prevents rapid concurrent calls), so no queue is needed.
     property string _pendingPath: ""
 
-    // Smart open: images go to the in-app viewer overlay (when a windowState is
-    // attached), everything else to the external default app. The Shift+O
-    // escape hatch calls openExternal() directly to bypass the in-app routing.
+    // Smart open: images and PDFs go to their in-app viewer overlays (when a
+    // windowState is attached), everything else to the external default app.
+    // The Shift+O escape hatch calls openExternal() directly to bypass the
+    // in-app routing.
     function open(path: string, mimeType: string): void {
         if (root.windowState && mimeType && mimeType.indexOf("image/") === 0) {
             root.windowState.requestImageViewer(path);
+            return;
+        }
+        if (root.windowState && mimeType === "application/pdf") {
+            root.windowState.requestPdfViewer(path);
             return;
         }
         root.openExternal(path, mimeType);

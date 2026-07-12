@@ -36,7 +36,7 @@ systemctl --user restart symmetria-fm
 - `CMAKE_INSTALL_PREFIX` defaults to `/usr` (via `CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT` guard) — combined with `INSTALL_QMLDIR=lib/qt6/qml`, the final path is `/usr/lib/qt6/qml/`
 - Pass `-DCMAKE_INSTALL_PREFIX=/custom/path` to override if needed
 
-**Build dependencies (Arch):** `qt6-base qt6-declarative syntax-highlighting libarchive qxlsx-qt6 freexl qt6-imageformats rust`
+**Build dependencies (Arch):** `qt6-base qt6-declarative syntax-highlighting libarchive qxlsx-qt6 freexl qt6-imageformats poppler-qt6 rust`
 
 The fuzzy finder links the Rust **`fff`** engine (MIT), vendored as a git submodule at `plugin/third_party/fff` (pinned commit) and built via **Corrosion** (fetched by CMake at configure time). A Rust toolchain (`rust`/`cargo`) is therefore required. `build-plugin.sh` runs `git submodule update --init` automatically; a fresh clone otherwise needs `git submodule update --init --recursive`. fff's native deps (libgit2 via `git2`, LMDB) are vendored by their `-sys` crates — no extra system packages. To bump fff: `git -C plugin/third_party/fff checkout <rev>` then commit the submodule pointer. After checkout, re-run `cmake -B build` from `plugin/` so Corrosion rebuilds against the new source tree.
 
@@ -51,13 +51,13 @@ cmake --build build --parallel $(nproc)
 QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
 ```
 
-Four test executables cover the async model classes: `FileSystemModelTest` (sorting, filtering, file watcher diffs), `ArchivePreviewModelTest` (entry caps, truncation, corruption handling), `SyntaxHighlightHelperTest` (highlighting output, binary detection, truncation), `FileInfoTest` (path → entry bridge). `QT_QPA_PLATFORM=offscreen` is required because `QTextDocument` and `QImageReader` need `QGuiApplication`.
+The test executables cover the async model classes — e.g. `FileSystemModelTest` (sorting, filtering, file watcher diffs), `ArchivePreviewModelTest` (entry caps, truncation, corruption handling), `SyntaxHighlightHelperTest` (highlighting output, binary detection, truncation), `FileInfoTest` (path → entry bridge), `PdfDocumentModelTest` (poppler load, per-page geometry, render widths, corrupt/encrypted errors; fixtures generated at runtime with `QPdfWriter` — no binary blobs in the repo) — plus Qt Quick Test suites for the pure-JS helpers (`tst_keyregistry`, `tst_chordbindings`, `tst_imageviewer`). `QT_QPA_PLATFORM=offscreen` is required because `QTextDocument` and `QImageReader` need `QGuiApplication`.
 
 To skip tests when doing a production build: `cmake -B build -DBUILD_TESTING=OFF`
 
 ### CI
 
-GitHub Actions runs on every push/PR to `main` (`.github/workflows/ci.yml`). The workflow builds the C++ plugin and runs the QTest suite on Ubuntu 24.04. Qt 6.9 is installed via `jurplel/install-qt-action`; KF6SyntaxHighlighting and QXlsx are built from source and cached. The Rust toolchain is installed via `dtolnay/rust-toolchain@stable`; the submodule is checked out with `submodules: recursive`; the Cargo registry is cached by `actions/cache`.
+GitHub Actions runs on every push/PR to `main` (`.github/workflows/ci.yml`). The workflow builds the C++ plugin and runs the QTest suite on Ubuntu 24.04. Qt 6.9 is installed via `jurplel/install-qt-action`; KF6SyntaxHighlighting, QXlsx, and poppler (Qt6 frontend) are built from source and cached — distro Qt-linked packages would mix two Qt ABIs in one process. The Rust toolchain is installed via `dtolnay/rust-toolchain@stable`; the submodule is checked out with `submodules: recursive`; the Cargo registry is cached by `actions/cache`.
 
 ### QML Changes
 
@@ -146,6 +146,7 @@ Model classes in C++ namespace `symmetria::filemanager::models`:
 | `PreviewImageHelper` | Image preview generation with background compositing + caching |
 | `FuzzyFinder` | Fuzzy file search backed by the Rust `fff` engine via its C ABI |
 | `AppIconProvider` | Resolves a `.desktop` id to a themed app-icon file path for the "Open With" menu via `IconThemeResolver::resolveApp`; cached per id |
+| `PdfDocumentModel` + `PdfPageItem` | In-app PDF viewer backend: async poppler-qt6 document handle + lazily-rasterized page item (see "In-app viewers" below) |
 
 **Icon resolution returns file paths, not `QIcon`s, by design.** `IconThemeResolver::resolve` (MIME/folder icons) and `IconThemeResolver::resolveApp` (application icons, the `apps/` context path) hand-roll XDG theme lookup to return the real SVG/PNG path on disk — because QML `Image { source: "file://..." }` renders an SVG source crisply, whereas `QIcon::fromTheme(...).pixmap()` would rasterize and lose the vector. This is why a new `.desktop` app entry resolves automatically without QML changes.
 
@@ -174,6 +175,15 @@ If the plugin is not installed, Symmetria Shell's wallpaper picker and file dial
   QML-side mime-string list — the old one silently rotted (it predated the
   `application/x-yaml` → `application/yaml` rename, which is why YAML stopped
   previewing).
+
+### In-App Viewers (images & PDFs)
+
+Enter on an image or PDF opens an **in-window modal overlay** (`ImageViewerPopup` / `PdfViewerPopup`, gated on `WindowState.modalImageViewer` / `modalPdfViewer`), NOT an external app or a new OS window. Non-derivable decisions:
+
+- **Overlay, never a `Window`** — the embeddable root (`FileManager.qml`) is a plain `Item`; in the IDE embed there is no window of our own to parent to, and Wayland offers no cross-app embedding. An overlay works in both hosts; a `Window` would break the IDE.
+- **PDF engine is poppler-qt6, not Qt PDF** — `qt6-pdf` is not in Arch's official repos (AUR/source only); poppler-qt6 is official. Do not "simplify" to `QtQuick.Pdf`/`PdfMultiPageView` without revisiting that packaging constraint. In CI, poppler is built from source against the workflow's Qt (same two-Qt-ABIs reason as KF6/QXlsx).
+- **`PdfPageItem` is a `QQuickPaintedItem`, not a `QQuickImageProvider`** — a provider needs a custom plugin class + `initializeEngine` hook; the painted item gets the document by direct property assignment and reuses the plugin's async + generation-counter pattern. Poppler is not thread-safe: renders serialize behind `PdfRenderContext`'s mutex, and workers capture that shared context so in-flight renders survive viewer destruction.
+- **Escape hatch**: `Shift+O` (registry row `open.external`) forces the external default app from any view; `o` inside a viewer does the same. Plain `o` was unavailable (tree's toggleExpand). `FileOpener.open()` only routes in-app when its optional `windowState` is set — windowState-less hosts (IDE sidebar tree) keep external-open behavior for everything.
 
 ### State Architecture
 

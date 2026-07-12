@@ -60,6 +60,7 @@ MillerColumns 1.0 modules/filemanager/MillerColumns.qml
 OpenWithView 1.0 modules/filemanager/OpenWithView.qml
 ParentPanel 1.0 modules/filemanager/ParentPanel.qml
 PathBar 1.0 modules/filemanager/PathBar.qml
+PdfViewerPopup 1.0 modules/filemanager/PdfViewerPopup.qml
 PreviewContent 1.0 modules/filemanager/PreviewContent.qml
 PreviewMetadata 1.0 modules/filemanager/PreviewMetadata.qml
 PreviewPanel 1.0 modules/filemanager/PreviewPanel.qml

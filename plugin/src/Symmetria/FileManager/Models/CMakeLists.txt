@@ -7,6 +7,8 @@ qt_add_qml_module(symmetria-filemanager-models
         iconthemeresolver.hpp iconthemeresolver.cpp
         appiconprovider.hpp appiconprovider.cpp
         previewimagehelper.hpp previewimagehelper.cpp
+        pdfdocumentmodel.hpp pdfdocumentmodel.cpp
+        pdfpageitem.hpp pdfpageitem.cpp
         icnsdecoder.hpp icnsdecoder.cpp
         syntaxhighlighthelper.hpp syntaxhighlighthelper.cpp
         archivepreviewmodel.hpp archivepreviewmodel.cpp
@@ -19,7 +21,8 @@ qt_add_qml_module(symmetria-filemanager-models
 )
 
 target_link_libraries(symmetria-filemanager-models PRIVATE
-    Qt::Core Qt::Qml Qt::Gui Qt::Concurrent Qt::Multimedia
+    Qt::Core Qt::Qml Qt::Quick Qt::Gui Qt::Concurrent Qt::Multimedia
+    PkgConfig::PopplerQt6
     KF6::SyntaxHighlighting
     PkgConfig::LibArchive
     QXlsx::QXlsx

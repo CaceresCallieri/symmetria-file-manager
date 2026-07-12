@@ -11,12 +11,16 @@ endif()
 set(INSTALL_QMLDIR "lib/qt6/qml" CACHE STRING "QML module install directory (relative to CMAKE_INSTALL_PREFIX)")
 
 # GuiPrivate needed because QXlsx links against Qt6::GuiPrivate
-find_package(Qt6 REQUIRED COMPONENTS Core Qml Gui Concurrent GuiPrivate Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Core Qml Quick Gui Concurrent GuiPrivate Multimedia)
 find_package(KF6SyntaxHighlighting REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LibArchive IMPORTED_TARGET libarchive REQUIRED)
 find_package(QXlsxQt6 REQUIRED)
 pkg_check_modules(FreeXL IMPORTED_TARGET freexl REQUIRED)
+# poppler-qt6 backs the in-app PDF viewer (PdfDocumentModel / PdfPageItem) —
+# chosen over the Qt PDF module because poppler-qt6 ships in Arch's official
+# repos while qt6-pdf does not (AUR/source only), keeping deps official-only.
+pkg_check_modules(PopplerQt6 IMPORTED_TARGET poppler-qt6 REQUIRED)
 
 # === Rust file-search engine (fff) via Corrosion ===
 # The fuzzy finder's backend is the MIT-licensed `fff` engine, vendored as a

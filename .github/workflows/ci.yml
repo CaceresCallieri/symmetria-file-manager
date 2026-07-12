@@ -10,6 +10,7 @@ env:
   QT_VERSION: "6.9.0"
   KF6_SYNTAX_TAG: "v6.12.0"
   QXLSX_TAG: "v1.5.0"
+  POPPLER_TAG: "poppler-25.07.0"
   DEPS_PREFIX: ${{ github.workspace }}/deps
 
 jobs:
@@ -57,6 +58,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libarchive-dev \
             libfreexl-dev \
+            libfreetype-dev \
+            libfontconfig1-dev \
+            libjpeg-turbo8-dev \
+            libopenjp2-7-dev \
+            libboost-container-dev \
             pkg-config \
             ninja-build \
             locales
@@ -67,7 +73,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.DEPS_PREFIX }}
-          key: deps-${{ env.QT_VERSION }}-kf6${{ env.KF6_SYNTAX_TAG }}-qxlsx${{ env.QXLSX_TAG }}
+          key: deps-${{ env.QT_VERSION }}-kf6${{ env.KF6_SYNTAX_TAG }}-qxlsx${{ env.QXLSX_TAG }}-${{ env.POPPLER_TAG }}
 
       - name: Build Extra CMake Modules (ECM)
         if: steps.deps-cache.outputs.cache-hit != 'true'
@@ -105,10 +111,42 @@ jobs:
           cmake --build QXlsx/build --parallel $(nproc)
           cmake --install QXlsx/build
 
+      - name: Build poppler (Qt6 frontend)
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        # Built from source (not Ubuntu's libpoppler-qt6-dev) for the same
+        # reason as KF6/QXlsx: the distro package links the SYSTEM Qt6, and
+        # mixing it with the install-qt-action Qt ${{ env.QT_VERSION }} would
+        # load two Qt copies into one process. Everything non-Qt6 is disabled.
+        run: |
+          git clone --depth 1 --branch ${{ env.POPPLER_TAG }} \
+            https://gitlab.freedesktop.org/poppler/poppler.git
+          cmake -G Ninja -B poppler/build -S poppler \
+            -DCMAKE_INSTALL_PREFIX=${{ env.DEPS_PREFIX }} \
+            -DCMAKE_PREFIX_PATH=${{ env.DEPS_PREFIX }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_QT6=ON \
+            -DENABLE_QT5=OFF \
+            -DENABLE_GLIB=OFF \
+            -DENABLE_CPP=OFF \
+            -DENABLE_UTILS=OFF \
+            -DENABLE_LIBCURL=OFF \
+            -DENABLE_NSS3=OFF \
+            -DENABLE_GPGME=OFF \
+            -DENABLE_LCMS=OFF \
+            -DENABLE_LIBTIFF=OFF \
+            -DENABLE_QT6_TESTS=OFF \
+            -DBUILD_TESTING=OFF \
+            -DTESTDATADIR=/tmp
+          cmake --build poppler/build --parallel $(nproc)
+          cmake --install poppler/build
+
       - name: Build plugin
         working-directory: plugin
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/deps/lib
+          # poppler-qt6 is discovered via pkg-config, not find_package — point
+          # it at the from-source install in the deps prefix.
+          PKG_CONFIG_PATH: ${{ github.workspace }}/deps/lib/pkgconfig
         run: |
           cmake -G Ninja -B build \
             -DCMAKE_INSTALL_PREFIX=/usr \

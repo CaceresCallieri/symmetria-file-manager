@@ -308,6 +308,7 @@ QtObject {
     readonly property int modalFuzzyFinder: 6
     readonly property int modalHelp: 7
     readonly property int modalImageViewer: 8
+    readonly property int modalPdfViewer: 9
 
     property int activeModal: modalNone
 
@@ -324,6 +325,8 @@ QtObject {
     // Absolute path of the image the in-app viewer opened on. The viewer
     // derives its folder strip (siblings, j/k order) from this path itself.
     property string imageViewerPath: ""
+    // Absolute path of the PDF the in-app viewer opened on.
+    property string pdfViewerPath: ""
 
     signal createCompleted(filename: string)
     signal renameCompleted(newName: string)
@@ -369,6 +372,12 @@ QtObject {
         activeModal = modalImageViewer;
     }
 
+    function requestPdfViewer(path: string): void {
+        // Same payload-before-activeModal ordering as requestImageViewer.
+        pdfViewerPath = path;
+        activeModal = modalPdfViewer;
+    }
+
     // Keyboard cheat-sheet (HelpPopup). No payload — the popup reads the
     // KeyRegistry directly, so this just flips the modal gate.
     function openHelp(): void {
@@ -384,6 +393,7 @@ QtObject {
         contextMenuTargetPath = "";
         contextMenuTargetMimeType = "";
         imageViewerPath = "";
+        pdfViewerPath = "";
     }
 
     // === Audio preview ===

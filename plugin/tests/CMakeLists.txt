@@ -46,6 +46,9 @@ target_link_libraries(PreviewImageHelperTest PRIVATE Qt6::Concurrent)
 
 add_model_test(AppIconProviderTest)
 
+add_model_test(PdfDocumentModelTest)
+target_link_libraries(PdfDocumentModelTest PRIVATE Qt6::Concurrent)
+
 add_model_test(ShellRunnerTest)
 
 add_model_test(FileWatcherTest)
