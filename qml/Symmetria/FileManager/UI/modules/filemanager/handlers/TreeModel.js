@@ -887,10 +887,18 @@ function jumpToParent(root) {
     }
 }
 
+// Single emit point for file activation — derives the MIME from the row's
+// FileSystemEntry so every activation path (Enter, l/Right, double-click)
+// carries it to FileOpener's in-app image routing. Falls back to "" (external
+// open) if the entry is somehow absent.
+function activateFile(root, row) {
+    root.fileActivated(row.path, row.entry ? row.entry.mimeType : "");
+}
+
 function activate(root, row) {
     if (!row) return;
     if (row.isDir) toggle(root, row.path);
-    else root.fileActivated(row.path);
+    else activateFile(root, row);
 }
 
 // onPathFilterChanged re-arm. pathFilter changes are frequent (a git-status

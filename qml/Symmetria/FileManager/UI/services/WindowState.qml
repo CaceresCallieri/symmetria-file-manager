@@ -307,6 +307,7 @@ QtObject {
     readonly property int modalZoxide: 5
     readonly property int modalFuzzyFinder: 6
     readonly property int modalHelp: 7
+    readonly property int modalImageViewer: 8
 
     property int activeModal: modalNone
 
@@ -320,6 +321,9 @@ QtObject {
     property bool renameIncludeExtension: false
     property string contextMenuTargetPath: ""
     property string contextMenuTargetMimeType: ""
+    // Absolute path of the image the in-app viewer opened on. The viewer
+    // derives its folder strip (siblings, j/k order) from this path itself.
+    property string imageViewerPath: ""
 
     signal createCompleted(filename: string)
     signal renameCompleted(newName: string)
@@ -357,6 +361,14 @@ QtObject {
         activeModal = modalFuzzyFinder;
     }
 
+    function requestImageViewer(path: string): void {
+        // Set the payload before activeModal — the Loader activates on
+        // activeModal, so the path must already be available when
+        // Component.onCompleted fires (same ordering as requestContextMenu).
+        imageViewerPath = path;
+        activeModal = modalImageViewer;
+    }
+
     // Keyboard cheat-sheet (HelpPopup). No payload — the popup reads the
     // KeyRegistry directly, so this just flips the modal gate.
     function openHelp(): void {
@@ -371,6 +383,7 @@ QtObject {
         renameIncludeExtension = false;
         contextMenuTargetPath = "";
         contextMenuTargetMimeType = "";
+        imageViewerPath = "";
     }
 
     // === Audio preview ===

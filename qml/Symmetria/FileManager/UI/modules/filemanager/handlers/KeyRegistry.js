@@ -166,6 +166,12 @@ var CORE = [
     { id: "nav.activate", keys: [Qt.Key_Return, Qt.Key_Enter], mods: "", keycap: "⏎",
       label: "Open / enter", icon: "subdirectory_arrow_left", group: "Navigation",
       run: function(ctx) { ctx.activateCurrent(); } },
+    // Escape hatch from in-app viewing: force the external default app for the
+    // current file. Shift+O (a layout-stable letter chord, per the symbol-keys
+    // rule) because plain `o` is the tree's toggleExpand.
+    { id: "open.external", keys: [Qt.Key_O], mods: "Shift", keycap: "⇧O",
+      label: "Open externally", icon: "open_in_new", group: "File",
+      run: function(ctx) { if (ctx.openExternal) ctx.openExternal(); } },
     { id: "nav.halfDown", keys: [Qt.Key_D], mods: "Ctrl", keycap: "⌃d",
       label: "Half-page down", icon: "keyboard_double_arrow_down", group: "Navigation",
       run: function(ctx) {
@@ -407,7 +413,7 @@ var TREE_ONLY = [
               if (!row.expanded) TreeModel.expand(ctx.root, row.path);
               else if (ctx.view.currentIndex + 1 < ctx.view.count) ctx.view.currentIndex++;
           } else {
-              ctx.root.fileActivated(row.path);
+              TreeModel.activateFile(ctx.root, row);
           }
       } },
     { id: "tree.toggleExpand", keys: [Qt.Key_O], mods: "", keycap: "o",

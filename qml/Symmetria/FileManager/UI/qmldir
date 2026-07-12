@@ -55,6 +55,7 @@ FuzzyFinderPopup 1.0 modules/filemanager/FuzzyFinderPopup.qml
 FuzzyFinderResultDelegate 1.0 modules/filemanager/FuzzyFinderResultDelegate.qml
 HelpPopup 1.0 modules/filemanager/HelpPopup.qml
 ImagePreview 1.0 modules/filemanager/ImagePreview.qml
+ImageViewerPopup 1.0 modules/filemanager/ImageViewerPopup.qml
 MillerColumns 1.0 modules/filemanager/MillerColumns.qml
 OpenWithView 1.0 modules/filemanager/OpenWithView.qml
 ParentPanel 1.0 modules/filemanager/ParentPanel.qml

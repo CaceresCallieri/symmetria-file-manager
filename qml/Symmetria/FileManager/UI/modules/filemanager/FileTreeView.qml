@@ -231,7 +231,14 @@ Item {
     // in a single pass — no per-delegate Connections object required.
     property int _statusVersion: 0
 
-    signal fileActivated(string path)
+    // mimeType rides along so the host's FileOpener can route images to the
+    // in-app viewer without re-stating the file (handlers that only care about
+    // the path can keep a single-parameter function(path) — QML ignores the
+    // extra argument).
+    signal fileActivated(string path, string mimeType)
+    // Shift+O escape hatch — the host should open in the external default app
+    // unconditionally, bypassing the in-app image viewer routing.
+    signal openExternallyRequested(string path, string mimeType)
     signal directoryChanged(string path)
     signal showHiddenToggleRequested()
     // Emitted after every user-driven mutation of `_expanded` so an outer

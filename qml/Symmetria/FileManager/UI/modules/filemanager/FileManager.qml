@@ -112,7 +112,8 @@ Item {
                     rootPath: tabManager.activeTab ? tabManager.activeTab.currentPath : Paths.home
                     showHidden: Config.fileManager.showHidden
                     windowState: tabManager.activeTab
-                    onFileActivated: function(path) { fmFileOpener.open(path, ""); }
+                    onFileActivated: function(path, mimeType) { fmFileOpener.open(path, mimeType); }
+                    onOpenExternallyRequested: function(path, mimeType) { fmFileOpener.openExternal(path, mimeType); }
                     onShowHiddenToggleRequested: Config.fileManager.showHidden = !Config.fileManager.showHidden
                 }
 
@@ -131,6 +132,7 @@ Item {
 
     FileOpener {
         id: fmFileOpener
+        windowState: tabManager.activeTab
     }
 
     // Modal overlays — render above the entire layout.
@@ -166,6 +168,11 @@ Item {
     HelpPopup {
         anchors.fill: parent
         windowState: tabManager.activeTab
+    }
+    ImageViewerPopup {
+        anchors.fill: parent
+        windowState: tabManager.activeTab
+        onOpenExternallyRequested: function(path, mimeType) { fmFileOpener.openExternal(path, mimeType); }
     }
 
     // Train zoxide's frecency database on every directory visit.

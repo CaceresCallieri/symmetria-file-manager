@@ -72,6 +72,11 @@ function handleKey(event, root, view) {
             clipboardCopyProcess: clipboardCopyProcess,
             services: { fileManager: FileManagerService, config: Config, paths: Paths },
             activateCurrent: function() { TreeModel.activate(root, root.currentRow); },
+            openExternal: function() {
+                var row = root.currentRow;
+                if (row && !row.isDir)
+                    root.openExternallyRequested(row.path, row.entry ? row.entry.mimeType : "");
+            },
             halfPageCount: function() { return TreeModel.halfPageCount(); },
             nav: function(fn) { fn(); },  // tree: passthrough (no cursor-save, matching the old switch)
             invalidateFlashCache: function() { TreeFlashHandler.invalidateEntryCache(); }
@@ -144,7 +149,7 @@ function handleKey(event, root, view) {
             if (!rowRight.expanded) TreeModel.expand(root, rowRight.path);
             else if (view.currentIndex + 1 < view.count) view.currentIndex++;
         } else {
-            root.fileActivated(rowRight.path);
+            TreeModel.activateFile(root, rowRight);
         }
         event.accepted = true;
         break;

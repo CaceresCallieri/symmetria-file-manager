@@ -11,11 +11,29 @@ Item {
     width: 0
     height: 0
 
+    // Optional window state — when attached (panel contexts), image opens route
+    // to the in-app viewer overlay instead of an external app. Hosts without a
+    // WindowState (e.g. the IDE's windowState-less embedded tree) leave it null
+    // and keep the external-open behavior for every type.
+    property WindowState windowState: null
+
     // Single-slot pending path — open() is called at most once per user keypress
     // (keyboard-first UI prevents rapid concurrent calls), so no queue is needed.
     property string _pendingPath: ""
 
+    // Smart open: images go to the in-app viewer overlay (when a windowState is
+    // attached), everything else to the external default app. The Shift+O
+    // escape hatch calls openExternal() directly to bypass the in-app routing.
     function open(path: string, mimeType: string): void {
+        if (root.windowState && mimeType && mimeType.indexOf("image/") === 0) {
+            root.windowState.requestImageViewer(path);
+            return;
+        }
+        root.openExternal(path, mimeType);
+    }
+
+    // Open in the user's external default app unconditionally.
+    function openExternal(path: string, mimeType: string): void {
         const resolved = _previewHelper.resolvePathForOpen(path);
         root._pendingPath = resolved;
         // _handlerCheck output contract (three cases):

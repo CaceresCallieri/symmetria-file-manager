@@ -25,6 +25,7 @@ function handleKey(event, root, view, pasteProcess, clipboardCopyProcess) {
         clipboardCopyProcess: clipboardCopyProcess,
         services: { fileManager: FileManagerService, config: Config, paths: Paths },
         activateCurrent: function() { root._activateCurrentItem(); },
+        openExternal: function() { root._openCurrentExternally(); },
         halfPageCount: function() { return _halfPageCount(view); },
         nav: function(fn) { root._saveCursorAndNavigate(fn); },
         invalidateFlashCache: function() { FlashHandler.invalidateEntryCache(); }

@@ -158,6 +158,13 @@ Item {
             fileOpener.open(root.currentEntry.path, root.currentEntry.mimeType);
     }
 
+    // Shift+O escape hatch — force the external default app, bypassing
+    // FileOpener.open()'s in-app image-viewer routing.
+    function _openCurrentExternally(): void {
+        if (root.currentEntry && !root.currentEntry.isDir)
+            fileOpener.openExternal(root.currentEntry.path, root.currentEntry.mimeType);
+    }
+
     Connections {
         target: root.windowState
 
@@ -413,6 +420,7 @@ Item {
 
     FileOpener {
         id: fileOpener
+        windowState: root.windowState
     }
 
     PasteRunner {

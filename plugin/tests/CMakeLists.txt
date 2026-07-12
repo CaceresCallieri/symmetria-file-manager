@@ -92,3 +92,21 @@ set_tests_properties(ChordBindingsTest PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     TIMEOUT 60
 )
+
+# --- QML image-viewer helpers test (Qt Quick Test) ---------------------------
+# Same hermetic pattern as KeyRegistryTest: imports ImageViewer.js + QtQuick/
+# QtTest only, never the UI module, so it runs in CI where the UI module isn't
+# installed.
+add_executable(ImageViewerTest tst_imageviewer.cpp)
+target_link_libraries(ImageViewerTest PRIVATE
+    Qt6::QuickTest
+    Qt6::Qml
+    Qt6::Gui
+)
+add_test(NAME ImageViewerTest
+    COMMAND ImageViewerTest -input "${CMAKE_CURRENT_SOURCE_DIR}/tst_imageviewer.qml"
+)
+set_tests_properties(ImageViewerTest PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 60
+)
