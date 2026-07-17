@@ -11,6 +11,7 @@
 #include <QQmlContext>
 #include <QQmlError>
 #include <QtDebug>
+#include <QtWebEngineQuick/qtwebenginequickglobal.h>
 
 #ifndef SYMMETRIA_FM_QML_PATH
 #error "SYMMETRIA_FM_QML_PATH must be defined by CMake — points at the host main.qml"
@@ -22,6 +23,12 @@
 
 int main(int argc, char* argv[])
 {
+    // Initialize WebEngine BEFORE QGuiApplication — it sets Qt::AA_ShareOpenGLContexts,
+    // which must be applied before the application object is constructed. Powers
+    // the HTML render preview (Ctrl+R); the WebEngineView itself is only ever
+    // instantiated on demand from QML. This is the canonical Qt6 ordering.
+    QtWebEngineQuick::initialize();
+
     QGuiApplication app(argc, argv);
     // quitOnLastWindowClosed is deliberately left at its default (true): the
     // daemon exits when the last FM window closes and systemd (Restart=always)

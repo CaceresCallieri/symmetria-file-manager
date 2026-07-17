@@ -376,6 +376,22 @@ QtObject {
     // === Audio preview ===
     signal audioPlaybackToggle()
 
+    // === HTML render preview (Ctrl+R) ===
+    // When true AND the previewed file is HTML, PreviewContent renders it in
+    // WebEngine instead of showing highlighted source. Reset whenever the
+    // previewed entry changes (PreviewContent.onEntryChanged) so each HTML file
+    // starts in cheap source view — spinning up Chromium only on explicit intent,
+    // never per j/k. Meaningful only in the Miller preview pane.
+    property bool htmlRenderActive: false
+
+    function toggleHtmlRender(): void {
+        htmlRenderActive = !htmlRenderActive;
+    }
+
+    function resetHtmlRender(): void {
+        htmlRenderActive = false;
+    }
+
     // === View mode (per-tab) ===
     // Standalone FM toggles between miller-columns and recursive tree via Ctrl-E.
     // Stored as int (mirrors the activeModal pattern) so WindowState stays

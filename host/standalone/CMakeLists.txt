@@ -8,7 +8,10 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "/usr" CACHE PATH "Install prefix" FORCE)
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Network)
+# WebEngineQuick powers the HTML render preview (Ctrl+R). It must be linked so
+# QtWebEngineQuick::initialize() is available in main(); the QML `import
+# QtWebEngine` resolves from Qt's default module path at runtime.
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Network WebEngineQuick)
 
 # Path containing Symmetria/FileManager/UI/qmldir — passed to engine
 # .addImportPath() at startup. In dev this points at the source tree's
@@ -29,7 +32,7 @@ qt_add_executable(symmetria-fm
 )
 
 target_link_libraries(symmetria-fm PRIVATE
-    Qt::Core Qt::Gui Qt::Qml Qt::Quick Qt::Network
+    Qt::Core Qt::Gui Qt::Qml Qt::Quick Qt::Network Qt::WebEngineQuick
 )
 
 target_compile_definitions(symmetria-fm PRIVATE

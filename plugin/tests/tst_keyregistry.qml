@@ -52,6 +52,7 @@ TestCase {
             navigate: function(p) { calls.push(["navigate", p]); },
             audioPlaybackToggle: function() { calls.push(["audio"]); },
             toggleViewMode: function() { calls.push(["toggleViewMode"]); },
+            toggleHtmlRender: function() { calls.push(["toggleHtmlRender"]); },
             openHelp: function() { calls.push(["openHelp"]); }
         };
         var fm = {
@@ -62,7 +63,8 @@ TestCase {
             pickerDirectory: opts.pickerDirectory || false,
             yank: function(p) { calls.push(["yank", p]); },
             cut: function(p) { calls.push(["cut", p]); },
-            cancelPickerMode: function() { calls.push(["cancelPickerMode"]); }
+            cancelPickerMode: function() { calls.push(["cancelPickerMode"]); },
+            isHtmlFile: function(m) { return m === "text/html" || m === "application/xhtml+xml"; }
         };
         var hasEntry = opts.currentEntry !== undefined ? opts.currentEntry
                                                        : { path: "/home/u/file", isDir: false, mimeType: "text/plain" };
@@ -239,6 +241,36 @@ TestCase {
         var b = KeyRegistry.matchBinding(_event(Qt.Key_N, 0), ctx);
         verify(b !== null);
         compare(b.id, "match.next");
+    }
+
+    // Ctrl+R HTML render toggle: matches only on an HTML entry, falls through
+    // otherwise, and yields to op.pickerSaveEdit in a save picker.
+    function test_ctrl_r_renders_html() {
+        var ctx = _ctx("miller", { currentEntry: { path: "/a.html", isDir: false, mimeType: "text/html" } });
+        var b = KeyRegistry.matchBinding(_event(Qt.Key_R, Qt.ControlModifier), ctx);
+        verify(b !== null, "Ctrl+R must match on an HTML entry");
+        compare(b.id, "miller.htmlRender");
+        verify(KeyRegistry.dispatch(_event(Qt.Key_R, Qt.ControlModifier), ctx), "Ctrl+R consumed on HTML");
+        var toggled = false;
+        for (var i = 0; i < ctx._calls.length; i++)
+            if (ctx._calls[i][0] === "toggleHtmlRender") toggled = true;
+        verify(toggled, "Ctrl+R must call toggleHtmlRender on an HTML entry");
+    }
+
+    function test_ctrl_r_falls_through_on_non_html() {
+        var ctx = _ctx("miller", { currentEntry: { path: "/a.txt", isDir: false, mimeType: "text/plain" } });
+        var b = KeyRegistry.matchBinding(_event(Qt.Key_R, Qt.ControlModifier), ctx);
+        verify(b === null, "Ctrl+R must fall through on a non-HTML file (not consumed)");
+    }
+
+    function test_ctrl_r_save_picker_wins() {
+        // Even on an HTML entry, a save picker's edit-name binding (earlier in
+        // CORE) takes Ctrl+R — the render toggle is secondary to active editing.
+        var ctx = _ctx("miller", { pickerMode: true, pickerSaveMode: true,
+            currentEntry: { path: "/a.html", isDir: false, mimeType: "text/html" } });
+        var b = KeyRegistry.matchBinding(_event(Qt.Key_R, Qt.ControlModifier), ctx);
+        verify(b !== null);
+        compare(b.id, "op.pickerSaveEdit");
     }
 
     // --- 3. dispatch() side effects (only ctx-pure / injectable run-bodies) -----

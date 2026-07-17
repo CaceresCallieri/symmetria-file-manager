@@ -36,7 +36,17 @@ systemctl --user restart symmetria-fm
 - `CMAKE_INSTALL_PREFIX` defaults to `/usr` (via `CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT` guard) — combined with `INSTALL_QMLDIR=lib/qt6/qml`, the final path is `/usr/lib/qt6/qml/`
 - Pass `-DCMAKE_INSTALL_PREFIX=/custom/path` to override if needed
 
-**Build dependencies (Arch):** `qt6-base qt6-declarative syntax-highlighting libarchive qxlsx-qt6 freexl qt6-imageformats libheif rust`
+**Build dependencies (Arch):** `qt6-base qt6-declarative syntax-highlighting libarchive qxlsx-qt6 freexl qt6-imageformats libheif qt6-webengine rust`
+
+`qt6-webengine` backs the **HTML render preview** (Ctrl+R). It is a hard build dep
+of the standalone host only: `host/standalone/main.cpp` calls
+`QtWebEngineQuick::initialize()` (which must run **before** `QGuiApplication` — it
+sets `Qt::AA_ShareOpenGLContexts`), and the host links `Qt::WebEngineQuick`. The
+QML side (`HtmlPreview.qml`, `import QtWebEngine`) only *instantiates* a
+`WebEngineView` when the Loader activates, so an **embedding host that has not
+called `QtWebEngineQuick::initialize()` cannot render** — importing the module is
+harmless, but instantiation needs the init. That is the one cross-host caveat for
+the IDE embedding: it must initialize WebEngine in its own `main()` to use Ctrl+R.
 
 `libheif` backs HEIC/HEIF preview: Arch's `qt6-imageformats` is built **without** libheif, so Qt has no native HEIF image plugin and `QImageReader::canRead()` returns false for `.heic`/`.heif`. Like `.icns` (which has its own `IcnsDecoder`), these are decoded by a custom `HeifDecoder` (`heifdecoder.cpp`, libheif → cache PNG) rather than handed to a QML `Image`, routed through `PreviewImageHelper`'s `needsCachedDecode` / `generateCachedPreview`.
 
@@ -176,6 +186,18 @@ If the plugin is not installed, Symmetria Shell's wallpaper picker and file dial
   QML-side mime-string list — the old one silently rotted (it predated the
   `application/x-yaml` → `application/yaml` rename, which is why YAML stopped
   previewing).
+- **HTML render toggle (`Ctrl+R`)** — an `.html`/`.xhtml` file previews as
+  highlighted **source** by default (it is `isText`), but `Ctrl+R` on the Miller
+  cursor flips `WindowState.htmlRenderActive`, routing it to `_typeHtmlRender` →
+  `HtmlPreview.qml`, a real **WebEngine** render. The toggle is **per-file**:
+  `PreviewContent.onEntryChanged` resets it, so Chromium spins up only on explicit
+  intent, never on plain j/k. Rendering is **sandboxed** — JS OFF by default
+  (`Config.fileManager.htmlPreviewJavaScript`), `localContentCanAccessRemoteUrls:
+  false` (the file cannot phone home), off-the-record/no-cache profile, link
+  navigation ignored. Only the Miller pane offers it (the finder info pane has no
+  key handler, so it always shows source there). The keybinding is
+  `miller.htmlRender` in `KeyRegistry.js`, `when()`-gated to HTML files so `Ctrl+R`
+  falls through on anything else and yields to `op.pickerSaveEdit` in a save picker.
 
 ### State Architecture
 

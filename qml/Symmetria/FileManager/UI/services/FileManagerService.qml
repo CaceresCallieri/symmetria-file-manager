@@ -223,6 +223,14 @@ QtObject {
         return mimeType.startsWith("audio/") || mimeType === "application/ogg";
     }
 
+    // HTML documents that the render preview (Ctrl+R) can display in WebEngine.
+    // Kept narrow: only genuine web documents, not every text/* type. text/html
+    // still classifies as isText (inherits text/plain) so it previews as source
+    // by default; this gate only decides whether the render TOGGLE is offered.
+    function isHtmlFile(mimeType: string): bool {
+        return mimeType === "text/html" || mimeType === "application/xhtml+xml";
+    }
+
     function isSpreadsheetFile(mimeType: string): bool {
         return [
             "application/vnd.ms-excel",

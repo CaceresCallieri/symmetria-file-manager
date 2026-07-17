@@ -37,6 +37,14 @@ Item {
     readonly property int _typeSpreadsheet: 7
     readonly property int _typeAudio: 8
     readonly property int _typeRemoteDir: 9
+    readonly property int _typeHtmlRender: 10
+
+    // HTML render toggle (Ctrl+R): an HTML file whose render mode is ON, driven by
+    // WindowState.htmlRenderActive. Gated on windowState existing — the finder
+    // info pane has no key handler to toggle it, so it always shows source there.
+    readonly property bool _htmlRenderActive: !!entry && !entry.isDir
+        && !!windowState && windowState.htmlRenderActive
+        && FileManagerService.isHtmlFile(entry.mimeType)
 
     readonly property int _previewType: {
         if (!entry)
@@ -56,6 +64,11 @@ Item {
             return _typeArchive;
         if (FileManagerService.isSpreadsheetFile(entry.mimeType))
             return _typeSpreadsheet;
+        // HTML with render mode ON → WebEngine render instead of source. Checked
+        // before the isText catch-all (HTML is isText), so toggling flips between
+        // _typeText (source) and _typeHtmlRender (rendered) for the same file.
+        if (_htmlRenderActive)
+            return _typeHtmlRender;
         // Text last — the catch-all for any non-binary file. `entry.isText` is
         // computed in C++ (MIME inheritance from text/plain + a content sniff for
         // unregistered/extensionless configs), so yaml/toml/csv/ini/etc. preview
@@ -93,6 +106,11 @@ Item {
     readonly property int spreadsheetTotalCols: spreadsheetLoader.item?.totalCols ?? 0
 
     readonly property string audioDuration: audioLoader.item?.audioDuration ?? ""
+
+    // Moving to a different file returns to cheap source view — render mode is
+    // per-file and deliberate (Ctrl+R), so Chromium never spins up on plain j/k.
+    // Toggling render does not change `entry`, so this does not fight the toggle.
+    onEntryChanged: if (windowState) windowState.resetHtmlRender()
 
     // --- Loaders: one preview per type, only the matching one active ---
 
@@ -259,6 +277,21 @@ Item {
         asynchronous: true
 
         sourceComponent: TextPreview {
+            entry: root.entry
+        }
+    }
+
+    // HTML render preview (Ctrl+R on an .html file) — real WebEngine render.
+    // Isolated in its own component so `import QtWebEngine` and the Chromium view
+    // only instantiate when this Loader activates, never on plain text preview.
+    Loader {
+        id: htmlRenderLoader
+
+        anchors.fill: parent
+        active: root._previewType === root._typeHtmlRender
+        asynchronous: true
+
+        sourceComponent: HtmlPreview {
             entry: root.entry
         }
     }

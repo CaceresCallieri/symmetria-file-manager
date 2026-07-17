@@ -345,6 +345,15 @@ var MILLER_ONLY = [
     { id: "miller.toggleHidden", keys: [Qt.Key_Period], mods: "*", keycap: ".",
       label: "Toggle hidden files", icon: "visibility", group: "View",
       run: function(ctx) { ctx.services.config.fileManager.showHidden = !ctx.services.config.fileManager.showHidden; ctx.services.config.save(); } },
+    // Render HTML in WebEngine vs. show highlighted source. when()-gated to HTML
+    // files so Ctrl+R falls through (not consumed) on anything else — and so it
+    // never clashes with op.pickerSaveEdit (also Ctrl+R, gated on pickerSaveMode,
+    // scanned earlier in CORE, so it wins in a save picker). See HtmlPreview.qml.
+    { id: "miller.htmlRender", keys: [Qt.Key_R], mods: "Ctrl", keycap: "⌃r",
+      label: "Render HTML preview", icon: "html", group: "View",
+      when: function(ctx) { return !!ctx.root.currentEntry
+          && ctx.services.fileManager.isHtmlFile(ctx.root.currentEntry.mimeType); },
+      run: function(ctx) { ctx.windowState.toggleHtmlRender(); } },
 
     // Search & jump
     { id: "miller.zoxide", keys: [Qt.Key_Z], mods: "", keycap: "z",
