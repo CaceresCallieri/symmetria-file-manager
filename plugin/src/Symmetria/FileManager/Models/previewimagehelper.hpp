@@ -52,6 +52,7 @@ private:
     void applyResolvedUrl(const QString& url);
     static bool needsCachedDecode(const QString& path);
     static bool isRpgmvFormat(const QString& path);
+    static bool isHeifFormat(const QString& path);
     static bool cacheIsOpenableArtifact(const QString& path);
     static QString cachedPreviewPathFor(const QString& sourcePath);
     static QString generateCachedPreview(const QString& sourcePath, const QString& cachePath);

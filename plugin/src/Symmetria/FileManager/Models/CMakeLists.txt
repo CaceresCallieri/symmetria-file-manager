@@ -8,6 +8,7 @@ qt_add_qml_module(symmetria-filemanager-models
         appiconprovider.hpp appiconprovider.cpp
         previewimagehelper.hpp previewimagehelper.cpp
         icnsdecoder.hpp icnsdecoder.cpp
+        heifdecoder.hpp heifdecoder.cpp
         syntaxhighlighthelper.hpp syntaxhighlighthelper.cpp
         archivepreviewmodel.hpp archivepreviewmodel.cpp
         spreadsheetpreviewmodel.hpp spreadsheetpreviewmodel.cpp
@@ -24,6 +25,7 @@ target_link_libraries(symmetria-filemanager-models PRIVATE
     PkgConfig::LibArchive
     QXlsx::QXlsx
     PkgConfig::FreeXL
+    PkgConfig::Libheif
     # Corrosion normalizes the crate target name `fff-c` -> `fff_c` (hyphens to
     # underscores); the CRATES filter in the top CMakeLists still uses `fff-c`.
     fff_c

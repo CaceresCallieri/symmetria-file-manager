@@ -17,6 +17,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(LibArchive IMPORTED_TARGET libarchive REQUIRED)
 find_package(QXlsxQt6 REQUIRED)
 pkg_check_modules(FreeXL IMPORTED_TARGET freexl REQUIRED)
+pkg_check_modules(Libheif IMPORTED_TARGET libheif REQUIRED)
 
 # === Rust file-search engine (fff) via Corrosion ===
 # The fuzzy finder's backend is the MIT-licensed `fff` engine, vendored as a

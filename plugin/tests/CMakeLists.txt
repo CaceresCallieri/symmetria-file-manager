@@ -44,6 +44,14 @@ target_link_libraries(FileInfoTest PRIVATE Qt6::Concurrent)
 add_model_test(PreviewImageHelperTest)
 target_link_libraries(PreviewImageHelperTest PRIVATE Qt6::Concurrent)
 
+add_model_test(HeifDecoderTest)
+# HeifDecoder::decodeToPng lives in the model lib (which links libheif privately),
+# so the test needs no direct libheif link. The fixture dir is baked in as a
+# compile define so the test finds sample.heic without a working-directory guess.
+target_compile_definitions(HeifDecoderTest PRIVATE
+    HEIF_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
+)
+
 add_model_test(AppIconProviderTest)
 
 add_model_test(ShellRunnerTest)

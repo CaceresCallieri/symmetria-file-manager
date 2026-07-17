@@ -107,9 +107,15 @@ CachedEntryData buildCachedEntryData(
         data.isVideo = data.mimeType.startsWith(QStringLiteral("video/"));
         data.isText = isTextLike(mime, path);
 
+        // Formats Qt cannot sniff/decode natively but which we render via a
+        // custom decoder in PreviewImageHelper (icns, RPGMV, and HEIF/HEIC —
+        // Arch's qt6-imageformats has no libheif plugin). Whitelist them so
+        // they route to the image preview instead of falling back.
         if (path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)
             || path.endsWith(QStringLiteral(".png_"), Qt::CaseInsensitive)
-            || path.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive)) {
+            || path.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive)
+            || path.endsWith(QStringLiteral(".heic"), Qt::CaseInsensitive)
+            || path.endsWith(QStringLiteral(".heif"), Qt::CaseInsensitive)) {
             data.isImage = true;
         } else {
             QImageReader reader(path);
@@ -129,7 +135,9 @@ FileSystemEntry::FileSystemEntry(const QString& path, const QString& relativePat
         if (m_fileInfo.isDir()) return false;
         if (m_path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)
             || m_path.endsWith(QStringLiteral(".png_"), Qt::CaseInsensitive)
-            || m_path.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive))
+            || m_path.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive)
+            || m_path.endsWith(QStringLiteral(".heic"), Qt::CaseInsensitive)
+            || m_path.endsWith(QStringLiteral(".heif"), Qt::CaseInsensitive))
             return true;
         return QImageReader(m_path).canRead();
       }())

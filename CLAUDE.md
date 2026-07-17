@@ -36,7 +36,9 @@ systemctl --user restart symmetria-fm
 - `CMAKE_INSTALL_PREFIX` defaults to `/usr` (via `CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT` guard) — combined with `INSTALL_QMLDIR=lib/qt6/qml`, the final path is `/usr/lib/qt6/qml/`
 - Pass `-DCMAKE_INSTALL_PREFIX=/custom/path` to override if needed
 
-**Build dependencies (Arch):** `qt6-base qt6-declarative syntax-highlighting libarchive qxlsx-qt6 freexl qt6-imageformats rust`
+**Build dependencies (Arch):** `qt6-base qt6-declarative syntax-highlighting libarchive qxlsx-qt6 freexl qt6-imageformats libheif rust`
+
+`libheif` backs HEIC/HEIF preview: Arch's `qt6-imageformats` is built **without** libheif, so Qt has no native HEIF image plugin and `QImageReader::canRead()` returns false for `.heic`/`.heif`. Like `.icns`, these are decoded by a custom `HeifDecoder` (`heifdecoder.cpp`, libheif → cache PNG) rather than handed to a QML `Image`. See "Preview Routing" below.
 
 The fuzzy finder links the Rust **`fff`** engine (MIT), vendored as a git submodule at `plugin/third_party/fff` (pinned commit) and built via **Corrosion** (fetched by CMake at configure time). A Rust toolchain (`rust`/`cargo`) is therefore required. `build-plugin.sh` runs `git submodule update --init` automatically; a fresh clone otherwise needs `git submodule update --init --recursive`. fff's native deps (libgit2 via `git2`, LMDB) are vendored by their `-sys` crates — no extra system packages. To bump fff: `git -C plugin/third_party/fff checkout <rev>` then commit the submodule pointer. After checkout, re-run `cmake -B build` from `plugin/` so Corrosion rebuilds against the new source tree.
 

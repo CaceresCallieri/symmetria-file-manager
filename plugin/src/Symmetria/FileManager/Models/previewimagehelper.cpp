@@ -1,5 +1,6 @@
 #include "previewimagehelper.hpp"
 #include "icnsdecoder.hpp"
+#include "heifdecoder.hpp"
 
 #include <qcryptographichash.h>
 #include <qdir.h>
@@ -141,7 +142,16 @@ bool PreviewImageHelper::needsCachedDecode(const QString& path) {
     return path.endsWith(QStringLiteral(".pdf"), Qt::CaseInsensitive)
         || path.endsWith(QStringLiteral(".rpgmvp"), Qt::CaseInsensitive)
         || path.endsWith(QStringLiteral(".png_"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive);
+        || path.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive)
+        || isHeifFormat(path);
+}
+
+// True for HEIF/HEIC containers (.heic / .heif). Qt has no native HEIF image
+// plugin on our target, so these are decoded via libheif into a cache PNG
+// rather than passed through to the QML Image (which would fail to load them).
+bool PreviewImageHelper::isHeifFormat(const QString& path) {
+    return path.endsWith(QStringLiteral(".heic"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".heif"), Qt::CaseInsensitive);
 }
 
 // Returns true for encrypted RPGMV game assets (.rpgmvp / .png_).
@@ -173,6 +183,9 @@ QString PreviewImageHelper::generateCachedPreview(const QString& sourcePath, con
 
     if (sourcePath.endsWith(QStringLiteral(".icns"), Qt::CaseInsensitive))
         return IcnsDecoder::extractLargestPng(sourcePath, cachePath);
+
+    if (isHeifFormat(sourcePath))
+        return HeifDecoder::decodeToPng(sourcePath, cachePath);
 
     // PDF — render first page with white background compositing
     QImageReader reader(sourcePath);
