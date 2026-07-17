@@ -28,12 +28,18 @@ Item {
 
     required property var entry  // FileSystemEntry-shaped | null
 
-    // file:// URL for the previewed path. encodeURI handles spaces; # and ? are
-    // escaped explicitly so filenames containing them aren't parsed as URL
-    // fragment/query. Empty string when there is no entry (WebEngine loads blank).
+    // file:// URL for the previewed path. A literal `%` in the name is escaped
+    // FIRST (before encodeURI, which does not touch `%` and would otherwise leave
+    // a stray `%NN`-looking sequence — so `50%.html` failed to load); encodeURI
+    // then handles spaces etc.; `#`/`?` are escaped last so a name containing them
+    // isn't parsed as URL fragment/query. Empty string → WebEngine loads blank.
     readonly property url _fileUrl: entry
-        ? "file://" + encodeURI(entry.path).replace(/#/g, "%23").replace(/\?/g, "%3F")
+        ? "file://" + encodeURI(entry.path.replace(/%/g, "%25"))
+            .replace(/#/g, "%23").replace(/\?/g, "%3F")
         : ""
+
+    // Load-error flag, flipped by the WebEngineView's onLoadingChanged below.
+    property bool _loadFailed: false
 
     WebEngineView {
         id: webView
@@ -45,15 +51,28 @@ Item {
         // through pages that assume white.
         backgroundColor: "white"
 
+        // Never take keyboard focus: the Miller list must keep it so Ctrl+R (exit
+        // render) and j/k (which reset render via onEntryChanged) always reach the
+        // view's Keys.onPressed and are not swallowed by Chromium. This is a
+        // preview, not an interactive browser surface.
+        activeFocusOnPress: false
+
         // Off-the-record, cache-less profile — the preview leaves no trace.
         profile: WebEngineProfile {
             offTheRecord: true
             httpCacheType: WebEngineProfile.NoCache
         }
 
+        // NOTE: WebEngine reads settings.* at page-LOAD time, so flipping the
+        // config below re-applies only on the next render (re-navigate / re-toggle),
+        // not to an already-loaded page. Fine here — the config is edited rarely.
         settings.javascriptEnabled: Config.fileManager.htmlPreviewJavaScript
         settings.localContentCanAccessRemoteUrls: false  // no phoning home
-        settings.localContentCanAccessFileUrls: true     // sibling css/img still load
+        // Sibling css/img/js load from disk. A hostile file CAN reference other
+        // local files (e.g. file:///~/.ssh/...), but with remote access AND JS
+        // both off there is no channel to exfiltrate them — accepted trade-off.
+        settings.localContentCanAccessFileUrls: true
+        settings.focusOnNavigationEnabled: false  // don't grab focus on load (see activeFocusOnPress)
         settings.javascriptCanOpenWindows: false
         settings.pluginsEnabled: false
         settings.screenCaptureEnabled: false
@@ -64,6 +83,14 @@ Item {
         onNavigationRequested: function(request) {
             if (request.navigationType !== WebEngineNavigationRequest.TypedNavigation)
                 request.action = WebEngineNavigationRequest.IgnoreRequest;
+        }
+
+        // Drives the error state below (file gone, decode failure, etc.).
+        onLoadingChanged: function(loadRequest) {
+            if (loadRequest.status === WebEngineView.LoadFailedStatus)
+                root._loadFailed = true;
+            else if (loadRequest.status === WebEngineView.LoadStartedStatus)
+                root._loadFailed = false;
         }
     }
 
@@ -76,17 +103,6 @@ Item {
     }
 
     // Error state — file gone, decode failure, etc.
-    property bool _loadFailed: false
-    Connections {
-        target: webView
-        function onLoadingChanged(loadRequest) {
-            if (loadRequest.status === WebEngineView.LoadFailedStatus)
-                root._loadFailed = true;
-            else if (loadRequest.status === WebEngineView.LoadStartedStatus)
-                root._loadFailed = false;
-        }
-    }
-
     Loader {
         anchors.centerIn: parent
         active: root._loadFailed

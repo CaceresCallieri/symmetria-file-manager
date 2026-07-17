@@ -38,15 +38,15 @@ systemctl --user restart symmetria-fm
 
 **Build dependencies (Arch):** `qt6-base qt6-declarative syntax-highlighting libarchive qxlsx-qt6 freexl qt6-imageformats libheif qt6-webengine rust`
 
-`qt6-webengine` backs the **HTML render preview** (Ctrl+R). It is a hard build dep
-of the standalone host only: `host/standalone/main.cpp` calls
-`QtWebEngineQuick::initialize()` (which must run **before** `QGuiApplication` — it
-sets `Qt::AA_ShareOpenGLContexts`), and the host links `Qt::WebEngineQuick`. The
-QML side (`HtmlPreview.qml`, `import QtWebEngine`) only *instantiates* a
-`WebEngineView` when the Loader activates, so an **embedding host that has not
-called `QtWebEngineQuick::initialize()` cannot render** — importing the module is
-harmless, but instantiation needs the init. That is the one cross-host caveat for
-the IDE embedding: it must initialize WebEngine in its own `main()` to use Ctrl+R.
+`qt6-webengine` backs the **HTML render preview** (Ctrl+R). It is a build/link dep
+of the standalone host (which must initialize WebEngine before `QGuiApplication` —
+see `host/standalone/main.cpp` for the ordering rationale) **and** a runtime dep of
+the UI panel itself, since `HtmlPreview.qml` does `import QtWebEngine`. The
+non-obvious cross-host caveat: importing the module is harmless, but instantiating
+a `WebEngineView` needs `QtWebEngineQuick::initialize()` to have run in the host's
+`main()`. So an **embedding host (e.g. the IDE) must initialize WebEngine itself**
+to use Ctrl+R — the panel only instantiates the view lazily on toggle, so a host
+that never calls it still loads fine and just can't render.
 
 `libheif` backs HEIC/HEIF preview: Arch's `qt6-imageformats` is built **without** libheif, so Qt has no native HEIF image plugin and `QImageReader::canRead()` returns false for `.heic`/`.heif`. Like `.icns` (which has its own `IcnsDecoder`), these are decoded by a custom `HeifDecoder` (`heifdecoder.cpp`, libheif → cache PNG) rather than handed to a QML `Image`, routed through `PreviewImageHelper`'s `needsCachedDecode` / `generateCachedPreview`.
 
@@ -187,17 +187,17 @@ If the plugin is not installed, Symmetria Shell's wallpaper picker and file dial
   `application/x-yaml` → `application/yaml` rename, which is why YAML stopped
   previewing).
 - **HTML render toggle (`Ctrl+R`)** — an `.html`/`.xhtml` file previews as
-  highlighted **source** by default (it is `isText`), but `Ctrl+R` on the Miller
-  cursor flips `WindowState.htmlRenderActive`, routing it to `_typeHtmlRender` →
-  `HtmlPreview.qml`, a real **WebEngine** render. The toggle is **per-file**:
-  `PreviewContent.onEntryChanged` resets it, so Chromium spins up only on explicit
-  intent, never on plain j/k. Rendering is **sandboxed** — JS OFF by default
-  (`Config.fileManager.htmlPreviewJavaScript`), `localContentCanAccessRemoteUrls:
-  false` (the file cannot phone home), off-the-record/no-cache profile, link
-  navigation ignored. Only the Miller pane offers it (the finder info pane has no
-  key handler, so it always shows source there). The keybinding is
-  `miller.htmlRender` in `KeyRegistry.js`, `when()`-gated to HTML files so `Ctrl+R`
-  falls through on anything else and yields to `op.pickerSaveEdit` in a save picker.
+  highlighted **source** by default (it is `isText`); `Ctrl+R` on the Miller cursor
+  flips it to a real **WebEngine** render via `HtmlPreview.qml`. Two non-obvious
+  design constraints: (1) the toggle is **per-file** (reset when the previewed
+  entry changes) so Chromium spins up only on deliberate intent, never per j/k —
+  do not make it sticky across files; (2) the render is deliberately **sandboxed**
+  (JS off by default, no remote loads, ephemeral profile) precisely so it is safe
+  to auto-render on a keystroke — the exact settings and *why* each one matters
+  live in `HtmlPreview.qml`'s header comment. Only the Miller pane offers it; the
+  finder info pane has no key handler, so it always shows source there. The
+  `Ctrl+R` binding and its gating/precedence live in `KeyRegistry.js` (see that
+  file's header, per the Keyboard Event Handling convention — not restated here).
 
 ### State Architecture
 
