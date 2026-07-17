@@ -262,6 +262,65 @@ private slots:
         // resolvePathForPreview must never generate the cache.
         QVERIFY(!QFileInfo::exists(cachePath));
     }
+
+    // -----------------------------------------------------------------------
+    // HEIF/HEIC routing
+    //
+    // Guards the classification seam: .heic/.heif must route through the
+    // cached-decode path (needsCachedDecode) so the preview pane shows the
+    // libheif-rendered PNG, yet must NOT be openable artifacts — opening
+    // launches the real viewer on the source, like PDF/ICNS. These use fake
+    // bytes (never decoded here) because resolvePathFor* only inspect the
+    // suffix and the cache; actual decode is covered by HeifDecoderTest.
+    // -----------------------------------------------------------------------
+
+    // Cache hit for HEIC: preview must return the cached PNG path — proves
+    // .heic is in needsCachedDecode.
+    void resolvePathForPreview_cachedHeic_returnsCachePath()
+    {
+        const QString heicPath = writeFile("photo.heic", "fake-heic");
+        QVERIFY(!heicPath.isEmpty());
+
+        const QString cachePath = expectedCachePathFor(heicPath);
+        QVERIFY(touchFile(cachePath));
+
+        const QString resolved = PreviewImageHelper::resolvePathForPreview(heicPath);
+        removeIfExists(cachePath);
+
+        QCOMPARE(resolved, cachePath);
+    }
+
+    // Cache miss for HEIF: preview returns the source path without generating
+    // the cache (also exercises the .heif suffix, not just .heic).
+    void resolvePathForPreview_uncachedHeif_returnsSourcePath()
+    {
+        const QString heifPath = writeFile("nocache.heif", "fake-heif");
+        QVERIFY(!heifPath.isEmpty());
+
+        const QString cachePath = expectedCachePathFor(heifPath);
+        removeIfExists(cachePath);
+
+        const QString resolved = PreviewImageHelper::resolvePathForPreview(heifPath);
+
+        QCOMPARE(resolved, heifPath);
+        QVERIFY(!QFileInfo::exists(cachePath));
+    }
+
+    // Opening a HEIC must launch the real viewer on the source, never the
+    // cached thumbnail — even when a cache entry exists (same policy as PDF).
+    void resolvePathForOpen_cachedHeic_returnsSourcePath()
+    {
+        const QString heicPath = writeFile("open.heic", "fake-heic");
+        QVERIFY(!heicPath.isEmpty());
+
+        const QString cachePath = expectedCachePathFor(heicPath);
+        QVERIFY(touchFile(cachePath));
+
+        const QString resolved = PreviewImageHelper::resolvePathForOpen(heicPath);
+        removeIfExists(cachePath);
+
+        QCOMPARE(resolved, heicPath);
+    }
 };
 
 QTEST_MAIN(PreviewImageHelperTest)
