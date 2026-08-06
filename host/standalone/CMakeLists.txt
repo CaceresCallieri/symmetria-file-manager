@@ -42,6 +42,15 @@ target_compile_definitions(symmetria-fm PRIVATE
 
 install(TARGETS symmetria-fm RUNTIME DESTINATION bin)
 
+# The .desktop entry ships with the binary, not with the portal backend: main.cpp
+# calls setDesktopFileName("symmetria-fm") and Qt6 registers that id with
+# org.freedesktop.portal.Registry on every startup. If no XDG applications dir
+# holds a matching file the portal answers "App info not found for ''" and the
+# FM's own portal requests stay anonymous. Basename, app_id and StartupWMClass
+# must all remain "symmetria-fm" — see the comments in symmetria-fm.desktop.
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../../symmetria-fm.desktop"
+        DESTINATION share/applications)
+
 # === symmetria-fm-cli — the CLI sender ===
 qt_add_executable(symmetria-fm-cli
     cli.cpp

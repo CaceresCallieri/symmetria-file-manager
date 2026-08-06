@@ -211,6 +211,34 @@ If the plugin is not installed, Symmetria Shell's wallpaper picker and file dial
 - `portal/symmetria_portal.py` — XDG Desktop Portal backend for system file dialogs.
 - Communication: Portal → `symmetria-fm-cli createPicker '<json>'` → QLocalSocket → daemon → QML picker window → FIFO → Portal → D-Bus response.
 
+**The app ID is a three-way contract.** `main.cpp` calls
+`setDesktopFileName("symmetria-fm")`; the installed
+`/usr/share/applications/symmetria-fm.desktop` must have that exact basename; and
+its `StartupWMClass` must match, because Qt derives the Wayland `app_id` from
+`desktopFileName()` — the same string the Hyprland `class:^(symmetria-fm)$`
+windowrule matches on. Break any leg and Qt's startup registration with
+`org.freedesktop.portal.Registry` fails with
+`Could not register app ID: App info not found for ''`, leaving the FM's *own*
+portal requests unattributable (no permission-store identity, no dialog
+parenting). The `.desktop` is installed by the **host** build
+(`host/standalone/CMakeLists.txt`), not by `install-portal.sh` — deliberately one
+owner so the two installers can't drift. Watch for a shadowing stale copy in
+`~/.local/share/applications/`, which takes precedence over `/usr/share`.
+
+**Portal startup can deadlock outside this repo.** `xdg-desktop-portal` builds its
+Settings proxy with a *synchronous* D-Bus activation of the GTK backend, and
+`portals.conf` must pin `Settings=gtk` because GTK is the only backend
+implementing that interface (hyprland.portal offers only
+Screenshot/ScreenCast/GlobalShortcuts/InputCapture). If the GTK backend isn't
+already running, that call burns the full 75 s D-Bus timeout, pushing total
+startup to ~88 s against systemd's 90 s `TimeoutStartSec` — and when it tips
+over, systemd kills the unit and *no* file dialog works system-wide, including
+ours. The fix is a systemd drop-in that orders the GTK backend first, and it
+lives in **dotfiles, not this repo**:
+`~/.dotfiles/.config/systemd/user/xdg-desktop-portal.service.d/gtk-preload.conf`.
+If pickers stop appearing, check `systemctl --user status xdg-desktop-portal`
+for `start operation timed out` before suspecting anything in `portal/`.
+
 ## Coding Conventions
 
 ### QML Property Ordering

@@ -32,6 +32,16 @@ sudo -A chmod 755 /usr/lib/symmetria/symmetria_portal.py
 echo "Installing portal definition..."
 sudo -A cp "$SCRIPT_DIR/symmetria.portal" /usr/share/xdg-desktop-portal/portals/symmetria.portal
 
+# 3b. Verify the .desktop entry is present. It is installed by the HOST build
+#     (host/standalone/CMakeLists.txt), not here — it belongs to the binary, and
+#     duplicating the copy in two installers would let the two drift. Without it
+#     Qt's portal registration fails ("App info not found for ''") and the FM's
+#     own portal requests stay anonymous.
+if [ ! -f /usr/share/applications/symmetria-fm.desktop ]; then
+    echo "WARNING: /usr/share/applications/symmetria-fm.desktop is missing."
+    echo "         Run: cmake --build host/standalone/build && sudo cmake --install host/standalone/build"
+fi
+
 # 4. Install D-Bus service file
 echo "Installing D-Bus service file..."
 sudo -A cp "$SCRIPT_DIR/org.freedesktop.impl.portal.desktop.symmetria.service" \
@@ -75,6 +85,7 @@ echo ""
 echo "To uninstall:"
 echo "  sudo -A rm /usr/lib/symmetria/symmetria_portal.py"
 echo "  sudo -A rm /usr/share/xdg-desktop-portal/portals/symmetria.portal"
+echo "  sudo -A rm /usr/share/applications/symmetria-fm.desktop  # installed by the host build"
 echo "  sudo -A rm /usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.symmetria.service"
 echo "  rm ~/.config/systemd/user/xdg-desktop-portal-symmetria.service"
 echo "  rm -rf ~/.local/share/symmetria/portal-venv"

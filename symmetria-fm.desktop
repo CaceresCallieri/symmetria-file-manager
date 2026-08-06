@@ -1,10 +1,20 @@
 [Desktop Entry]
 Name=Symmetria File Manager
-Comment=Keyboard-first file manager built on QuickShell
-Exec=qs ipc --any-display -c symmetria-fm call filemanager open ""
-Icon=symmetria-fm
+Comment=Keyboard-first file manager built on Qt6/QML
+# The daemon (symmetria-fm.service) is always running; the CLI just pokes it over
+# the QLocalSocket. `open` with no path is valid — cli.cpp substitutes an empty
+# initialPath — so %f being unset when launched from a launcher is fine.
+Exec=symmetria-fm-cli open %f
+# No symmetria-fm icon is shipped; system-file-manager is the freedesktop
+# standard name and resolves in every icon theme. Swap this the day we ship one.
+Icon=system-file-manager
 Type=Application
 Categories=System;FileManager;
 MimeType=inode/directory;
 Terminal=false
 StartupNotify=false
+# Matches the Wayland app_id, which Qt derives from desktopFileName() — set in
+# host/standalone/main.cpp to this file's basename. Keep the three in sync
+# (basename == app_id == StartupWMClass), otherwise the portal cannot resolve
+# the app info and the Hyprland `class:^(symmetria-fm)$` windowrule stops matching.
+StartupWMClass=symmetria-fm

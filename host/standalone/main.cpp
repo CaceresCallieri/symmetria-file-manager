@@ -38,6 +38,15 @@ int main(int argc, char* argv[])
     QGuiApplication::setApplicationName(QStringLiteral("symmetria-fm"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("File Manager"));
     QGuiApplication::setOrganizationName(QStringLiteral("Symmetria"));
+    // Must match the basename of the installed symmetria-fm.desktop (see
+    // portal/install-portal.sh). Qt6 registers every app with the XDG portal's
+    // org.freedesktop.portal.Registry at startup using this value as the app ID;
+    // without it Qt sends an empty id and every launch logs
+    //   "Could not register app ID: App info not found for ''".
+    // The portal needs a resolvable app ID to attribute requests in the
+    // permission store and to parent dialogs against the right window — so this
+    // is NOT cosmetic, even though the failure is non-fatal.
+    QGuiApplication::setDesktopFileName(QStringLiteral("symmetria-fm"));
 
     HostController controller;
     if (!controller.startServer()) {
