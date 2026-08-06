@@ -61,8 +61,8 @@ cd symmetria-file-manager
 # Build and install the C++ plugin
 ./build-plugin.sh
 
-# Install QuickShell config, icon, and desktop entry
-./install.sh --standalone
+# Install the host binaries, icon, desktop entry, and systemd unit
+./install.sh
 
 # Enable the systemd service
 cp symmetria-fm.service ~/.config/systemd/user/
@@ -121,7 +121,7 @@ To skip tests: `cmake -B build -DBUILD_TESTING=OFF`
 ### Opening the File Manager
 
 ```bash
-qs ipc --any-display -c symmetria-fm call filemanager open ""
+symmetria-fm-cli open ~/Downloads
 ```
 
 > Tip: bind this command to a key in your compositor config (e.g., `Super+E` in Hyprland's `keybinds.conf`).

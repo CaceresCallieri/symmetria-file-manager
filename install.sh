@@ -8,8 +8,8 @@
 #   /usr/lib/qt6/qml/Symmetria/FileManager/UI/      panel QML module
 #   /usr/bin/symmetria-fm                           daemon binary
 #   /usr/bin/symmetria-fm-cli                       IPC sender CLI
-#   ~/.local/share/icons/hicolor/512x512/apps/      app icon
-#   ~/.local/share/applications/                    .desktop entry
+#   /usr/share/icons/hicolor/512x512/apps/          app icon (via cmake --install)
+#   /usr/share/applications/                        .desktop entry (via cmake --install)
 #   ~/.config/systemd/user/symmetria-fm.service     systemd user unit
 #
 # After install:
@@ -38,18 +38,24 @@ cmake -S "$PROJECT_DIR/host/standalone" -B "$PROJECT_DIR/host/standalone/build" 
 cmake --build "$PROJECT_DIR/host/standalone/build" --parallel "$(nproc)"
 sudo cmake --install "$PROJECT_DIR/host/standalone/build"
 
-# 3. Install user-facing assets (icon, desktop entry).
+# 3. Refresh the caches for the assets step 2 just installed, and evict the
+#    user-scope copies older versions of this script used to create.
+#
+#    The .desktop entry and icon are installed by `cmake --install` above, into
+#    /usr/share. This script previously copied both into ~/.local/share as well.
+#    That is worse than redundant: the user scope takes XDG precedence, so the
+#    stale copy wins over the freshly built one and the entry silently stops
+#    tracking the repo (this is how an Exec= pointing at the retired QuickShell
+#    daemon survived the Qt6 migration). Remove any such leftovers rather than
+#    leaving them to shadow the real entry.
 echo
-echo "[3/4] Installing user assets…"
-ICON_DIR="$HOME/.local/share/icons/hicolor/512x512/apps"
-DESKTOP_DIR="$HOME/.local/share/applications"
-mkdir -p "$ICON_DIR" "$DESKTOP_DIR"
-cp "$PROJECT_DIR/assets/symmetria-fm.png" "$ICON_DIR/"
-cp "$PROJECT_DIR/symmetria-fm.desktop" "$DESKTOP_DIR/"
-gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
-update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
-echo "  Icon → $ICON_DIR/symmetria-fm.png"
-echo "  Desktop entry → $DESKTOP_DIR/symmetria-fm.desktop"
+echo "[3/4] Refreshing desktop/icon caches…"
+rm -f "$HOME/.local/share/applications/symmetria-fm.desktop" \
+      "$HOME/.local/share/icons/hicolor/512x512/apps/symmetria-fm.png"
+sudo update-desktop-database /usr/share/applications 2>/dev/null || true
+sudo gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
+echo "  Icon → /usr/share/icons/hicolor/512x512/apps/symmetria-fm.png"
+echo "  Desktop entry → /usr/share/applications/symmetria-fm.desktop"
 
 # 4. Install the systemd user unit.
 echo

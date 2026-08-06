@@ -42,14 +42,23 @@ target_compile_definitions(symmetria-fm PRIVATE
 
 install(TARGETS symmetria-fm RUNTIME DESTINATION bin)
 
-# The .desktop entry ships with the binary, not with the portal backend: main.cpp
-# calls setDesktopFileName("symmetria-fm") and Qt6 registers that id with
-# org.freedesktop.portal.Registry on every startup. If no XDG applications dir
-# holds a matching file the portal answers "App info not found for ''" and the
-# FM's own portal requests stay anonymous. Basename, app_id and StartupWMClass
-# must all remain "symmetria-fm" — see the comments in symmetria-fm.desktop.
+# The .desktop entry and its icon ship with the binary, not with the portal
+# backend: main.cpp calls setDesktopFileName("symmetria-fm") and Qt6 registers
+# that id with org.freedesktop.portal.Registry on every startup. If no XDG
+# applications dir holds a matching file the portal answers "App info not found
+# for ''" and the FM's own portal requests stay anonymous.
+#
+# This is the ONLY place either file is installed, and both go to the system
+# prefix. install.sh used to copy them into ~/.local/share instead; since the
+# user scope takes XDG precedence over /usr, that copy shadowed this one and
+# went stale on every rebuild. The icon has to follow the .desktop into the same
+# scope — leaving it user-scope would make Icon=symmetria-fm resolve only for
+# whoever ran install.sh and silently degrade to a generic glyph for everyone
+# else.
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../../symmetria-fm.desktop"
         DESTINATION share/applications)
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../../assets/symmetria-fm.png"
+        DESTINATION share/icons/hicolor/512x512/apps)
 
 # === symmetria-fm-cli — the CLI sender ===
 qt_add_executable(symmetria-fm-cli

@@ -29,24 +29,39 @@ int main(int argc, char* argv[])
     // instantiated on demand from QML. This is the canonical Qt6 ordering.
     QtWebEngineQuick::initialize();
 
-    QGuiApplication app(argc, argv);
-    // quitOnLastWindowClosed is deliberately left at its default (true): the
-    // daemon exits when the last FM window closes and systemd (Restart=always)
-    // brings up a fresh instance. This is a design decision — each session
-    // starts clean rather than resuming prior window state. Do NOT "fix" this
-    // by setting quitOnLastWindowClosed(false).
+    // All four are statics Qt documents as settable before the application
+    // object exists, and they are set here ON PURPOSE. Qt's unix platform
+    // integration reads desktopFileName() in its constructor: if it is already
+    // set it registers with the XDG portal immediately, otherwise it defers the
+    // registration onto the event loop and retries. Setting these after
+    // construction happens to work through that deferred path, but it makes
+    // correctness depend on a Qt implementation detail. Setting them first does
+    // not.
     QGuiApplication::setApplicationName(QStringLiteral("symmetria-fm"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("File Manager"));
     QGuiApplication::setOrganizationName(QStringLiteral("Symmetria"));
-    // Must match the basename of the installed symmetria-fm.desktop (see
-    // portal/install-portal.sh). Qt6 registers every app with the XDG portal's
+    // Must equal the basename of the installed symmetria-fm.desktop, which
+    // host/standalone/CMakeLists.txt installs. Qt6 registers every app with
     // org.freedesktop.portal.Registry at startup using this value as the app ID;
     // without it Qt sends an empty id and every launch logs
     //   "Could not register app ID: App info not found for ''".
     // The portal needs a resolvable app ID to attribute requests in the
     // permission store and to parent dialogs against the right window — so this
     // is NOT cosmetic, even though the failure is non-fatal.
+    //
+    // It also now decides the Wayland app_id: Qt prefers desktopFileName() and
+    // only falls back to the executable's basename. Both are "symmetria-fm"
+    // today, so nothing changed — but renaming this literal (e.g. to a
+    // reverse-DNS id like org.symmetria.FileManager) would silently change the
+    // app_id every compositor window rule matches on.
     QGuiApplication::setDesktopFileName(QStringLiteral("symmetria-fm"));
+
+    QGuiApplication app(argc, argv);
+    // quitOnLastWindowClosed is deliberately left at its default (true): the
+    // daemon exits when the last FM window closes and systemd (Restart=always)
+    // brings up a fresh instance. This is a design decision — each session
+    // starts clean rather than resuming prior window state. Do NOT "fix" this
+    // by setting quitOnLastWindowClosed(false).
 
     HostController controller;
     if (!controller.startServer()) {

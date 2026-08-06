@@ -39,7 +39,7 @@ sudo -A cp "$SCRIPT_DIR/symmetria.portal" /usr/share/xdg-desktop-portal/portals/
 #     own portal requests stay anonymous.
 if [ ! -f /usr/share/applications/symmetria-fm.desktop ]; then
     echo "WARNING: /usr/share/applications/symmetria-fm.desktop is missing."
-    echo "         Run: cmake --build host/standalone/build && sudo cmake --install host/standalone/build"
+    echo "         Run: $SCRIPT_DIR/../install.sh"
 fi
 
 # 4. Install D-Bus service file
@@ -85,7 +85,9 @@ echo ""
 echo "To uninstall:"
 echo "  sudo -A rm /usr/lib/symmetria/symmetria_portal.py"
 echo "  sudo -A rm /usr/share/xdg-desktop-portal/portals/symmetria.portal"
-echo "  sudo -A rm /usr/share/applications/symmetria-fm.desktop  # installed by the host build"
+echo "  # NOT /usr/share/applications/symmetria-fm.desktop — that belongs to the"
+echo "  # symmetria-fm binary, not to this portal backend. Removing it would break"
+echo "  # the file manager's own portal registration while it is still installed."
 echo "  sudo -A rm /usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.symmetria.service"
 echo "  rm ~/.config/systemd/user/xdg-desktop-portal-symmetria.service"
 echo "  rm -rf ~/.local/share/symmetria/portal-venv"

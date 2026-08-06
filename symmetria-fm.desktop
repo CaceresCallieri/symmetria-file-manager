@@ -3,18 +3,22 @@ Name=Symmetria File Manager
 Comment=Keyboard-first file manager built on Qt6/QML
 # The daemon (symmetria-fm.service) is always running; the CLI just pokes it over
 # the QLocalSocket. `open` with no path is valid — cli.cpp substitutes an empty
-# initialPath — so %f being unset when launched from a launcher is fine.
+# initialPath and main.qml falls back to $HOME — so %f being unset when launched
+# from a launcher is fine. %f and not %u: cli.cpp wants a plain path and would
+# use a file:// URI verbatim.
+TryExec=symmetria-fm-cli
 Exec=symmetria-fm-cli open %f
-# No symmetria-fm icon is shipped; system-file-manager is the freedesktop
-# standard name and resolves in every icon theme. Swap this the day we ship one.
-Icon=system-file-manager
+# assets/symmetria-fm.png, installed alongside this file by the host build.
+Icon=symmetria-fm
 Type=Application
-Categories=System;FileManager;
+Categories=System;FileTools;FileManager;
 MimeType=inode/directory;
 Terminal=false
 StartupNotify=false
-# Matches the Wayland app_id, which Qt derives from desktopFileName() — set in
-# host/standalone/main.cpp to this file's basename. Keep the three in sync
-# (basename == app_id == StartupWMClass), otherwise the portal cannot resolve
-# the app info and the Hyprland `class:^(symmetria-fm)$` windowrule stops matching.
+# Launcher/shell hint (GNOME Shell, docks, XWayland WM_CLASS) for associating an
+# already-open window with this entry. It does NOT drive Hyprland's window rules:
+# those match the Wayland app_id, which Qt derives from setDesktopFileName() in
+# host/standalone/main.cpp. Editing this key to fix a windowrule will do nothing.
+# Keep all three strings identical anyway — the portal resolves app info by the
+# .desktop basename, so drift there is what actually breaks registration.
 StartupWMClass=symmetria-fm

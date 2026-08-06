@@ -211,33 +211,30 @@ If the plugin is not installed, Symmetria Shell's wallpaper picker and file dial
 - `portal/symmetria_portal.py` — XDG Desktop Portal backend for system file dialogs.
 - Communication: Portal → `symmetria-fm-cli createPicker '<json>'` → QLocalSocket → daemon → QML picker window → FIFO → Portal → D-Bus response.
 
-**The app ID is a three-way contract.** `main.cpp` calls
-`setDesktopFileName("symmetria-fm")`; the installed
-`/usr/share/applications/symmetria-fm.desktop` must have that exact basename; and
-its `StartupWMClass` must match, because Qt derives the Wayland `app_id` from
-`desktopFileName()` — the same string the Hyprland `class:^(symmetria-fm)$`
-windowrule matches on. Break any leg and Qt's startup registration with
-`org.freedesktop.portal.Registry` fails with
-`Could not register app ID: App info not found for ''`, leaving the FM's *own*
-portal requests unattributable (no permission-store identity, no dialog
-parenting). The `.desktop` is installed by the **host** build
-(`host/standalone/CMakeLists.txt`), not by `install-portal.sh` — deliberately one
-owner so the two installers can't drift. Watch for a shadowing stale copy in
-`~/.local/share/applications/`, which takes precedence over `/usr/share`.
-
-**Portal startup can deadlock outside this repo.** `xdg-desktop-portal` builds its
-Settings proxy with a *synchronous* D-Bus activation of the GTK backend, and
-`portals.conf` must pin `Settings=gtk` because GTK is the only backend
-implementing that interface (hyprland.portal offers only
-Screenshot/ScreenCast/GlobalShortcuts/InputCapture). If the GTK backend isn't
-already running, that call burns the full 75 s D-Bus timeout, pushing total
-startup to ~88 s against systemd's 90 s `TimeoutStartSec` — and when it tips
-over, systemd kills the unit and *no* file dialog works system-wide, including
-ours. The fix is a systemd drop-in that orders the GTK backend first, and it
-lives in **dotfiles, not this repo**:
-`~/.dotfiles/.config/systemd/user/xdg-desktop-portal.service.d/gtk-preload.conf`.
-If pickers stop appearing, check `systemctl --user status xdg-desktop-portal`
-for `start operation timed out` before suspecting anything in `portal/`.
+**The app ID is a three-way contract** — `host/standalone/main.cpp`'s
+`setDesktopFileName()` value == the installed `.desktop` basename == that file's
+`StartupWMClass`. Only the first two are load-bearing, and they fail differently:
+basename drift breaks Qt's `org.freedesktop.portal.Registry` registration
+(`Could not register app ID: App info not found for '<id>'` — the id is empty
+only when `setDesktopFileName` is absent entirely). `StartupWMClass` is merely a
+launcher/XWayland hint and drives **nothing** here — do not edit it to fix a
+window rule. What a compositor rule actually matches is the Wayland `app_id`,
+which Qt takes from `setDesktopFileName()` and only otherwise falls back to the
+executable's basename; both are `symmetria-fm` today, so renaming that literal
+(say, to a reverse-DNS id) would silently change the `app_id` too. Why any of
+it is load-bearing: see the comment above the call in `main.cpp`. The `.desktop`
+and its icon ship with the **host** build — the only installer that places them,
+and it targets `/usr`, because a `~/.local/share` copy takes XDG precedence and
+goes stale —
+`cmake --build host/standalone/build && sudo cmake --install host/standalone/build`.
+Verify with `journalctl --user -u symmetria-fm --invocation=0 | grep "app ID"`: a
+healthy start logs nothing. The `--invocation=0` scoping is load-bearing —
+without it the query also matches the hundreds of pre-fix failures still in the
+journal and looks like a regression. If it does log, check for a shadowing copy
+first
+(`ls ~/.local/share/applications/symmetria-fm.desktop`) — `~/.local/share` takes
+XDG precedence over `/usr/share`. No Hyprland windowrule matches this class
+today; see Critical Pitfalls → *Wayland focus on Hyprland* before adding one.
 
 ## Coding Conventions
 
@@ -428,7 +425,9 @@ Use `FileSystemModel.Alphabetical`, `.Modified`, `.Size`, `.Extension`, `.Natura
 
 **QFileSystemWatcher directory watch is deaf to in-place content writes** — Qt's directory inotify mask tracks creation/deletion/rename/attribute changes but **omits `IN_MODIFY`/`IN_CLOSE_WRITE`**, so a file that grows on disk *after* it was first listed emits **no `directoryChanged` at all**. This bites downloads streamed straight to their final name (`curl -O`, `wget`, `yt-dlp`, "Save image as") — not temp-file-then-rename downloads (Firefox/Chrome), whose final name appears already full-size via `IN_MOVED_TO`. Compounded by `FileSystemEntry` holding an immutable `QFileInfo` stat'd once at construction, and `FileSystemModel`'s diff historically comparing only the *set of paths*, the symptom was a file stuck at **0 bytes with no preview** until re-navigation rebuilt the entries. Fix (in `FileSystemModel`, see those functions for mechanics): `syncFileWatches()` adds a per-file watch so `fileChanged` fires on growth, debounced into a rescan by `onFileChanged()`; the background diff also rebuilds same-path size/mtime changes as remove+add (keeping entries immutable snapshots). Bounded deliberately — per-file watches are **non-recursive only** and capped at `kMaxFileWatches` to protect the inotify budget. Regression test: `growingFileRefreshesSize`.
 
-**Wayland focus on Hyprland** — Without `WlrKeyboardFocus.Exclusive` (which only existed under QuickShell's wlr-layer-shell), the picker window relies on `Qt.Dialog | Qt.WindowStaysOnTopHint + requestActivate()` to claim focus. If Hyprland's bindings still swallow keys destined for the picker, ship a `windowrulev2 = float, class:^(symmetria-fm)$` rule.
+**Wayland focus on Hyprland** — Without `WlrKeyboardFocus.Exclusive` (which only existed under QuickShell's wlr-layer-shell), the picker window relies on `Qt.Dialog | Qt.WindowStaysOnTopHint + requestActivate()` to claim focus. If Hyprland's bindings still swallow keys destined for the picker, ship a `windowrule = float, match:class ^(symmetria-fm)$` rule. **None is shipped today** — the class it would match is the app ID contract described under Service & Portal, so the two must be changed together. (Note the syntax: this Hyprland config uses the current `windowrule = <action>, match:<selector>` form, not the older `windowrulev2 = <action>,<selector>`.)
+
+**Portal startup stalls outside this repo** — `xdg-desktop-portal` activates the GTK Settings backend *synchronously* at startup (GTK is the only backend implementing that interface). If GTK isn't already running, the call burns a 75 s D-Bus timeout and systemd can kill the unit — and then *no* file dialog works system-wide, ours included, so the symptom looks like our bug. Check `systemctl --user status xdg-desktop-portal` for `start operation timed out` **before** suspecting anything in `portal/`. The fix is a systemd drop-in that lives in **dotfiles, not this repo** — `~/.dotfiles/.config/systemd/user/xdg-desktop-portal.service.d/gtk-ordering.conf` (measurements and full rationale in its header). If it is missing, re-stow from `~/.dotfiles` and run `systemctl --user daemon-reload`; confirm with `systemctl --user cat xdg-desktop-portal`. Related: `~/.config/xdg-desktop-portal/portals.conf` pins `Settings=gtk` and is tracked by **neither** repo — machine-local state a reinstall loses silently.
 
 **QML Loader quirks** — `anchors.margins` silently fails inside Loader `sourceComponent` blocks. Always use explicit x/y/width/height positioning and explicit imports inside Loaders. See `QUIRKS.md` for details.
 
