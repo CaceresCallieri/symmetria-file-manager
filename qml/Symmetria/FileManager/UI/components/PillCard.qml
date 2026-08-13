@@ -23,16 +23,19 @@ PillSurface {
 
     radius: FmTheme.rounding.lg
 
+    // ⚠ EVERY SHADOW ALPHA BELOW IS DELIBERATELY 0 — the flat-aesthetic move
+    // shared with the Symmetria IDE. Read the neutralization note in
+    // PillSurface.qml before changing anything here; historical alphas were
+    // dark 0.28, light 0.07, inner 0.03.
     darkShadowOffsetX: 3
     darkShadowOffsetY: 4
     darkShadowBlur: 14
-    darkShadowAlpha: 0.28
+    darkShadowAlpha: 0.0
 
     lightShadowOffsetX: -3
     lightShadowOffsetY: -3
     lightShadowBlur: 11
-    lightShadowAlpha: 0.07
+    lightShadowAlpha: 0.0
 
-    // Bottom inner-shadow visible on cards (off on pills) → embedded-panel feel.
-    innerShadowAlpha: 0.03
+    innerShadowAlpha: 0.0
 }

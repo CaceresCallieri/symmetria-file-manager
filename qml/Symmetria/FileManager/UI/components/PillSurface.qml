@@ -69,22 +69,34 @@ Item {
     // a state change, without re-stating the per-shadow alpha constants.
     property bool elevated: true
 
-    // --- Two-shadow convex depth (claymorphic) -----------------------------
+    // --- Two-shadow convex depth (claymorphic — NEUTRALIZED) ---------------
+    // ⚠ EVERY SHADOW ALPHA BELOW IS DELIBERATELY 0. The File Manager and the
+    // Symmetria IDE are moving to a flat aesthetic together; see the IDE's
+    // `docs/flat-aesthetic-plan.md`. Do NOT "restore" the historical values —
+    // the flatness is the intent, not a regression.
+    //
+    // The OFFSETS and BLURS keep their historical values on purpose: they are
+    // inert while the alphas are 0 (a fully transparent shadow paints nothing
+    // regardless of geometry), and keeping them makes the clay look
+    // recoverable by editing three numbers here plus three in PillCard if the
+    // direction is reversed mid-flight. The plan's last phase deletes the
+    // shadow machinery outright, and the geometry goes with it.
+    //
+    // Historical alphas: dark 0.40, light 0.10, highlight 0.08.
     property real darkShadowOffsetX: 2
     property real darkShadowOffsetY: 3
     property real darkShadowBlur: 12
-    property real darkShadowAlpha: 0.40
+    property real darkShadowAlpha: 0.0
 
     property real lightShadowOffsetX: -2
     property real lightShadowOffsetY: -2
     property real lightShadowBlur: 8
-    property real lightShadowAlpha: 0.10
+    property real lightShadowAlpha: 0.0
 
-    // --- Inner rim highlight (clay-derived) --------------------------------
-    // Visible top rim by default; the bottom inner shadow stays off (heavy
-    // bottom-inner shadow makes clay feel dated). Consumers wanting the full
-    // "embedded panel" feel can raise innerShadowAlpha.
-    property real highlightAlpha: 0.08
+    // --- Inner rim highlight (clay-derived — NEUTRALIZED) ------------------
+    // The top rim was the single cue that most distinguished clay from a flat
+    // matte capsule, so it is the first thing to go. See the note above.
+    property real highlightAlpha: 0.0
     property real innerShadowAlpha: 0.0
 
     // Default slot: children reparent into the body and clip-free overlay the
