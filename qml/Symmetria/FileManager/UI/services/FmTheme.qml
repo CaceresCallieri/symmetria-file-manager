@@ -230,23 +230,21 @@ QtObject {
     }
 
     // === Overlay tokens ===
-    // `subtle` and `emphasis` are primarily EDGE tokens — panel borders and
-    // dividers (MillerColumns, ContextMenu, HelpPopup). `zebra` is a FILL token
-    // for alternating list rows, split off from `subtle` during the flat move
-    // because the two want different things at the same alpha: a 6% white edge
-    // over a near-black base reads correctly, while a 6% white FILL across a
-    // whole row reads as a banded stripe.
+    // Panel borders and dividers (MillerColumns, ContextMenu, HelpPopup), plus
+    // the fill of small swatches like the keycap badges in
+    // ContextMenuActionsView and HelpPopup.
     //
-    // The split is by AREA, not strictly by role: `subtle` is also the fill of
-    // small swatches — the keycap badges in ContextMenuActionsView and
-    // HelpPopup — and that is deliberate. A 24px badge at 6% reads as a chip;
-    // it is the full-row width that turns the same value into a stripe.
+    // ⚠ There is deliberately NO alternating-row token. A `zebra` one existed
+    // briefly during the flat-aesthetic move, at a third of `subtle`'s alpha,
+    // because a 6% white FILL across a full row read as a banded stripe over
+    // the near-black base where the same 6% is correct as an EDGE. The striping
+    // was then dropped from the file tree and the Miller list altogether (user
+    // decision), which left the token with no consumer. Do not reintroduce one
+    // without reintroducing the striping — see the notes in FileTreeRow.qml and
+    // FileListItem.qml.
     property QtObject overlay: QtObject {
         property color subtle: Qt.alpha("#ffffff", 0.06)
         property color emphasis: Qt.alpha("#ffffff", 0.10)
-        // Alternating-row tint. Deliberately at the threshold of perception:
-        // it should help the eye track a long row, not stripe the list.
-        property color zebra: Qt.alpha("#ffffff", 0.03)
     }
 
     // === Misc ===

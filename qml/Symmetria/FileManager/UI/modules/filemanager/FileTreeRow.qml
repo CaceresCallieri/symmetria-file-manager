@@ -41,19 +41,13 @@ Item {
     width: ListView.view ? ListView.view.width : 0
     implicitHeight: Config.fileManager.sizes.itemHeight * root.compactScale
 
-    // Zebra striping — even rows get a faint FLAT gray lift over the card
-    // surface; odd rows stay transparent and reveal it. Mirrors FileListItem so
-    // the tree matches the Miller list. Declared FIRST so it sits beneath the
-    // search-match tint and the current-item highlight. Plain, un-animated
-    // Rectangle on purpose — same j/k-stutter constraint as the highlight; do
-    // NOT add a Behavior or gradient (see CLAUDE.md → Theme & Typography).
-    Rectangle {
-        anchors.fill: parent
-        anchors.leftMargin: FmTheme.padding.sm
-        anchors.rightMargin: FmTheme.padding.sm
-        radius: FmTheme.rounding.sm
-        color: root.index % 2 === 0 ? FmTheme.overlay.zebra : "transparent"
-    }
+    // NO zebra striping. Even rows used to take a faint gray lift so adjacent
+    // rows separated visually; it was removed with the flat-aesthetic move
+    // (user decision). Over a near-black base the alternation read as banding
+    // rather than as a reading aid, and the tree is quieter without it — row
+    // separation is carried by the indent guides and the row spacing instead.
+    // Mirrored in FileListItem, so the tree and the Miller list stay identical;
+    // change both or neither. Restoring it is a revert of one commit.
 
     // Search-match tint (rendered beneath the current-item highlight)
     Rectangle {

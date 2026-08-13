@@ -79,20 +79,11 @@ Item {
 
     implicitHeight: Config.fileManager.sizes.itemHeight
 
-    // Zebra striping — even rows get a faint FLAT gray lift; odd rows stay at the
-    // column-surface color, so adjacent rows separate visually (GNOME-Files look).
-    // Flat by request: NO gradient and NO claymorphism here — the only clay in the
-    // list is the selection pill below. Declared FIRST so it sits beneath the
-    // search-match tint and the selection highlight. Plain, un-animated Rectangle
-    // on purpose — same j/k-stutter constraint as the selection highlight; do NOT
-    // convert to StyledRect or add a Behavior.
-    Rectangle {
-        anchors.fill: parent
-        anchors.leftMargin: FmTheme.padding.sm
-        anchors.rightMargin: FmTheme.padding.sm
-        radius: FmTheme.rounding.sm
-        color: root.index % 2 === 0 ? FmTheme.overlay.zebra : "transparent"
-    }
+    // NO zebra striping. Even rows used to take a faint gray lift for the
+    // GNOME-Files look; it was removed with the flat-aesthetic move (user
+    // decision). Over a near-black base the alternation read as banding rather
+    // than as a reading aid. Mirrored in FileTreeRow, so the Miller list and
+    // the tree stay identical; change both or neither.
 
     // Search match highlight — subtle gray tint behind matching rows
     Rectangle {
