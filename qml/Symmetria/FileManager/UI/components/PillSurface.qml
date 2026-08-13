@@ -4,12 +4,19 @@ import Symmetria.FileManager.UI
 import QtQuick
 import QtQuick.Effects
 
-// CLAYMORPHISM pill primitive — ported from Symmetria Shell's PillSurface so
-// the file manager and the shell share one visual language ("clay" pills are
-// everywhere in the shell's top bar). Use it wherever a matte capsule surface
-// is wanted: the path breadcrumb, the status bar, the active tab.
+// Matte pill primitive — a fill + hairline border capsule. Use it wherever a
+// matte capsule surface is wanted: the path breadcrumb, the status bar, the
+// active tab.
 //
-// The recipe (what makes the "claymorphism" look):
+// ⚠ THE DEPTH IS SWITCHED OFF. This started as a claymorphism primitive ported
+// from Symmetria Shell's PillSurface, but the file manager and the Symmetria
+// IDE moved to a flat aesthetic together and every shadow alpha below is now 0
+// — see the neutralization note on the shadow properties. The shell keeps its
+// own clay; this component no longer matches it. Everything the rest of this
+// header describes about shadows and rim highlights is HISTORICAL, kept so the
+// recipe is legible if the direction is ever reversed.
+//
+// The recipe (what USED TO make the "claymorphism" look):
 //   - Two opposing OUTER shadows — dark SE + light NW — produce a convex,
 //     extruded "raised chip" feel. Slightly asymmetric offsets (y > x on the
 //     dark shadow) read as an overhead light source.
