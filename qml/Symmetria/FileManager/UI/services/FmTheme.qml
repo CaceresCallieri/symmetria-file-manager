@@ -6,31 +6,48 @@ import QtQuick
 QtObject {
     id: root
 
-    // === Symmetria config directory ===
-    readonly property string _configDir: Paths.home + "/.config/quickshell/symmetria/config"
+    // === Symmetria toolkit config directory ===
+    // ⚠ THIS IS NO LONGER SYMMETRIA SHELL'S CONFIG DIR. Until the flat-aesthetic
+    // move, the palette was read from
+    // `~/.config/quickshell/symmetria/config/color-scheme.json` — the SHELL's
+    // file — so the file manager followed the desktop's palette. The shell has
+    // since taken its own darker, metallic direction that the file manager and
+    // the Symmetria IDE deliberately do not follow, so the two apps now read a
+    // TOOLKIT-owned scheme file instead. Editing the shell's colours no longer
+    // affects this app, and that is the intent.
+    //
+    // The file is OPTIONAL: with no file present the built-in dark palette
+    // below applies unchanged. It exists so one file can re-skin both apps at
+    // once. Same path is read by the IDE (src/symmetria_ide/ui_scheme.py); keep
+    // the two in sync when adding keys.
+    readonly property string _configDir: Paths.home + "/.config/symmetria/ui"
 
-    // === Palette (defaults: warm-neutral monochrome; overwritten from color-scheme.json) ===
+    // === Palette (defaults: near-black neutral; overwritten from color-scheme.json) ===
     // Stored as a plain JS object (not QtObject) because QML reserves
     // identifiers starting with "on" + uppercase for signal handlers,
     // which would clash with M3 names like onSurface, onPrimary, etc.
     // Use immutable reassignment (root.palette = {...}) to trigger bindings.
+    //
+    // Flat-aesthetic values: a near-black base (#0F0F10) with surfaces
+    // separated by small lightness steps and a hairline border, rather than by
+    // shadow. The previous warm-neutral charcoal set is in git history.
     property var palette: ({
-        surface: "#1a1818",
-        surfaceContainerLowest: "#141212",
-        surfaceContainerLow: "#1c1a1a",
-        surfaceContainer: "#262424",
-        surfaceContainerHigh: "#302e2e",
-        onSurface: "#eee5da",
-        onSurfaceVariant: "#c8c4bc",
-        primary: "#c8c4bc",
-        onPrimary: "#333130",
-        primaryContainer: "#887f74",
-        onPrimaryContainer: "#eee5da",
-        outline: "#8a8580",
-        outlineVariant: "#484442",
-        secondaryContainer: "#585350",
-        onSecondaryContainer: "#c8c4bc",
-        surfaceVariant: "#484442",
+        surface: "#0f0f10",
+        surfaceContainerLowest: "#0b0b0c",
+        surfaceContainerLow: "#121214",
+        surfaceContainer: "#161618",
+        surfaceContainerHigh: "#1c1c1f",
+        onSurface: "#d4d4d8",
+        onSurfaceVariant: "#a8a8ae",
+        primary: "#b4b4ba",
+        onPrimary: "#0f0f10",
+        primaryContainer: "#3a3a40",
+        onPrimaryContainer: "#e4e4e8",
+        outline: "#6e6e73",
+        outlineVariant: "#2a2a2e",
+        secondaryContainer: "#232327",
+        onSecondaryContainer: "#b4b4ba",
+        surfaceVariant: "#2a2a2e",
         error: "#ffb4ab",
         shadow: "#000000"
     })
@@ -53,9 +70,14 @@ QtObject {
     }
 
     // === Layout tokens ===
+    // Corner radii. `lg` came down from 16 with the flat move: a generous
+    // corner is what made an extruded clay card read as a soft physical
+    // object, and with the depth gone the same 16px reads as a dated rounded
+    // widget on a large panel. 8 keeps panels legibly rounded at the scale Zed
+    // and similar flat chrome use. Mirrored by the IDE's `Theme.radius.lg`.
     property QtObject rounding: QtObject {
         property int sm: 6
-        property int lg: 16
+        property int lg: 8
         property int full: 1000
     }
 
@@ -108,7 +130,20 @@ QtObject {
     }
 
     // === Matte pill effect ===
-    // Opaque dark charcoal background with subtle white edge — ported from Symmetria
+    // Opaque near-black background with a subtle white edge.
+    //
+    // ⚠ THE LIGHTNESS HERE IS NOT PALETTE-DRIVEN. `_mattePill` takes only the
+    // HUE and SATURATION from `baseColor`; the lightness comes entirely from
+    // `intensity` via the formula below. Darkening `surfaceContainerHigh` in
+    // the scheme file therefore does NOT darken a single pill — this formula is
+    // the only lever. Recorded because the opposite is the natural assumption,
+    // and it cost a pass to discover during the flat-aesthetic work.
+    //
+    // Flat-aesthetic values: the base was `0.10 + intensity * 0.08` (medium
+    // landed at L 0.14 ≈ #242424), which read as a light grey chip once the
+    // clay depth came off and the base went near-black. The range below puts
+    // medium at L 0.075 and strong at L 0.089, a step above `surface` (#0f0f10,
+    // ≈ L 0.06) — visible as a raised surface, but by fill alone.
 
     // Intensity presets (0 = deep black, 1 = slightly lighter charcoal)
     readonly property QtObject matte: QtObject {
@@ -118,7 +153,7 @@ QtObject {
 
     function _mattePill(baseColor: color, intensity: real): var {
         const clampedIntensity = Math.max(0, Math.min(1, intensity));
-        const lightness = 0.10 + clampedIntensity * 0.08;
+        const lightness = 0.04 + clampedIntensity * 0.07;
 
         const background = Qt.hsla(
             baseColor.hslHue,
@@ -126,7 +161,10 @@ QtObject {
             lightness,
             1.0
         );
-        const border = Qt.alpha("#ffffff", 0.12);
+        // Hairline edge. Dropped from 0.12 to 0.08 with the flat move: without
+        // a shadow the border is the ONLY separation cue, so it has to read as
+        // a hairline rather than as a drawn outline.
+        const border = Qt.alpha("#ffffff", 0.08);
 
         return { background: background, border: border };
     }
@@ -187,9 +225,18 @@ QtObject {
     }
 
     // === Overlay tokens ===
+    // `subtle` and `emphasis` are EDGE tokens — panel borders and dividers
+    // (MillerColumns, ContextMenu, HelpPopup). `zebra` is a FILL token for
+    // alternating list rows, split off from `subtle` during the flat move
+    // because the two want opposite things at the same alpha: a 6% white edge
+    // over a near-black base reads correctly, while a 6% white FILL across a
+    // whole row reads as a banded stripe. One token, one meaning.
     property QtObject overlay: QtObject {
         property color subtle: Qt.alpha("#ffffff", 0.06)
         property color emphasis: Qt.alpha("#ffffff", 0.10)
+        // Alternating-row tint. Deliberately at the threshold of perception:
+        // it should help the eye track a long row, not stripe the list.
+        property color zebra: Qt.alpha("#ffffff", 0.03)
     }
 
     // === Misc ===

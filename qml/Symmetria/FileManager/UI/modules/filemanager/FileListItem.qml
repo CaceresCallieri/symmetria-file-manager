@@ -91,7 +91,7 @@ Item {
         anchors.leftMargin: FmTheme.padding.sm
         anchors.rightMargin: FmTheme.padding.sm
         radius: FmTheme.rounding.sm
-        color: root.index % 2 === 0 ? FmTheme.overlay.subtle : "transparent"
+        color: root.index % 2 === 0 ? FmTheme.overlay.zebra : "transparent"
     }
 
     // Search match highlight — subtle gray tint behind matching rows
