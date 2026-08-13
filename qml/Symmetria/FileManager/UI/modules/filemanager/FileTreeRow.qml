@@ -221,8 +221,8 @@ Item {
 
     StateLayer {
         // Root is a plain Item (no radius), so StateLayer's parent?.radius
-        // fallback yields a square hover — shape it to match the zebra /
-        // current-item rectangles above (same side insets, sm rounding).
+        // fallback yields a square hover — shape it to match the search-match
+        // and current-item rectangles above (same side insets, sm rounding).
         anchors.leftMargin: FmTheme.padding.sm
         anchors.rightMargin: FmTheme.padding.sm
         radius: FmTheme.rounding.sm
