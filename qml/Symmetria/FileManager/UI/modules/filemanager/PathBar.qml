@@ -97,9 +97,16 @@ Item {
             }
         }
 
-        // Breadcrumb bar — claymorphism pill (shared with the shell)
+        // Breadcrumb bar. `palette.surface` — the base colour, not the matte
+        // pill's own fill: this bar spans the full width at the top of the
+        // pane, so a fill above the ground reads as a lighter band across the
+        // whole app rather than as a control. The hairline border it keeps
+        // from PillSurface is what still marks it as a field. Same reasoning,
+        // and the same value, as the pane surfaces in MillerColumns.
         PillSurface {
             id: breadcrumbContainer
+
+            color: FmTheme.palette.surface
 
             Layout.fillWidth: true
             implicitHeight: breadcrumbs.implicitHeight + Math.round(FmTheme.padding.sm / 2) * 2

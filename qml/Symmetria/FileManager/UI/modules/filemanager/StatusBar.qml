@@ -22,10 +22,15 @@ Item {
 
     implicitHeight: inner.implicitHeight + FmTheme.padding.sm * 4
 
-    // Claymorphism pill container — matte fill + hairline border + convex
-    // depth (shadows + rim highlight) shared with the shell, via PillSurface.
+    // Bar container. `palette.surface` — the base colour, not the matte pill's
+    // own fill, for the same reason as the breadcrumb bar in PathBar: a
+    // full-width bar filled above the ground reads as a lighter band across
+    // the app rather than as a control. The hairline border still frames it.
+    // (The depth this used to carry is switched off — see PillSurface.)
     PillSurface {
         id: pill
+
+        color: FmTheme.palette.surface
 
         anchors.fill: parent
         anchors.topMargin: FmTheme.padding.sm
@@ -59,7 +64,13 @@ Item {
             StyledRect {
                 id: acceptBtn
                 visible: FileManagerService.pickerMode && root._normalVisible
-                color: _acceptEnabled ? FmTheme.palette.primary : FmTheme.palette.surfaceVariant
+                // ENABLED keeps `palette.primary` — a light fill with dark
+                // text is the primary-action affordance and the one thing on
+                // this bar that should stand out. DISABLED drops to
+                // `surfaceContainer`, one quiet step above the bar's own base
+                // fill; it used to sit at `surfaceVariant` (#2a2a2e), which
+                // read as a bright grey lozenge against the near-black ground.
+                color: _acceptEnabled ? FmTheme.palette.primary : FmTheme.palette.surfaceContainer
                 radius: FmTheme.rounding.full
                 implicitWidth: acceptLabel.implicitWidth + FmTheme.padding.lg * 2
                 implicitHeight: acceptLabel.implicitHeight + FmTheme.padding.sm * 2
@@ -255,10 +266,13 @@ Item {
                 Layout.fillWidth: true
             }
 
-            // Cancel button (picker mode only)
+            // Cancel button (picker mode only). `surfaceContainer`, matching
+            // the disabled accept button — a secondary control one quiet step
+            // above the bar. Was `surfaceVariant` (#2a2a2e), a bright grey
+            // lozenge against the near-black ground.
             StyledRect {
                 visible: FileManagerService.pickerMode && root._normalVisible
-                color: FmTheme.palette.surfaceVariant
+                color: FmTheme.palette.surfaceContainer
                 radius: FmTheme.rounding.full
                 implicitWidth: cancelLabel.implicitWidth + FmTheme.padding.lg * 2
                 implicitHeight: cancelLabel.implicitHeight + FmTheme.padding.sm * 2
