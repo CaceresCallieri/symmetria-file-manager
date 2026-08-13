@@ -214,7 +214,12 @@ QtObject {
         property color renamedOrange: "#d19a66"     // renamed/copied (R/C) — moved content
         property color conflictedMagenta: "#c678dd" // conflicted (U) — merge conflicts
         property color ignoredGray: "#5c6370"       // ignored (!) — rarely rendered
-        property color badgeText: "#1a1818"         // text on saturated background
+        // Text ON a saturated badge fill (the green/amber/red git chips), so it
+        // is NOT palette-derived and did not move with the flat-aesthetic
+        // palette. The value happens to equal the pre-flat `palette.surface`,
+        // which is a coincidence of both being a warm near-black — it must stay
+        // legible against the badge colours, not against the app background.
+        property color badgeText: "#1a1818"
         // Inline line-delta text colors. Distinct from staged/unstaged
         // badge fills (which are saturated for use as backgrounds) —
         // these are slightly muted so they read cleanly as TEXT on the
@@ -225,12 +230,17 @@ QtObject {
     }
 
     // === Overlay tokens ===
-    // `subtle` and `emphasis` are EDGE tokens — panel borders and dividers
-    // (MillerColumns, ContextMenu, HelpPopup). `zebra` is a FILL token for
-    // alternating list rows, split off from `subtle` during the flat move
-    // because the two want opposite things at the same alpha: a 6% white edge
+    // `subtle` and `emphasis` are primarily EDGE tokens — panel borders and
+    // dividers (MillerColumns, ContextMenu, HelpPopup). `zebra` is a FILL token
+    // for alternating list rows, split off from `subtle` during the flat move
+    // because the two want different things at the same alpha: a 6% white edge
     // over a near-black base reads correctly, while a 6% white FILL across a
-    // whole row reads as a banded stripe. One token, one meaning.
+    // whole row reads as a banded stripe.
+    //
+    // The split is by AREA, not strictly by role: `subtle` is also the fill of
+    // small swatches — the keycap badges in ContextMenuActionsView and
+    // HelpPopup — and that is deliberate. A 24px badge at 6% reads as a chip;
+    // it is the full-row width that turns the same value into a stripe.
     property QtObject overlay: QtObject {
         property color subtle: Qt.alpha("#ffffff", 0.06)
         property color emphasis: Qt.alpha("#ffffff", 0.10)
