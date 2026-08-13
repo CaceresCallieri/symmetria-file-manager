@@ -111,23 +111,24 @@ Item {
         border.width: root.ListView.isCurrentItem ? 1 : 0
         opacity: root.ListView.isCurrentItem ? 1 : 0
 
-        // Clay rim highlight — the top "lit-from-above" cue that defines the
-        // claymorphism look, matching the bars/cards. Inlined (NOT PillSurface)
-        // on purpose: this delegate must stay a plain, un-animated Rectangle so
-        // rapid j/k navigation stays stutter-free (see the note above). A
-        // per-row PillSurface would add color animation + two GPU shadow nodes
-        // to every visible row, re-introducing exactly that stutter. The drop
-        // shadow is also omitted deliberately — a shadow on a flush list row
-        // reads oddly; rim + border + matte fill carry the clay language here.
-        Rectangle {
-            anchors.fill: parent
-            radius: selectionHighlight.radius
-            color: "transparent"
-            gradient: Gradient {
-                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.08) }
-                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.0) }
-            }
-        }
+        // ⚠ NO rim highlight. A child Rectangle used to paint a white 0.08 →
+        // transparent top gradient here — the "lit-from-above" cue that is the
+        // single strongest claymorphism signal — and it was REMOVED with the
+        // flat-aesthetic move (user decision).
+        //
+        // It is worth knowing why this one outlived the rest of the clay. The
+        // depth recipe elsewhere lives in `PillSurface`, so zeroing
+        // `Theme.depth`'s alphas flattened every surface that used it in one
+        // edit. This gradient was inlined ON PURPOSE — a per-row PillSurface
+        // would add colour animation and two GPU shadow nodes to every visible
+        // row, which stutters during rapid j/k navigation — so it was invisible
+        // to that change and kept rendering a clay pill after the whole rest of
+        // the app had gone flat. The lesson generalises: a performance
+        // exception that copies a visual recipe also opts out of the recipe's
+        // single point of change.
+        //
+        // The matte fill + hairline border below stay; they are what marks the
+        // row as current now.
     }
 
     // Clipboard indicator strip — left edge, above selection highlight.

@@ -46,10 +46,19 @@ Item {
             Layout.fillHeight: true
             Layout.preferredWidth: 2
 
+            // Column surface. `palette.surface` — the SAME colour as the host
+            // background, deliberately. These panes used to paint one rung
+            // lighter (`surfaceContainerLow`), which read as a grey box sitting
+            // ON the near-black chrome rather than as part of it, and the
+            // effect was strongest inside the Symmetria IDE, where the file
+            // manager shares a window with chrome painted at the base colour.
+            // With the fill matched, the hairline border alone delineates the
+            // column. The same surface is repeated for the other two columns
+            // below and once more in FileManager.qml — change all four together.
             StyledRect {
                 anchors.fill: parent
                 radius: FmTheme.rounding.lg
-                color: FmTheme.palette.surfaceContainerLow
+                color: FmTheme.palette.surface
                 border.color: FmTheme.overlay.subtle
                 border.width: 1
             }
@@ -84,7 +93,7 @@ Item {
             StyledRect {
                 anchors.fill: parent
                 radius: FmTheme.rounding.lg
-                color: FmTheme.palette.surfaceContainerLow
+                color: FmTheme.palette.surface
                 border.color: FmTheme.overlay.subtle
                 border.width: 1
             }
@@ -113,7 +122,7 @@ Item {
             StyledRect {
                 anchors.fill: parent
                 radius: FmTheme.rounding.lg
-                color: FmTheme.palette.surfaceContainerLow
+                color: FmTheme.palette.surface
                 border.color: FmTheme.overlay.subtle
                 border.width: 1
             }

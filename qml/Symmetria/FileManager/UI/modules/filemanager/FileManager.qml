@@ -95,10 +95,13 @@ Item {
                 anchors.fill: parent
                 anchors.margins: FmTheme.padding.md
 
+                // Pane surface — the fourth copy of the idiom documented at the
+                // first column in MillerColumns.qml. `palette.surface` matches
+                // the host background on purpose; change all four together.
                 StyledRect {
                     anchors.fill: parent
                     radius: FmTheme.rounding.lg
-                    color: FmTheme.palette.surfaceContainerLow
+                    color: FmTheme.palette.surface
                     border.color: FmTheme.overlay.subtle
                     border.width: 1
                 }
