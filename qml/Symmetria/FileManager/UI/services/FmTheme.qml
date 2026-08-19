@@ -28,26 +28,39 @@ QtObject {
     // which would clash with M3 names like onSurface, onPrimary, etc.
     // Use immutable reassignment (root.palette = {...}) to trigger bindings.
     //
-    // Flat-aesthetic values: a near-black base (#0F0F10) with surfaces
+    // Flat-aesthetic values: a near-black base (#0F0F0F) with surfaces
     // separated by small lightness steps and a hairline border, rather than by
     // shadow. The previous warm-neutral charcoal set is in git history.
+    //
+    // ⚠ ACHROMATIC ON PURPOSE (2026-08-19). Every neutral here is r == g == b.
+    // They were not: each carried a cool cast (blue-minus-red of +1 to +6) that
+    // read as blue-grey rather than neutral once it covered a whole Miller
+    // column or file tree. The neutralisation dropped the blue channel to meet
+    // r/g and left r/g untouched, so every step's ORDERING and spacing survive
+    // exactly and only the hue is gone.
+    //
+    // Keep it that way, and keep it in step with the IDE: Symmetria IDE's
+    // `Theme.qml` made the same move on the same day, and this module renders
+    // INSIDE that IDE's side panel — a tint on either side alone shows up as
+    // the file tree disagreeing with the chrome around it. `error` is a real
+    // accent and is deliberately exempt.
     property var palette: ({
-        surface: "#0f0f10",
-        surfaceContainerLowest: "#0b0b0c",
-        surfaceContainerLow: "#121214",
-        surfaceContainer: "#161618",
-        surfaceContainerHigh: "#1c1c1f",
-        onSurface: "#d4d4d8",
-        onSurfaceVariant: "#a8a8ae",
-        primary: "#b4b4ba",
-        onPrimary: "#0f0f10",
-        primaryContainer: "#3a3a40",
-        onPrimaryContainer: "#e4e4e8",
-        outline: "#6e6e73",
-        outlineVariant: "#2a2a2e",
-        secondaryContainer: "#232327",
-        onSecondaryContainer: "#b4b4ba",
-        surfaceVariant: "#2a2a2e",
+        surface: "#0f0f0f",
+        surfaceContainerLowest: "#0b0b0b",
+        surfaceContainerLow: "#121212",
+        surfaceContainer: "#161616",
+        surfaceContainerHigh: "#1c1c1c",
+        onSurface: "#d4d4d4",
+        onSurfaceVariant: "#a8a8a8",
+        primary: "#b4b4b4",
+        onPrimary: "#0f0f0f",
+        primaryContainer: "#3a3a3a",
+        onPrimaryContainer: "#e4e4e4",
+        outline: "#6e6e6e",
+        outlineVariant: "#2a2a2a",
+        secondaryContainer: "#232323",
+        onSecondaryContainer: "#b4b4b4",
+        surfaceVariant: "#2a2a2a",
         error: "#ffb4ab",
         shadow: "#000000"
     })
