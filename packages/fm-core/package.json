@@ -16,6 +16,12 @@
     "./filter": "./src/filter.ts",
     "./glob": "./src/glob.ts",
     "./contract": "./src/contract.ts",
-    "./pane": "./src/pane.ts"
+    "./pane": "./src/pane.ts",
+    "./keys/types": "./src/keys/types.ts",
+    "./keys/registry": "./src/keys/registry.ts",
+    "./keys/dispatch": "./src/keys/dispatch.ts",
+    "./keys/chords": "./src/keys/chords.ts",
+    "./keys/cascade": "./src/keys/cascade.ts",
+    "./keys/keyEvent": "./src/keys/keyEvent.ts"
   }
 }

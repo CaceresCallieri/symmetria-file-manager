@@ -9,82 +9,17 @@
  * passed. These tests drive the composed `App` through the bridge and the
  * keyboard, so an orphaned component fails here.
  */
-import type { FsEntry } from "@symmetria/fm-core/entry";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { BRIDGE_KEY, type Bridge } from "../../src/preload/bridge.ts";
+
+import { BRIDGE_KEY } from "../../src/preload/bridge.ts";
 import { App } from "../../src/renderer/App.tsx";
+import { type BridgeLog, cursorIn, installBridge, namesIn } from "./support.ts";
 
-function entry(name: string, kind: FsEntry["kind"] = "file"): FsEntry {
-  return { name, kind, size: 3, modifiedMs: 0, isSymlink: false, isHidden: false };
-}
-
-/**
- * A filesystem, as a map from path to listing.
- *
- * A `Map`, not a `Record<string, FsEntry[]>`. The open dictionary type claims
- * every string is a key and hands back a value the caller must then re-check,
- * which is the type evidence the project's lint policy asks us not to discard.
- * `Map.get` returns `FsEntry[] | undefined` and says so.
- */
-const TREE = new Map([
-  ["/home", [entry("jc", "directory"), entry("other", "directory")]],
-  ["/home/jc", [entry("projects", "directory"), entry("notes.txt"), entry("todo.txt")]],
-  ["/home/jc/projects", [entry("alpha", "directory"), entry("beta.md")]],
-]);
-
-let listedPaths: string[] = [];
-let unwatched: string[] = [];
-
-/**
- * A bridge that answers from `TREE`.
- *
- * Stubbed at the `window` global rather than by mocking the module, so the
- * renderer's own `bridge.ts` — its request shape, its reply decoding, its
- * missing-bridge handling — is exercised rather than replaced.
- */
-function installBridge(): void {
-  const bridge: Bridge = {
-    version: "test",
-    list: (request) => {
-      const path = (request as { path: string }).path;
-      listedPaths.push(path);
-      const entries = TREE.get(path);
-      return Promise.resolve(
-        entries === undefined
-          ? { ok: false as const, error: { code: "scan_failed" as const, message: `no ${path}` } }
-          : { ok: true as const, value: { entries, total: entries.length, streamId: null } },
-      );
-    },
-    watch: () => Promise.resolve({ ok: true as const, value: null }),
-    unwatch: (request) => {
-      unwatched.push((request as { subscriptionId: string }).subscriptionId);
-      return Promise.resolve({ ok: true as const, value: null });
-    },
-    readText: () => Promise.resolve({ ok: true as const, value: null }),
-    cancel: () => Promise.resolve({ ok: true as const, value: null }),
-    onListBatch: () => () => undefined,
-    onChanged: () => () => undefined,
-  };
-
-  Object.defineProperty(window, BRIDGE_KEY, { value: bridge, configurable: true, writable: true });
-}
-
-/** The names visible in one column, in order. */
-function namesIn(testId: string): string[] {
-  return [...within(screen.getByTestId(testId)).queryAllByTestId("row")].map(
-    (row) => row.textContent ?? "",
-  );
-}
-
-function cursorIn(testId: string): string {
-  return screen.getByTestId(testId).querySelector('[data-cursor="true"]')?.textContent ?? "";
-}
+let log: BridgeLog;
 
 beforeEach(() => {
-  listedPaths = [];
-  unwatched = [];
-  installBridge();
+  log = installBridge();
 });
 
 afterEach(cleanup);
@@ -95,8 +30,8 @@ describe("App, wired to a bridge", () => {
 
     await waitFor(() => expect(namesIn("column-current")).toContain("notes.txt"));
     expect(namesIn("column-parent")).toContain("jc");
-    expect(listedPaths).toContain("/home/jc");
-    expect(listedPaths).toContain("/home");
+    expect(log.listed).toContain("/home/jc");
+    expect(log.listed).toContain("/home");
   });
 
   it("shows the location as breadcrumbs and the count in the status bar", async () => {
@@ -181,7 +116,7 @@ describe("App, wired to a bridge", () => {
     // A watch per navigation that is never released is how the inotify budget
     // disappears during ordinary use — the same failure that removed the
     // recursive watcher, arriving by a slower route.
-    await waitFor(() => expect(unwatched).toContain("pane:/home/jc"));
+    await waitFor(() => expect(log.unwatched).toContain("pane:/home/jc"));
   });
 });
 

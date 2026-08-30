@@ -421,14 +421,28 @@ Loader {
 - **Chords**: prefix keys (g/c/,) are registry rows that set `activeChordPrefix`;
   RESOLUTION and the sub-menu table stay in `ChordHandler.js` + `WindowState`'s
   `chordBindings` (rendered by BOTH the `WhichKeyPopup` HUD and `HelpPopup`).
-  Timer-based 500ms detection, NOT Symmetria's KeyChords module.
+  NOT Symmetria's KeyChords module. **There is NO chord timer.** This document
+  used to claim a 500 ms timeout, in two places; `ChordHandler.js` has no timer
+  and never had one. A prefix persists until the next key resolves it, an
+  Escape cancels it, the view loses focus, or the tab changes. Do not add a
+  timer to make the code match a sentence that was wrong.
 - **The windowState-less embedded tree path** (IDE sidebar) bypasses the registry
   entirely — `TreeKeyHandler` keeps a legacy navigation-only switch + `gg` timer
   for that consumer; only when `root.windowState` exists does it dispatch.
-- **Escape priority** (stack-based, last-entered-first-exited): chord → search →
-  flash nav → picker → close window. Miller swallows a stray Escape
-  (`miller.escapeSwallow`); the tree intentionally has no such binding, so Escape
-  propagates to the host's close-window handling.
+- **Escape priority** (stack-based, last-entered-first-exited). The real order
+  has EIGHT steps, and search is not one of them — whether the search field sees
+  Escape is decided by which input holds FOCUS, not by the cascade. An earlier
+  version of this list omitted the modal and bookmark steps and placed search
+  inside the cascade; it was wrong on both counts:
+  1. a text input has focus → the input handles it, and the cascade never runs;
+  2. a modal is open → the modal handles it;
+  3. the bookmark sub-mode is active → cancels the sub-mode;
+  4. a chord is pending → cancels the chord;
+  5. flash is active → the flash handler cancels it;
+  6. a picker is open → clears the selection if multi-select, else cancels the picker;
+  7. something is selected → clears the selection (`sel.clear`);
+  8. Miller swallows what is left (`miller.escapeSwallow`); the tree intentionally
+     has no such binding, so Escape propagates to the host's close-window handling.
 - Picker mode suppresses certain keys (Y/X/P/Space/T/[/]) via the `dispatch`
   pre-pass; gated OFF for `pickerFileOps` embedding hosts.
 
@@ -490,7 +504,7 @@ Use `FileSystemModel.Alphabetical`, `.Modified`, `.Size`, `.Extension`, `.Natura
 
 **QML `on` prefix restriction** — QML reserves identifiers starting with `on` + uppercase letter for signal handlers. The palette uses `property var` (plain JS object) instead of `QtObject` because M3 token names like `onSurface`, `onPrimary`, `onSecondaryContainer` would clash with signal handler syntax inside `QtObject`. This means palette updates must use immutable reassignment (`root.palette = {...}`) to trigger bindings — do NOT mutate individual keys.
 
-**Vim chord detection** — Uses timer-based multi-key detection (500ms timeout), implemented in `qml/Symmetria/FileManager/UI/modules/filemanager/handlers/ChordHandler.js`.
+**Vim chord detection** — Multi-key detection in `qml/Symmetria/FileManager/UI/modules/filemanager/handlers/ChordHandler.js`. **There is no timeout.** This entry used to state a 500 ms timer; the file contains none. See Keyboard Event Handling → Chords for what actually ends a pending prefix.
 
 **Claymorphism shadows render outside the pill bounds** — `PillSurface`/`PillCard` cast `RectangularShadow`s that paint into the area *around* the pill, beyond the component's own rect. So (1) any ancestor with `clip: true` slices the soft shadow edges into a flat, chopped look, and (2) the host must leave margin around the pill for the shadow to occupy. If a shadow looks cut off, search the parent chain for a `clip` — do NOT shrink the blur. Full rationale in the `GOTCHA` block at the top of `components/PillSurface.qml`.
 

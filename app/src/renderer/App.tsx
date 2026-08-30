@@ -1,8 +1,14 @@
-import { useEffect } from "react";
+import type { CascadeMode } from "@symmetria/fm-core/keys/cascade";
+import type { KeyContext } from "@symmetria/fm-core/keys/types";
+import { useMemo } from "react";
 
+import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { MillerColumns } from "./components/MillerColumns.tsx";
 import { PathBar } from "./components/PathBar.tsx";
 import { StatusBar } from "./components/StatusBar.tsx";
+import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
+import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
+import { useKeyActions } from "./useKeyActions.ts";
 import { usePane } from "./usePane.ts";
 
 /**
@@ -24,34 +30,29 @@ export interface AppProps {
 
 export function App({ startPath }: AppProps = {}) {
   const pane = usePane(startPath ?? initialPath());
-  const { moveBy, enter, leave } = pane;
+  const { actions, modes, state } = useKeyActions(pane);
 
-  // A minimal, deliberately temporary key handler.
-  //
-  // The real one is the ported `KeyRegistry` — 54 declarative bindings feeding
-  // both dispatch and the help popup — which is phase 6 and replaces this
-  // wholesale. Four keys are here because "navigate" is what this phase claims
-  // to deliver, and a claim nobody can exercise from the keyboard is not
-  // delivered. Do NOT grow this switch: every key added here is one the
-  // registry has to reclaim.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const moved = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[event.key];
-      if (moved !== undefined) {
-        moveBy(moved);
-      } else if (event.key === "l" || event.key === "ArrowRight" || event.key === "Enter") {
-        enter();
-      } else if (event.key === "h" || event.key === "ArrowLeft") {
-        leave();
-      } else {
-        return;
-      }
-      event.preventDefault();
-    };
+  const context = useMemo<KeyContext>(
+    // Miller is the only view that exists. The tree rows are ported and
+    // unreachable until it does, which is deliberate — see the registry.
+    () => ({ view: "miller", state, actions }),
+    [state, actions],
+  );
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [moveBy, enter, leave]);
+  const mode = useMemo<CascadeMode>(
+    () => ({
+      modalOpen: modes.helpOpen,
+      bookmarkSubMode: modes.bookmarkSubMode,
+      chordPrefix: modes.chordPrefix,
+      // Flash jump is a text-input mode that arrives with its own phase. Until
+      // then nothing can enter it, so the cascade never reaches that step.
+      flashActive: false,
+      textInputFocused: false,
+    }),
+    [modes.helpOpen, modes.bookmarkSubMode, modes.chordPrefix],
+  );
+
+  useKeyDispatch({ mode, context });
 
   return (
     <main className="app">
@@ -68,12 +69,22 @@ export function App({ startPath }: AppProps = {}) {
         cursorIndex={pane.state.cursorIndex}
         parentCursorName={pane.parentCursorName}
       />
+      <WhichKeyOverlay
+        prefix={modes.chordPrefix}
+        cursorIsImage={state.cursorEntry?.isImage === true}
+      />
+      {modes.message === null ? null : (
+        <p data-testid="pane-message" className="pane-message">
+          {modes.message}
+        </p>
+      )}
       <StatusBar
         entryCount={pane.state.entries.length}
-        selectedCount={0}
+        selectedCount={state.selectedCount}
         sort={pane.sort}
         showHidden={pane.showHidden}
       />
+      {modes.helpOpen ? <HelpOverlay context={context} onClose={modes.closeHelp} /> : null}
     </main>
   );
 }

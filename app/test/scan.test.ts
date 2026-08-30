@@ -188,14 +188,38 @@ describe("scanDirectory at scale, a directory of symlinks", () => {
   });
 
   it("costs no more than a directory of plain files", async () => {
-    const started = performance.now();
-    const entries = await scanDirectory(links);
-    const elapsed = performance.now() - started;
+    // Measured as a RATIO against plain files built the same way, not against a
+    // wall-clock ceiling.
+    //
+    // This assertion used to read `elapsed < 100`, and it was flaky by
+    // construction: the same code measured 42 ms on an idle machine and 104 ms
+    // with a build running beside it, so the suite failed for load rather than
+    // for a regression. The defect it exists to catch — `lstat` for the size
+    // plus `stat` for the target's kind, two syscalls per link — roughly
+    // DOUBLES the cost, which a ratio catches on any machine and a millisecond
+    // budget catches only on a quiet one.
+    const plain = await mkdtemp(join(tmpdir(), "symfm-links-baseline-"));
+    try {
+      await Promise.all(
+        Array.from({ length: 6000 }, (_, i) => writeFile(join(plain, `entry-${i}.txt`), "x")),
+      );
+      await scanDirectory(plain);
 
-    // 6000 links plus the two targets they point at.
-    expect(entries).toHaveLength(6002);
-    expect(elapsed).toBeLessThan(100);
-  });
+      // Best-of-N on both sides, via the same helper the throughput budget
+      // uses: one slow run caused by a machine that got busy must not decide
+      // either number.
+      const baseline = await fastestScan(plain);
+      const withLinks = await fastestScan(links);
+
+      // 6000 links plus the two targets they point at.
+      expect(await scanDirectory(links)).toHaveLength(6002);
+      // 1.6, not 1.0: scheduling noise is real and the regression is a factor
+      // of two. A threshold that fails at 1.05 would be the same flake again.
+      expect(withLinks / baseline).toBeLessThan(1.6);
+    } finally {
+      await rm(plain, { recursive: true, force: true });
+    }
+  }, 120_000);
 
   it("still resolves each link to its target kind", async () => {
     const entries = await scanDirectory(links);

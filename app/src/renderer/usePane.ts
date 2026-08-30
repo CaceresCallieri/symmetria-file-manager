@@ -25,6 +25,8 @@ export interface Pane {
   readonly error: string | null;
   readonly loading: boolean;
   moveBy(delta: number): void;
+  /** Put the cursor on an absolute index, clamped into range. */
+  moveTo(index: number): void;
   enter(): void;
   leave(): void;
 }
@@ -132,6 +134,11 @@ export function usePane(initialPath: string): Pane {
     setState((previous) => moveCursor(previous, delta));
   }, []);
 
+  const moveTo = useCallback((index: number) => {
+    // Expressed as a relative move so clamping lives in exactly one place.
+    setState((previous) => moveCursor(previous, index - previous.cursorIndex));
+  }, []);
+
   const enter = useCallback(() => {
     setState((previous) => enterDirectory(previous));
   }, []);
@@ -149,6 +156,7 @@ export function usePane(initialPath: string): Pane {
     error,
     loading,
     moveBy,
+    moveTo,
     enter,
     leave,
   };
