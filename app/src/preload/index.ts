@@ -30,8 +30,15 @@ const bridge: Bridge = {
   cancel: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.cancel, request),
   describe: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.describe, request),
   previewUrl: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.previewUrl, request),
+  transfer: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.transfer, request),
+  cancelTransfer: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.cancelTransfer, request),
+  create: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.create, request),
+  rename: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.rename, request),
+  trash: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.trash, request),
+  open: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.open, request),
   onListBatch: (listener) => listen(PUSH_CHANNELS.listBatch, listener),
   onChanged: (listener) => listen(PUSH_CHANNELS.changed, listener),
+  onTransferProgress: (listener) => listen(PUSH_CHANNELS.transferProgress, listener),
 };
 
 contextBridge.exposeInMainWorld(BRIDGE_KEY, bridge);

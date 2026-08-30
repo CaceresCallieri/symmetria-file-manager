@@ -26,6 +26,18 @@ export const REQUEST_CHANNELS = {
   describe: "symmetria-fm:describe",
   /** Make one file loadable by the renderer, and name the URL. */
   previewUrl: "symmetria-fm:preview-url",
+  /** Copy or move entries into a directory. */
+  transfer: "symmetria-fm:transfer",
+  /** Abandon a running transfer. */
+  cancelTransfer: "symmetria-fm:cancel-transfer",
+  /** Create an empty file or a directory, with its parents. */
+  create: "symmetria-fm:create",
+  /** Rename an entry in place. */
+  rename: "symmetria-fm:rename",
+  /** Send entries to the desktop trash. */
+  trash: "symmetria-fm:trash",
+  /** Hand an entry to whatever the desktop says opens it. */
+  open: "symmetria-fm:open",
 } as const;
 
 /** Main process pushes, renderer listens. These are never handled. */
@@ -34,6 +46,8 @@ export const PUSH_CHANNELS = {
   listBatch: "symmetria-fm:list-batch",
   /** A watched directory changed. */
   changed: "symmetria-fm:changed",
+  /** How far a transfer has got. */
+  transferProgress: "symmetria-fm:transfer-progress",
 } as const;
 
 export const CHANNELS = { ...REQUEST_CHANNELS, ...PUSH_CHANNELS } as const;

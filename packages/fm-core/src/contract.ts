@@ -25,6 +25,10 @@ export type FailureCode =
   | "read_failed"
   | "watch_failed"
   | "cancelled"
+  /** The operation would have destroyed something that is already there. */
+  | "conflict"
+  /** A mutation the filesystem refused: permission, a read-only mount, ENOSPC. */
+  | "write_failed"
   /**
    * A reply did not have the shape its channel promises.
    *
@@ -107,6 +111,48 @@ export interface DescribeRequest {
   readonly path: string;
 }
 
+/** What a paste does with what it took. */
+export type TransferMode = "copy" | "move";
+
+export interface TransferRequest {
+  readonly sources: readonly string[];
+  /** The directory the sources land in. */
+  readonly destination: string;
+  readonly mode: TransferMode;
+  /**
+   * Replace what is already there.
+   *
+   * False on the first attempt, always. The reply then names the collisions and
+   * the caller asks — silently overwriting is how a file manager loses work.
+   */
+  readonly overwrite: boolean;
+  /** The caller's name for this transfer, so it can cancel it and follow it. */
+  readonly transferId: string;
+}
+
+export interface CreateRequest {
+  readonly path: string;
+  readonly kind: "file" | "directory";
+}
+
+export interface RenameRequest {
+  readonly path: string;
+  /** The new NAME, not a path. Renaming never moves an entry. */
+  readonly name: string;
+}
+
+export interface TrashRequest {
+  readonly paths: readonly string[];
+}
+
+export interface OpenRequest {
+  readonly path: string;
+}
+
+export interface CancelTransferRequest {
+  readonly transferId: string;
+}
+
 /** Ask for a URL the renderer may load this file from. */
 export interface PreviewUrlRequest {
   readonly path: string;
@@ -160,6 +206,29 @@ export interface PreviewUrlReply {
   readonly url: string;
 }
 
+export interface TransferReply {
+  /** How many top-level sources landed. */
+  readonly moved: number;
+  /**
+   * The names already present at the destination.
+   *
+   * Non-empty means NOTHING was transferred: the whole operation stops before
+   * it starts rather than doing half of it and asking about the rest.
+   */
+  readonly conflicts: readonly string[];
+}
+
+export interface RenameReply {
+  readonly path: string;
+}
+
+/** How far a transfer has got. Pushed, not polled. */
+export interface TransferProgress {
+  readonly transferId: string;
+  readonly done: number;
+  readonly total: number;
+}
+
 /**
  * Everything a handler may reply with.
  *
@@ -173,6 +242,8 @@ export type IpcReply =
   | Result<ReadTextReply>
   | Result<DescribeReply>
   | Result<PreviewUrlReply>
+  | Result<TransferReply>
+  | Result<RenameReply>
   | Result<null>;
 
 // ── decoding ──────────────────────────────────────────────────────────────
@@ -291,18 +362,112 @@ export const decodeReadTextRequest: Decoder<ReadTextRequest> = (raw) => {
   return success({ path: path.value, maxBytes: Math.min(requested, MAX_READ_BYTES) });
 };
 
-export const decodeDescribeRequest: Decoder<DescribeRequest> = (raw) => {
+/**
+ * A request whose whole content is one path.
+ *
+ * Three channels ask exactly this — describe, preview-url and open — and they
+ * had three identical decoders. One definition means a rule added to path
+ * validation reaches all of them, which is the point: the next rule will be a
+ * security rule.
+ */
+const decodePathOnly: Decoder<{ readonly path: string }> = (raw) => {
   if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
 
   const path = decodePath(raw["path"]);
   return isFailure(path) ? path : success({ path: path.value });
 };
 
-export const decodePreviewUrlRequest: Decoder<PreviewUrlRequest> = (raw) => {
+export const decodeDescribeRequest: Decoder<DescribeRequest> = decodePathOnly;
+
+export const decodePreviewUrlRequest: Decoder<PreviewUrlRequest> = decodePathOnly;
+
+function decodePathList(raw: unknown): Result<string[]> {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return failure("invalid_request", "sources must be a non-empty array");
+  }
+
+  const paths: string[] = [];
+  for (const item of raw) {
+    const path = decodePath(item);
+    if (isFailure(path)) return path;
+    paths.push(path.value);
+  }
+  return success(paths);
+}
+
+export const decodeTransferRequest: Decoder<TransferRequest> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
+
+  const sources = decodePathList(raw["sources"]);
+  if (isFailure(sources)) return sources;
+
+  const destination = decodePath(raw["destination"]);
+  if (isFailure(destination)) return destination;
+
+  const mode = raw["mode"];
+  if (mode !== "copy" && mode !== "move") {
+    return failure("invalid_request", "mode must be copy or move");
+  }
+
+  const transferId = stringField(raw, "transferId");
+  if (transferId === null) return failure("invalid_request", "transferId must be a string");
+
+  return success({
+    sources: sources.value,
+    destination: destination.value,
+    mode,
+    overwrite: raw["overwrite"] === true,
+    transferId,
+  });
+};
+
+export const decodeCreateRequest: Decoder<CreateRequest> = (raw) => {
   if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
 
   const path = decodePath(raw["path"]);
-  return isFailure(path) ? path : success({ path: path.value });
+  if (isFailure(path)) return path;
+
+  const kind = raw["kind"];
+  if (kind !== "file" && kind !== "directory") {
+    return failure("invalid_request", "kind must be file or directory");
+  }
+  return success({ path: path.value, kind });
+};
+
+export const decodeRenameRequest: Decoder<RenameRequest> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
+
+  const path = decodePath(raw["path"]);
+  if (isFailure(path)) return path;
+
+  const name = stringField(raw, "name");
+  if (name === null || name === "") return failure("invalid_request", "name must be a string");
+
+  // A rename takes a NAME. A separator would move the entry somewhere else
+  // while calling itself a rename, and `..` would move it somewhere the user
+  // cannot see from here.
+  if (name.includes("/") || name === "." || name === "..") {
+    return failure("invalid_request", "a name may not contain a path separator");
+  }
+  return success({ path: path.value, name });
+};
+
+export const decodeTrashRequest: Decoder<TrashRequest> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
+
+  const paths = decodePathList(raw["paths"]);
+  return isFailure(paths) ? paths : success({ paths: paths.value });
+};
+
+export const decodeOpenRequest: Decoder<OpenRequest> = decodePathOnly;
+
+export const decodeCancelTransferRequest: Decoder<CancelTransferRequest> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
+
+  const transferId = stringField(raw, "transferId");
+  return transferId === null
+    ? failure("invalid_request", "transferId must be a string")
+    : success({ transferId });
 };
 
 export const decodeUnwatchRequest: Decoder<UnwatchRequest> = (raw) => {
@@ -484,4 +649,36 @@ export const decodeReadTextReply: Decoder<ReadTextReply> = (raw) => {
     return failure("invalid_reply", "reply.text and reply.bytesRead are required");
   }
   return success({ text, bytesRead, truncated: raw["truncated"] === true });
+};
+
+export const decodeTransferReply: Decoder<TransferReply> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_reply", "reply must be an object");
+
+  const moved = finiteField(raw, "moved");
+  const conflicts = raw["conflicts"];
+  if (moved === null || !Array.isArray(conflicts)) {
+    return failure("invalid_reply", "reply.moved and reply.conflicts are required");
+  }
+  return success({ moved, conflicts: conflicts.map(String) });
+};
+
+export const decodeRenameReply: Decoder<RenameReply> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_reply", "reply must be an object");
+
+  const path = stringField(raw, "path");
+  return path === null
+    ? failure("invalid_reply", "reply.path must be a string")
+    : success({ path });
+};
+
+export const decodeTransferProgress: Decoder<TransferProgress> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_reply", "event must be an object");
+
+  const transferId = stringField(raw, "transferId");
+  const done = finiteField(raw, "done");
+  const total = finiteField(raw, "total");
+  if (transferId === null || done === null || total === null) {
+    return failure("invalid_reply", "progress is missing a required field");
+  }
+  return success({ transferId, done, total });
 };

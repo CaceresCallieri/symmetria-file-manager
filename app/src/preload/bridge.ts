@@ -29,6 +29,20 @@ export interface Bridge {
   describe(request: unknown): Promise<Result<unknown>>;
   /** Make one file loadable by the renderer, and name the URL. */
   previewUrl(request: unknown): Promise<Result<unknown>>;
+  /** Copy or move entries into a directory. */
+  transfer(request: unknown): Promise<Result<unknown>>;
+  /** Abandon a running transfer. */
+  cancelTransfer(request: unknown): Promise<Result<unknown>>;
+  /** Create an empty file or a directory, with its parents. */
+  create(request: unknown): Promise<Result<unknown>>;
+  /** Rename an entry in place. */
+  rename(request: unknown): Promise<Result<unknown>>;
+  /** Send entries to the desktop trash. */
+  trash(request: unknown): Promise<Result<unknown>>;
+  /** Hand an entry to whatever the desktop says opens it. */
+  open(request: unknown): Promise<Result<unknown>>;
+  /** Follow a running transfer. */
+  onTransferProgress(listener: (event: unknown) => void): Unsubscribe;
   /** Receive one batch of a streamed listing. */
   onListBatch(listener: (batch: unknown) => void): Unsubscribe;
   /** Receive a directory-changed notification. */

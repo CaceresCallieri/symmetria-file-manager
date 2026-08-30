@@ -4,11 +4,14 @@ import { useMemo } from "react";
 
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { MillerColumns } from "./components/MillerColumns.tsx";
+import { OpsModals } from "./components/modals/OpsModals.tsx";
 import { PathBar } from "./components/PathBar.tsx";
 import { StatusBar } from "./components/StatusBar.tsx";
+import { StatusStrip } from "./components/StatusStrip.tsx";
 import { TabBar } from "./components/TabBar.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
 import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
+import { useFileOps } from "./useFileOps.ts";
 import { useKeyActions } from "./useKeyActions.ts";
 import { usePreview } from "./usePreview.ts";
 import { useTabs } from "./useTabs.ts";
@@ -32,7 +35,8 @@ export interface AppProps {
 
 export function App({ startPath }: AppProps = {}) {
   const tabs = useTabs(startPath ?? initialPath());
-  const { actions, modes, state } = useKeyActions(tabs);
+  const ops = useFileOps(tabs);
+  const { actions, modes, state } = useKeyActions(tabs, ops);
   const preview = usePreview(state.cursorEntry?.path ?? null);
 
   const context = useMemo<KeyContext>(
@@ -44,7 +48,9 @@ export function App({ startPath }: AppProps = {}) {
 
   const mode = useMemo<CascadeMode>(
     () => ({
-      modalOpen: modes.helpOpen,
+      // One gate for every dialog: the help sheet and the operation dialogs
+      // share it, so two can never be open at once.
+      modalOpen: modes.helpOpen || ops.modal.kind !== "none",
       bookmarkSubMode: modes.bookmarkSubMode,
       chordPrefix: modes.chordPrefix,
       // Flash jump is a text-input mode that arrives with its own phase. Until
@@ -52,7 +58,7 @@ export function App({ startPath }: AppProps = {}) {
       flashActive: false,
       textInputFocused: false,
     }),
-    [modes.helpOpen, modes.bookmarkSubMode, modes.chordPrefix],
+    [modes.helpOpen, modes.bookmarkSubMode, modes.chordPrefix, ops.modal.kind],
   );
 
   useKeyDispatch({ mode, context });
@@ -68,11 +74,6 @@ export function App({ startPath }: AppProps = {}) {
         />
       ) : null}
       <PathBar path={tabs.pane.path} />
-      {tabs.error === null ? null : (
-        <p data-testid="pane-error" className="pane-error">
-          {tabs.error}
-        </p>
-      )}
       <MillerColumns
         path={tabs.pane.path}
         parentEntries={tabs.parentEntries}
@@ -91,11 +92,12 @@ export function App({ startPath }: AppProps = {}) {
         prefix={modes.chordPrefix}
         cursorIsImage={state.cursorEntry?.isImage === true}
       />
-      {modes.message === null ? null : (
-        <p data-testid="pane-message" className="pane-message">
-          {modes.message}
-        </p>
-      )}
+      <StatusStrip
+        error={tabs.error}
+        message={ops.message ?? modes.message}
+        progress={ops.progress}
+        onCancelTransfer={ops.cancelRunningTransfer}
+      />
       <StatusBar
         entryCount={tabs.pane.entries.length}
         selectedCount={state.selectedCount}
@@ -103,6 +105,14 @@ export function App({ startPath }: AppProps = {}) {
         showHidden={tabs.showHidden}
       />
       {modes.helpOpen ? <HelpOverlay context={context} onClose={modes.closeHelp} /> : null}
+      <OpsModals
+        modal={ops.modal}
+        onCancel={ops.closeModal}
+        onConfirmDelete={ops.confirmDelete}
+        onConfirmRename={ops.confirmRename}
+        onConfirmCreate={ops.confirmCreate}
+        onConfirmOverwrite={ops.confirmOverwrite}
+      />
     </main>
   );
 }

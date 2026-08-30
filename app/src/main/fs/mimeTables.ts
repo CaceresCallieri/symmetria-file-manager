@@ -1,8 +1,9 @@
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 
 import type { MimeGlob, MimeTables } from "@symmetria/fm-core/mime";
+
+import { dataDirectories } from "../xdg.ts";
 
 /**
  * Load the XDG shared-mime-info database from disk.
@@ -15,16 +16,6 @@ import type { MimeGlob, MimeTables } from "@symmetria/fm-core/mime";
  * type the user installed a program for — a `.kra`, a `.blend` — resolves in
  * their file manager and not in ours, which reads as our bug.
  */
-
-/** Where the database lives, most-specific first. */
-function dataDirectories(): string[] {
-  const home = process.env["XDG_DATA_HOME"] ?? join(homedir(), ".local", "share");
-  const system = process.env["XDG_DATA_DIRS"] ?? "/usr/local/share:/usr/share";
-
-  // The user's own directory wins, which is what lets a locally installed
-  // program's types take precedence over the system's.
-  return [home, ...system.split(":").filter((dir) => dir !== "")];
-}
 
 async function readLines(path: string): Promise<string[]> {
   // A missing file is normal: not every data directory has a MIME database,

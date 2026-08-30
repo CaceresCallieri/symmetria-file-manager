@@ -11,21 +11,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BRIDGE_KEY, type Bridge } from "../../src/preload/bridge.ts";
 import { ImagePreview } from "../../src/renderer/components/preview/ImagePreview.tsx";
+import { inertBridge } from "./support.ts";
 
 beforeEach(() => {
-  const bridge = {
-    version: "test",
-    list: () => Promise.resolve({ ok: true as const, value: null }),
-    watch: () => Promise.resolve({ ok: true as const, value: null }),
-    unwatch: () => Promise.resolve({ ok: true as const, value: null }),
-    readText: () => Promise.resolve({ ok: true as const, value: null }),
-    cancel: () => Promise.resolve({ ok: true as const, value: null }),
-    describe: () => Promise.resolve({ ok: true as const, value: null }),
+  const bridge: Bridge = {
+    ...inertBridge(),
     previewUrl: () =>
       Promise.resolve({ ok: true as const, value: { url: "symmetria-fm://app/__preview/t" } }),
-    onListBatch: () => () => undefined,
-    onChanged: () => () => undefined,
-  } satisfies Bridge;
+  };
 
   Object.defineProperty(window, BRIDGE_KEY, { value: bridge, configurable: true, writable: true });
 });

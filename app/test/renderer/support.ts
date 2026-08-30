@@ -58,10 +58,41 @@ function head(request: unknown): Head {
   return { text, truncated: text.length < whole.length };
 }
 
+/**
+ * A bridge that answers nothing, for the methods a test does not care about.
+ *
+ * Shared so a channel added to the surface is a one-line change here rather
+ * than a compile error in every fixture that happened to build its own.
+ */
+export function inertBridge(): Bridge {
+  const ok = () => Promise.resolve({ ok: true as const, value: null });
+  return {
+    version: "inert",
+    list: ok,
+    watch: ok,
+    unwatch: ok,
+    readText: ok,
+    cancel: ok,
+    describe: ok,
+    previewUrl: ok,
+    transfer: ok,
+    create: ok,
+    rename: ok,
+    trash: ok,
+    open: ok,
+    cancelTransfer: ok,
+    onListBatch: () => () => undefined,
+    onChanged: () => () => undefined,
+    onTransferProgress: () => () => undefined,
+  };
+}
+
 export interface BridgeLog {
   readonly listed: string[];
   readonly unwatched: string[];
   readonly watched: string[];
+  /** Every operation the renderer asked the main process to perform. */
+  readonly ops: string[];
   /** Which paths the preview asked about, in order. Used to assert the debounce. */
   readonly described: string[];
   /** How many listeners the renderer attached to the change channel. */
@@ -70,6 +101,20 @@ export interface BridgeLog {
   emitChange(subscriptionId: string): void;
   /** Add an entry to a directory, so a change has something to report. */
   addEntry(path: string, name: string): void;
+  /** Make the next transfer report these names as already present. */
+  conflictNext(names: readonly string[]): void;
+  /** Leave the next transfer unresolved, so a test can watch it running. */
+  holdNextTransfer(): void;
+  /** Push a progress tick, as the main process would. */
+  emitProgress(transferId: string, done: number, total: number): void;
+  /**
+   * The ids of the transfers that have been asked for.
+   *
+   * The renderer numbers them from a module-level counter, so it carries across
+   * tests in one file — a test that assumed `t0` would pass alone and fail in
+   * company.
+   */
+  readonly transferIds: string[];
 }
 
 /**
@@ -84,10 +129,16 @@ export function installBridge(): BridgeLog {
   const unwatched: string[] = [];
   const watched: string[] = [];
   const described: string[] = [];
+  const ops: string[] = [];
+  let conflictOnce: readonly string[] = [];
+  let holdOnce = false;
+  const transferIds: string[] = [];
+  const progressListeners = new Set<(payload: unknown) => void>();
   const listeners = new Set<(payload: unknown) => void>();
   const tree = new Map([...TREE].map(([path, entries]) => [path, [...entries]]));
 
   const bridge: Bridge = {
+    ...inertBridge(),
     version: "test",
     list: (request) => {
       const path = (request as { path: string }).path;
@@ -161,6 +212,66 @@ export function installBridge(): BridgeLog {
         value: { url: `symmetria-fm://app/__preview/${encodeURIComponent(path)}` },
       });
     },
+    transfer: (request) => {
+      const { sources, destination, mode, overwrite, transferId } = request as {
+        sources: string[];
+        destination: string;
+        mode: string;
+        overwrite: boolean;
+        transferId: string;
+      };
+      transferIds.push(transferId);
+      ops.push(`${mode} ${sources.join(",")} -> ${destination}${overwrite ? " !" : ""}`);
+
+      // Reported once, so a test can drive the conflict prompt and then watch
+      // the confirmed retry go through.
+      const conflicts = overwrite ? [] : conflictOnce;
+      conflictOnce = [];
+
+      if (holdOnce) {
+        holdOnce = false;
+        // Never settles: a transfer the test can observe mid-flight.
+        return new Promise(() => undefined);
+      }
+
+      return Promise.resolve({
+        ok: true as const,
+        value: { moved: conflicts.length > 0 ? 0 : sources.length, conflicts },
+      });
+    },
+    create: (request) => {
+      const { path, kind } = request as { path: string; kind: string };
+      ops.push(`create ${kind} ${path}`);
+      return Promise.resolve({ ok: true as const, value: null });
+    },
+    rename: (request) => {
+      const { path, name } = request as { path: string; name: string };
+      ops.push(`rename ${path} -> ${name}`);
+      if (name === "taken.txt") {
+        return Promise.resolve({
+          ok: false as const,
+          error: { code: "write_failed" as const, message: `${name} already exists` },
+        });
+      }
+      return Promise.resolve({ ok: true as const, value: { path: name } });
+    },
+    trash: (request) => {
+      const { paths } = request as { paths: string[] };
+      ops.push(`trash ${paths.join(",")}`);
+      return Promise.resolve({ ok: true as const, value: null });
+    },
+    open: (request) => {
+      ops.push(`open ${(request as { path: string }).path}`);
+      return Promise.resolve({ ok: true as const, value: null });
+    },
+    cancelTransfer: (request) => {
+      ops.push(`cancel ${(request as { transferId: string }).transferId}`);
+      return Promise.resolve({ ok: true as const, value: null });
+    },
+    onTransferProgress: (listener) => {
+      progressListeners.add(listener);
+      return () => progressListeners.delete(listener);
+    },
     onListBatch: () => () => undefined,
     onChanged: (listener) => {
       listeners.add(listener);
@@ -175,6 +286,17 @@ export function installBridge(): BridgeLog {
     unwatched,
     watched,
     described,
+    ops,
+    conflictNext: (names) => {
+      conflictOnce = names;
+    },
+    transferIds,
+    holdNextTransfer: () => {
+      holdOnce = true;
+    },
+    emitProgress: (transferId, done, total) => {
+      for (const listener of progressListeners) listener({ transferId, done, total });
+    },
     listenerCount: () => listeners.size,
     emitChange: (subscriptionId) => {
       for (const listener of listeners) listener({ subscriptionId, changed: [] });

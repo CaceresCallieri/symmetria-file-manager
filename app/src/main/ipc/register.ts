@@ -4,10 +4,16 @@ import { basename } from "node:path";
 import {
   type Decoder,
   decodeCancelRequest,
+  decodeCancelTransferRequest,
+  decodeCreateRequest,
   decodeDescribeRequest,
   decodeListRequest,
+  decodeOpenRequest,
   decodePreviewUrlRequest,
   decodeReadTextRequest,
+  decodeRenameRequest,
+  decodeTransferRequest,
+  decodeTrashRequest,
   decodeUnwatchRequest,
   decodeWatchRequest,
   type FailureCode,
@@ -26,6 +32,7 @@ import { sortEntries } from "@symmetria/fm-core/sort";
 import { mimeTables } from "../fs/mimeTables.ts";
 import { scanDirectory } from "../fs/scan.ts";
 import { type ChangedEntry, type StopWatching, watchDirectory } from "../fs/watch.ts";
+import { operations } from "../ops/index.ts";
 import { authorisePreview } from "../previewTokens.ts";
 import { previewUrlFor } from "../protocol.ts";
 import { CHANNELS, REQUEST_CHANNELS } from "./channels.ts";
@@ -270,6 +277,55 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
       // broken image the renderer has no way to explain.
       await stat(request.path);
       return success({ url: previewUrlFor(authorisePreview(request.path)) });
+    }),
+  );
+
+  ipc.handle(
+    CHANNELS.transfer,
+    guard(decodeTransferRequest, "write_failed", async (request) => {
+      const outcome = await operations.transfer(request, (done, total) => {
+        sender.send(CHANNELS.transferProgress, { transferId: request.transferId, done, total });
+      });
+      return success(outcome);
+    }),
+  );
+
+  ipc.handle(
+    CHANNELS.cancelTransfer,
+    guard(decodeCancelTransferRequest, "write_failed", (request) => {
+      operations.cancelTransfer(request.transferId);
+      return Promise.resolve(success(null));
+    }),
+  );
+
+  ipc.handle(
+    CHANNELS.create,
+    guard(decodeCreateRequest, "write_failed", async (request) => {
+      await operations.create(request.path, request.kind);
+      return success(null);
+    }),
+  );
+
+  ipc.handle(
+    CHANNELS.rename,
+    guard(decodeRenameRequest, "write_failed", async (request) => {
+      return success({ path: await operations.rename(request.path, request.name) });
+    }),
+  );
+
+  ipc.handle(
+    CHANNELS.trash,
+    guard(decodeTrashRequest, "write_failed", async (request) => {
+      await operations.trash(request.paths);
+      return success(null);
+    }),
+  );
+
+  ipc.handle(
+    CHANNELS.open,
+    guard(decodeOpenRequest, "read_failed", async (request) => {
+      await operations.open(request.path);
+      return success(null);
     }),
   );
 

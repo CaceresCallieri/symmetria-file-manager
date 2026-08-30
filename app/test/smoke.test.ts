@@ -88,7 +88,7 @@ describe("the application boots", () => {
 
   it("exposes only the declared bridge methods", () => {
     expect(report.bridgeKeys).toBe(
-      "cancel,describe,list,onChanged,onListBatch,previewUrl,readText,unwatch,version,watch",
+      "cancel,cancelTransfer,create,describe,list,onChanged,onListBatch,onTransferProgress,open,previewUrl,readText,rename,transfer,trash,unwatch,version,watch",
     );
   });
 

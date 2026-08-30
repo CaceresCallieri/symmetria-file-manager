@@ -284,3 +284,29 @@ kbd {
   padding: 4px 0;
   color: #ff8a80;
 }
+
+.dialog__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.dialog__actions button,
+.overlay__panel input {
+  padding: 4px 8px;
+  border: 1px solid var(--overlay-subtle);
+  border-radius: 6px;
+  background: var(--overlay-subtle);
+  color: inherit;
+  font: inherit;
+}
+
+.overlay__panel input {
+  width: 100%;
+}
+
+.dialog__hint {
+  margin: 8px 0 0;
+  opacity: 70%;
+}

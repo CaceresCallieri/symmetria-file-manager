@@ -21,5 +21,6 @@
     "docs/**",
     "tools/oxlint/anti-slop/**"
   ],
-  "ignoreDependencies": ["@oxlint/plugins"]
+  "ignoreDependencies": ["@oxlint/plugins"],
+  "ignoreBinaries": ["xdg-mime"]
 }

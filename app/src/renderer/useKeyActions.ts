@@ -1,6 +1,7 @@
 import type { BookmarkSubMode, KeyActions, KeyState } from "@symmetria/fm-core/keys/types";
 import { useMemo, useState } from "react";
 
+import type { FileOps } from "./useFileOps.ts";
 import type { Tabs } from "./useTabs.ts";
 
 /**
@@ -34,6 +35,11 @@ export interface KeyWiring {
   readonly state: KeyState;
 }
 
+/** Is the cursor on a directory? Deciding enter-versus-open needs only this. */
+function isDirectoryUnderCursor(tabs: Tabs): boolean {
+  return tabs.pane.entries[tabs.pane.cursorIndex]?.kind === "directory";
+}
+
 /**
  * Roughly half a screen of rows.
  *
@@ -46,7 +52,7 @@ function halfPageRows(): number {
   return Math.max(1, Math.floor(viewport / 2 / 24));
 }
 
-export function useKeyActions(tabs: Tabs): KeyWiring {
+export function useKeyActions(tabs: Tabs, ops: FileOps): KeyWiring {
   const [chordPrefix, setChordPrefix] = useState("");
   const [bookmarkSubMode, setBookmarkSubMode] = useState<BookmarkSubMode | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -63,9 +69,10 @@ export function useKeyActions(tabs: Tabs): KeyWiring {
       jumpToBottom: () => tabs.moveTo(tabs.pane.entries.length - 1),
       halfPageDown: () => tabs.moveBy(halfPageRows()),
       halfPageUp: () => tabs.moveBy(-halfPageRows()),
-      activate: () => tabs.enter(),
+      // A directory is entered; anything else is handed to the desktop.
+      activate: () => (isDirectoryUnderCursor(tabs) ? tabs.enter() : ops.open()),
       goUp: () => tabs.leave(),
-      enterDirectory: () => tabs.enter(),
+      enterDirectory: () => (isDirectoryUnderCursor(tabs) ? tabs.enter() : ops.open()),
       goHome: soon("Go home"),
       jumpDirectoryFileBoundary: soon("Jump to the directory/file boundary"),
       dismiss: () => setMessage(null),
@@ -73,14 +80,14 @@ export function useKeyActions(tabs: Tabs): KeyWiring {
       historyBack: soon("History"),
       historyForward: soon("History"),
 
-      trash: soon("Trash"),
-      rename: soon("Rename"),
-      createEntry: soon("New file or folder"),
+      trash: () => ops.requestDelete(),
+      rename: (withExtension) => ops.requestRename(withExtension),
+      createEntry: () => ops.requestCreate(),
       editSaveName: soon("Editing the save name"),
 
-      yank: soon("Yank"),
-      cut: soon("Cut"),
-      paste: soon("Paste"),
+      yank: () => ops.yank(),
+      cut: () => ops.cut(),
+      paste: () => ops.paste(),
       copyToClipboard: soon("Copy to clipboard"),
 
       toggleSelection: () => tabs.toggleMark(),
@@ -107,7 +114,7 @@ export function useKeyActions(tabs: Tabs): KeyWiring {
       toggleHidden: soon("Hidden files"),
       toggleHtmlRender: soon("The HTML preview"),
       openContextMenu: soon("The context menu"),
-      openCopyingPath: () => tabs.enter(),
+      openCopyingPath: () => ops.open(),
 
       tabNew: () => tabs.open(),
       tabClose: () => tabs.close(),
@@ -125,7 +132,7 @@ export function useKeyActions(tabs: Tabs): KeyWiring {
       treeToggleGitignore: soon("The tree view"),
       treeRefresh: soon("The tree view"),
     };
-  }, [tabs]);
+  }, [tabs, ops]);
 
   const state = useMemo<KeyState>(() => {
     const entry = tabs.pane.entries[tabs.pane.cursorIndex];

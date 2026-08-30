@@ -1,15 +1,22 @@
 import {
+  type CreateRequest,
   type DescribeReply,
   decodeChangedEvent,
   decodeDescribeReply,
   decodeListReply,
   decodePreviewUrlReply,
   decodeReadTextReply,
+  decodeRenameReply,
+  decodeTransferProgress,
+  decodeTransferReply,
   failure,
   isFailure,
   type ListReply,
   type ReadTextReply,
+  type RenameReply,
   type Result,
+  type TransferReply,
+  type TransferRequest,
 } from "@symmetria/fm-core/contract";
 import type { SortMode } from "@symmetria/fm-core/sort";
 
@@ -181,4 +188,75 @@ export async function watchDirectory(
     release();
     void bridge.unwatch({ subscriptionId });
   };
+}
+
+/** Copy or move entries into a directory. */
+export async function transferEntries(request: TransferRequest): Promise<Result<TransferReply>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("write_failed", MISSING_BRIDGE);
+
+  const reply = await bridge.transfer(request);
+  return isFailure(reply) ? reply : decodeTransferReply(reply.value);
+}
+
+/** Abandon a running transfer. */
+export function cancelTransfer(transferId: string): void {
+  void getBridge()?.cancelTransfer({ transferId });
+}
+
+/** Create an empty file or a directory, with its parents. */
+export async function createPath(request: CreateRequest): Promise<Result<null>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("write_failed", MISSING_BRIDGE);
+
+  const reply = await bridge.create(request);
+  return isFailure(reply) ? reply : { ok: true, value: null };
+}
+
+/** Rename an entry in place. */
+export async function renamePath(path: string, name: string): Promise<Result<RenameReply>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("write_failed", MISSING_BRIDGE);
+
+  const reply = await bridge.rename({ path, name });
+  return isFailure(reply) ? reply : decodeRenameReply(reply.value);
+}
+
+/** Send entries to the desktop trash. */
+export async function trashPaths(paths: readonly string[]): Promise<Result<null>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("write_failed", MISSING_BRIDGE);
+
+  const reply = await bridge.trash({ paths });
+  return isFailure(reply) ? reply : { ok: true, value: null };
+}
+
+/** Hand an entry to whatever the desktop says opens it. */
+export async function openPath(path: string): Promise<Result<null>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("read_failed", MISSING_BRIDGE);
+
+  const reply = await bridge.open({ path });
+  return isFailure(reply) ? reply : { ok: true, value: null };
+}
+
+/**
+ * Follow a running transfer.
+ *
+ * One listener for the channel, dispatched to the transfer it names — the same
+ * shape the change events use, and for the same reason: a listener per transfer
+ * would wake every one of them on each tick.
+ */
+export function onTransferProgress(
+  transferId: string,
+  onTick: (done: number, total: number) => void,
+): Unsubscribe {
+  const bridge = getBridge();
+  if (bridge === null) return () => undefined;
+
+  return bridge.onTransferProgress((raw) => {
+    const event = decodeTransferProgress(raw);
+    if (isFailure(event) || event.value.transferId !== transferId) return;
+    onTick(event.value.done, event.value.total);
+  });
 }

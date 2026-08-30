@@ -135,12 +135,24 @@ describe("operations that later phases build", () => {
     // The registry is ported whole, so it names operations that do not exist
     // yet. A key that silently does nothing reads as a bug; one that says why
     // reads as a roadmap.
+    //
+    // `f` is the fuzzy finder, still unbuilt. `d` used to stand here and now
+    // opens the trash dialog for real — an operation graduating out of this
+    // test is the point of the test, not a break in it.
+    await openedAtHome();
+
+    fireEvent.keyDown(window, { key: "f" });
+
+    const message = await screen.findByTestId("pane-message");
+    expect(message.textContent).toMatch(/fuzzy finder/i);
+  });
+
+  it("opens the trash dialog for an operation that now exists", async () => {
     await openedAtHome();
 
     fireEvent.keyDown(window, { key: "d" });
 
-    const message = await screen.findByTestId("pane-message");
-    expect(message.textContent).toMatch(/trash/i);
+    expect(await screen.findByTestId("modal-delete")).toBeDefined();
   });
 });
 
