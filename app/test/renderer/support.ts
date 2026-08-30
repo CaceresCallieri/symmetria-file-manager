@@ -45,6 +45,13 @@ const MANY = Array.from({ length: PREVIEW_CAP + 37 }, (_, i) =>
  * listing — that is how a directory the process cannot read is expressed here.
  */
 const TREE = new Map([
+  // The root is listable. It was deliberately absent once, so that climbing to
+  // it failed and a test could assert the pane reported why — but the pane now
+  // RETURNS to its last good path when a listing fails, so that test was
+  // asserting two things at once and caught the pane mid-revert about one run
+  // in nine. Climbing is one property and a failed listing is another; they are
+  // tested separately now.
+  ["/", [entry("home", "directory"), entry("tmp", "directory")]],
   ["/home", [entry("jc", "directory"), entry("other", "directory")]],
   [
     "/home/jc",

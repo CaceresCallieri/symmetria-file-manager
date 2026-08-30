@@ -45,6 +45,33 @@ async function fastestScan(path: string, runs = 5): Promise<number> {
 }
 
 /**
+ * Two directories timed in alternation, best-of-N each.
+ *
+ * Alternating rather than batching is what keeps the RATIO honest: whatever the
+ * machine is doing, both sides get the same share of it. Taking all of one and
+ * then all of the other lets a burst of load land on one side alone.
+ */
+async function interleavedScans(
+  plain: string,
+  links: string,
+  runs = 5,
+): Promise<{ baseline: number; withLinks: number }> {
+  let baseline = Number.POSITIVE_INFINITY;
+  let withLinks = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < runs; i++) {
+    const startedPlain = performance.now();
+    await scanDirectory(plain);
+    baseline = Math.min(baseline, performance.now() - startedPlain);
+
+    const startedLinks = performance.now();
+    await scanDirectory(links);
+    withLinks = Math.min(withLinks, performance.now() - startedLinks);
+  }
+  return { baseline, withLinks };
+}
+
+/**
  * The floor the scan is measured against: the syscalls it cannot avoid.
  *
  * One `readdir` plus one `lstat` per entry, issued in the same bounded batches
@@ -234,11 +261,17 @@ describe("scanDirectory at scale, a directory of symlinks", () => {
       );
       await scanDirectory(plain);
 
-      // Best-of-N on both sides, via the same helper the throughput budget
-      // uses: one slow run caused by a machine that got busy must not decide
-      // either number.
-      const baseline = await fastestScan(plain);
-      const withLinks = await fastestScan(links);
+      // Best-of-N on both sides, INTERLEAVED.
+      //
+      // It used to take five baseline samples and then five link samples, and
+      // that is what made it flake: a machine that got busy between the two
+      // batches inflated the second one and the ratio with it. Measured on this
+      // box, the ratio ran 0.93-1.29 quiet and reached 1.63 against a 1.6
+      // threshold in a full parallel suite — while the defect it guards costs a
+      // factor of two. Widening the threshold would have bought the same flake
+      // a little later and blunted the guard; alternating the two measurements
+      // makes both sides see the same conditions, which is the actual fix.
+      const { baseline, withLinks } = await interleavedScans(plain, links);
 
       // 6000 links plus the two targets they point at.
       expect(await scanDirectory(links)).toHaveLength(6002);

@@ -107,10 +107,12 @@ describe("App, wired to a bridge", () => {
 
     for (let i = 0; i < 5; i++) fireEvent.keyDown(window, { key: "h" });
 
-    // `/` is not in the fake tree, so the listing fails and the pane says why
-    // instead of rendering a blank column with no explanation.
-    await waitFor(() => expect(screen.getByTestId("path-bar").textContent).toBe("/"));
-    expect(screen.getByTestId("pane-error")).toBeDefined();
+    // Five presses from `/home` is four more than there is anywhere to go.
+    await waitFor(() => expect(namesIn("column-current")).toContain("home"));
+    expect(screen.getByTestId("path-bar").textContent).toBe("/");
+    // Arriving somewhere real, not stranded: the clamp is `leaveDirectory`
+    // refusing to go above `/`, and it must not look like a failed listing.
+    expect(screen.queryByTestId("pane-error")).toBeNull();
   });
 
   it("releases the watch on the directory it left", async () => {
