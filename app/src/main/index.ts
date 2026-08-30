@@ -1,8 +1,10 @@
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 
 import { BRIDGE_KEY } from "../preload/bridge.ts";
+import { electronIpcSurface } from "./ipc/electronSurface.ts";
+import { createRegistry } from "./ipc/register.ts";
 import { APP_ENTRY_URL, handleAppScheme, registerAppScheme } from "./protocol.ts";
 import { buildWindowOptions } from "./window.ts";
 
@@ -79,6 +81,22 @@ async function reportAndQuit(window: BrowserWindow): Promise<void> {
       .then((r) => r.ok)
       .catch(() => false),
     rendererOrigin: window.location.protocol,
+    // The bridge, exercised from page code. This is the criterion the phase is
+    // for: the renderer has no filesystem, so a listing it can name proves the
+    // only route to the disk works, and works from the sandbox.
+    bridgeList: await (async () => {
+      try {
+        const reply = await window[${JSON.stringify(BRIDGE_KEY)}].list({ path: "/usr", showHidden: false });
+        return reply.ok ? reply.value.entries.length : "err:" + reply.error.code;
+      } catch (e) { return "threw:" + String(e); }
+    })(),
+    bridgeRejectsBadInput: await (async () => {
+      try {
+        const reply = await window[${JSON.stringify(BRIDGE_KEY)}].list({ path: 7 });
+        return reply.ok === false && reply.error.code === "invalid_request";
+      } catch { return false; }
+    })(),
+    bridgeKeys: Object.keys(window[${JSON.stringify(BRIDGE_KEY)}]).sort().join(","),
   }))()`);
 
   process.stdout.write(
@@ -96,6 +114,15 @@ async function reportAndQuit(window: BrowserWindow): Promise<void> {
 app.whenReady().then(() => {
   handleAppScheme();
   const window = createWindow();
+
+  // The renderer has no filesystem of its own, so this registry is the only
+  // way it reaches one. Bound to this window's sender: a push goes to the
+  // window that asked, never broadcast to whatever else might be listening.
+  createRegistry(electronIpcSurface(ipcMain), {
+    send: (channel, payload) => {
+      if (!window.isDestroyed()) window.webContents.send(channel, payload);
+    },
+  });
 
   if (SMOKE) {
     window.webContents.once("did-finish-load", () => {

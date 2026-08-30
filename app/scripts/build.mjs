@@ -9,10 +9,18 @@ const out = `${appDir}/dist-electron`;
 await rm(out, { recursive: true, force: true });
 
 /**
- * The main process, as ESM.
+ * What must not be bundled.
  *
- * `electron` is external because it is supplied by the runtime, not bundled.
- * Node built-ins likewise.
+ * `electron` is supplied by the runtime. `@parcel/watcher` is a NATIVE module:
+ * bundling its CommonJS entry into an ESM output turns its `require("path")`
+ * into a dynamic require the ESM loader refuses, and the application dies at
+ * load with "Dynamic require of \"path\" is not supported". A native module is
+ * resolved from `node_modules` at runtime, never inlined.
+ */
+const EXTERNAL = ["electron", "@parcel/watcher"];
+
+/**
+ * The main process, as ESM.
  */
 await esbuild({
   entryPoints: [`${appDir}/src/main/index.ts`],
@@ -21,7 +29,7 @@ await esbuild({
   platform: "node",
   format: "esm",
   target: "node24",
-  external: ["electron"],
+  external: EXTERNAL,
   sourcemap: true,
   logLevel: "info",
 });
@@ -41,7 +49,7 @@ await esbuild({
   platform: "node",
   format: "cjs",
   target: "node24",
-  external: ["electron"],
+  external: EXTERNAL,
   sourcemap: true,
   logLevel: "info",
 });

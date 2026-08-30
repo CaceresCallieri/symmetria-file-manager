@@ -1,14 +1,35 @@
-import { contextBridge } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 
-import { BRIDGE_KEY, buildBridge } from "./bridge.ts";
+import { PUSH_CHANNELS, REQUEST_CHANNELS } from "../main/ipc/channels.ts";
+import { BRIDGE_KEY, type Bridge, type Unsubscribe } from "./bridge.ts";
 
 /**
  * The preload runs with Node available, inside the renderer process. Anything
  * attached to `window` here becomes reachable from sandboxed page code, so this
- * file exposes exactly one object built from plain data — never a module, never
- * a function that closes over one.
+ * file exposes exactly one object holding plain functions — never a module,
+ * never `ipcRenderer` itself, and never a function that takes a channel name
+ * from the caller. A bridge that lets page code choose the channel is not a
+ * bridge, it is a hole with a railing.
  *
  * There is one `exposeInMainWorld` call in this file and a test asserts that
  * count, because "exactly one" is the property worth pinning.
  */
-contextBridge.exposeInMainWorld(BRIDGE_KEY, buildBridge(process.versions.electron ?? "unknown"));
+
+function listen(channel: string, listener: (payload: unknown) => void): Unsubscribe {
+  const wrapped = (_event: unknown, payload: unknown) => listener(payload);
+  ipcRenderer.on(channel, wrapped);
+  return () => ipcRenderer.removeListener(channel, wrapped);
+}
+
+const bridge: Bridge = {
+  version: process.versions.electron ?? "unknown",
+  list: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.list, request),
+  watch: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.watch, request),
+  unwatch: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.unwatch, request),
+  readText: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.readText, request),
+  cancel: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.cancel, request),
+  onListBatch: (listener) => listen(PUSH_CHANNELS.listBatch, listener),
+  onChanged: (listener) => listen(PUSH_CHANNELS.changed, listener),
+};
+
+contextBridge.exposeInMainWorld(BRIDGE_KEY, bridge);

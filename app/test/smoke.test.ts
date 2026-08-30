@@ -74,6 +74,24 @@ describe("the application boots", () => {
     expect(report.rendererOrigin).toBe("symmetria-fm:");
   });
 
+  it("lists a real directory through the bridge, from sandboxed page code", () => {
+    // The whole point of phase 4. The renderer cannot reach the filesystem,
+    // so a listing it can produce proves the bridge is the route and that the
+    // route works from inside the sandbox.
+    expect(report.bridgeList).toBeTypeOf("number");
+    expect(report.bridgeList as number).toBeGreaterThan(0);
+  });
+
+  it("refuses a malformed request at the boundary, as a value", () => {
+    expect(report.bridgeRejectsBadInput).toBe(true);
+  });
+
+  it("exposes only the declared bridge methods", () => {
+    expect(report.bridgeKeys).toBe(
+      "cancel,list,onChanged,onListBatch,readText,unwatch,version,watch",
+    );
+  });
+
   it("exposes the bridge to the renderer and nothing besides", () => {
     expect(report.rendererBridgePresent).toBe(true);
     expect(report.rendererHasNodeProcess).toBe(false);

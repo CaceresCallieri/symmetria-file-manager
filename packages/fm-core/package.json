@@ -14,6 +14,7 @@
     "./mime": "./src/mime.ts",
     "./sort": "./src/sort.ts",
     "./filter": "./src/filter.ts",
-    "./glob": "./src/glob.ts"
+    "./glob": "./src/glob.ts",
+    "./contract": "./src/contract.ts"
   }
 }
