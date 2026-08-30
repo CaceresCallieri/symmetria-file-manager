@@ -9,7 +9,9 @@
   "desktopName": "symmetria-fm-electron.desktop",
   "scripts": {
     "build": "node scripts/build.mjs && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "start": "node scripts/start.mjs",
+    "dev": "node scripts/build.mjs && vite build && node scripts/start.mjs"
   },
   "dependencies": {
     "@pierre/trees": "1.0.0-beta.4",
