@@ -1,3 +1,13 @@
 packages:
   - "packages/*"
   - "app"
+# pnpm 11 refuses to run a dependency's install scripts without an explicit
+# entry here. Both of these need theirs, and both are packages this project
+# selected deliberately rather than pulled in transitively:
+#   electron — its postinstall downloads the platform binary; without it there
+#              is no application to launch and no smoke test.
+#   esbuild  — its postinstall places the native binary the bundler runs on.
+# Anything not listed stays blocked, which is the point of the mechanism.
+allowBuilds:
+  electron: true
+  esbuild: true

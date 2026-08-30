@@ -5,5 +5,21 @@
   "type": "module",
   "description": "The standalone Electron host for the Symmetria File Manager",
   "license": "MIT",
-  "main": "dist-electron/main/index.js"
+  "main": "dist-electron/main/index.js",
+  "desktopName": "symmetria-fm-electron.desktop",
+  "scripts": {
+    "build": "node scripts/build.mjs && vite build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.1",
+    "esbuild": "^0.28.2",
+    "vite": "^8.2.2"
+  }
 }

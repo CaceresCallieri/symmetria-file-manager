@@ -43,6 +43,24 @@
     "tools/oxlint/anti-slop/**"
   ],
 
+  // Electron has three entry points and none of them is imported by anything:
+  // the runtime loads the main bundle, Chromium loads the preload, and the
+  // built page loads the renderer. Without these, fallow reports all three as
+  // unused files — which is true of the module graph and false of the program.
+  "entry": [
+    "app/src/main/index.ts",
+    "app/src/preload/index.ts",
+    "app/src/renderer/main.tsx",
+    "app/scripts/build.mjs",
+    "app/test/**/*.ts"
+  ],
+
+  // Two paths inside `new URL(...)` point at build OUTPUT, not at modules:
+  // `../renderer/index.html` is the page the window loads, and
+  // `../preload/index.cjs` is the bundle Chromium loads. They resolve at
+  // runtime, relative to `dist-electron/`, and never at analysis time.
+  "ignoreUnresolvedImports": ["../renderer/index.html", "../preload/index.cjs"],
+
   // The side effect of excluding the tree above: fallow can no longer see that
   // `tools/oxlint/anti-slop/index.ts` imports `@oxlint/plugins`, so it reported
   // that package as an unused devDependency. It is not — verified with

@@ -9,10 +9,10 @@
   // catalog's canonical single `tsc` line: a shared `lib` would let a `window`
   // reference into the main process and a `node:fs` import into the sandboxed
   // renderer, and both would type-check.
-  // `app/tsconfig.main.json` and `app/tsconfig.renderer.json` exist and are
-  // correct, but they are NOT referenced yet: `app/src/` has no files, so
-  // `tsc -p` on either errors TS18003. Phase 2 creates the sources, adds both
-  // references here, and adds their two lines to the check contract.
   "files": [],
-  "references": [{ "path": "./packages/fm-core" }]
+  "references": [
+    { "path": "./packages/fm-core" },
+    { "path": "./app/tsconfig.main.json" },
+    { "path": "./app/tsconfig.renderer.json" }
+  ]
 }

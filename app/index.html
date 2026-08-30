@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      Chromium blocks WebAssembly under a Content Security Policy that omits
+      'wasm-unsafe-eval'. Electron's own security guide recommends
+      `script-src 'self'` and never mentions WASM, so following it verbatim
+      silently breaks any WASM decoder shipped later. It is here from the start
+      rather than discovered when a preview goes blank.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'"
+    />
+    <title>Symmetria File Manager</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/renderer/main.tsx"></script>
+  </body>
+</html>
