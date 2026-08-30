@@ -1,6 +1,7 @@
 import type { FsEntry } from "@symmetria/fm-core/entry";
 
 import { FileList, NO_SELECTION } from "./FileList.tsx";
+import { PreviewPane, type PreviewPaneProps } from "./preview/PreviewPane.tsx";
 
 export interface MillerColumnsProps {
   readonly path: string;
@@ -11,6 +12,8 @@ export interface MillerColumnsProps {
   readonly parentCursorName: string;
   /** Marked entries in the CURRENT column, by name. */
   readonly selection?: ReadonlySet<string>;
+  /** What the third column shows. Absent means an empty slot. */
+  readonly preview?: PreviewPaneProps;
 }
 
 /**
@@ -27,6 +30,7 @@ export function MillerColumns({
   cursorIndex,
   parentCursorName,
   selection,
+  preview,
 }: MillerColumnsProps) {
   // NOT clamped to 0. If the directory we are inside has been renamed or
   // removed between reads, clamping would highlight whatever sits at index
@@ -48,9 +52,13 @@ export function MillerColumns({
         testId="column-current"
         selection={selection ?? NO_SELECTION}
       />
-      <div className="list" data-testid="column-preview">
-        <span>{entries[cursorIndex]?.name ?? ""}</span>
-      </div>
+      {preview === undefined ? (
+        <div className="list" data-testid="column-preview">
+          <span>{entries[cursorIndex]?.name ?? ""}</span>
+        </div>
+      ) : (
+        <PreviewPane {...preview} />
+      )}
     </div>
   );
 }

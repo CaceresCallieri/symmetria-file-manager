@@ -228,3 +228,59 @@ kbd {
   padding: 0 8px;
   opacity: 80%;
 }
+
+/* Previews. Layout only; the syntax colours come from the generated theme. */
+
+.preview-pane {
+  display: flex;
+  flex-direction: column;
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.preview__body {
+  margin: 0;
+  overflow: auto;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+  tab-size: 4;
+
+  /* Selectable, because reading a preview and copying a line out of it is the
+     same activity. */
+  user-select: text;
+}
+
+.preview__truncated {
+  flex: 0 0 auto;
+  margin: 4px 0 0;
+  opacity: 60%;
+  font-style: italic;
+}
+
+/* `contain`, not `cover`: an image preview that crops is lying about the
+   picture. The natural aspect ratio is the point. */
+.preview--image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.preview--document embed {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+}
+
+.preview__failed {
+  margin: 0;
+  padding: 4px 0;
+  color: #ff8a80;
+}

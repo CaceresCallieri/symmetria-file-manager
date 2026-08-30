@@ -22,6 +22,7 @@
     "./keys/dispatch": "./src/keys/dispatch.ts",
     "./keys/chords": "./src/keys/chords.ts",
     "./keys/cascade": "./src/keys/cascade.ts",
-    "./keys/keyEvent": "./src/keys/keyEvent.ts"
+    "./keys/keyEvent": "./src/keys/keyEvent.ts",
+    "./preview/route": "./src/preview/route.ts"
   }
 }

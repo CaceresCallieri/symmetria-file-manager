@@ -1,9 +1,12 @@
-import { open } from "node:fs/promises";
+import { open, readdir, stat } from "node:fs/promises";
+import { basename } from "node:path";
 
 import {
   type Decoder,
   decodeCancelRequest,
+  decodeDescribeRequest,
   decodeListRequest,
+  decodePreviewUrlRequest,
   decodeReadTextRequest,
   decodeUnwatchRequest,
   decodeWatchRequest,
@@ -18,10 +21,33 @@ import {
 } from "@symmetria/fm-core/contract";
 import type { FsEntry } from "@symmetria/fm-core/entry";
 import { filterEntries } from "@symmetria/fm-core/filter";
+import { resolveMimeType } from "@symmetria/fm-core/mime";
 import { sortEntries } from "@symmetria/fm-core/sort";
+import { mimeTables } from "../fs/mimeTables.ts";
 import { scanDirectory } from "../fs/scan.ts";
 import { type ChangedEntry, type StopWatching, watchDirectory } from "../fs/watch.ts";
+import { authorisePreview } from "../previewTokens.ts";
+import { previewUrlFor } from "../protocol.ts";
 import { CHANNELS, REQUEST_CHANNELS } from "./channels.ts";
+
+/**
+ * How much of a file's head the content sniff needs.
+ *
+ * The same figure `fm-core`'s sniff inspects. Reading more would cost a page
+ * fault per preview for evidence nothing reads.
+ */
+const SNIFF_BYTES = 8192;
+
+async function readHead(path: string, bytes: number): Promise<Uint8Array> {
+  const handle = await open(path, "r");
+  try {
+    const buffer = Buffer.alloc(bytes);
+    const { bytesRead } = await handle.read(buffer, 0, bytes, 0);
+    return new Uint8Array(buffer.subarray(0, bytesRead));
+  } finally {
+    await handle.close();
+  }
+}
 
 /**
  * The transport, as a shape rather than an import.
@@ -204,6 +230,50 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
   );
 
   ipc.handle(
+    CHANNELS.describe,
+    guard(decodeDescribeRequest, "read_failed", async (request) => {
+      const stats = await stat(request.path);
+
+      if (stats.isDirectory()) {
+        // The count is what the directory branch shows. `readdir` rather than
+        // the full scan: nothing here needs each entry's type or size, and a
+        // directory of ten thousand files would pay for both.
+        const entries = await readdir(request.path);
+        return success({
+          name: basename(request.path),
+          path: request.path,
+          isDirectory: true,
+          entryCount: entries.length,
+          size: stats.size,
+          mime: "inode/directory",
+          head: new Uint8Array(),
+        });
+      }
+
+      const tables = await mimeTables();
+      return success({
+        name: basename(request.path),
+        path: request.path,
+        isDirectory: false,
+        entryCount: 0,
+        size: stats.size,
+        mime: resolveMimeType(tables, basename(request.path)),
+        head: await readHead(request.path, SNIFF_BYTES),
+      });
+    }),
+  );
+
+  ipc.handle(
+    CHANNELS.previewUrl,
+    guard(decodePreviewUrlRequest, "read_failed", async (request) => {
+      // Stat first, so a path that cannot be read fails here rather than as a
+      // broken image the renderer has no way to explain.
+      await stat(request.path);
+      return success({ url: previewUrlFor(authorisePreview(request.path)) });
+    }),
+  );
+
+  ipc.handle(
     CHANNELS.readText,
     guard(decodeReadTextRequest, "read_failed", async (request) => {
       const handle = await open(request.path, "r");
@@ -216,7 +286,11 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
         const wanted = Math.min(request.maxBytes, size);
         const buffer = Buffer.alloc(wanted);
         const { bytesRead } = await handle.read(buffer, 0, wanted, 0);
-        return success({ text: buffer.subarray(0, bytesRead).toString("utf8"), bytesRead });
+        return success({
+          text: buffer.subarray(0, bytesRead).toString("utf8"),
+          bytesRead,
+          truncated: bytesRead < size,
+        });
       } finally {
         await handle.close();
       }

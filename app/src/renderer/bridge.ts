@@ -1,9 +1,14 @@
 import {
+  type DescribeReply,
   decodeChangedEvent,
+  decodeDescribeReply,
   decodeListReply,
+  decodePreviewUrlReply,
+  decodeReadTextReply,
   failure,
   isFailure,
   type ListReply,
+  type ReadTextReply,
   type Result,
 } from "@symmetria/fm-core/contract";
 import type { SortMode } from "@symmetria/fm-core/sort";
@@ -97,6 +102,49 @@ function deliver(raw: unknown): void {
   if (isFailure(event)) return;
 
   subscribers.get(event.value.subscriptionId)?.();
+}
+
+/**
+ * Everything the preview router needs about one entry, in one round trip.
+ *
+ * One call rather than three: a `stat`, a MIME resolution and a head read on
+ * separate channels would each pay the boundary crossing, and every cursor
+ * movement would pay all three.
+ */
+export async function describeEntry(path: string): Promise<Result<DescribeReply>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("read_failed", MISSING_BRIDGE);
+
+  const reply = await bridge.describe({ path });
+  return isFailure(reply) ? reply : decodeDescribeReply(reply.value);
+}
+
+/**
+ * A URL the renderer may load this file from.
+ *
+ * Not a blob URL built from bytes sent over the bridge: Chromium's PDF viewer
+ * refuses a blob whose origin is a custom scheme, and the embed silently
+ * resolves to an error page. A URL under the application's own scheme is one
+ * the viewer accepts — and it saves copying the file across the boundary.
+ */
+export async function previewUrl(path: string): Promise<Result<string>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("read_failed", MISSING_BRIDGE);
+
+  const reply = await bridge.previewUrl({ path });
+  if (isFailure(reply)) return reply;
+
+  const decoded = decodePreviewUrlReply(reply.value);
+  return isFailure(decoded) ? decoded : { ok: true, value: decoded.value.url };
+}
+
+/** Read the head of a file as text. */
+export async function readFileText(path: string, maxBytes: number): Promise<Result<ReadTextReply>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("read_failed", MISSING_BRIDGE);
+
+  const reply = await bridge.readText({ path, maxBytes });
+  return isFailure(reply) ? reply : decodeReadTextReply(reply.value);
 }
 
 /** Watch a directory, and stop watching when the returned function is called. */

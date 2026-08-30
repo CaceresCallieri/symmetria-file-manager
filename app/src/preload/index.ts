@@ -28,6 +28,8 @@ const bridge: Bridge = {
   unwatch: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.unwatch, request),
   readText: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.readText, request),
   cancel: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.cancel, request),
+  describe: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.describe, request),
+  previewUrl: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.previewUrl, request),
   onListBatch: (listener) => listen(PUSH_CHANNELS.listBatch, listener),
   onChanged: (listener) => listen(PUSH_CHANNELS.changed, listener),
 };

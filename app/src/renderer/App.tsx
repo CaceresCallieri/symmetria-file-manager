@@ -10,6 +10,7 @@ import { TabBar } from "./components/TabBar.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
 import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { useKeyActions } from "./useKeyActions.ts";
+import { usePreview } from "./usePreview.ts";
 import { useTabs } from "./useTabs.ts";
 
 /**
@@ -32,6 +33,7 @@ export interface AppProps {
 export function App({ startPath }: AppProps = {}) {
   const tabs = useTabs(startPath ?? initialPath());
   const { actions, modes, state } = useKeyActions(tabs);
+  const preview = usePreview(state.cursorEntry?.path ?? null);
 
   const context = useMemo<KeyContext>(
     // Miller is the only view that exists. The tree rows are ported and
@@ -78,6 +80,12 @@ export function App({ startPath }: AppProps = {}) {
         cursorIndex={tabs.pane.cursorIndex}
         parentCursorName={tabs.parentCursorName}
         selection={tabs.pane.selection}
+        preview={{
+          route: preview.route,
+          path: preview.path,
+          size: preview.size,
+          error: preview.error,
+        }}
       />
       <WhichKeyOverlay
         prefix={modes.chordPrefix}

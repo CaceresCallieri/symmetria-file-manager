@@ -22,6 +22,10 @@ export const REQUEST_CHANNELS = {
   readText: "symmetria-fm:read-text",
   /** Abandon an in-flight stream. */
   cancel: "symmetria-fm:cancel",
+  /** Everything the preview router needs about one entry. */
+  describe: "symmetria-fm:describe",
+  /** Make one file loadable by the renderer, and name the URL. */
+  previewUrl: "symmetria-fm:preview-url",
 } as const;
 
 /** Main process pushes, renderer listens. These are never handled. */

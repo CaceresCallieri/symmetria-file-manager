@@ -18,7 +18,8 @@
     "knip": "knip --reporter json",
     "fallow:dead-code": "fallow dead-code --fail-on-issues",
     "fallow:health": "fallow health --score --hotspots --fail-on-issues",
-    "fallow:dupes": "fallow dupes --fail-on-issues"
+    "fallow:dupes": "fallow dupes --fail-on-issues",
+    "theme:generate": "node tools/theme/kde-theme-to-hljs.mjs plugin/src/Symmetria/FileManager/Models/themes/wine.theme app/src/renderer/syntax-wine.css"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.6",

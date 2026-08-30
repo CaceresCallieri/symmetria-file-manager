@@ -46,6 +46,18 @@ export function buildWindowOptions(): BrowserWindowConstructorOptions {
       // would otherwise pass every other assertion about this object.
       nodeIntegrationInSubFrames: false,
       webSecurity: true,
+      // What turns on Chromium's built-in PDF viewer, and nothing else.
+      //
+      // It defaults to false, and with it off an `<embed type="application/pdf">`
+      // loads `chrome-error://chromewebdata` instead — a failure invisible from
+      // the DOM, which still shows a correct-looking embed tag, and silent at
+      // the console. Only the frame tree exposes it.
+      //
+      // The name is a leftover: NPAPI and PPAPI plugins are long gone from
+      // Chromium, so the only thing this flag now admits is the PDF viewer. It
+      // does not widen what the renderer may reach — that is still decided by
+      // `sandbox`, `contextIsolation` and the content policy.
+      plugins: true,
     },
   };
 }

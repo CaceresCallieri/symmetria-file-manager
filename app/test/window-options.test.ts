@@ -43,3 +43,24 @@ describe("buildWindowOptions", () => {
     expect(WINDOW_BACKGROUND).toMatch(/^#[0-9a-f]{6}$/);
   });
 });
+
+describe("the PDF viewer", () => {
+  it("enables plugins, which is the only thing that turns it on", () => {
+    // Verification found the document preview producing a correct-looking
+    // `<embed type="application/pdf">` whose child frame was actually
+    // `chrome-error://chromewebdata`. The flag defaults to false, the DOM hides
+    // the failure, and nothing reaches the console — only the frame tree shows
+    // it. The name is a leftover: NPAPI and PPAPI are long gone, so the PDF
+    // viewer is the only thing this admits.
+    expect(buildWindowOptions().webPreferences?.plugins).toBe(true);
+  });
+
+  it("does not let the plugin flag weaken anything else", () => {
+    const { webPreferences } = buildWindowOptions();
+
+    expect(webPreferences?.sandbox).toBe(true);
+    expect(webPreferences?.contextIsolation).toBe(true);
+    expect(webPreferences?.nodeIntegration).toBe(false);
+    expect(webPreferences?.webSecurity).toBe(true);
+  });
+});

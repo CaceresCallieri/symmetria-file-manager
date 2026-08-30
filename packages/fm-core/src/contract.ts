@@ -102,6 +102,16 @@ export interface CancelRequest {
   readonly streamId: string;
 }
 
+/** Everything the preview router needs about one entry, in one round trip. */
+export interface DescribeRequest {
+  readonly path: string;
+}
+
+/** Ask for a URL the renderer may load this file from. */
+export interface PreviewUrlRequest {
+  readonly path: string;
+}
+
 /** `unwatch` needs only the id; requiring a path was an accident of reuse. */
 export interface UnwatchRequest {
   readonly subscriptionId: string;
@@ -124,6 +134,30 @@ export interface ListBatch {
 export interface ReadTextReply {
   readonly text: string;
   readonly bytesRead: number;
+  /** The file is longer than what was read. */
+  readonly truncated: boolean;
+}
+
+export interface DescribeReply {
+  readonly name: string;
+  readonly path: string;
+  readonly isDirectory: boolean;
+  /** How many entries a directory holds. Zero for a file. */
+  readonly entryCount: number;
+  readonly size: number;
+  readonly mime: string | null;
+  /**
+   * The first bytes, for the content sniff.
+   *
+   * Sent as a typed array rather than as a string: a UTF-8 decode of arbitrary
+   * bytes is lossy, and the sniff is looking for a NUL that a lossy decode
+   * would have replaced.
+   */
+  readonly head: Uint8Array;
+}
+
+export interface PreviewUrlReply {
+  readonly url: string;
 }
 
 /**
@@ -134,7 +168,12 @@ export interface ReadTextReply {
  * which is exactly what the type-evidence policy flags. `null` is the reply for
  * the channels whose whole answer is "it worked".
  */
-export type IpcReply = Result<ListReply> | Result<ReadTextReply> | Result<null>;
+export type IpcReply =
+  | Result<ListReply>
+  | Result<ReadTextReply>
+  | Result<DescribeReply>
+  | Result<PreviewUrlReply>
+  | Result<null>;
 
 // ── decoding ──────────────────────────────────────────────────────────────
 
@@ -250,6 +289,20 @@ export const decodeReadTextRequest: Decoder<ReadTextRequest> = (raw) => {
   }
 
   return success({ path: path.value, maxBytes: Math.min(requested, MAX_READ_BYTES) });
+};
+
+export const decodeDescribeRequest: Decoder<DescribeRequest> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
+
+  const path = decodePath(raw["path"]);
+  return isFailure(path) ? path : success({ path: path.value });
+};
+
+export const decodePreviewUrlRequest: Decoder<PreviewUrlRequest> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
+
+  const path = decodePath(raw["path"]);
+  return isFailure(path) ? path : success({ path: path.value });
 };
 
 export const decodeUnwatchRequest: Decoder<UnwatchRequest> = (raw) => {
@@ -381,4 +434,54 @@ export const decodeChangedEvent: Decoder<ChangedEvent> = (raw) => {
     return failure("invalid_reply", "event.subscriptionId must be a string");
   }
   return success({ subscriptionId });
+};
+
+export const decodeDescribeReply: Decoder<DescribeReply> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_reply", "reply must be an object");
+
+  const name = stringField(raw, "name");
+  const path = stringField(raw, "path");
+  const size = finiteField(raw, "size");
+  const entryCount = finiteField(raw, "entryCount");
+  if (name === null || path === null || size === null || entryCount === null) {
+    return failure("invalid_reply", "reply is missing a required field");
+  }
+
+  const mime = raw["mime"];
+  if (mime !== null && typeof mime !== "string") {
+    return failure("invalid_reply", "reply.mime must be a string or null");
+  }
+
+  const head = raw["head"];
+  if (!(head instanceof Uint8Array)) {
+    return failure("invalid_reply", "reply.head must be a byte array");
+  }
+
+  return success({
+    name,
+    path,
+    isDirectory: raw["isDirectory"] === true,
+    entryCount,
+    size,
+    mime,
+    head,
+  });
+};
+
+export const decodePreviewUrlReply: Decoder<PreviewUrlReply> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_reply", "reply must be an object");
+
+  const url = stringField(raw, "url");
+  return url === null ? failure("invalid_reply", "reply.url must be a string") : success({ url });
+};
+
+export const decodeReadTextReply: Decoder<ReadTextReply> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_reply", "reply must be an object");
+
+  const text = stringField(raw, "text");
+  const bytesRead = finiteField(raw, "bytesRead");
+  if (text === null || bytesRead === null) {
+    return failure("invalid_reply", "reply.text and reply.bytesRead are required");
+  }
+  return success({ text, bytesRead, truncated: raw["truncated"] === true });
 };

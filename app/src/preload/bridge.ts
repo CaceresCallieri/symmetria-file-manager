@@ -25,6 +25,10 @@ export interface Bridge {
   readText(request: unknown): Promise<Result<unknown>>;
   /** Abandon an in-flight listing. */
   cancel(request: unknown): Promise<Result<unknown>>;
+  /** Everything the preview router needs about one entry. */
+  describe(request: unknown): Promise<Result<unknown>>;
+  /** Make one file loadable by the renderer, and name the URL. */
+  previewUrl(request: unknown): Promise<Result<unknown>>;
   /** Receive one batch of a streamed listing. */
   onListBatch(listener: (batch: unknown) => void): Unsubscribe;
   /** Receive a directory-changed notification. */
