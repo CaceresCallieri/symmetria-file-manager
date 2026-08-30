@@ -12,6 +12,8 @@ export interface MillerColumnsProps {
   readonly parentCursorName: string;
   /** Marked entries in the CURRENT column, by name. */
   readonly selection?: ReadonlySet<string>;
+  /** Search matches in the CURRENT column, by index. Nowhere else searches. */
+  readonly matches?: ReadonlySet<number>;
   /** What the third column shows. Absent means an empty slot. */
   readonly preview?: PreviewPaneProps;
   /** Move the cursor to a row of the current column. */
@@ -36,6 +38,7 @@ export function MillerColumns({
   cursorIndex,
   parentCursorName,
   selection,
+  matches,
   preview,
   onSelect,
   onActivate,
@@ -79,6 +82,7 @@ export function MillerColumns({
         cursorIndex={cursorIndex}
         testId="column-current"
         selection={selection ?? NO_SELECTION}
+        {...(matches === undefined ? {} : { matches })}
         {...(onSelect === undefined ? {} : { onSelect })}
         {...(onActivate === undefined ? {} : { onActivate })}
       />

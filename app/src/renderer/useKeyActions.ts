@@ -1,8 +1,8 @@
 import type { BookmarkSubMode, KeyActions, KeyState } from "@symmetria/fm-core/keys/types";
 import { cursorEntry, isDirectoryEntry } from "@symmetria/fm-core/pane";
 import { useMemo, useState } from "react";
-
 import type { FileOps } from "./useFileOps.ts";
+import type { Search } from "./useSearch.ts";
 import type { Tabs } from "./useTabs.ts";
 
 /**
@@ -58,7 +58,7 @@ function halfPageRows(): number {
   return Math.max(1, Math.floor(viewport / 2 / 24));
 }
 
-export function useKeyActions(tabs: Tabs, ops: FileOps): KeyWiring {
+export function useKeyActions(tabs: Tabs, ops: FileOps, search: Search): KeyWiring {
   const [chordPrefix, setChordPrefix] = useState("");
   const [bookmarkSubMode, setBookmarkSubMode] = useState<BookmarkSubMode | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -99,9 +99,9 @@ export function useKeyActions(tabs: Tabs, ops: FileOps): KeyWiring {
       toggleSelection: () => tabs.toggleMark(),
       clearSelection: () => tabs.clearMarks(),
 
-      startSearch: soon("Search"),
-      nextMatch: soon("Search"),
-      previousMatch: soon("Search"),
+      startSearch: () => search.open(),
+      nextMatch: () => search.goNext(),
+      previousMatch: () => search.goPrevious(),
       startFlash: soon("Flash jump"),
       openFuzzyFinder: soon("The fuzzy finder"),
       openZoxide: soon("Zoxide"),
@@ -138,14 +138,14 @@ export function useKeyActions(tabs: Tabs, ops: FileOps): KeyWiring {
       treeToggleGitignore: soon("The tree view"),
       treeRefresh: soon("The tree view"),
     };
-  }, [tabs, ops]);
+  }, [tabs, ops, search]);
 
   const state = useMemo<KeyState>(() => {
     const entry = tabs.pane.entries[tabs.pane.cursorIndex];
     return {
       selectedCount: tabs.pane.selection.size,
-      searchActive: false,
-      matchCount: 0,
+      searchActive: search.active,
+      matchCount: search.matchCount,
       cursorEntry:
         entry === undefined
           ? null
@@ -160,7 +160,7 @@ export function useKeyActions(tabs: Tabs, ops: FileOps): KeyWiring {
             },
       picker: { active: false, saveMode: false, fileOps: false, multiple: false, directory: false },
     };
-  }, [tabs.pane]);
+  }, [tabs.pane, search.active, search.matchCount]);
 
   const modes = useMemo<KeyModes>(
     () => ({

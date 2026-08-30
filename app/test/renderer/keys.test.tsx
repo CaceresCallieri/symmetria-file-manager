@@ -158,11 +158,18 @@ describe("operations that later phases build", () => {
 
 describe("the Latin-American layout, through the real listener", () => {
   it("reaches a symbol binding that arrives with Shift held", async () => {
+    // On this operator's layout `/` is Shift+7, so the binding declares
+    // `mods: "*"`. A `mods: ""` row silently never fires for them, which is how
+    // slash-search broke in the Qt build after its own registry migration.
+    //
+    // This used to prove the binding was reached by watching for the message
+    // "Search is not built yet". Search is built now, so the proof moved to
+    // what the binding actually does — which is a stronger statement, not a
+    // weaker one: the key reaches its row AND the row does its work.
     await openedAtHome();
 
     fireEvent.keyDown(window, { key: "/", shiftKey: true });
 
-    const message = await screen.findByTestId("pane-message");
-    expect(message.textContent).toMatch(/search/i);
+    expect(await screen.findByTestId("search-field")).toBeDefined();
   });
 });

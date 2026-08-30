@@ -7,6 +7,7 @@ import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { MillerColumns } from "./components/MillerColumns.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
 import { PathBar } from "./components/PathBar.tsx";
+import { SearchField } from "./components/SearchField.tsx";
 import { StatusBar } from "./components/StatusBar.tsx";
 import { StatusStrip } from "./components/StatusStrip.tsx";
 import { TabBar } from "./components/TabBar.tsx";
@@ -15,6 +16,7 @@ import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { useFileOps } from "./useFileOps.ts";
 import { useKeyActions } from "./useKeyActions.ts";
 import { usePreview } from "./usePreview.ts";
+import { useSearch } from "./useSearch.ts";
 import { useTabs } from "./useTabs.ts";
 
 /**
@@ -37,7 +39,13 @@ export interface AppProps {
 export function App({ startPath }: AppProps = {}) {
   const tabs = useTabs(startPath ?? initialPath());
   const ops = useFileOps(tabs);
-  const { actions, modes, state } = useKeyActions(tabs, ops);
+  const search = useSearch({
+    entries: tabs.pane.entries,
+    cursorIndex: tabs.pane.cursorIndex,
+    path: tabs.pane.path,
+    moveTo: tabs.moveTo,
+  });
+  const { actions, modes, state } = useKeyActions(tabs, ops, search);
   const preview = usePreview(state.cursorEntry?.path ?? null);
 
   const context = useMemo<KeyContext>(
@@ -57,9 +65,14 @@ export function App({ startPath }: AppProps = {}) {
       // Flash jump is a text-input mode that arrives with its own phase. Until
       // then nothing can enter it, so the cascade never reaches that step.
       flashActive: false,
-      textInputFocused: false,
+      // The seam the cascade documented and nothing used until now. The field
+      // is a real `<input>`, so `useKeyDispatch` would report this anyway from
+      // the event target — stating it here as well means a key that arrives
+      // while the field is open but not yet focused is still not the
+      // dispatcher's.
+      textInputFocused: search.active,
     }),
-    [modes.helpOpen, modes.bookmarkSubMode, modes.chordPrefix, ops.modal.kind],
+    [modes.helpOpen, modes.bookmarkSubMode, modes.chordPrefix, ops.modal.kind, search.active],
   );
 
   useKeyDispatch({ mode, context });
@@ -104,6 +117,15 @@ export function App({ startPath }: AppProps = {}) {
         />
       ) : null}
       <PathBar path={tabs.pane.path} onNavigate={tabs.navigate} />
+      {search.active ? (
+        <SearchField
+          query={search.query}
+          matchCount={search.matchCount}
+          onChange={search.setQuery}
+          onConfirm={search.confirm}
+          onCancel={search.cancel}
+        />
+      ) : null}
       <MillerColumns
         path={tabs.pane.path}
         parentEntries={tabs.parentEntries}
@@ -111,6 +133,7 @@ export function App({ startPath }: AppProps = {}) {
         cursorIndex={tabs.pane.cursorIndex}
         parentCursorName={tabs.parentCursorName}
         selection={tabs.pane.selection}
+        matches={search.matches}
         onSelect={tabs.moveTo}
         onActivate={activateAt}
         onLeaveTo={leaveTo}

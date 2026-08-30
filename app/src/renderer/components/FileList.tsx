@@ -10,6 +10,14 @@ export interface FileListProps {
   readonly testId: string;
   /** Marked entries, by name. Empty in the columns that cannot be marked. */
   readonly selection: ReadonlySet<string>;
+  /**
+   * Search matches, by INDEX rather than by name.
+   *
+   * Indices because that is what the search computes and what stepping between
+   * matches needs; names because a mark survives a re-sort. The two sets are
+   * deliberately keyed differently and are not interchangeable.
+   */
+  readonly matches?: ReadonlySet<number>;
   /** A single click on a row. Absent leaves the whole column unclickable. */
   readonly onSelect?: (index: number) => void;
   /** A double click on a row. */
@@ -98,6 +106,7 @@ export function FileList({
   cursorIndex,
   testId,
   selection,
+  matches,
   onSelect,
   onActivate,
   clickableWhen,
@@ -224,6 +233,7 @@ export function FileList({
                 entry={entry}
                 isCursor={isCursor}
                 isMarked={selection.has(entry.name)}
+                isMatch={matches?.has(item.index) === true}
                 {...(onSelect === undefined || !reachable
                   ? {}
                   : { onSelect: () => onSelect(item.index) })}

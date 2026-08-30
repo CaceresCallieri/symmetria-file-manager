@@ -42,6 +42,14 @@
   /* ── Meaning ──────────────────────────────────────────────────────────── */
   --primary: oklch(57.1% 0.21 264);
   --destructive: oklch(63.7% 0.208 25.3);
+  /*
+   * A search match, sitting under the row rather than on its text.
+   *
+   * Its own token and not `--accent`: the cursor uses that, and a match needs
+   * to be visible on a row that is NOT the cursor while staying quieter than
+   * one that is.
+   */
+  --search-match: rgb(255 255 255 / 5%);
   /* The cut/mark indicator. Hardcoded in the Qt build for the same reason it is
      its own token here: an indicator that stops being legible is worse than one
      that does not match. */

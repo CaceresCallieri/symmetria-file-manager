@@ -410,3 +410,51 @@ kbd {
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/*
+ * A search match.
+ *
+ * A background tint rather than a text colour, because the file-operation mark
+ * already owns the text colour and a row can be both at once. Kept below the
+ * cursor fill in specificity order for the same reason: where the cursor sits
+ * on a match, "where you are" is the more urgent fact.
+ *
+ * No transition, for the reason every row fill in this file has none — the Qt
+ * build measured visible stutter during fast cursor movement when a per-row
+ * rectangle carried an animation.
+ */
+.row--match {
+  background: var(--search-match);
+}
+
+.row--match.row--cursor {
+  background: var(--accent);
+}
+
+.search {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  flex: 0 0 auto;
+  padding: 2px 8px;
+}
+
+.search__sigil {
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+
+.search__field {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  outline: none;
+}
+
+.search__count {
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+}

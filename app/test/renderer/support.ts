@@ -152,6 +152,14 @@ export interface BridgeLog {
   emitChange(subscriptionId: string): void;
   /** Add an entry to a directory, so a change has something to report. */
   addEntry(path: string, name: string): void;
+  /**
+   * Add an entry at the FRONT of a directory.
+   *
+   * Distinct from `addEntry` because it shifts every index after it, which is
+   * what a real re-sort or an alphabetically-early new file does — and index
+   * shifts are what stale index-keyed state gets wrong.
+   */
+  addEntryFirst(path: string, name: string): void;
   /** Make the next transfer report these names as already present. */
   conflictNext(names: readonly string[]): void;
   /** Leave the next transfer unresolved, so a test can watch it running. */
@@ -359,6 +367,9 @@ export function installBridge(): BridgeLog {
     },
     addEntry: (path, name) => {
       tree.get(path)?.push(entry(name));
+    },
+    addEntryFirst: (path, name) => {
+      tree.get(path)?.unshift(entry(name));
     },
   };
 }

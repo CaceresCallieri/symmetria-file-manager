@@ -7,6 +7,14 @@ export interface FileRowProps {
   readonly isCursor: boolean;
   /** Marked for a file operation. Distinct from the cursor, which is where you are. */
   readonly isMarked?: boolean;
+  /**
+   * Matches the running search.
+   *
+   * A third state, and independent of the other two: a row can be the cursor,
+   * marked for a copy, and a search match all at once, so each needs its own
+   * attribute and its own class rather than one shared highlight.
+   */
+  readonly isMatch?: boolean;
   /** A single click. Absent means the row is not clickable at all. */
   readonly onSelect?: () => void;
   /** A double click. Absent means a double click does nothing beyond selecting. */
@@ -44,7 +52,14 @@ export interface FileRowProps {
  * the container taking focus has to be reconciled with the document handler.
  * **Recorded as follow-up work rather than done here.**
  */
-export function FileRow({ entry, isCursor, isMarked = false, onSelect, onActivate }: FileRowProps) {
+export function FileRow({
+  entry,
+  isCursor,
+  isMarked = false,
+  isMatch = false,
+  onSelect,
+  onActivate,
+}: FileRowProps) {
   const clickable = onSelect !== undefined;
 
   // The two suppressions below must sit on the lines directly above the element
@@ -61,9 +76,10 @@ export function FileRow({ entry, isCursor, isMarked = false, onSelect, onActivat
       data-testid="row"
       data-cursor={isCursor ? "true" : undefined}
       data-marked={isMarked ? "true" : undefined}
+      data-match={isMatch ? "true" : undefined}
       className={`row${isCursor ? " row--cursor" : ""}${isMarked ? " row--marked" : ""}${
-        clickable ? " row--clickable" : ""
-      }`}
+        isMatch ? " row--match" : ""
+      }${clickable ? " row--clickable" : ""}`}
       data-kind={entry.kind}
       onMouseDown={clickable ? (event) => event.preventDefault() : undefined}
       onClick={onSelect}
