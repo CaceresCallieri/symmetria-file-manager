@@ -1,0 +1,122 @@
+/*
+ * Structure, not appearance.
+ *
+ * The palette and the icon set are phase 10. What is here is load-bearing for
+ * correctness rather than for looks: the columns must have a REAL height, or
+ * `getBoundingClientRect` reports zero, the virtualiser falls back to its
+ * assumed viewport and renders the same number of rows whatever the window
+ * size. A layout that only looks right is not the same as one that measures
+ * right.
+ */
+
+:root {
+  /* The near-black base. The full palette arrives in phase 10. */
+  --surface: #0b0b0b;
+  --on-surface: #e6e6e6;
+  --overlay-subtle: rgb(255 255 255 / 6%);
+  --overlay-emphasis: rgb(255 255 255 / 10%);
+  --row-height: 24px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: Rubik, system-ui, sans-serif;
+  font-size: 13px;
+
+  /* The window is the viewport. A scrolling body would scroll the chrome along
+   * with the columns, and the columns do their own scrolling. */
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 6px;
+  padding: 6px;
+}
+
+.columns {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+
+  /* Without this a flex child refuses to shrink below its content height, so
+   * the columns grow past the window instead of scrolling inside it — and the
+   * measured height stops matching what is on screen. */
+  min-height: 0;
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--overlay-subtle);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.list--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 60%;
+}
+
+/*
+ * A plain fill. No gradient and no transition: the Qt version measured visible
+ * stutter during fast cursor movement when a per-row rectangle carried an
+ * animation, and the zebra striping was removed because over a near-black base
+ * the alternation read as banding. The cursor highlight is the only row fill.
+ */
+.row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: var(--row-height);
+  padding: 0 6px;
+  white-space: nowrap;
+  border-radius: 4px;
+}
+
+.row--cursor {
+  background: var(--overlay-emphasis);
+}
+
+.row[data-kind="directory"] .row__name {
+  font-weight: 600;
+}
+
+.path-bar,
+.status-bar {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 0 8px;
+  opacity: 80%;
+}
+
+.crumb--current {
+  font-weight: 600;
+  opacity: 100%;
+}
+
+.pane-error {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 8px;
+  color: #ff8a80;
+}

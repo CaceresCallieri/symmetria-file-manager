@@ -15,6 +15,7 @@
     "./sort": "./src/sort.ts",
     "./filter": "./src/filter.ts",
     "./glob": "./src/glob.ts",
-    "./contract": "./src/contract.ts"
+    "./contract": "./src/contract.ts",
+    "./pane": "./src/pane.ts"
   }
 }

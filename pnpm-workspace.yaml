@@ -7,12 +7,14 @@ packages:
 #   electron — its postinstall downloads the platform binary; without it there
 #              is no application to launch and no smoke test.
 #   esbuild  — its postinstall places the native binary the bundler runs on.
-#   @parcel/watcher — the ONE new native module this whole design adds. Its
-#              postinstall places the prebuilt inotify binding; without it there
-#              is no file watching. Chosen over chokidar because it is the only
-#              option that fixes both documented Qt watcher failures at once.
 # Anything not listed stays blocked, which is the point of the mechanism.
+#
+# There is deliberately no file-watching entry. `@parcel/watcher` was listed
+# here as "the ONE new native module this whole design adds"; it turned out to
+# have no non-recursive mode and exhausted the kernel's inotify budget when a
+# pane opened on a home directory. `node:fs.watch` needs no build step, so the
+# application ships no native modules.
 allowBuilds:
-  "@parcel/watcher": true
+  '@parcel/watcher': set this to true or false
   electron: true
   esbuild: true

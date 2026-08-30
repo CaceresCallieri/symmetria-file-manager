@@ -1,7 +1,6 @@
+import { type FSWatcher, watch } from "node:fs";
 import { lstat, realpath } from "node:fs/promises";
-import { basename, dirname } from "node:path";
-
-import watcher from "@parcel/watcher";
+import { join } from "node:path";
 
 /** What changed, and what it is now. */
 export interface ChangedEntry {
@@ -21,16 +20,37 @@ export interface ChangedEntry {
 export type StopWatching = () => Promise<void>;
 
 /**
+ * How long to gather events before reporting them.
+ *
+ * A single write produces several inotify events, and an extraction produces
+ * thousands. Coalescing them into one batch is what keeps a busy directory from
+ * turning into a message per file across the process boundary. Short enough to
+ * stay imperceptible, long enough to collapse a burst.
+ */
+const COALESCE_MS = 20;
+
+/**
  * Watch one directory, non-recursively, and report what changed.
+ *
+ * **`node:fs.watch`, deliberately, and NOT `@parcel/watcher`.** The first
+ * implementation used Parcel's watcher with a comment claiming it was
+ * non-recursive — it is not, and it has no non-recursive mode: `subscribe()`
+ * always walks the whole subtree, and the `ignore` option filters paths rather
+ * than limiting depth. Filtering the *events* by `dirname` made it look correct
+ * while the watch itself still descended. Opening the file manager on a home
+ * directory therefore failed with
+ * `inotify_add_watch ... failed: No space left on device` — the kernel's
+ * per-user watch limit, exhausted at startup by a single pane. Miller columns
+ * watch one directory at a time, so recursion buys nothing and costs the budget.
  *
  * **This replaces machinery rather than porting it.** Qt's directory watcher
  * omits `IN_MODIFY` from its inotify mask, so a file that grew on disk after it
  * was first listed emitted no event at all — a download streamed straight to its
  * final name sat at 0 bytes with no preview until the user navigated away and
  * back. The C++ worked around that with per-file watches, a `kMaxFileWatches`
- * cap to protect the inotify budget, and a debounced rescan. libuv's watches
- * include `IN_MODIFY`, so all of it is deleted. `watch.test.ts` is what proves
- * the deletion was safe.
+ * cap to protect the inotify budget, and a debounced rescan. `fs.watch` reports
+ * content writes as `change`, so all of it is deleted. `watch.test.ts` is what
+ * proves the deletion was safe.
  *
  * The size is re-read per event because an entry is an immutable snapshot: a
  * changed file becomes a new entry, never a mutated one.
@@ -39,53 +59,69 @@ export async function watchDirectory(
   path: string,
   onChange: (changed: ChangedEntry[]) => void,
 ): Promise<StopWatching> {
-  // Canonicalise once. The watcher reports realpath-resolved paths, so a
-  // directory reached through a symlink — or named with a trailing slash —
-  // would fail a raw string comparison and silently report nothing at all.
+  // Canonicalise once. A directory reached through a symlink is watched at its
+  // real location, so the names the watcher reports and the paths it stats
+  // agree — comparing a raw string against a resolved one dropped every event
+  // in silence.
   const root = await realpath(path).catch(() => path);
 
   let released = false;
+  const pending = new Set<string>();
   const inFlight = new Set<Promise<void>>();
+  let timer: NodeJS.Timeout | null = null;
 
-  const subscription = await watcher.subscribe(
-    root,
-    (error, events) => {
-      if (error !== null || released) return;
+  const flush = () => {
+    timer = null;
+    if (released || pending.size === 0) return;
 
-      const here = events.filter((event) => dirname(event.path) === root);
-      if (here.length === 0) return;
+    const names = [...pending];
+    pending.clear();
 
-      const work = Promise.all(here.map(toChangedEntry))
-        .then((changed) => {
-          // The handler started before `stop()` and settled after it. Without
-          // this check a closed tab still receives an update for a watcher its
-          // owner believes is dead.
-          if (!released) onChange(changed);
-        })
-        .catch(() => undefined);
+    const work = Promise.all(names.map((name) => toChangedEntry(root, name)))
+      .then((changed) => {
+        // The read started before `stop()` and settled after it. Without this
+        // check a closed tab still receives an update for a watcher its owner
+        // believes is dead.
+        if (!released) onChange(changed);
+      })
+      .catch(() => undefined);
 
-      inFlight.add(work);
-      void work.finally(() => inFlight.delete(work));
-    },
-    // Non-recursive: one directory, one watch. A recursive watch over a home
-    // directory is how an inotify budget disappears.
-    { ignore: [] },
-  );
+    inFlight.add(work);
+    void work.finally(() => inFlight.delete(work));
+  };
+
+  const watcher: FSWatcher = watch(root, { recursive: false }, (_event, name) => {
+    // `filename` is documented as possibly null. An event with no name says
+    // something changed but not what, and a rescan of the whole directory is
+    // the honest response — which is what the consumer does with any batch.
+    if (released || name === null) return;
+
+    pending.add(name);
+    timer ??= setTimeout(flush, COALESCE_MS);
+  });
+
+  // A watch on a directory that is deleted while watched emits an error rather
+  // than throwing. Swallowing it keeps the process alive; the consumer learns
+  // the directory is gone from its next listing.
+  watcher.on("error", () => undefined);
 
   return async () => {
     if (released) return;
     released = true;
-    await subscription.unsubscribe();
+
+    if (timer !== null) clearTimeout(timer);
+    watcher.close();
+
     // Let anything already dispatched settle, so a caller that awaits `stop()`
     // knows no further callback can arrive.
     await Promise.allSettled([...inFlight]);
   };
 }
 
-async function toChangedEntry(event: { path: string }): Promise<ChangedEntry> {
-  const stats = await lstat(event.path).catch(() => null);
+async function toChangedEntry(root: string, name: string): Promise<ChangedEntry> {
+  const stats = await lstat(join(root, name)).catch(() => null);
   return {
-    name: basename(event.path),
+    name,
     size: stats?.size ?? 0,
     kind: stats === null ? "deleted" : "changed",
   };

@@ -43,7 +43,10 @@ function createWindow(): BrowserWindow {
     window.show();
   });
 
-  void window.loadURL(APP_ENTRY_URL);
+  // The starting directory travels in the URL fragment. A fragment never
+  // reaches the scheme handler — it is resolved in the page — so this adds a
+  // parameter without widening the surface `protocol.ts` has to validate.
+  void window.loadURL(`${APP_ENTRY_URL}#${encodeURIComponent(app.getPath("home"))}`);
   return window;
 }
 

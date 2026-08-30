@@ -11,13 +11,15 @@ await rm(out, { recursive: true, force: true });
 /**
  * What must not be bundled.
  *
- * `electron` is supplied by the runtime. `@parcel/watcher` is a NATIVE module:
- * bundling its CommonJS entry into an ESM output turns its `require("path")`
- * into a dynamic require the ESM loader refuses, and the application dies at
- * load with "Dynamic require of \"path\" is not supported". A native module is
- * resolved from `node_modules` at runtime, never inlined.
+ * `electron` is supplied by the runtime, and it is now the only entry. The list
+ * also held `@parcel/watcher`, a native module whose CommonJS entry became an
+ * unsupported dynamic require once bundled into ESM. That dependency is gone —
+ * it has no non-recursive mode and exhausted the inotify budget on a home
+ * directory, so `node:fs.watch` replaced it. The application now ships **no
+ * native modules at all**, which is a packaging property worth keeping: adding
+ * one back means rebuilding it per Electron ABI.
  */
-const EXTERNAL = ["electron", "@parcel/watcher"];
+const EXTERNAL = ["electron"];
 
 /**
  * The main process, as ESM.

@@ -1,4 +1,4 @@
-import { appendFile, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
@@ -134,6 +134,30 @@ describe("watchDirectory", () => {
 
     await halt();
     await rm(linked, { force: true });
+  });
+
+  it("does not descend into subdirectories", async () => {
+    // The regression this pins, and why it looks like a missing feature rather
+    // than a fix. The first implementation used `@parcel/watcher` with a
+    // comment claiming it was non-recursive. It is not, and it has no
+    // non-recursive mode — `subscribe()` always walks the whole subtree, and
+    // filtering the resulting EVENTS by directory made it look correct while
+    // the watch itself still descended. Opening a pane on a home directory
+    // failed with `inotify_add_watch ... No space left on device`: one pane
+    // exhausted the kernel's per-user watch limit at startup.
+    //
+    // Miller columns show one directory at a time, so watching a subtree buys
+    // nothing. Do NOT "fix" this test by making the watch recursive.
+    const nested = join(root, "nested");
+    await mkdir(nested);
+
+    const batches: { name: string; size: number }[][] = [];
+    stop = await watchDirectory(root, (changed) => batches.push(changed));
+
+    await writeFile(join(nested, "deep.txt"), "hello");
+    await new Promise((r) => setTimeout(r, 500));
+
+    expect(batches.flat().some((e) => e.name === "deep.txt")).toBe(false);
   });
 
   it("releases its watch, so a tab that closes leaks nothing", async () => {

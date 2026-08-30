@@ -24,7 +24,15 @@ export type FailureCode =
   | "scan_failed"
   | "read_failed"
   | "watch_failed"
-  | "cancelled";
+  | "cancelled"
+  /**
+   * A reply did not have the shape its channel promises.
+   *
+   * Distinct from `invalid_request`, which travels the other way. The renderer
+   * cannot fix a malformed reply by asking differently, so conflating the two
+   * would tell the user to correct input that was never theirs.
+   */
+  | "invalid_reply";
 
 export interface Succeeded<T> {
   readonly ok: true;
@@ -258,4 +266,119 @@ export const decodeCancelRequest: Decoder<CancelRequest> = (raw) => {
     return failure("invalid_request", "streamId is required");
   }
   return success({ streamId: raw.streamId });
+};
+
+// ── decoding replies ──────────────────────────────────────────────────────
+
+/**
+ * The renderer parses what crosses the boundary too, not only the main process.
+ *
+ * The bridge hands page code `Result<unknown>`, and turning that into a typed
+ * reply with an assertion would move the parsing problem rather than solve it:
+ * a main process that changed its reply shape would then produce a `TypeError`
+ * deep inside a React render, blaming the component instead of the boundary.
+ * These decoders make a shape mismatch a value the interface can show.
+ */
+
+function stringField(raw: Record<string, unknown>, field: string): string | null {
+  const value = raw[field];
+  return typeof value === "string" ? value : null;
+}
+
+function finiteField(raw: Record<string, unknown>, field: string): number | null {
+  const value = raw[field];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+const ENTRY_KINDS = ["file", "directory", "other"] as const;
+
+function isEntryKind(value: string): value is FsEntry["kind"] {
+  return (ENTRY_KINDS as readonly string[]).includes(value);
+}
+
+export const decodeFsEntry: Decoder<FsEntry> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_reply", "entry must be an object");
+
+  const name = stringField(raw, "name");
+  if (name === null) return failure("invalid_reply", "entry.name must be a string");
+
+  const kind = stringField(raw, "kind");
+  if (kind === null || !isEntryKind(kind)) {
+    return failure("invalid_reply", `entry.kind is not a kind: ${String(raw["kind"])}`);
+  }
+
+  const size = finiteField(raw, "size");
+  const modifiedMs = finiteField(raw, "modifiedMs");
+  if (size === null || modifiedMs === null) {
+    return failure("invalid_reply", "entry.size and entry.modifiedMs must be finite numbers");
+  }
+
+  const entry: FsEntry = {
+    name,
+    kind,
+    size,
+    modifiedMs,
+    isSymlink: raw["isSymlink"] === true,
+    isHidden: raw["isHidden"] === true,
+  };
+  return success(raw["unreadable"] === true ? { ...entry, unreadable: true } : entry);
+};
+
+function decodeEntries(raw: unknown): Result<FsEntry[]> {
+  if (!Array.isArray(raw)) return failure("invalid_reply", "entries must be an array");
+
+  const entries: FsEntry[] = [];
+  for (const item of raw) {
+    const decoded = decodeFsEntry(item);
+    // One bad entry fails the whole listing rather than being skipped. A
+    // silently shortened directory is indistinguishable from a correct one, and
+    // the user would act on a listing that is missing something.
+    if (isFailure(decoded)) return decoded;
+    entries.push(decoded.value);
+  }
+  return success(entries);
+}
+
+export const decodeListReply: Decoder<ListReply> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_reply", "reply must be an object");
+
+  const entries = decodeEntries(raw["entries"]);
+  if (isFailure(entries)) return entries;
+
+  const total = finiteField(raw, "total");
+  if (total === null) return failure("invalid_reply", "reply.total must be a finite number");
+
+  const streamId = raw["streamId"];
+  if (streamId !== null && typeof streamId !== "string") {
+    return failure("invalid_reply", "reply.streamId must be a string or null");
+  }
+
+  return success({ entries: entries.value, total, streamId });
+};
+
+export const decodeListBatch: Decoder<ListBatch> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_reply", "batch must be an object");
+
+  const streamId = stringField(raw, "streamId");
+  if (streamId === null) return failure("invalid_reply", "batch.streamId must be a string");
+
+  const entries = decodeEntries(raw["entries"]);
+  if (isFailure(entries)) return entries;
+
+  return success({ streamId, entries: entries.value, done: raw["done"] === true });
+};
+
+/** What a watched directory reports. The changed paths are not needed yet. */
+export interface ChangedEvent {
+  readonly subscriptionId: string;
+}
+
+export const decodeChangedEvent: Decoder<ChangedEvent> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_reply", "event must be an object");
+
+  const subscriptionId = stringField(raw, "subscriptionId");
+  if (subscriptionId === null) {
+    return failure("invalid_reply", "event.subscriptionId must be a string");
+  }
+  return success({ subscriptionId });
 };
