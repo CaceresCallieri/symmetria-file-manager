@@ -1,0 +1,9 @@
+{
+  "name": "@symmetria/fm-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The standalone Electron host for the Symmetria File Manager",
+  "license": "MIT",
+  "main": "dist-electron/main/index.js"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "@symmetria/fm-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Framework-free file-manager logic: keybinding registry, preview routing, MIME inheritance, sort and filter",
+  "license": "MIT",
+  "sideEffects": false
+}

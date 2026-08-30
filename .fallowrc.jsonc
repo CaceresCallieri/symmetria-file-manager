@@ -1,0 +1,53 @@
+{
+  "$schema": "./node_modules/fallow/schema.json",
+
+  // Every entry here was added because an observed finding proved it was
+  // needed, per the catalog's rule. None is speculative.
+
+  // `ignorePatterns` removes files from analysis ENTIRELY — discovery, parsing,
+  // resolution and the module graph. Reserved for trees fallow cannot parse or
+  // must not reason about.
+  "ignorePatterns": [
+    // ── The Qt tree ──
+    // Observed: `fallow dead-code` reported 32 unreachable files, all of them
+    // QML-side JavaScript (`handlers/KeyRegistry.js`, `TreeModel.js`, …). They
+    // are not dead: QML loads them with `import "handlers/…" as …`, an edge no
+    // JavaScript analyser can follow. Observed too: `fallow dupes` found 127
+    // duplicated lines between `FlashHandler.js` and `TreeFlashHandler.js` —
+    // real, but in code this cycle must leave untouched, and already covered by
+    // the incumbent gate `tools/quality/check-qml.sh`.
+    // Remove this entry when the Qt tree is deleted at parity.
+    "qml/**",
+
+    // Vendored dependencies and build output. Not our source.
+    "plugin/third_party/**",
+    "plugin/build/**",
+
+    // Research prose and a generated page. No source to analyse.
+    "docs/**",
+
+    // ── Vendored policy source ──
+    // Observed, three separate findings: `fallow dupes` reported 42 duplicated
+    // lines in `shared/dictionary-types.ts`; `dead-code` reported two unused
+    // exports; and `audit --changed-since` reported 54 high-complexity
+    // functions. All of it is copied verbatim from anti-slop upstream commit
+    // 6d538555cb151d4121ed51a27db81890eacf8ae9. Drift is detected by diffing
+    // against upstream, so we neither refactor it nor let findings against it
+    // gate our reviews.
+    //
+    // `ignoreFindings` was tried first and is the more precise instrument —
+    // it keeps files in the module graph — but the schema scopes it to
+    // source-owned DEAD-CODE findings, so `audit`'s complexity and duplication
+    // findings still gated. Hence the blunter `ignorePatterns`, plus the
+    // `ignoreDependencies` entry below to undo its one side effect.
+    "tools/oxlint/anti-slop/**"
+  ],
+
+  // The side effect of excluding the tree above: fallow can no longer see that
+  // `tools/oxlint/anti-slop/index.ts` imports `@oxlint/plugins`, so it reported
+  // that package as an unused devDependency. It is not — verified with
+  // `grep -rn '@oxlint/plugins' tools/oxlint/anti-slop/`, which finds it in
+  // `index.ts`, `rules/no-reflect-apply.ts` and `shared/reflect-method.ts`.
+  // `knip.json` carries the identical entry for the identical reason.
+  "ignoreDependencies": ["@oxlint/plugins"]
+}

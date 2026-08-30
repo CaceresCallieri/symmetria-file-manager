@@ -142,6 +142,59 @@ in `.claude/project-standards.md`. The **`/seal` and `code-review` workflows MUS
 run this on a change's QML and treat findings as blocking**, the same as a reviewer
 finding. C++ plugin changes use the ctest gate (see Build & Run → Running Tests).
 
+The two sections below are the machine-readable form of that gate, plus the
+TypeScript toolchain added for the Electron rewrite. **They are the contract
+`/seal`, `/code-review`, `/tech-debt` and CI actually read** — the prose above
+describes the QML gate, these sections are what runs it.
+
+## Deterministic Checks
+
+Run these change-scoped checks during `/seal`, `/code-review`, and ad-hoc review. Substitute `<base>` with the commit the review target diffs against: the parent of one reviewed commit, or `<oldest>^` for a commit range.
+
+```bash
+pnpm exec biome check --changed --since=<base> --reporter=summary --no-errors-on-unmatched  # lint + format + a11y
+git diff -z --name-only --diff-filter=ACMR <base> -- '*.js' '*.jsx' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.mts' '*.cts' | xargs -0 -r pnpm exec oxlint --config anti-slop.config.mjs --disable-nested-config --format agent --  # command-id: typescript.anti-slop.changed.v1; type-evidence policy; errors gate, pilot warnings advise
+pnpm exec tsc -p packages/fm-core --noEmit --pretty false  # types — whole package, never diff-scoped
+pnpm exec fallow audit --changed-since <base> --format compact  # dead code, complexity, duplication; new findings gate
+git diff -z --name-only --diff-filter=ACMR <base> -- '*.qml' | xargs -0 -r tools/quality/check-qml.sh  # QML gate, scoped to changed files; exits 0 when none changed
+```
+
+Biome, `tsc` and the QML gate exit non-zero on findings. Anti-slop exits non-zero for its eight error rules; its seven pilot warnings print and exit zero. Fallow uses the gating `audit` command. The QML line exits 0 when the change touches no `.qml` file, which is the normal case for the Electron tree.
+
+**One `tsc` line per context, not one for the tree.** The three contexts must not share a `lib`: `packages/fm-core` is imported by both processes and gets no DOM; the main process gets Node and no DOM; the sandboxed renderer gets DOM and no Node. A shared `lib` would let a `window` reference type-check inside the main process and a `node:fs` import type-check inside the renderer. Only the `fm-core` line is listed above because `app/src/` has no files yet — `app/tsconfig.main.json` and `app/tsconfig.renderer.json` are written and correct, and their two lines join this block when the sources land.
+
+**`--with-callers` is yours to add, and the fence will not do it for you.** When a change alters a QML component's public API, the Quality Gate above requires `tools/quality/check-qml.sh --with-callers <component.qml>`. The scoped line in this fence never runs that form, so a reviewer who runs the fence and stops has skipped the one check that catches an API break at its call site.
+
+**Advisory pilot — anti-slop.** Catalog revision `bc94865c5c4a2663b344cc7a9b6d755526fd5fca614618ff92761f4e2658e396` (profile `typescript.md`, no layers matched). Tool source revision `6d538555cb151d4121ed51a27db81890eacf8ae9`. **Pilot review due 2026-09-03**; on or after that date, report `pilot review overdue` and keep the rules advisory until a reviewed decision changes this contract. Command records: `typescript.anti-slop.changed.v1` = `5ac5cd1291b040b6294b8429d5ee68c8e05b1df27002d46c7b70fc732ef814a6`; `typescript.anti-slop.full.v1` = `758ba14767a3b44c4d51dd419b710c17bf41120e0c4705a94fede96ab5b9f884`. The seven advisory rule IDs are `anti-slop/no-conditional-empty-object-spread`, `anti-slop/no-module-mocking`, `anti-slop/no-runtime-typeof`, `anti-slop/no-shape-in-symbol-names`, `anti-slop/no-unknown-parameters`, `anti-slop/no-unsafe-dictionary-type`, `anti-slop/require-safety-comment-for-type-assertion`. Promote a warning only with observed project evidence; keep it advisory when the sample is inconclusive.
+
+This project prose is the runtime classification authority. A blocking finding prevents completion until it is fixed or suppressed narrowly with a reason. A listed advisory finding remains review evidence but does not prevent completion. A command that cannot execute is a tooling failure: report it and continue the review. Suppressions live in `biome.jsonc`, `anti-slop.config.mjs`, `.fallowrc.jsonc`, `knip.json` and `.qmllint.ini`, each beside a reason.
+
+**Tests never enter this section, tracked or not** — the catalog excludes them by contract. Vitest and `ctest` are repository-gate concerns only.
+
+## Full-Project Checks
+
+Run every command during `/tech-debt`, a full codebase audit, and CI. Run all lines even when one reports findings.
+
+```bash
+pnpm exec biome check . --reporter=summary  # lint + format + a11y — complete project
+pnpm exec oxlint --config anti-slop.config.mjs --disable-nested-config --format stylish -- .  # command-id: typescript.anti-slop.full.v1; type-evidence policy; errors gate, pilot warnings feed tech debt
+pnpm exec tsc -p packages/fm-core --noEmit --pretty false  # types — complete package
+pnpm exec knip --reporter json  # files, exports, dependencies, and the workspace package graph
+pnpm exec fallow dead-code --fail-on-issues  # whole-project dead code; any issue gates
+pnpm exec fallow health --score --hotspots --fail-on-issues  # complexity, cycles, and health hotspots
+pnpm exec fallow dupes --fail-on-issues  # whole-project duplication
+```
+
+**Advisory pilot — anti-slop.** Catalog revision `bc94865c5c4a2663b344cc7a9b6d755526fd5fca614618ff92761f4e2658e396` (profile `typescript.md`, no layers matched). Tool source revision `6d538555cb151d4121ed51a27db81890eacf8ae9`. **Pilot review due 2026-09-03**; on or after that date, report `pilot review overdue` and keep the rules advisory until a reviewed decision changes this contract. Command records: `typescript.anti-slop.changed.v1` = `5ac5cd1291b040b6294b8429d5ee68c8e05b1df27002d46c7b70fc732ef814a6`; `typescript.anti-slop.full.v1` = `758ba14767a3b44c4d51dd419b710c17bf41120e0c4705a94fede96ab5b9f884`. The seven advisory rule IDs are `anti-slop/no-conditional-empty-object-spread`, `anti-slop/no-module-mocking`, `anti-slop/no-runtime-typeof`, `anti-slop/no-shape-in-symbol-names`, `anti-slop/no-unknown-parameters`, `anti-slop/no-unsafe-dictionary-type`, `anti-slop/require-safety-comment-for-type-assertion`. Promote a warning only with observed project evidence; keep it advisory when the sample is inconclusive.
+
+This gate starts clean. Every blocking finding must be fixed or suppressed narrowly with a reason before setup is complete. Listed advisory findings remain visible for `/tech-debt` and do not prevent adoption. A command that cannot execute is a tooling failure and does not hide results from the remaining commands.
+
+**Three commands are deliberately absent, and none of them is an oversight.**
+
+- **The QML full-tree sweep.** `tools/quality/check-qml.sh` with no arguments exits 1 on the pre-existing baseline recorded in `.claude/project-standards.md`, so it can never satisfy a gate that starts clean. Encoding a permanent exemption for it here would be exactly the hidden baseline this contract forbids. Changed-file cleanliness is enforced by the scoped line in the change gate; the full-tree sweep is `/tech-debt` input, described in the Quality Gate section above. Do not add it to this fence.
+- **`ctest`.** It cannot run until `plugin/build` exists — see Build & Run → Running Tests. Add its line once a build directory is produced; a line that fails for every reviewer is worse than an absent one.
+- **`pnpm exec vitest run`.** It belongs here the moment a tracked suite exists. The catalog forbids adding it earlier, because Vitest exits non-zero with no tests and that would make this gate permanently red.
+
 ## Architecture
 
 ### Plugin: `Symmetria.FileManager.Models` (C++ → QML)
