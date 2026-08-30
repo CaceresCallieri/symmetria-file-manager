@@ -47,6 +47,28 @@
      that does not match. */
   --marked: oklch(75% 0.09 25);
 
+  /* ── Scrollbars ───────────────────────────────────────────────────────── */
+  /*
+   * Mesura Code's own values, from its `@variant dark` block — the same source
+   * the palette above came from, so a panel embedded there will not have two
+   * scrollbars that disagree.
+   *
+   * The thumb is 8% white, which is numerically the same as `--accent`. Declared
+   * separately anyway rather than aliased: a scrollbar and a row highlight
+   * drifting apart later is an ordinary change, and it should not require
+   * splitting a token at that point.
+   */
+  /*
+   * Both axes. A webkit scrollbar's thickness is its `width` when it runs
+   * vertically and its `height` when it runs horizontally, so this one value
+   * feeds both — the name says `width` because that is what Mesura Code calls
+   * it (`--app-scrollbar-width`), and keeping the names in step is worth more
+   * than the small inaccuracy.
+   */
+  --scrollbar-width: 6px;
+  --scrollbar-thumb: rgb(255 255 255 / 8%);
+  --scrollbar-thumb-hover: rgb(255 255 255 / 12%);
+
   /* ── Geometry ─────────────────────────────────────────────────────────── */
   --row-height: 24px;
   --radius: 0.5rem;

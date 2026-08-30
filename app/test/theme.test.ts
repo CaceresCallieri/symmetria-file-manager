@@ -100,3 +100,78 @@ describe("the palette", () => {
     expect([...used].filter((token) => !declared.has(token))).toEqual([]);
   });
 });
+
+/**
+ * The scrollbars.
+ *
+ * Chromium draws a wide white scrollbar with arrow buttons by default, and over
+ * a near-black window it is the loudest thing on screen. These assert the rules
+ * exist and read from tokens; whether the result LOOKS right is a screenshot's
+ * job, and this phase was verified with one.
+ */
+describe("the scrollbar", () => {
+  async function sheet(): Promise<string> {
+    return readFile(join(RENDERER, "styles.css"), "utf8");
+  }
+
+  it("declares its three tokens", async () => {
+    const tokens = await readFile(TOKENS, "utf8");
+
+    expect(tokens).toMatch(/^\s*--scrollbar-width:/m);
+    expect(tokens).toMatch(/^\s*--scrollbar-thumb:/m);
+    expect(tokens).toMatch(/^\s*--scrollbar-thumb-hover:/m);
+  });
+
+  it("sizes the bar from the width token", async () => {
+    const rule = /::-webkit-scrollbar\s*\{[^}]*\}/.exec(await sheet())?.[0] ?? "";
+
+    expect(rule).toContain("var(--scrollbar-width)");
+  });
+
+  it("paints the thumb from the token, and a different one on hover", async () => {
+    const text = await sheet();
+    const thumb = /::-webkit-scrollbar-thumb\s*\{[^}]*\}/.exec(text)?.[0] ?? "";
+    const hover = /::-webkit-scrollbar-thumb:hover\s*\{[^}]*\}/.exec(text)?.[0] ?? "";
+
+    expect(thumb).toContain("var(--scrollbar-thumb)");
+    expect(hover).toContain("var(--scrollbar-thumb-hover)");
+  });
+
+  it("rounds the thumb", async () => {
+    const thumb = /::-webkit-scrollbar-thumb\s*\{[^}]*\}/.exec(await sheet())?.[0] ?? "";
+
+    expect(thumb).toMatch(/border-radius:/);
+  });
+
+  it("leaves the track transparent, so the surface shows through the lane", async () => {
+    const track = /::-webkit-scrollbar-track\s*\{[^}]*\}/.exec(await sheet())?.[0] ?? "";
+
+    expect(track).toContain("transparent");
+  });
+
+  it("draws no arrow buttons at the ends", async () => {
+    // The usual reason a restyled scrollbar still looks wrong: the thumb and
+    // the track are handled and the two little arrows are left alone.
+    const button = /::-webkit-scrollbar-button\s*\{[^}]*\}/.exec(await sheet())?.[0] ?? "";
+
+    expect(button).toMatch(/display:\s*none/);
+  });
+
+  it("styles every scrolling surface, not one class at a time", async () => {
+    // Applied globally rather than per class. The surfaces that scroll today are
+    // the three columns, a preview body, a directory listing and the modal
+    // panel; a rule per class would need a seventh edit for the next one.
+    //
+    // A review read this as checking only that SOME rule is unscoped, and it
+    // does not: `every` fails when any single prefix is non-empty. Measured —
+    // re-scoping one of the six rules to `.list::-webkit-scrollbar-thumb` and
+    // leaving the rest alone fails this test. Noted so the next reader does not
+    // "tighten" it into something it already does.
+    const selectors = [...(await sheet()).matchAll(/^([^\n{]*)::-webkit-scrollbar[^\n{]*\{/gm)].map(
+      (match) => (match[1] ?? "").trim(),
+    );
+
+    expect(selectors.length).toBeGreaterThan(0);
+    expect(selectors.every((prefix) => prefix === "" || prefix === "*")).toBe(true);
+  });
+});

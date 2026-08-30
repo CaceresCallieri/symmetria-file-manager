@@ -359,3 +359,54 @@ kbd {
 .crumb--clickable:hover {
   color: var(--foreground);
 }
+
+/*
+ * Scrollbars.
+ *
+ * Chromium's default is wide, white and carries an arrow button at each end,
+ * which over a near-black window is the loudest thing on screen. This replaces
+ * it with a thin lane the same colour family as the borders.
+ *
+ * ── Global on purpose ──────────────────────────────────────────────────────
+ * Not scoped to `.list`. Six surfaces scroll today — the three columns, a
+ * preview body, a directory listing and the modal panel — and the search field
+ * and the tree view will add more. A rule per class means remembering to add
+ * the seventh.
+ *
+ * ── Why the WebKit pseudo-elements and not `scrollbar-color` ────────────────
+ * Chromium is the only engine this ships on, and the standard properties cannot
+ * express a transparent track with a rounded thumb and no buttons. There is no
+ * portability being given up here: there is no second engine.
+ *
+ * `::-webkit-scrollbar-button` is the one people forget. Without it the thumb
+ * and the track are restyled and the two little arrows stay, which reads as a
+ * half-finished theme rather than as a deliberate one.
+ */
+
+::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
+
+::-webkit-scrollbar-track {
+  /* Transparent, so the column surface runs under the lane rather than being
+     interrupted by a stripe of its own. */
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: var(--radius-sm);
+  background: var(--scrollbar-thumb);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
