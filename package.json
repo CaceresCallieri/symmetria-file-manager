@@ -14,7 +14,7 @@
     "lint:fix": "biome check . --write",
     "anti-slop": "oxlint --config anti-slop.config.mjs --disable-nested-config --format stylish -- .",
     "typecheck": "tsc -p packages/fm-core --noEmit --pretty false",
-    "test": "pnpm --filter @symmetria/fm-app test",
+    "test": "pnpm -r test",
     "knip": "knip --reporter json",
     "fallow:dead-code": "fallow dead-code --fail-on-issues",
     "fallow:health": "fallow health --score --hotspots --fail-on-issues",

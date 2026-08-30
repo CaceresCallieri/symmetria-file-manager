@@ -7,7 +7,12 @@ packages:
 #   electron — its postinstall downloads the platform binary; without it there
 #              is no application to launch and no smoke test.
 #   esbuild  — its postinstall places the native binary the bundler runs on.
+#   @parcel/watcher — the ONE new native module this whole design adds. Its
+#              postinstall places the prebuilt inotify binding; without it there
+#              is no file watching. Chosen over chokidar because it is the only
+#              option that fixes both documented Qt watcher failures at once.
 # Anything not listed stays blocked, which is the point of the mechanism.
 allowBuilds:
+  "@parcel/watcher": true
   electron: true
   esbuild: true

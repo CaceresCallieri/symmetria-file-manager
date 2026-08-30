@@ -12,8 +12,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@parcel/watcher": "^2.6.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "@symmetria/fm-core": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",

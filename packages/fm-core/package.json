@@ -5,5 +5,15 @@
   "type": "module",
   "description": "Framework-free file-manager logic: keybinding registry, preview routing, MIME inheritance, sort and filter",
   "license": "MIT",
-  "sideEffects": false
+  "sideEffects": false,
+  "scripts": {
+    "test": "vitest run"
+  },
+  "exports": {
+    "./entry": "./src/entry.ts",
+    "./mime": "./src/mime.ts",
+    "./sort": "./src/sort.ts",
+    "./filter": "./src/filter.ts",
+    "./glob": "./src/glob.ts"
+  }
 }
