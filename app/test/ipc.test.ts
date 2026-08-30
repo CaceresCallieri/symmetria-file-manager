@@ -239,3 +239,139 @@ describe("the Electron adapter", () => {
     expect(names(reply.value)).toContain("alpha.txt");
   });
 });
+
+/**
+ * The watch channels, which had NO coverage at all — and which is where two of
+ * the review's findings lived.
+ */
+describe("watching", () => {
+  it("reports a watch failure as watch_failed, not as scan_failed", async () => {
+    // `guard` used to catch everything and report `scan_failed`, so a read
+    // error and a watch error arrived under a code that named neither. A
+    // failure that is a value but lies about itself is no better than a throw.
+    const ipc = fakeIpc();
+    createRegistry(
+      ipc,
+      { send: () => {} },
+      {
+        watchDirectory: () => Promise.reject(new Error("no such directory")),
+      },
+    );
+
+    const reply = await ipc.invoke(CHANNELS.watch, { path: "/nope", subscriptionId: "s" });
+
+    expect(reply.ok).toBe(false);
+    if (reply.ok) return;
+    expect(reply.error.code).toBe("watch_failed");
+  });
+
+  it("reports a read failure as read_failed", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    const reply = await ipc.invoke(CHANNELS.readText, { path: "/does/not/exist" });
+
+    expect(reply.ok).toBe(false);
+    if (reply.ok) return;
+    expect(reply.error.code).toBe("read_failed");
+  });
+
+  it("stops the first watch when the same id is claimed twice at once", async () => {
+    // The race: both calls read an empty map before either wrote, so both
+    // opened a real watch and the later silently overwrote the earlier —
+    // leaking a watcher nothing could stop, and delivering duplicate events
+    // under one id.
+    const stops: string[] = [];
+    let opened = 0;
+    const ipc = fakeIpc();
+    createRegistry(
+      ipc,
+      { send: () => {} },
+      {
+        watchDirectory: async (path) => {
+          const mine = `${path}#${opened++}`;
+          await new Promise((r) => setTimeout(r, 10));
+          return async () => {
+            stops.push(mine);
+          };
+        },
+      },
+    );
+
+    await Promise.all([
+      ipc.invoke(CHANNELS.watch, { path: "/tmp", subscriptionId: "same" }),
+      ipc.invoke(CHANNELS.watch, { path: "/tmp", subscriptionId: "same" }),
+    ]);
+
+    // Two watches were opened, and the first was released rather than orphaned.
+    expect(opened).toBe(2);
+    expect(stops).toHaveLength(1);
+  });
+
+  it("releases the watch on unwatch, without needing a path", async () => {
+    let stopped = false;
+    const ipc = fakeIpc();
+    createRegistry(
+      ipc,
+      { send: () => {} },
+      {
+        watchDirectory: async () => async () => {
+          stopped = true;
+        },
+      },
+    );
+
+    await ipc.invoke(CHANNELS.watch, { path: "/tmp", subscriptionId: "s1" });
+    // No `path` — `unwatch` used to reuse the watch decoder and demand one.
+    const reply = await ipc.invoke(CHANNELS.unwatch, { subscriptionId: "s1" });
+
+    expect(reply.ok).toBe(true);
+    expect(stopped).toBe(true);
+  });
+});
+
+describe("dispose", () => {
+  it("releases every watch, so a closed window leaks nothing", async () => {
+    // `dispose` existed and was never called from the application. Every watch
+    // a session opened lived until the process exited.
+    let stopped = 0;
+    const ipc = fakeIpc();
+    const registry = createRegistry(
+      ipc,
+      { send: () => {} },
+      {
+        watchDirectory: async () => async () => {
+          stopped++;
+        },
+      },
+    );
+
+    await ipc.invoke(CHANNELS.watch, { path: "/tmp", subscriptionId: "a" });
+    await ipc.invoke(CHANNELS.watch, { path: "/var", subscriptionId: "b" });
+    registry.dispose();
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(stopped).toBe(2);
+  });
+});
+
+describe("a caller-named stream can be cancelled while it runs", () => {
+  it("cancels by the id the caller chose, not one it can never learn", async () => {
+    // The id used to be minted in the main process and returned in the reply,
+    // which arrives only once the scan has finished — so cancelling one
+    // specific running scan was structurally impossible and `"all"` was the
+    // only lever that ever worked.
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    const pending = ipc.invoke(CHANNELS.list, {
+      path: "/usr/lib",
+      stream: true,
+      streamId: "mine",
+    });
+    await ipc.invoke(CHANNELS.cancel, { streamId: "mine" });
+
+    const reply = await pending;
+    if (!reply.ok) expect(reply.error.code).toBe("cancelled");
+  });
+});

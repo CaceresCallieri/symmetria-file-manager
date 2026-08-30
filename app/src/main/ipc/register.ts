@@ -5,7 +5,9 @@ import {
   decodeCancelRequest,
   decodeListRequest,
   decodeReadTextRequest,
+  decodeUnwatchRequest,
   decodeWatchRequest,
+  type FailureCode,
   failure,
   type IpcReply,
   isFailure,
@@ -71,6 +73,17 @@ export interface Dependencies {
  */
 const BATCH = 500;
 
+/**
+ * Register every handler on one transport.
+ *
+ * **One registry per process.** Electron's `ipcMain.handle` throws when a
+ * channel already has a handler, so a second call on the same transport is a
+ * crash rather than a second registry. That is fine while there is one window —
+ * decision D3 chose tabs over multiple windows — but multi-window work must
+ * either share this registry or route by sender first. `cancel: "all"` is the
+ * other half of that constraint: it abandons every stream the registry knows,
+ * which is correct for one window and wrong for two.
+ */
 export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependencies = {}): Registry {
   const scan = deps.scanDirectory ?? scanDirectory;
   const watch = deps.watchDirectory ?? watchDirectory;
@@ -83,7 +96,11 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
    * Decode, then run. The handler never sees a payload that failed to decode —
    * it is not merely given bad input to cope with, it is never called at all.
    */
-  function guard<T>(decode: Decoder<T>, run: (request: T) => Promise<IpcReply>): IpcHandler {
+  function guard<T>(
+    decode: Decoder<T>,
+    onError: FailureCode,
+    run: (request: T) => Promise<IpcReply>,
+  ): IpcHandler {
     return async (payload) => {
       const decoded = decode(payload);
       if (isFailure(decoded)) return decoded;
@@ -92,16 +109,40 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
       } catch (cause) {
         // Nothing throws across the boundary. A thrown error arrives as an
         // opaque string with no code, and the renderer cannot branch on it.
-        return failure("scan_failed", cause instanceof Error ? cause.message : String(cause));
+        //
+        // The code is per channel, not a blanket `scan_failed`. Reporting a
+        // read error or a watch error as a scan failure is a value that lies,
+        // which defeats the reason failures are values at all.
+        return failure(onError, cause instanceof Error ? cause.message : String(cause));
       }
     };
   }
 
+  /**
+   * Serialise work per subscription id.
+   *
+   * Two concurrent `watch` calls with the same id both read an empty map before
+   * either writes, so both opened a real filesystem watch and the later one
+   * silently overwrote the earlier — leaking a watcher that nothing could ever
+   * stop, and delivering duplicate events under one id.
+   */
+  const watchQueue = new Map<string, Promise<unknown>>();
+
+  function serialise<T>(id: string, work: () => Promise<T>): Promise<T> {
+    const next = (watchQueue.get(id) ?? Promise.resolve()).then(work, work);
+    watchQueue.set(
+      id,
+      next.catch(() => undefined),
+    );
+    return next;
+  }
+
   ipc.handle(
     CHANNELS.list,
-    guard(decodeListRequest, async (request): Promise<Result<ListReply>> => {
+    guard(decodeListRequest, "scan_failed", async (request): Promise<Result<ListReply>> => {
       const controller = new AbortController();
-      const streamId = `s${nextStream++}`;
+      // The caller names the stream when it wants to be able to cancel it.
+      const streamId = request.streamId ?? `s${nextStream++}`;
       streams.set(streamId, controller);
 
       try {
@@ -115,7 +156,7 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
           return success({ entries: shown, total: shown.length, streamId: null });
         }
 
-        pushBatches(sender, streamId, shown);
+        await pushBatches(sender, streamId, shown);
         return success({ entries: [], total: shown.length, streamId });
       } catch (cause) {
         if (controller.signal.aborted) return failure("cancelled", "the scan was cancelled");
@@ -128,7 +169,7 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
 
   ipc.handle(
     CHANNELS.cancel,
-    guard(decodeCancelRequest, async (request) => {
+    guard(decodeCancelRequest, "cancelled", async (request) => {
       // `all` is the tab-closed case: abandon everything this window started.
       const targets =
         request.streamId === "all" ? [...streams.values()] : [streams.get(request.streamId)];
@@ -139,32 +180,42 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
 
   ipc.handle(
     CHANNELS.watch,
-    guard(decodeWatchRequest, async (request) => {
-      await watches.get(request.subscriptionId)?.();
-      const stop = await watch(request.path, (changed: ChangedEntry[]) => {
-        sender.send(CHANNELS.changed, { subscriptionId: request.subscriptionId, changed });
-      });
-      watches.set(request.subscriptionId, stop);
-      return success(null);
-    }),
+    guard(decodeWatchRequest, "watch_failed", async (request) =>
+      serialise(request.subscriptionId, async () => {
+        await watches.get(request.subscriptionId)?.();
+        const stop = await watch(request.path, (changed: ChangedEntry[]) => {
+          sender.send(CHANNELS.changed, { subscriptionId: request.subscriptionId, changed });
+        });
+        watches.set(request.subscriptionId, stop);
+        return success(null);
+      }),
+    ),
   );
 
   ipc.handle(
     CHANNELS.unwatch,
-    guard(decodeWatchRequest, async (request) => {
-      await watches.get(request.subscriptionId)?.();
-      watches.delete(request.subscriptionId);
-      return success(null);
-    }),
+    guard(decodeUnwatchRequest, "watch_failed", async (request) =>
+      serialise(request.subscriptionId, async () => {
+        await watches.get(request.subscriptionId)?.();
+        watches.delete(request.subscriptionId);
+        return success(null);
+      }),
+    ),
   );
 
   ipc.handle(
     CHANNELS.readText,
-    guard(decodeReadTextRequest, async (request) => {
+    guard(decodeReadTextRequest, "read_failed", async (request) => {
       const handle = await open(request.path, "r");
       try {
-        const buffer = Buffer.alloc(request.maxBytes);
-        const { bytesRead } = await handle.read(buffer, 0, request.maxBytes, 0);
+        // Allocate what the file HOLDS, not what the caller asked for. The
+        // first draft did `Buffer.alloc(request.maxBytes)` before reading, so a
+        // renderer could force a 64 MB zero-filled allocation per call, with no
+        // limit on how many calls were in flight, for a file of twelve bytes.
+        const { size } = await handle.stat();
+        const wanted = Math.min(request.maxBytes, size);
+        const buffer = Buffer.alloc(wanted);
+        const { bytesRead } = await handle.read(buffer, 0, wanted, 0);
         return success({ text: buffer.subarray(0, bytesRead).toString("utf8"), bytesRead });
       } finally {
         await handle.close();
@@ -183,7 +234,19 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
   };
 }
 
-function pushBatches(sender: Sender, streamId: string, entries: readonly FsEntry[]): void {
+/**
+ * Send the batches, yielding between them.
+ *
+ * A synchronous loop changes the wire granularity and nothing else: the main
+ * process still serialises every batch before returning, so the first rows do
+ * not paint any sooner. Yielding is what lets the renderer process batch one
+ * while the main process is still building batch two.
+ */
+async function pushBatches(
+  sender: Sender,
+  streamId: string,
+  entries: readonly FsEntry[],
+): Promise<void> {
   for (let offset = 0; offset < entries.length; offset += BATCH) {
     const slice = entries.slice(offset, offset + BATCH);
     const batch: ListBatch = {
@@ -192,5 +255,6 @@ function pushBatches(sender: Sender, streamId: string, entries: readonly FsEntry
       done: offset + BATCH >= entries.length,
     };
     sender.send(CHANNELS.listBatch, batch);
+    await new Promise((resolve) => setImmediate(resolve));
   }
 }

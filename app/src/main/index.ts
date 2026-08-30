@@ -118,11 +118,18 @@ app.whenReady().then(() => {
   // The renderer has no filesystem of its own, so this registry is the only
   // way it reaches one. Bound to this window's sender: a push goes to the
   // window that asked, never broadcast to whatever else might be listening.
-  createRegistry(electronIpcSurface(ipcMain), {
+  const registry = createRegistry(electronIpcSurface(ipcMain), {
     send: (channel, payload) => {
       if (!window.isDestroyed()) window.webContents.send(channel, payload);
     },
   });
+
+  // `dispose` was written and never called, which meant every filesystem watch
+  // a session opened lived until the process exited. For an application whose
+  // whole point is to stay resident, an uninvoked cleanup path is a leak with a
+  // delay on it.
+  window.on("closed", () => registry.dispose());
+  app.on("will-quit", () => registry.dispose());
 
   if (SMOKE) {
     window.webContents.once("did-finish-load", () => {

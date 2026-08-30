@@ -68,6 +68,16 @@ export interface ListRequest {
   readonly showHidden: boolean;
   readonly sort: SortMode;
   readonly stream: boolean;
+  /**
+   * The caller's name for this request, so it can cancel it.
+   *
+   * The first draft generated the id in the main process and returned it in the
+   * reply — which arrives only once the scan has already finished. Per-request
+   * cancellation was therefore structurally unreachable, and `"all"` was the
+   * only lever that ever worked. The caller naming the stream up front is what
+   * makes cancelling a running scan possible at all.
+   */
+  readonly streamId: string | null;
 }
 
 export interface WatchRequest {
@@ -82,6 +92,11 @@ export interface ReadTextRequest {
 
 export interface CancelRequest {
   readonly streamId: string;
+}
+
+/** `unwatch` needs only the id; requiring a path was an accident of reuse. */
+export interface UnwatchRequest {
+  readonly subscriptionId: string;
 }
 
 // ── replies ───────────────────────────────────────────────────────────────
@@ -115,13 +130,18 @@ export type IpcReply = Result<ListReply> | Result<ReadTextReply> | Result<null>;
 
 // ── decoding ──────────────────────────────────────────────────────────────
 
-const SORT_MODES: readonly SortMode[] = [
-  "alphabetical",
-  "modified",
-  "size",
-  "extension",
-  "natural",
-];
+const SORT_MODES = ["alphabetical", "modified", "size", "extension", "natural"] as const;
+
+/**
+ * A real narrowing, not an assertion.
+ *
+ * The first draft wrote `SORT_MODES.includes(sort as SortMode)` and then
+ * `sort as SortMode` again — two assertions telling the compiler something
+ * neither had checked. A predicate proves it instead, and both casts disappear.
+ */
+function isSortMode(value: string): value is SortMode {
+  return (SORT_MODES as readonly string[]).includes(value);
+}
 
 /**
  * The largest read the renderer may ask for.
@@ -135,14 +155,6 @@ function isRecord(raw: unknown): raw is Record<string, unknown> {
 }
 
 /**
- * An absolute path with no NUL byte.
- *
- * Relative is refused because the renderer never learns a working directory, so
- * a relative path can only be a mistake or an attempt to reach somewhere it was
- * not given. A NUL is refused because it terminates the path at the syscall
- * boundary — a string check can approve one thing and the kernel open another.
- */
-/**
  * The longest path the renderer may name.
  *
  * Linux caps a path at 4096 bytes, so anything beyond it cannot name a real
@@ -152,6 +164,14 @@ function isRecord(raw: unknown): raw is Record<string, unknown> {
  */
 const MAX_PATH_LENGTH = 4096;
 
+/**
+ * An absolute path with no NUL byte.
+ *
+ * Relative is refused because the renderer never learns a working directory, so
+ * a relative path can only be a mistake or an attempt to reach somewhere it was
+ * not given. A NUL is refused because it terminates the path at the syscall
+ * boundary — a string check can approve one thing and the kernel open another.
+ */
 function decodePath(raw: unknown): Result<string> {
   if (typeof raw !== "string") return failure("invalid_request", "path must be a string");
   if (raw === "") return failure("invalid_request", "path must not be empty");
@@ -170,19 +190,32 @@ export const decodeListRequest: Decoder<ListRequest> = (raw) => {
   if (isFailure(path)) return path;
 
   const sort = raw.sort ?? "alphabetical";
-  if (typeof sort !== "string" || !SORT_MODES.includes(sort as SortMode)) {
+  if (typeof sort !== "string" || !isSortMode(sort)) {
     return failure("invalid_request", `sort must be one of ${SORT_MODES.join(", ")}`);
   }
+
+  const streamId = decodeStreamId(raw.streamId);
+  if (isFailure(streamId)) return streamId;
 
   // Unknown keys are ignored rather than refused, so an older main process
   // survives a newer renderer sending a field it has never heard of.
   return success({
     path: path.value,
     showHidden: raw.showHidden === true,
-    sort: sort as SortMode,
+    sort,
     stream: raw.stream === true,
+    streamId: streamId.value,
   });
 };
+
+/** An optional caller-supplied identifier. Absent is fine; empty is not. */
+function decodeStreamId(raw: unknown): Result<string | null> {
+  if (raw === undefined || raw === null) return success(null);
+  if (typeof raw !== "string" || raw === "") {
+    return failure("invalid_request", "streamId must be a non-empty string when given");
+  }
+  return success(raw);
+}
 
 export const decodeWatchRequest: Decoder<WatchRequest> = (raw) => {
   if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
@@ -209,6 +242,14 @@ export const decodeReadTextRequest: Decoder<ReadTextRequest> = (raw) => {
   }
 
   return success({ path: path.value, maxBytes: Math.min(requested, MAX_READ_BYTES) });
+};
+
+export const decodeUnwatchRequest: Decoder<UnwatchRequest> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
+  if (typeof raw.subscriptionId !== "string" || raw.subscriptionId === "") {
+    return failure("invalid_request", "subscriptionId is required");
+  }
+  return success({ subscriptionId: raw.subscriptionId });
 };
 
 export const decodeCancelRequest: Decoder<CancelRequest> = (raw) => {
