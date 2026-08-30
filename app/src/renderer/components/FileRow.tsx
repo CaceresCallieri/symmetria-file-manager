@@ -1,5 +1,7 @@
 import type { FsEntry } from "@symmetria/fm-core/entry";
 
+import { FileIcon } from "./FileIcon.tsx";
+
 export interface FileRowProps {
   readonly entry: FsEntry;
   readonly isCursor: boolean;
@@ -33,6 +35,7 @@ export function FileRow({ entry, isCursor, isMarked = false }: FileRowProps) {
           also a fill, and two fills over a near-black base are hard to tell
           apart at a glance. */}
       <span className="row__mark">{isMarked ? "▸" : ""}</span>
+      <FileIcon name={entry.name} kind={entry.kind} />
       <span className="row__name">{entry.name}</span>
       {entry.isSymlink ? <span className="row__link">→</span> : null}
     </div>
