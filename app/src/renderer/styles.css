@@ -343,3 +343,19 @@ kbd {
   flex: 0 0 auto;
   color: currentcolor;
 }
+
+/*
+ * A pointer cursor only where a click does something.
+ *
+ * The preview column's rows carry `.row` for their layout and NOT this class:
+ * they are a preview, and a hand cursor over them would promise navigation the
+ * column does not offer.
+ */
+.row--clickable,
+.crumb--clickable {
+  cursor: pointer;
+}
+
+.crumb--clickable:hover {
+  color: var(--foreground);
+}

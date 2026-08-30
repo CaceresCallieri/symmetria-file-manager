@@ -1,5 +1,6 @@
 import type { TransferMode } from "@symmetria/fm-core/contract";
 import { isFailure } from "@symmetria/fm-core/contract";
+import { entryAt, joinPath } from "@symmetria/fm-core/pane";
 import { useCallback, useMemo, useState } from "react";
 
 import {
@@ -85,6 +86,8 @@ export interface FileOps {
   requestRename(withExtension: boolean): void;
   requestCreate(): void;
   open(): void;
+  /** Hand the entry at this index to the desktop, whatever is marked. */
+  openAt(index: number): void;
 
   confirmDelete(): void;
   confirmRename(name: string): void;
@@ -123,6 +126,13 @@ export function useFileOps(tabs: Tabs): FileOps {
     const cursor = pane.entries[pane.cursorIndex];
     return cursor === undefined ? [] : [`${pane.path}/${cursor.name}`];
   }, [pane]);
+
+  /** Hand one path to the desktop, reporting a refusal in the status strip. */
+  const openOne = useCallback((path: string) => {
+    void openPath(path).then((reply) => {
+      if (isFailure(reply)) setMessage(reply.error.message);
+    });
+  }, []);
 
   const take = useCallback(
     (mode: TransferMode) => {
@@ -271,11 +281,15 @@ export function useFileOps(tabs: Tabs): FileOps {
     requestCreate: () => setModal({ kind: "create" }),
     open: () => {
       const target = targets[0];
-      if (target === undefined) return;
-
-      void openPath(target).then((reply) => {
-        if (isFailure(reply)) setMessage(reply.error.message);
-      });
+      if (target !== undefined) openOne(target);
+    },
+    // A click names its own target, so it cannot go through `targets` — that
+    // resolves to the marked entries or the cursor, and a double click on an
+    // unmarked row while three others are marked must open the row, not the
+    // three.
+    openAt: (index) => {
+      const entry = entryAt(pane, index);
+      if (entry !== null) openOne(joinPath(pane.path, entry.name));
     },
 
     confirmDelete,

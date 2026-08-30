@@ -7,6 +7,8 @@ import {
   createPane,
   cursorEntry,
   enterDirectory,
+  entryAt,
+  isDirectoryEntry,
   leaveDirectory,
   moveCursor,
   type PaneState,
@@ -205,5 +207,60 @@ describe("selection", () => {
 
     expect(enterDirectory(setCursor(marked, 0)).selection.size).toBe(0);
     expect(leaveDirectory(marked).selection.size).toBe(0);
+  });
+});
+
+/**
+ * The two questions the pointer added.
+ *
+ * `entryAt` exists because a click asks about the row it landed on, which is
+ * usually not the cursor; `isDirectoryEntry` exists because the keyboard and
+ * the pointer both decide enter-versus-open and must decide it the same way.
+ */
+describe("asking about an entry by index", () => {
+  const pane = setEntries(createPane("/home/jc"), [
+    entry("projects", "directory"),
+    entry("notes.txt"),
+  ]);
+
+  it("answers for a row that is not under the cursor", () => {
+    expect(pane.cursorIndex).toBe(0);
+    expect(entryAt(pane, 1)?.name).toBe("notes.txt");
+  });
+
+  it("answers null for an index that is not there, rather than clamping", () => {
+    // Clamping would make a click on a row that vanished between the render and
+    // the event act on whatever moved into its place.
+    expect(entryAt(pane, 9)).toBeNull();
+    expect(entryAt(pane, -1)).toBeNull();
+  });
+
+  it("is what the cursor question is built from", () => {
+    expect(cursorEntry(pane)).toBe(entryAt(pane, pane.cursorIndex));
+  });
+});
+
+describe("deciding whether something can be entered", () => {
+  it("says yes for a directory and no for a file", () => {
+    expect(isDirectoryEntry(entry("projects", "directory"))).toBe(true);
+    expect(isDirectoryEntry(entry("notes.txt"))).toBe(false);
+  });
+
+  it("says no for nothing at all", () => {
+    expect(isDirectoryEntry(null)).toBe(false);
+  });
+
+  it("says yes for a SYMLINK to a directory, which is why one definition exists", () => {
+    // The scan reports a link by its target's kind precisely so a symlinked
+    // directory can be walked into. Two copies of this predicate would
+    // eventually disagree about exactly this case — the keyboard entering it
+    // and the pointer opening it, or the reverse.
+    const link: FsEntry = { ...entry("to-dir", "directory"), isSymlink: true };
+    expect(isDirectoryEntry(link)).toBe(true);
+  });
+
+  it("says no for a broken link, which the scan reports as other", () => {
+    const broken: FsEntry = { ...entry("to-nowhere", "other"), isSymlink: true };
+    expect(isDirectoryEntry(broken)).toBe(false);
   });
 });

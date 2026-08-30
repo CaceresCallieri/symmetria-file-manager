@@ -1,5 +1,6 @@
 import type { CascadeMode } from "@symmetria/fm-core/keys/cascade";
 import type { KeyContext } from "@symmetria/fm-core/keys/types";
+import { entryAt, isDirectoryEntry, joinPath, parentOf } from "@symmetria/fm-core/pane";
 import { useMemo } from "react";
 
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
@@ -63,6 +64,35 @@ export function App({ startPath }: AppProps = {}) {
 
   useKeyDispatch({ mode, context });
 
+  /**
+   * A double click: move the cursor to what was clicked, then act on it.
+   *
+   * The order is load-bearing. Acting first would enter or open whatever the
+   * cursor happened to be sitting on, which is almost never the row under the
+   * pointer. `entryAt` asks about the clicked index rather than the cursor for
+   * the same reason.
+   *
+   * The enter-or-open decision calls `isDirectoryEntry`, which is the same
+   * function `useKeyActions` calls for the Enter key. Not the same SHAPE of
+   * test — the same function, because two copies would eventually disagree
+   * about a symlinked directory, which the scan reports as `directory`
+   * precisely so it can be entered.
+   */
+  const activateAt = (index: number) => {
+    tabs.moveTo(index);
+    if (isDirectoryEntry(entryAt(tabs.pane, index))) tabs.enter();
+    else ops.openAt(index);
+  };
+
+  /**
+   * A click in the parent column: go to that sibling directory.
+   *
+   * Reached by name rather than by index, because the parent column's own
+   * cursor is derived from a name lookup too — see `MillerColumns` — and the
+   * two would have to be kept in step if either used an index.
+   */
+  const leaveTo = (name: string) => tabs.navigate(joinPath(parentOf(tabs.pane.path), name));
+
   return (
     <main className="app">
       {tabs.showBar ? (
@@ -73,7 +103,7 @@ export function App({ startPath }: AppProps = {}) {
           onClose={tabs.close}
         />
       ) : null}
-      <PathBar path={tabs.pane.path} />
+      <PathBar path={tabs.pane.path} onNavigate={tabs.navigate} />
       <MillerColumns
         path={tabs.pane.path}
         parentEntries={tabs.parentEntries}
@@ -81,6 +111,9 @@ export function App({ startPath }: AppProps = {}) {
         cursorIndex={tabs.pane.cursorIndex}
         parentCursorName={tabs.parentCursorName}
         selection={tabs.pane.selection}
+        onSelect={tabs.moveTo}
+        onActivate={activateAt}
+        onLeaveTo={leaveTo}
         preview={{
           route: preview.route,
           path: preview.path,

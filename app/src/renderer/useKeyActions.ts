@@ -1,4 +1,5 @@
 import type { BookmarkSubMode, KeyActions, KeyState } from "@symmetria/fm-core/keys/types";
+import { cursorEntry, isDirectoryEntry } from "@symmetria/fm-core/pane";
 import { useMemo, useState } from "react";
 
 import type { FileOps } from "./useFileOps.ts";
@@ -35,9 +36,14 @@ export interface KeyWiring {
   readonly state: KeyState;
 }
 
-/** Is the cursor on a directory? Deciding enter-versus-open needs only this. */
+/**
+ * Is the cursor on a directory? Deciding enter-versus-open needs only this.
+ *
+ * The predicate itself is shared with the pointer, which asks the same question
+ * about a clicked row rather than about the cursor.
+ */
 function isDirectoryUnderCursor(tabs: Tabs): boolean {
-  return tabs.pane.entries[tabs.pane.cursorIndex]?.kind === "directory";
+  return isDirectoryEntry(cursorEntry(tabs.pane));
 }
 
 /**

@@ -61,8 +61,33 @@ export function createPane(path: string): PaneState {
   return { path, entries: [], cursorIndex: 0, cursorMemory: new Map(), selection: new Set() };
 }
 
+/**
+ * The entry at an index, or `null`.
+ *
+ * Exists because the pointer needs to ask about a row that is NOT under the
+ * cursor — a click decides what to do from what was clicked, and asking about
+ * the cursor instead is how a double click opens the wrong file. `cursorEntry`
+ * is the same question at one particular index.
+ */
+export function entryAt(pane: PaneState, index: number): FsEntry | null {
+  return pane.entries[index] ?? null;
+}
+
 export function cursorEntry(pane: PaneState): FsEntry | null {
-  return pane.entries[pane.cursorIndex] ?? null;
+  return entryAt(pane, pane.cursorIndex);
+}
+
+/**
+ * Is this something you can go into?
+ *
+ * One definition, because two callers ask it about different entries — the
+ * keyboard about the cursor, the pointer about what was clicked — and the
+ * answer decides enter-versus-open in both. A second copy would eventually
+ * disagree about a symlinked directory, which the scan reports as `directory`
+ * precisely so it can be entered.
+ */
+export function isDirectoryEntry(entry: FsEntry | null): boolean {
+  return entry?.kind === "directory";
 }
 
 /**

@@ -10,6 +10,18 @@ export interface FileListProps {
   readonly testId: string;
   /** Marked entries, by name. Empty in the columns that cannot be marked. */
   readonly selection: ReadonlySet<string>;
+  /** A single click on a row. Absent leaves the whole column unclickable. */
+  readonly onSelect?: (index: number) => void;
+  /** A double click on a row. */
+  readonly onActivate?: (index: number) => void;
+  /**
+   * Which rows a click reaches. Absent means all of them.
+   *
+   * The parent column uses it to leave files inert: a file there is not a
+   * destination, and a row that looks clickable and does nothing is worse than
+   * one that never offered.
+   */
+  readonly clickableWhen?: (entry: FsEntry) => boolean;
 }
 
 /**
@@ -81,7 +93,15 @@ export function observeWithFallback(
  * they show three levels and never expand a subtree — and decision D5 removed
  * automatic expansion entirely. This component handles the other half.
  */
-export function FileList({ entries, cursorIndex, testId, selection }: FileListProps) {
+export function FileList({
+  entries,
+  cursorIndex,
+  testId,
+  selection,
+  onSelect,
+  onActivate,
+  clickableWhen,
+}: FileListProps) {
   // A callback ref into state, not `useRef`.
   //
   // A `useRef` is null during the first render, so the virtualiser has no
@@ -186,6 +206,7 @@ export function FileList({ entries, cursorIndex, testId, selection }: FileListPr
           const entry = entries[item.index];
           if (entry === undefined) return null;
           const isCursor = item.index === cursorIndex;
+          const reachable = clickableWhen === undefined || clickableWhen(entry);
           return (
             <div
               key={entry.name}
@@ -199,7 +220,17 @@ export function FileList({ entries, cursorIndex, testId, selection }: FileListPr
                 transform: `translateY(${item.start}px)`,
               }}
             >
-              <FileRow entry={entry} isCursor={isCursor} isMarked={selection.has(entry.name)} />
+              <FileRow
+                entry={entry}
+                isCursor={isCursor}
+                isMarked={selection.has(entry.name)}
+                {...(onSelect === undefined || !reachable
+                  ? {}
+                  : { onSelect: () => onSelect(item.index) })}
+                {...(onActivate === undefined || !reachable
+                  ? {}
+                  : { onActivate: () => onActivate(item.index) })}
+              />
             </div>
           );
         })}
