@@ -163,6 +163,15 @@ export interface BridgeLog {
    * shifts are what stale index-keyed state gets wrong.
    */
   addEntryFirst(path: string, name: string): void;
+  /**
+   * Hold the next bookmark write open until the returned function is called.
+   *
+   * Lets a test put two writes in flight at once and release them, which is the
+   * only way to observe whether they were serialised at all.
+   */
+  holdNextBookmarkWrite(): () => void;
+  /** The letters each bookmark write persisted, in COMPLETION order. */
+  readonly bookmarkWrites: string[];
   /** Make the next transfer report these names as already present. */
   conflictNext(names: readonly string[]): void;
   /** Leave the next transfer unresolved, so a test can watch it running. */
@@ -195,6 +204,8 @@ export function installBridge(): BridgeLog {
   let conflictOnce: readonly string[] = [];
   let holdOnce = false;
   const transferIds: string[] = [];
+  const bookmarkWrites: string[] = [];
+  let releaseNextWrite: (() => void) | null = null;
   const progressListeners = new Set<(payload: unknown) => void>();
   const listeners = new Set<(payload: unknown) => void>();
   const tree = new Map([...TREE].map(([path, entries]) => [path, [...entries]]));
@@ -348,13 +359,25 @@ export function installBridge(): BridgeLog {
       const { bookmarks } = request as {
         bookmarks: { letter: string; bookmark: { path: string } }[];
       };
-      ops.push(
-        `bookmarks ${bookmarks
-          .map((b) => b.letter)
-          .sort()
-          .join("")}`,
-      );
-      return Promise.resolve({ ok: true as const, value: null });
+      const letters = bookmarks
+        .map((b) => b.letter)
+        .sort()
+        .join("");
+      ops.push(`bookmarks ${letters}`);
+
+      // `ops` records when a write was ASKED for; `bookmarkWrites` records when
+      // it FINISHED. The two orders differ only when writes overlap, which is
+      // the one thing worth pinning about serialisation.
+      const settle = () => {
+        bookmarkWrites.push(letters);
+        return { ok: true as const, value: null };
+      };
+
+      if (releaseNextWrite === null) return Promise.resolve(settle());
+
+      return new Promise<{ ok: true; value: null }>((resolve) => {
+        releaseNextWrite = () => resolve(settle());
+      });
     },
     cancelTransfer: (request) => {
       ops.push(`cancel ${(request as { transferId: string }).transferId}`);
@@ -383,6 +406,16 @@ export function installBridge(): BridgeLog {
       conflictOnce = names;
     },
     transferIds,
+    bookmarkWrites,
+    holdNextBookmarkWrite: () => {
+      // Armed as a marker; the write itself replaces it with the real releaser.
+      releaseNextWrite = () => undefined;
+      return () => {
+        const release = releaseNextWrite;
+        releaseNextWrite = null;
+        release?.();
+      };
+    },
     holdNextTransfer: () => {
       holdOnce = true;
     },

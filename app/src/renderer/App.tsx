@@ -149,6 +149,7 @@ export function App({ startPath }: AppProps = {}) {
       <WhichKeyOverlay
         prefix={modes.chordPrefix}
         cursorIsImage={state.cursorEntry?.isImage === true}
+        bookmarks={bookmarks.byLetter}
       />
       <StatusStrip
         error={tabs.error}
@@ -162,7 +163,9 @@ export function App({ startPath }: AppProps = {}) {
         sort={tabs.sort}
         showHidden={tabs.showHidden}
       />
-      {modes.helpOpen ? <HelpOverlay context={context} onClose={modes.closeHelp} /> : null}
+      {modes.helpOpen ? (
+        <HelpOverlay context={context} bookmarks={bookmarks.byLetter} onClose={modes.closeHelp} />
+      ) : null}
       <OpsModals
         modal={ops.modal}
         onCancel={ops.closeModal}

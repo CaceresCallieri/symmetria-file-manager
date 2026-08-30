@@ -288,3 +288,16 @@ export async function readBookmarks(): Promise<Result<Map<string, Bookmark>>> {
     new Map(decoded.value.bookmarks.map(({ letter, bookmark }) => [letter, bookmark])),
   );
 }
+
+/** Replace the stored bookmarks. */
+export async function writeBookmarks(
+  bookmarks: ReadonlyMap<string, Bookmark>,
+): Promise<Result<null>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("write_failed", "the bridge is missing");
+
+  const reply = await bridge.bookmarksWrite({
+    bookmarks: [...bookmarks].map(([letter, bookmark]) => ({ letter, bookmark })),
+  });
+  return isFailure(reply) ? reply : success(null);
+}

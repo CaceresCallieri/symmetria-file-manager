@@ -1,4 +1,5 @@
-import { CHORD_GROUPS, copyGroupFor } from "@symmetria/fm-core/keys/chords";
+import type { Bookmark } from "@symmetria/fm-core/bookmarks";
+import { CHORD_GROUPS, groupFor } from "@symmetria/fm-core/keys/chords";
 import { isSuppressedInPicker } from "@symmetria/fm-core/keys/dispatch";
 import { bindingsFor, HELP_GROUPS, MODES } from "@symmetria/fm-core/keys/registry";
 import type { KeyContext } from "@symmetria/fm-core/keys/types";
@@ -6,6 +7,8 @@ import { useEffect } from "react";
 
 export interface HelpOverlayProps {
   readonly context: KeyContext;
+  /** What is bound, so the `g` chord lists real destinations. */
+  readonly bookmarks: ReadonlyMap<string, Bookmark>;
   readonly onClose: () => void;
 }
 
@@ -20,7 +23,7 @@ export interface HelpOverlayProps {
  * instead, because a bare prefix row would tell the reader that `g` does
  * something rather than that `g` opens a menu.
  */
-export function HelpOverlay({ context, onClose }: HelpOverlayProps) {
+export function HelpOverlay({ context, bookmarks, onClose }: HelpOverlayProps) {
   // A modal handles its own Escape. The cascade reports `modal` and does
   // nothing, which is what makes "the modal handles it" true rather than a
   // claim — if this listener were missing, the help would be uncloseable by
@@ -70,8 +73,11 @@ export function HelpOverlay({ context, onClose }: HelpOverlayProps) {
 
         <section data-testid="help-group-Chords">
           <h3>Chords</h3>
-          {[...CHORD_GROUPS].map(([prefix, group]) => {
-            const shown = prefix === "c" ? copyGroupFor(cursorIsImage) : group;
+          {[...CHORD_GROUPS].map(([prefix]) => {
+            // `groupFor` is shared with the which-key HUD, so the cheat sheet
+            // and the popup cannot come to disagree about what `g` offers.
+            const shown = groupFor(prefix, cursorIsImage, bookmarks);
+            if (shown === undefined) return null;
             return (
               <div key={prefix} data-testid={`chord-group-${prefix}`}>
                 <h4>

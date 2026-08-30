@@ -71,6 +71,32 @@ export const CHORD_GROUPS: ReadonlyMap<string, ChordGroup> = new Map([
   ],
 ]);
 
+/**
+ * The `g` group as the overlays should draw it, with the user's bookmarks.
+ *
+ * The chord table's own header has promised this since it was written: "User
+ * bookmarks are merged into the `g` group by the host, which owns them." This
+ * is that merge, and it deliberately mirrors `copyGroupFor` below — same shape,
+ * same reason. An overlay must not advertise a letter that would answer "No
+ * bookmark on d", and the only way it can know is to be handed the store.
+ *
+ * Sorted by letter. A map iterates in insertion order, which is whatever order
+ * the file happened to be written in, so an unsorted list would reshuffle
+ * itself as the user edited their bookmarks.
+ */
+export function goGroupWith(
+  bookmarks: ReadonlyMap<string, { readonly label: string }>,
+): ChordGroup {
+  const base = CHORD_GROUPS.get("g");
+  if (base === undefined) throw new Error("the go chord group is missing");
+
+  const rows: ChordEntry[] = [...bookmarks]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, bookmark]) => ({ key, label: bookmark.label, icon: "bookmark" }));
+
+  return { ...base, binds: [...base.binds, ...rows] };
+}
+
 /** The image row, offered only when the cursor sits on one. */
 export const IMAGE_CHORD_ENTRY: ChordEntry = {
   key: "i",
@@ -226,4 +252,27 @@ export function handleBookmarkSubMode(
 
   ctx.actions.exitBookmarkSubMode();
   return true;
+}
+
+/**
+ * Which group a prefix draws, including the two that depend on state.
+ *
+ * `c` hides its image row away from an image, and `g` gains the user's
+ * bookmarks. Both overlays call this rather than each deciding for itself: the
+ * which-key HUD and the cheat sheet must not come to disagree about what a
+ * prefix offers, and they would, because they are edited months apart.
+ *
+ * It lived in the HUD component for one commit, with the cheat sheet importing
+ * it from there. That put a pure function with no DOM in it inside a component
+ * file, and made one component depend on another for data rather than for
+ * rendering. It belongs here, beside the table it reads.
+ */
+export function groupFor(
+  prefix: string,
+  cursorIsImage: boolean,
+  bookmarks: ReadonlyMap<string, { readonly label: string }>,
+): ChordGroup | undefined {
+  if (prefix === "c") return copyGroupFor(cursorIsImage);
+  if (prefix === "g") return goGroupWith(bookmarks);
+  return CHORD_GROUPS.get(prefix);
 }

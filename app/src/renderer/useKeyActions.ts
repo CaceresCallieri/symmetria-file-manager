@@ -1,3 +1,4 @@
+import { isReservedLetter, labelFor } from "@symmetria/fm-core/bookmarks";
 import type { BookmarkSubMode, KeyActions, KeyState } from "@symmetria/fm-core/keys/types";
 import { cursorEntry, isDirectoryEntry } from "@symmetria/fm-core/pane";
 import { useMemo, useState } from "react";
@@ -123,8 +124,29 @@ export function useKeyActions(
         if (path === null) setMessage(`No bookmark on ${letter}`);
         else tabs.navigate(path);
       },
-      assignBookmark: soon("Bookmarks"),
-      deleteBookmark: soon("Bookmarks"),
+      assignBookmark: (letter) => {
+        // The store drops a reserved letter on read, so binding one would look
+        // like a save that worked and be gone after a restart. Refusing here
+        // and saying which letter is the honest version of the same rule.
+        if (isReservedLetter(letter)) {
+          setMessage(`${letter} is reserved`);
+          return;
+        }
+        const path = tabs.pane.path;
+        const label = labelFor(path);
+        bookmarks.assign(letter, { path, label });
+        setMessage(`${letter} → ${label}`);
+      },
+      deleteBookmark: (letter) => {
+        if (isReservedLetter(letter)) {
+          setMessage(`${letter} is reserved`);
+          return;
+        }
+        // Silent for a letter that was not bound: the user asked for it to be
+        // gone and it is.
+        if (bookmarks.pathFor(letter) !== null) setMessage(`${letter} removed`);
+        bookmarks.remove(letter);
+      },
       setSort: soon("Sorting"),
       showMessage: setMessage,
 

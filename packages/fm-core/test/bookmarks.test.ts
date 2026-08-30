@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-
 import {
   decodeBookmarks,
   isReservedLetter,
@@ -8,6 +7,7 @@ import {
   resolveBookmarks,
   seedBookmarks,
 } from "../src/bookmarks.ts";
+import { goGroupWith } from "../src/keys/chords.ts";
 
 /**
  * Bookmarks, as data.
@@ -205,5 +205,49 @@ describe("what the store answers with", () => {
 
     expect([...resolved.bookmarks.keys()].sort()).toEqual([...seed.keys()].sort());
     expect(resolved.shouldWrite).toBe(false);
+  });
+});
+
+describe("the go group as the overlays draw it", () => {
+  it("appends every bookmark after the prefix's own row", () => {
+    const group = goGroupWith(
+      new Map([
+        ["d", { path: "/home/jc/Downloads", label: "Downloads" }],
+        ["p", { path: "/home/jc/Pictures", label: "Pictures" }],
+      ]),
+    );
+
+    expect(group.binds.map((bind) => bind.key)).toEqual(["g", "d", "p"]);
+    expect(group.binds[1]?.label).toBe("Downloads");
+  });
+
+  it("orders the bookmarks by letter, so the overlay does not reshuffle", () => {
+    // A map iterates in insertion order, which is the order the file happened
+    // to be written in. Sorting makes the list the same every time it is drawn.
+    const group = goGroupWith(
+      new Map([
+        ["v", { path: "/v", label: "Videos" }],
+        ["d", { path: "/d", label: "Downloads" }],
+        ["m", { path: "/m", label: "Music" }],
+      ]),
+    );
+
+    expect(group.binds.map((bind) => bind.key)).toEqual(["g", "d", "m", "v"]);
+  });
+
+  it("is the bare prefix group when nothing is bound", () => {
+    const group = goGroupWith(new Map());
+
+    expect(group.binds.map((bind) => bind.key)).toEqual(["g"]);
+  });
+
+  it("does not mutate the table it reads", () => {
+    // `copyGroupFor` next door has the same property and the same reason: the
+    // chord table is module state, and two overlays read it on every render.
+    const first = goGroupWith(new Map([["d", { path: "/d", label: "Downloads" }]]));
+    const second = goGroupWith(new Map());
+
+    expect(first.binds).toHaveLength(2);
+    expect(second.binds).toHaveLength(1);
   });
 });

@@ -1,9 +1,12 @@
-import { CHORD_GROUPS, copyGroupFor } from "@symmetria/fm-core/keys/chords";
+import type { Bookmark } from "@symmetria/fm-core/bookmarks";
+import { groupFor } from "@symmetria/fm-core/keys/chords";
 
 export interface WhichKeyOverlayProps {
   /** The pending chord prefix. Nothing renders when it is empty. */
   readonly prefix: string;
   readonly cursorIsImage: boolean;
+  /** What is bound, so the `g` menu lists real destinations. */
+  readonly bookmarks: ReadonlyMap<string, Bookmark>;
 }
 
 /**
@@ -13,10 +16,10 @@ export interface WhichKeyOverlayProps {
  * It appears the moment a prefix is set and disappears when the chord resolves,
  * because there is no chord timeout to wait out.
  */
-export function WhichKeyOverlay({ prefix, cursorIsImage }: WhichKeyOverlayProps) {
+export function WhichKeyOverlay({ prefix, cursorIsImage, bookmarks }: WhichKeyOverlayProps) {
   if (prefix === "") return null;
 
-  const group = prefix === "c" ? copyGroupFor(cursorIsImage) : CHORD_GROUPS.get(prefix);
+  const group = groupFor(prefix, cursorIsImage, bookmarks);
   if (group === undefined) return null;
 
   return (
