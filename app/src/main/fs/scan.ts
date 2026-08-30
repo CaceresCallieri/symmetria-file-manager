@@ -113,7 +113,7 @@ async function describe(
  * broken link would make it invisible, which is the opposite of what a file
  * manager is for.
  */
-function kindOf(source: { isDirectory(): boolean; isFile(): boolean } | null): EntryKind {
+export function kindOf(source: { isDirectory(): boolean; isFile(): boolean } | null): EntryKind {
   if (source === null) return "other";
   if (source.isDirectory()) return "directory";
   if (source.isFile()) return "file";

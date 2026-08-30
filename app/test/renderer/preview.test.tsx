@@ -7,7 +7,7 @@
  * it, that the debounce holds, and that a preview which cannot be built still
  * shows something truthful.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../../src/renderer/App.tsx";
@@ -30,12 +30,79 @@ async function opened(): Promise<void> {
 }
 
 describe("the preview column", () => {
-  it("counts a directory's entries rather than trying to read it", async () => {
+  it("lists a directory's entries rather than trying to read it", async () => {
     // The cursor starts on `projects`, a directory.
     await opened();
 
     const shown = await screen.findByTestId("preview-directory");
-    expect(shown.textContent).toBe("2 entries");
+    expect(
+      within(shown)
+        .getAllByTestId("preview-entry")
+        .map((r) => r.textContent),
+    ).toEqual(["alpha", "beta.md"]);
+  });
+
+  it("draws each listed entry with the icon its kind and name earn", async () => {
+    // The same icon component the file rows use. A second mapping here would
+    // drift, and a folder would eventually look like a folder in one column and
+    // not in another.
+    await opened();
+
+    const shown = await screen.findByTestId("preview-directory");
+    const rows = within(shown).getAllByTestId("preview-entry");
+
+    expect(rows[0]?.querySelector(".file-icon")).not.toBeNull();
+    expect(rows[0]?.dataset["kind"]).toBe("directory");
+    expect(rows[1]?.dataset["kind"]).toBe("file");
+  });
+
+  it("says how many it is not showing when the listing is capped", async () => {
+    // `many` is the last entry of the fixture home, so the bottom key reaches it
+    // however many entries are added before it later.
+    await opened();
+    fireEvent.keyDown(window, { key: "G", shiftKey: true });
+    await waitFor(() => expect(cursorIn("column-current")).toContain("many"));
+
+    const shown = await screen.findByTestId("preview-directory");
+    expect(within(shown).getAllByTestId("preview-entry")).toHaveLength(500);
+    expect(shown.textContent).toContain("37 more");
+  });
+
+  it("says an empty directory is empty instead of showing nothing", async () => {
+    await opened();
+    fireEvent.keyDown(window, { key: "G", shiftKey: true });
+    fireEvent.keyDown(window, { key: "k" });
+    fireEvent.keyDown(window, { key: "k" });
+    await waitFor(() => expect(cursorIn("column-current")).toContain("empty"));
+
+    const shown = await screen.findByTestId("preview-directory");
+    expect(within(shown).queryAllByTestId("preview-entry")).toHaveLength(0);
+    expect(shown.textContent).toMatch(/empty/i);
+  });
+
+  it("shows the error and no rows for a directory it could not read", async () => {
+    await opened();
+    fireEvent.keyDown(window, { key: "G", shiftKey: true });
+    fireEvent.keyDown(window, { key: "k" });
+    await waitFor(() => expect(cursorIn("column-current")).toContain("locked"));
+
+    await screen.findByTestId("preview-error");
+    expect(screen.queryAllByTestId("preview-entry")).toHaveLength(0);
+  });
+
+  it("leaves the listed rows inert — they are a preview, not a third pane", async () => {
+    // A click here would imply the column is navigable, and it is not: the
+    // cursor lives in the middle column and entering is what moves it.
+    await opened();
+    const shown = await screen.findByTestId("preview-directory");
+    const row = within(shown).getAllByTestId("preview-entry")[0];
+
+    expect(row?.tagName).toBe("DIV");
+    expect(row?.getAttribute("tabindex")).toBeNull();
+
+    const before = [...log.listed];
+    if (row !== undefined) fireEvent.click(row);
+    expect(log.listed).toEqual(before);
   });
 
   it("renders a text file's contents", async () => {
@@ -88,8 +155,11 @@ describe("the debounce", () => {
     await vi.advanceTimersByTimeAsync(PREVIEW_DEBOUNCE_MS * 2);
 
     // One description for where the cursor came to rest, not one per step.
+    // Three steps from `projects` lands on `empty` — the fixture home grew when
+    // the directory listing arrived, and the count of steps is what this test
+    // is about rather than which entry they end on.
     const asked = log.described.slice(before);
-    expect(asked).toEqual(["/home/jc/todo.txt"]);
+    expect(asked).toEqual(["/home/jc/empty"]);
   });
 
   it("describes the entry the cursor settles on", async () => {

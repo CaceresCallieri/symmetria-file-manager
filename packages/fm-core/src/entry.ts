@@ -31,5 +31,18 @@ export interface FsEntry {
   readonly unreadable?: boolean;
 }
 
+/**
+ * An entry reduced to the two facts a listing needs.
+ *
+ * The preview column draws a name and an icon, and the icon is chosen from the
+ * name and the kind. Sending a whole `FsEntry` per row would carry a size, an
+ * mtime and two flags that nothing there reads — across a process boundary,
+ * hundreds of times, every time the cursor settles on a directory.
+ */
+export interface EntrySummary {
+  readonly name: string;
+  readonly kind: EntryKind;
+}
+
 /** What a preview would do with this entry. */
 export type EntryClass = "image" | "text" | "binary";

@@ -11,7 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { App } from "../../src/renderer/App.tsx";
-import { cursorIn, installBridge, namesIn } from "./support.ts";
+import { cursorIn, HOME_LAST_ENTRY, installBridge, namesIn } from "./support.ts";
 
 beforeEach(installBridge);
 afterEach(cleanup);
@@ -37,13 +37,13 @@ describe("navigation comes from the registry now", () => {
 
     fireEvent.keyDown(window, { key: "G", shiftKey: true });
 
-    await waitFor(() => expect(cursorIn("column-current")).toContain("todo.txt"));
+    await waitFor(() => expect(cursorIn("column-current")).toContain(HOME_LAST_ENTRY));
   });
 
   it("jumps to the top with the gg chord, one key at a time", async () => {
     await openedAtHome();
     fireEvent.keyDown(window, { key: "G", shiftKey: true });
-    await waitFor(() => expect(cursorIn("column-current")).toContain("todo.txt"));
+    await waitFor(() => expect(cursorIn("column-current")).toContain(HOME_LAST_ENTRY));
 
     fireEvent.keyDown(window, { key: "g" });
     fireEvent.keyDown(window, { key: "g" });

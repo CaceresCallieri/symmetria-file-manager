@@ -1,3 +1,4 @@
+import type { EntrySummary } from "../entry.ts";
 import { classify, inheritsFrom, isImageMime, type MimeTables } from "../mime.ts";
 
 /**
@@ -25,6 +26,8 @@ export interface PreviewTarget {
   readonly isDirectory: boolean;
   /** How many entries a directory holds. Meaningless for a file. */
   readonly entryCount: number;
+  /** The first entries, capped by whoever read them. Empty for a file. */
+  readonly entries: readonly EntrySummary[];
   readonly size: number;
   readonly mime: string | null;
   /** The first bytes, for the sniff that catches an unregistered text file. */
@@ -37,7 +40,17 @@ export type UnbuiltKind = "video" | "audio" | "archive" | "spreadsheet";
 export type PreviewRoute =
   /** Nothing under the cursor. */
   | { readonly kind: "none" }
-  | { readonly kind: "directory"; readonly entryCount: number }
+  /**
+   * `entries` is what the column draws; `entryCount` is the whole truth.
+   *
+   * They differ when the listing was capped, and that difference is the only
+   * thing that lets the pane say how many it is not showing.
+   */
+  | {
+      readonly kind: "directory";
+      readonly entryCount: number;
+      readonly entries: readonly EntrySummary[];
+    }
   | { readonly kind: "image"; readonly mime: string }
   | { readonly kind: "document"; readonly mime: string }
   | { readonly kind: "code"; readonly language: string }
@@ -188,7 +201,9 @@ function isArchive(tables: MimeTables, mime: string): boolean {
  */
 export function routePreview(tables: MimeTables, target: PreviewTarget | null): PreviewRoute {
   if (target === null) return { kind: "none" };
-  if (target.isDirectory) return { kind: "directory", entryCount: target.entryCount };
+  if (target.isDirectory) {
+    return { kind: "directory", entryCount: target.entryCount, entries: target.entries };
+  }
 
   const mime = target.mime;
 

@@ -41,6 +41,7 @@ function target(over: Partial<PreviewTarget>): PreviewTarget {
     path: "/tmp/file.txt",
     isDirectory: false,
     entryCount: 0,
+    entries: [],
     size: 12,
     mime: "text/plain",
     head: TEXT_HEAD,
@@ -63,10 +64,10 @@ describe("the branch order", () => {
     expect(routePreview(tables, null).kind).toBe("none");
   });
 
-  it("counts a directory's entries rather than trying to preview it", () => {
+  it("lists a directory's entries rather than trying to preview it", () => {
     const route = routePreview(tables, target({ isDirectory: true, entryCount: 42 }));
 
-    expect(route).toEqual({ kind: "directory", entryCount: 42 });
+    expect(route).toEqual({ kind: "directory", entryCount: 42, entries: [] });
   });
 
   it("prefers the directory branch even for a directory with a known type", () => {
@@ -169,5 +170,61 @@ describe("languageFor", () => {
   it("returns null for a dotfile with no extension of its own", () => {
     // `.gitignore` has one dot, at position zero, which is not an extension.
     expect(languageFor(".gitignore")).toBeNull();
+  });
+});
+
+/**
+ * The directory branch carries the listing, not only its size.
+ *
+ * A count is a fact about a directory; a listing is the directory. Miller
+ * columns are three columns because the third one shows what entering would
+ * reveal, and a caption saying "16 entries" shows none of it.
+ */
+describe("the directory branch", () => {
+  it("carries the listed entries alongside the count", () => {
+    const route = routePreview(tables, {
+      ...target({}),
+      name: "projects",
+      path: "/home/jc/projects",
+      isDirectory: true,
+      entryCount: 2,
+      entries: [
+        { name: "alpha", kind: "directory" },
+        { name: "beta.md", kind: "file" },
+      ],
+    });
+
+    expect(route.kind).toBe("directory");
+    if (route.kind !== "directory") return;
+    expect(route.entryCount).toBe(2);
+    expect(route.entries.map((e) => e.name)).toEqual(["alpha", "beta.md"]);
+  });
+
+  it("reports a count larger than the listing, so the cap is visible downstream", () => {
+    // The main process caps what it sends and reports the true total. Losing
+    // one of the two would leave the pane unable to say how many it is not
+    // showing.
+    const route = routePreview(tables, {
+      ...target({}),
+      isDirectory: true,
+      entryCount: 900,
+      entries: [{ name: "one", kind: "file" }],
+    });
+
+    expect(route.kind).toBe("directory");
+    if (route.kind !== "directory") return;
+    expect(route.entryCount).toBe(900);
+    expect(route.entries).toHaveLength(1);
+  });
+
+  it("still routes to directory when the listing is empty", () => {
+    const route = routePreview(tables, {
+      ...target({}),
+      isDirectory: true,
+      entryCount: 0,
+      entries: [],
+    });
+
+    expect(route.kind).toBe("directory");
   });
 });

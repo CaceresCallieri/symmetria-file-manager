@@ -14,7 +14,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { BRIDGE_KEY } from "../../src/preload/bridge.ts";
 import { App } from "../../src/renderer/App.tsx";
-import { type BridgeLog, cursorIn, installBridge, namesIn } from "./support.ts";
+import {
+  type BridgeLog,
+  cursorIn,
+  HOME_ENTRY_COUNT,
+  HOME_LAST_ENTRY,
+  installBridge,
+  namesIn,
+} from "./support.ts";
 
 let log: BridgeLog;
 
@@ -39,7 +46,7 @@ describe("App, wired to a bridge", () => {
 
     await waitFor(() => expect(namesIn("column-current")).toContain("notes.txt"));
     expect(within(screen.getByTestId("path-bar")).getByText("jc")).toBeDefined();
-    expect(screen.getByTestId("status-bar").textContent).toContain("3 entries");
+    expect(screen.getByTestId("status-bar").textContent).toContain(`${HOME_ENTRY_COUNT} entries`);
   });
 
   it("moves the cursor down without wrapping past the last entry", async () => {
@@ -48,7 +55,7 @@ describe("App, wired to a bridge", () => {
 
     for (let i = 0; i < 10; i++) fireEvent.keyDown(window, { key: "j" });
 
-    await waitFor(() => expect(cursorIn("column-current")).toContain("todo.txt"));
+    await waitFor(() => expect(cursorIn("column-current")).toContain(HOME_LAST_ENTRY));
   });
 
   it("moves the cursor up without wrapping past the first entry", async () => {

@@ -1,5 +1,6 @@
+import type { Dirent } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 
 import {
   type Decoder,
@@ -25,12 +26,12 @@ import {
   type Result,
   success,
 } from "@symmetria/fm-core/contract";
-import type { FsEntry } from "@symmetria/fm-core/entry";
+import type { EntrySummary, FsEntry } from "@symmetria/fm-core/entry";
 import { filterEntries } from "@symmetria/fm-core/filter";
 import { resolveMimeType } from "@symmetria/fm-core/mime";
 import { sortEntries } from "@symmetria/fm-core/sort";
 import { mimeTables } from "../fs/mimeTables.ts";
-import { scanDirectory } from "../fs/scan.ts";
+import { kindOf, scanDirectory } from "../fs/scan.ts";
 import { type ChangedEntry, type StopWatching, watchDirectory } from "../fs/watch.ts";
 import { operations } from "../ops/index.ts";
 import { authorisePreview } from "../previewTokens.ts";
@@ -44,6 +45,45 @@ import { CHANNELS, REQUEST_CHANNELS } from "./channels.ts";
  * fault per preview for evidence nothing reads.
  */
 const SNIFF_BYTES = 8192;
+
+/**
+ * How many names a directory's describe reply carries.
+ *
+ * The cap is here rather than in the renderer because this is the side that can
+ * stop the work: a directory of ten thousand entries would otherwise serialise
+ * ten thousand names across the boundary every time the cursor settled on it,
+ * which the 150 ms preview debounce spaces out but does not bound. The true
+ * count travels beside the listing, so the column can still say how many it is
+ * not showing.
+ *
+ * 500 is far more than fits on any screen and small enough that the reply stays
+ * a few tens of kilobytes.
+ */
+export const MAX_DIRECTORY_PREVIEW_ENTRIES = 500;
+
+/**
+ * One `readdir` result reduced to what a listing row draws.
+ *
+ * **A symlink's own dirent type is `DT_LNK`**, so `isDirectory()` and
+ * `isFile()` are both false for one — classifying straight from the dirent
+ * would make every link `other`, and a symlinked directory would draw the wrong
+ * icon here while drawing the right one two columns to the left. What a person
+ * means by "what is this" is the target, which is what `scanDirectory` already
+ * reports in the two navigable columns.
+ *
+ * `kindOf` is shared with that scan rather than reimplemented, so the two can
+ * never come to disagree. The stat strategy is NOT shared: the scan needs a
+ * size and an mtime for every entry, and a listing row needs neither, so this
+ * pays a `stat` only for the links.
+ */
+async function direntSummary(directory: string, dirent: Dirent): Promise<EntrySummary> {
+  if (!dirent.isSymbolicLink()) return { name: dirent.name, kind: kindOf(dirent) };
+
+  // A broken link resolves to `other` and stays listed, exactly as in the scan:
+  // dropping it would make it invisible.
+  const target = await stat(join(directory, dirent.name)).catch(() => null);
+  return { name: dirent.name, kind: kindOf(target) };
+}
 
 async function readHead(path: string, bytes: number): Promise<Uint8Array> {
   const handle = await open(path, "r");
@@ -242,15 +282,22 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
       const stats = await stat(request.path);
 
       if (stats.isDirectory()) {
-        // The count is what the directory branch shows. `readdir` rather than
-        // the full scan: nothing here needs each entry's type or size, and a
-        // directory of ten thousand files would pay for both.
-        const entries = await readdir(request.path);
+        // `readdir` rather than the full scan, still: the listing needs a name
+        // and a kind, and `withFileTypes` returns the kind inline — on Linux it
+        // comes back in the same `getdents64` the names do, so it costs nothing
+        // extra. The full scan would `stat` every entry for a size and an mtime
+        // that no row in the preview column draws.
+        const found = await readdir(request.path, { withFileTypes: true });
         return success({
           name: basename(request.path),
           path: request.path,
           isDirectory: true,
-          entryCount: entries.length,
+          entryCount: found.length,
+          entries: await Promise.all(
+            found
+              .slice(0, MAX_DIRECTORY_PREVIEW_ENTRIES)
+              .map((dirent) => direntSummary(request.path, dirent)),
+          ),
           size: stats.size,
           mime: "inode/directory",
           head: new Uint8Array(),
@@ -263,6 +310,7 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
         path: request.path,
         isDirectory: false,
         entryCount: 0,
+        entries: [],
         size: stats.size,
         mime: resolveMimeType(tables, basename(request.path)),
         head: await readHead(request.path, SNIFF_BYTES),

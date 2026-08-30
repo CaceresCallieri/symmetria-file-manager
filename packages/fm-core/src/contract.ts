@@ -1,4 +1,4 @@
-import type { FsEntry } from "./entry.ts";
+import type { EntrySummary, FsEntry } from "./entry.ts";
 import type { SortMode } from "./sort.ts";
 
 /**
@@ -190,6 +190,16 @@ export interface DescribeReply {
   readonly isDirectory: boolean;
   /** How many entries a directory holds. Zero for a file. */
   readonly entryCount: number;
+  /**
+   * The first entries, capped. Empty for a file.
+   *
+   * Capped rather than complete, and reported beside the true `entryCount`
+   * rather than instead of it: a directory of ten thousand names would
+   * otherwise cross the boundary in full every time the cursor settled on it.
+   * The difference between the two numbers is what lets the pane say how many
+   * it is not showing.
+   */
+  readonly entries: readonly EntrySummary[];
   readonly size: number;
   readonly mime: string | null;
   /**
@@ -601,6 +611,27 @@ export const decodeChangedEvent: Decoder<ChangedEvent> = (raw) => {
   return success({ subscriptionId });
 };
 
+/**
+ * One listed entry, decoded.
+ *
+ * Reuses `isEntryKind`, the same predicate `decodeFsEntry` validates a full
+ * entry with — one definition of what a kind is, so the two decoders cannot
+ * come to disagree about `other`.
+ *
+ * Returns `null` for anything malformed rather than dropping it, so a single
+ * bad element fails the whole reply. Dropping would leave the pane rendering a
+ * listing shorter than the one the main process sent, with nothing saying so.
+ */
+function entrySummary(raw: unknown): EntrySummary | null {
+  if (!isRecord(raw)) return null;
+
+  const name = stringField(raw, "name");
+  const kind = stringField(raw, "kind");
+  if (name === null || kind === null || !isEntryKind(kind)) return null;
+
+  return { name, kind };
+}
+
 export const decodeDescribeReply: Decoder<DescribeReply> = (raw) => {
   if (!isRecord(raw)) return failure("invalid_reply", "reply must be an object");
 
@@ -610,6 +641,28 @@ export const decodeDescribeReply: Decoder<DescribeReply> = (raw) => {
   const entryCount = finiteField(raw, "entryCount");
   if (name === null || path === null || size === null || entryCount === null) {
     return failure("invalid_reply", "reply is missing a required field");
+  }
+
+  const rawEntries = raw["entries"];
+  if (!Array.isArray(rawEntries)) {
+    return failure("invalid_reply", "reply.entries must be an array");
+  }
+  const entries: EntrySummary[] = [];
+  for (const element of rawEntries) {
+    const summary = entrySummary(element);
+    if (summary === null) {
+      return failure("invalid_reply", "reply.entries holds a malformed entry");
+    }
+    entries.push(summary);
+  }
+
+  // The listing is a capped PREFIX of the directory, so it can never be longer
+  // than the count. Without this the pane computes `count - listed` for its
+  // "and N more" line and would render "and -3 more" — a broken invariant
+  // presented as a fact, rather than a failure at the boundary that exists to
+  // catch one.
+  if (entries.length > entryCount) {
+    return failure("invalid_reply", "reply.entries is longer than reply.entryCount");
   }
 
   const mime = raw["mime"];
@@ -627,6 +680,7 @@ export const decodeDescribeReply: Decoder<DescribeReply> = (raw) => {
     path,
     isDirectory: raw["isDirectory"] === true,
     entryCount,
+    entries,
     size,
     mime,
     head,

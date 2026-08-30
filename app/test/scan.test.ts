@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -43,6 +43,35 @@ async function fastestScan(path: string, runs = 5): Promise<number> {
   }
   return best;
 }
+
+/**
+ * The floor the scan is measured against: the syscalls it cannot avoid.
+ *
+ * One `readdir` plus one `lstat` per entry, issued in the same bounded batches
+ * the scan uses, and nothing else — no sorting, no filtering, no entry objects.
+ * Measured with the same best-of-N as the scan, in the same conditions, so a
+ * loaded machine slows both sides and the ratio between them stays honest.
+ */
+async function fastestRawWalk(path: string, runs = 5): Promise<number> {
+  let best = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < runs; i++) {
+    const started = performance.now();
+    const names = await readdir(path);
+    for (let from = 0; from < names.length; from += RAW_BATCH) {
+      await Promise.all(
+        names
+          .slice(from, from + RAW_BATCH)
+          .map((name) => lstat(join(path, name)).catch(() => null)),
+      );
+    }
+    best = Math.min(best, performance.now() - started);
+  }
+  return best;
+}
+
+/** The scan's own batch width (`BATCH` in scan.ts), so the baseline pays the same queueing cost. */
+const RAW_BATCH = 512;
 
 describe("scanDirectory", () => {
   it("reports name, kind, size, modification time and symlink status", async () => {
@@ -245,19 +274,31 @@ describe("scanDirectory at scale", () => {
     await rm(big, { recursive: true, force: true });
   });
 
-  it("lists six thousand entries inside the budget", async () => {
+  it("lists six thousand entries without costing more than the syscalls do", async () => {
     const entries = await scanDirectory(big);
-    const elapsed = await fastestScan(big);
 
     expect(entries).toHaveLength(6000);
-    // 100 ms is the plan's figure. Measured here after batching: 42–48 ms over
-    // eight runs, so the budget carries better than 2x headroom and will not
-    // flake. Before batching the same directory measured 98–109 ms — straddling
-    // the threshold, which a verification pass caught. Bounding the concurrency
-    // made it FASTER, not slower: dispatching six thousand `lstat` calls at
-    // once floods libuv's four-thread pool and the time goes into queue
-    // management. This budget is also what fails if someone rewrites the
-    // batched fill as a serial `for await` loop.
-    expect(elapsed).toBeLessThan(100);
+
+    // ── Why this is a ratio and not `elapsed < 100` ─────────────────────────
+    // It WAS `elapsed < 100`, with a comment stating the budget carried better
+    // than 2x headroom and would not flake. It flaked: 146 ms, in a full suite
+    // run where 28 other files compete for the CPU and for libuv's four-thread
+    // pool. The same assertion passed 3 out of 3 alone, at well under budget,
+    // with the implementation untouched — so it was measuring the machine's
+    // spare capacity, exactly as the symlink budget forty lines above was
+    // measuring it before that one was converted to a ratio for the same
+    // reason. Two absolute budgets in one file, one already known to be wrong:
+    // this is the second.
+    //
+    // What the budget is FOR is unchanged and is still enforced: it fails if
+    // someone rewrites the batched fill as a serial `for await` loop. The
+    // baseline below is the raw work the scan cannot avoid — one `readdir`
+    // plus one `lstat` per entry, issued the same batched way — so it moves
+    // with the machine and the ratio does not. A serial rewrite costs many
+    // times the baseline; the batched fill costs a small multiple of it.
+    const baseline = await fastestRawWalk(big);
+    const elapsed = await fastestScan(big);
+
+    expect(elapsed / baseline).toBeLessThan(4);
   });
 });

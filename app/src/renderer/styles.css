@@ -272,6 +272,19 @@ kbd {
   font-style: italic;
 }
 
+/* A directory's listing scrolls on its own, so the "and N more" line below it
+   stays visible instead of being pushed off the end of a long list. */
+.preview__listing {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.preview__empty {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
 /* `contain`, not `cover`: an image preview that crops is lying about the
    picture. The natural aspect ratio is the point. */
 .preview--image img {

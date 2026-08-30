@@ -1,7 +1,7 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { IpcReply, ListBatch, ListReply } from "@symmetria/fm-core/contract";
+import type { DescribeReply, IpcReply, ListBatch, ListReply } from "@symmetria/fm-core/contract";
 
 import type { FsEntry } from "@symmetria/fm-core/entry";
 import type { IpcMainInvokeEvent } from "electron";
@@ -9,7 +9,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { CHANNELS, REQUEST_CHANNELS } from "../src/main/ipc/channels.ts";
 import { electronIpcSurface } from "../src/main/ipc/electronSurface.ts";
-import { createRegistry, type IpcHandler, type IpcSurface } from "../src/main/ipc/register.ts";
+import {
+  createRegistry,
+  type IpcHandler,
+  type IpcSurface,
+  MAX_DIRECTORY_PREVIEW_ENTRIES,
+} from "../src/main/ipc/register.ts";
 
 /**
  * A stand-in for Electron's `ipcMain`.
@@ -48,10 +53,39 @@ function names(value: unknown): string[] {
 
 let root: string;
 
+/**
+ * Two directories of their own, beside `root` rather than inside it.
+ *
+ * `root`'s listing is asserted exactly by the tests above it, so anything added
+ * there would break them for no reason connected to what it is testing.
+ */
+let kinds: string;
+/** More entries than the preview cap, so the cap is observable. */
+let capped: string;
+const BIG_COUNT = MAX_DIRECTORY_PREVIEW_ENTRIES + 37;
+
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "symfm-ipc-"));
   await writeFile(join(root, "alpha.txt"), "twelve bytes");
   await writeFile(join(root, "beta.md"), "x");
+
+  const scratch = await mkdtemp(join(tmpdir(), "symfm-dirs-"));
+  kinds = join(scratch, "kinds");
+  await mkdir(kinds);
+  await writeFile(join(kinds, "alpha.txt"), "x");
+  await mkdir(join(kinds, "sub"));
+  // A symlink's own dirent type is neither file nor directory, so these three
+  // are what prove the listing resolves the target rather than the link.
+  await symlink(join(kinds, "sub"), join(kinds, "link-to-dir"));
+  await symlink(join(kinds, "alpha.txt"), join(kinds, "link-to-file"));
+  await symlink(join(kinds, "gone"), join(kinds, "link-broken"));
+
+  capped = join(scratch, "capped");
+  await mkdir(capped);
+  // Zero-padded so the names sort the way a person would expect them to.
+  for (let i = 0; i < BIG_COUNT; i++) {
+    await writeFile(join(capped, `f${String(i).padStart(4, "0")}.txt`), "x");
+  }
 });
 
 afterAll(async () => {
@@ -373,5 +407,85 @@ describe("a caller-named stream can be cancelled while it runs", () => {
 
     const reply = await pending;
     if (!reply.ok) expect(reply.error.code).toBe("cancelled");
+  });
+});
+
+describe("describing a directory", () => {
+  it("carries the entries, not only how many there are", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    const reply = await ipc.invoke(CHANNELS.describe, { path: root });
+
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    const value = reply.value as DescribeReply;
+    expect(value.isDirectory).toBe(true);
+    expect(value.entries.map((e) => e.name).sort()).toEqual(["alpha.txt", "beta.md"]);
+  });
+
+  it("reports each entry's kind, so the listing can draw the right icon", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    const reply = await ipc.invoke(CHANNELS.describe, { path: kinds });
+
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    const byName = new Map(
+      (reply.value as DescribeReply).entries.map((e) => [e.name, e.kind] as const),
+    );
+    expect(byName.get("alpha.txt")).toBe("file");
+    expect(byName.get("sub")).toBe("directory");
+  });
+
+  it("reports a symlink by what it points at, not by being a link", async () => {
+    // `readdir` returns `DT_LNK` for a symlink, so `isDirectory()` and
+    // `isFile()` are both false and classifying from the dirent alone makes
+    // every link `other` — the wrong icon here, while the same link draws
+    // correctly two columns to the left, which is where a listing that
+    // disagrees with the scan becomes visible.
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    const reply = await ipc.invoke(CHANNELS.describe, { path: kinds });
+
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    const byName = new Map(
+      (reply.value as DescribeReply).entries.map((e) => [e.name, e.kind] as const),
+    );
+    expect(byName.get("link-to-dir")).toBe("directory");
+    expect(byName.get("link-to-file")).toBe("file");
+    // A link that resolves to nothing stays listed as `other`, matching the
+    // scan. Dropping it would make it invisible.
+    expect(byName.get("link-broken")).toBe("other");
+  });
+
+  it("caps the listing but reports the true total", async () => {
+    // A directory of ten thousand entries would otherwise serialise ten
+    // thousand strings across the bridge every time the cursor settled on it,
+    // 150 ms apart. The cap bounds the payload; the count stays honest.
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    const reply = await ipc.invoke(CHANNELS.describe, { path: capped });
+
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    const value = reply.value as DescribeReply;
+    expect(value.entryCount).toBe(BIG_COUNT);
+    expect(value.entries).toHaveLength(MAX_DIRECTORY_PREVIEW_ENTRIES);
+  });
+
+  it("sends an empty listing for a file", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    const reply = await ipc.invoke(CHANNELS.describe, { path: join(root, "alpha.txt") });
+
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    expect((reply.value as DescribeReply).entries).toEqual([]);
   });
 });

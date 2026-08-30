@@ -15,12 +15,63 @@ function entry(name: string, kind: FsEntry["kind"] = "file"): FsEntry {
   return { name, kind, size: 3, modifiedMs: 0, isSymlink: false, isHidden: false };
 }
 
-/** A filesystem, as a map from path to listing. */
+/**
+ * How many names a directory's describe reply carries.
+ *
+ * Mirrors `MAX_DIRECTORY_PREVIEW_ENTRIES` in the main process. Declared again
+ * rather than imported, because importing it would pull a main-process module —
+ * which compiles against Node and no DOM — into a renderer test.
+ */
+const PREVIEW_CAP = 500;
+
+/**
+ * More entries than the preview listing sends, so the cap is observable.
+ *
+ * Zero-padded so the order a reader expects is the order they get.
+ */
+const MANY = Array.from({ length: PREVIEW_CAP + 37 }, (_, i) =>
+  entry(`f${String(i).padStart(4, "0")}.txt`),
+);
+
+/**
+ * A filesystem, as a map from path to listing.
+ *
+ * The three directories at the end of the home listing are appended rather than
+ * inserted: every test that navigates by key counts from the top, so a new
+ * entry before `notes.txt` would move the cursor under all of them.
+ *
+ * `locked` is deliberately absent from this map while appearing in the home
+ * listing — that is how a directory the process cannot read is expressed here.
+ */
 const TREE = new Map([
   ["/home", [entry("jc", "directory"), entry("other", "directory")]],
-  ["/home/jc", [entry("projects", "directory"), entry("notes.txt"), entry("todo.txt")]],
+  [
+    "/home/jc",
+    [
+      entry("projects", "directory"),
+      entry("notes.txt"),
+      entry("todo.txt"),
+      entry("empty", "directory"),
+      entry("locked", "directory"),
+      entry("many", "directory"),
+    ],
+  ],
   ["/home/jc/projects", [entry("alpha", "directory"), entry("beta.md")]],
+  ["/home/jc/empty", []],
+  ["/home/jc/many", MANY],
 ]);
+
+/**
+ * Facts about the fixture home that tests assert against.
+ *
+ * Derived rather than written down, because they are incidental: a phase that
+ * needs a new fixture directory should not have to hunt down four assertions in
+ * two other suites that happened to hardcode "3 entries" and "todo.txt". It
+ * already happened once.
+ */
+const HOME = TREE.get("/home/jc") ?? [];
+export const HOME_ENTRY_COUNT = HOME.length;
+export const HOME_LAST_ENTRY = HOME[HOME.length - 1]?.name ?? "";
 
 /**
  * What each fixture file contains, and what type it claims to be.
@@ -171,13 +222,17 @@ export function installBridge(): BridgeLog {
       described.push(path);
 
       if (tree.has(path)) {
+        const listing = tree.get(path) ?? [];
         return Promise.resolve({
           ok: true as const,
           value: {
             name: path.split("/").pop() ?? "/",
             path,
             isDirectory: true,
-            entryCount: tree.get(path)?.length ?? 0,
+            entryCount: listing.length,
+            // Capped like the main process: the count stays true, the payload
+            // stays bounded.
+            entries: listing.slice(0, PREVIEW_CAP).map((e) => ({ name: e.name, kind: e.kind })),
             size: 4096,
             mime: "inode/directory",
             head: new Uint8Array(),
@@ -199,6 +254,7 @@ export function installBridge(): BridgeLog {
           path,
           isDirectory: false,
           entryCount: 0,
+          entries: [],
           size: file.text.length,
           mime: file.mime,
           head: Uint8Array.from(file.text.slice(0, 64), (c) => c.charCodeAt(0)),
