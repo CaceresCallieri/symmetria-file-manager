@@ -1,9 +1,10 @@
 import type { Dirent } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
-
+import { decodeBookmarks } from "@symmetria/fm-core/bookmarks";
 import {
   type Decoder,
+  decodeBookmarksWriteRequest,
   decodeCancelRequest,
   decodeCancelTransferRequest,
   decodeCreateRequest,
@@ -30,6 +31,7 @@ import type { EntrySummary, FsEntry } from "@symmetria/fm-core/entry";
 import { filterEntries } from "@symmetria/fm-core/filter";
 import { resolveMimeType } from "@symmetria/fm-core/mime";
 import { sortEntries } from "@symmetria/fm-core/sort";
+import { defaultBookmarksPath, readOrSeedBookmarks, saveBookmarks } from "../bookmarks.ts";
 import { mimeTables } from "../fs/mimeTables.ts";
 import { kindOf, scanDirectory } from "../fs/scan.ts";
 import { type ChangedEntry, type StopWatching, watchDirectory } from "../fs/watch.ts";
@@ -315,6 +317,35 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
         mime: resolveMimeType(tables, basename(request.path)),
         head: await readHead(request.path, SNIFF_BYTES),
       });
+    }),
+  );
+
+  // No `guard`: this channel takes no payload, so there is nothing to decode.
+  ipc.handle(CHANNELS.bookmarksRead, async () => {
+    try {
+      const bookmarks = await readOrSeedBookmarks();
+      return success({
+        bookmarks: [...bookmarks].map(([letter, bookmark]) => ({ letter, bookmark })),
+      });
+    } catch (cause) {
+      return failure("read_failed", cause instanceof Error ? cause.message : String(cause));
+    }
+  });
+
+  ipc.handle(
+    CHANNELS.bookmarksWrite,
+    guard(decodeBookmarksWriteRequest, "write_failed", async (request) => {
+      // Shape, then MEANING. `decodeBookmarksWriteRequest` proves the payload
+      // is a list of letter-and-bookmark pairs; it does not know that `g` is
+      // reserved or that a path must be absolute. Running the store's own
+      // decoder here applies the same rules the read path applies, so a caller
+      // cannot persist an entry that the next load would silently drop —
+      // a bookmark that appears to save and is gone after a restart.
+      const asObject: Record<string, { path: string; label: string }> = {};
+      for (const { letter, bookmark } of request.bookmarks) asObject[letter] = bookmark;
+
+      await saveBookmarks(defaultBookmarksPath(), decodeBookmarks(asObject));
+      return success(null);
     }),
   );
 

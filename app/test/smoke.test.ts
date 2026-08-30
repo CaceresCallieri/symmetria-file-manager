@@ -87,8 +87,11 @@ describe("the application boots", () => {
   });
 
   it("exposes only the declared bridge methods", () => {
+    // An exact string, so a method added to the privileged surface is a
+    // deliberate edit here rather than something that slips in. `bookmarksRead`
+    // and `bookmarksWrite` joined it when the bookmark store landed.
     expect(report.bridgeKeys).toBe(
-      "cancel,cancelTransfer,create,describe,list,onChanged,onListBatch,onTransferProgress,open,previewUrl,readText,rename,transfer,trash,unwatch,version,watch",
+      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,create,describe,list,onChanged,onListBatch,onTransferProgress,open,previewUrl,readText,rename,transfer,trash,unwatch,version,watch",
     );
   });
 

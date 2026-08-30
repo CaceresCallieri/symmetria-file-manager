@@ -155,6 +155,33 @@ export function useTabs(initialPath: string): Tabs {
   // solved the same race with a generation counter, for the same reason.
   const generation = useRef(new Map<string, number>());
 
+  /**
+   * The last path each tab actually managed to list.
+   *
+   * Navigation is optimistic — the pane's path changes first and the listing
+   * arrives afterwards — which is what makes `l` feel instant. The cost is that
+   * a path which turns out not to be readable would otherwise leave the tab
+   * parked on it with an empty column: the error is shown, but the user is
+   * standing somewhere that does not exist and `h` is their only way out.
+   *
+   * Verification found this through a bookmark pointing at a deleted directory.
+   * It is not specific to bookmarks: entering a directory that vanished between
+   * the listing and the keypress does the same thing, and so does a stale
+   * breadcrumb.
+   */
+  const lastGood = useRef(new Map<string, string>());
+
+  /**
+   * Tabs whose next load is a revert's own recovery.
+   *
+   * Without this the repair erased its own message: the failed load reports the
+   * error, the revert re-lists the last good path, and THAT load succeeds and
+   * clears the error one render later. The user saw a flash and was told
+   * nothing. Review caught it; the tests did not, because they only asserted
+   * the error appeared, never that it stayed.
+   */
+  const reverting = useRef(new Set<string>());
+
   const loadTab = useCallback((id: string, path: string) => {
     const mine = (generation.current.get(id) ?? 0) + 1;
     generation.current.set(id, mine);
@@ -163,11 +190,32 @@ export function useTabs(initialPath: string): Tabs {
       if (generation.current.get(id) !== mine) return;
 
       if (isFailure(reply)) {
-        setState((previous) => updatePaneById(previous, id, (p) => setEntries(p, [])));
         setError(reply.error.message);
+        reverting.current.delete(id);
+
+        // Go back to the last place that worked. Changing the path here feeds
+        // the reconciler, which re-lists it and re-arms its watch — the same
+        // route any other navigation takes, so there is no second code path for
+        // "navigating backwards".
+        const previousPath = lastGood.current.get(id);
+        if (previousPath !== undefined && previousPath !== path) {
+          reverting.current.add(id);
+          setState((previous) =>
+            updatePaneById(previous, id, (p) => ({ ...p, path: previousPath, entries: [] })),
+          );
+          return;
+        }
+
+        // Nowhere to go back TO — the window opened here. Staying with an empty
+        // listing and the error is the honest answer.
+        setState((previous) => updatePaneById(previous, id, (p) => setEntries(p, [])));
         return;
       }
-      setError(null);
+      // A revert's own load must NOT clear the message that caused it. Any
+      // other successful load may: it means the user went somewhere real.
+      const recovering = reverting.current.delete(id);
+      if (!recovering) setError(null);
+      lastGood.current.set(id, path);
       setState((previous) =>
         updatePaneById(previous, id, (p) => setEntries(p, reply.value.entries)),
       );
@@ -246,6 +294,18 @@ export function useTabs(initialPath: string): Tabs {
 
   const close = useCallback((index?: number) => {
     setState((previous) => {
+      // Release the per-tab bookkeeping with the tab. Three maps are keyed by
+      // tab id and none of them was pruned, so every tab a session ever opened
+      // stayed in all three for the life of the window. Bounded in practice and
+      // still wrong; the reconciler already releases the WATCH this way, and
+      // these are the same kind of thing.
+      const closing = previous.tabs[index ?? previous.activeIndex]?.id;
+      if (closing !== undefined) {
+        generation.current.delete(closing);
+        lastGood.current.delete(closing);
+        reverting.current.delete(closing);
+      }
+
       const next = closeTab(previous, index ?? previous.activeIndex);
       if (next !== null) return next;
 

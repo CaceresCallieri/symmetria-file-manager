@@ -1,6 +1,7 @@
 import type { BookmarkSubMode, KeyActions, KeyState } from "@symmetria/fm-core/keys/types";
 import { cursorEntry, isDirectoryEntry } from "@symmetria/fm-core/pane";
 import { useMemo, useState } from "react";
+import type { Bookmarks } from "./useBookmarks.ts";
 import type { FileOps } from "./useFileOps.ts";
 import type { Search } from "./useSearch.ts";
 import type { Tabs } from "./useTabs.ts";
@@ -58,7 +59,12 @@ function halfPageRows(): number {
   return Math.max(1, Math.floor(viewport / 2 / 24));
 }
 
-export function useKeyActions(tabs: Tabs, ops: FileOps, search: Search): KeyWiring {
+export function useKeyActions(
+  tabs: Tabs,
+  ops: FileOps,
+  search: Search,
+  bookmarks: Bookmarks,
+): KeyWiring {
   const [chordPrefix, setChordPrefix] = useState("");
   const [bookmarkSubMode, setBookmarkSubMode] = useState<BookmarkSubMode | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -110,7 +116,13 @@ export function useKeyActions(tabs: Tabs, ops: FileOps, search: Search): KeyWiri
       setChordPrefix,
       startBookmarkSubMode: setBookmarkSubMode,
       exitBookmarkSubMode: () => setBookmarkSubMode(null),
-      navigateToBookmark: soon("Bookmarks"),
+      navigateToBookmark: (letter) => {
+        const path = bookmarks.pathFor(letter);
+        // Saying which letter is empty beats a silent no-op: the user pressed
+        // `g` and then something, and needs to know the second key was heard.
+        if (path === null) setMessage(`No bookmark on ${letter}`);
+        else tabs.navigate(path);
+      },
       assignBookmark: soon("Bookmarks"),
       deleteBookmark: soon("Bookmarks"),
       setSort: soon("Sorting"),
@@ -138,7 +150,7 @@ export function useKeyActions(tabs: Tabs, ops: FileOps, search: Search): KeyWiri
       treeToggleGitignore: soon("The tree view"),
       treeRefresh: soon("The tree view"),
     };
-  }, [tabs, ops, search]);
+  }, [tabs, ops, search, bookmarks]);
 
   const state = useMemo<KeyState>(() => {
     const entry = tabs.pane.entries[tabs.pane.cursorIndex];

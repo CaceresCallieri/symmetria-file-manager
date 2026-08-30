@@ -1,3 +1,4 @@
+import { seedBookmarks } from "@symmetria/fm-core/bookmarks";
 import type { FsEntry } from "@symmetria/fm-core/entry";
 import { screen, within } from "@testing-library/react";
 
@@ -132,6 +133,8 @@ export function inertBridge(): Bridge {
     trash: ok,
     open: ok,
     cancelTransfer: ok,
+    bookmarksRead: ok,
+    bookmarksWrite: ok,
     onListBatch: () => () => undefined,
     onChanged: () => () => undefined,
     onTransferProgress: () => () => undefined,
@@ -326,6 +329,31 @@ export function installBridge(): BridgeLog {
     },
     open: (request) => {
       ops.push(`open ${(request as { path: string }).path}`);
+      return Promise.resolve({ ok: true as const, value: null });
+    },
+    // The seed, as the main process would answer it on a fresh machine: the
+    // fixture home is `/home/jc`, and `readOrSeedBookmarks` would have written
+    // this file before the first reply.
+    bookmarksRead: () =>
+      Promise.resolve({
+        ok: true as const,
+        value: {
+          bookmarks: [...seedBookmarks("/home/jc")].map(([letter, bookmark]) => ({
+            letter,
+            bookmark,
+          })),
+        },
+      }),
+    bookmarksWrite: (request) => {
+      const { bookmarks } = request as {
+        bookmarks: { letter: string; bookmark: { path: string } }[];
+      };
+      ops.push(
+        `bookmarks ${bookmarks
+          .map((b) => b.letter)
+          .sort()
+          .join("")}`,
+      );
       return Promise.resolve({ ok: true as const, value: null });
     },
     cancelTransfer: (request) => {

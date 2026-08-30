@@ -38,6 +38,10 @@ export const REQUEST_CHANNELS = {
   trash: "symmetria-fm:trash",
   /** Hand an entry to whatever the desktop says opens it. */
   open: "symmetria-fm:open",
+  /** Read the bookmark store, seeding it on a first run. */
+  bookmarksRead: "symmetria-fm:bookmarks-read",
+  /** Replace the bookmark store. */
+  bookmarksWrite: "symmetria-fm:bookmarks-write",
 } as const;
 
 /** Main process pushes, renderer listens. These are never handled. */

@@ -1,11 +1,17 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DescribeReply, IpcReply, ListBatch, ListReply } from "@symmetria/fm-core/contract";
+import type {
+  BookmarksReply,
+  DescribeReply,
+  IpcReply,
+  ListBatch,
+  ListReply,
+} from "@symmetria/fm-core/contract";
 
 import type { FsEntry } from "@symmetria/fm-core/entry";
 import type { IpcMainInvokeEvent } from "electron";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CHANNELS, REQUEST_CHANNELS } from "../src/main/ipc/channels.ts";
 import { electronIpcSurface } from "../src/main/ipc/electronSurface.ts";
@@ -487,5 +493,105 @@ describe("describing a directory", () => {
     expect(reply.ok).toBe(true);
     if (!reply.ok) return;
     expect((reply.value as DescribeReply).entries).toEqual([]);
+  });
+});
+
+describe("the bookmark channels", () => {
+  /**
+   * Driven through `createRegistry`, not through the store functions directly.
+   *
+   * The gap this closes let an unvalidated write reach the disk: the wire
+   * decoder proves the payload is a list of letter-and-bookmark pairs, and knew
+   * nothing about reserved letters or absolute paths. Nothing called the
+   * handler with a bad payload, so nothing noticed.
+   *
+   * Every case points `SYMMETRIA_FM_BOOKMARKS` at a scratch file. The
+   * operator's real store is the one their Qt file manager reads, and a test
+   * that wrote to it would break a working application.
+   */
+  let store: string;
+  let previousEnv: string | undefined;
+
+  beforeAll(() => {
+    previousEnv = process.env["SYMMETRIA_FM_BOOKMARKS"];
+  });
+
+  afterAll(() => {
+    if (previousEnv === undefined) delete process.env["SYMMETRIA_FM_BOOKMARKS"];
+    else process.env["SYMMETRIA_FM_BOOKMARKS"] = previousEnv;
+  });
+
+  beforeEach(async () => {
+    store = join(await mkdtemp(join(tmpdir(), "symfm-marks-ipc-")), "bookmarks.json");
+    process.env["SYMMETRIA_FM_BOOKMARKS"] = store;
+  });
+
+  it("answers the read with a seeded store on a first run", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    const reply = await ipc.invoke(CHANNELS.bookmarksRead, {});
+
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    const letters = (reply.value as BookmarksReply).bookmarks.map((b) => b.letter).sort();
+    expect(letters).toEqual(["c", "d", "h", "m", "o", "p", "r", "v"]);
+  });
+
+  it("refuses a reserved letter rather than writing one that would be dropped", async () => {
+    // `g` is jump-to-top, so a bookmark on it could never fire. Persisting it
+    // would look like a save that worked and be gone after a restart.
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    await ipc.invoke(CHANNELS.bookmarksWrite, {
+      bookmarks: [
+        { letter: "g", bookmark: { path: "/tmp", label: "tmp" } },
+        { letter: "w", bookmark: { path: "/tmp", label: "tmp" } },
+      ],
+    });
+
+    const back = JSON.parse(await readFile(store, "utf8")) as Record<string, unknown>;
+    expect(Object.keys(back)).toEqual(["w"]);
+  });
+
+  it("refuses a relative path", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    await ipc.invoke(CHANNELS.bookmarksWrite, {
+      bookmarks: [{ letter: "w", bookmark: { path: "relative/here", label: "here" } }],
+    });
+
+    const back = JSON.parse(await readFile(store, "utf8")) as Record<string, unknown>;
+    expect(Object.keys(back)).toEqual([]);
+  });
+
+  it("never enters the handler on a malformed payload", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    const reply = await ipc.invoke(CHANNELS.bookmarksWrite, { bookmarks: "not a list" });
+
+    expect(reply.ok).toBe(false);
+    if (reply.ok) return;
+    expect(reply.error.code).toBe("invalid_request");
+  });
+
+  it("reads back what it wrote", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    await ipc.invoke(CHANNELS.bookmarksWrite, {
+      bookmarks: [{ letter: "w", bookmark: { path: "/tmp/work", label: "work" } }],
+    });
+    const reply = await ipc.invoke(CHANNELS.bookmarksRead, {});
+
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    // The file is now the whole answer, so the seed is NOT merged back in.
+    const pairs = (reply.value as BookmarksReply).bookmarks;
+    expect(pairs.map((b) => b.letter)).toEqual(["w"]);
+    expect(pairs[0]?.bookmark.path).toBe("/tmp/work");
   });
 });

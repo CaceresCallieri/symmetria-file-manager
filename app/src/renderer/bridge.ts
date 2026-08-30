@@ -1,6 +1,8 @@
+import type { Bookmark } from "@symmetria/fm-core/bookmarks";
 import {
   type CreateRequest,
   type DescribeReply,
+  decodeBookmarksReply,
   decodeChangedEvent,
   decodeDescribeReply,
   decodeListReply,
@@ -15,6 +17,7 @@ import {
   type ReadTextReply,
   type RenameReply,
   type Result,
+  success,
   type TransferReply,
   type TransferRequest,
 } from "@symmetria/fm-core/contract";
@@ -259,4 +262,29 @@ export function onTransferProgress(
     if (isFailure(event) || event.value.transferId !== transferId) return;
     onTick(event.value.done, event.value.total);
   });
+}
+
+/**
+ * The bookmark store, as a map.
+ *
+ * Converted from the wire's list of pairs at this edge, so nothing above here
+ * has to remember that the boundary carries plain data. A failure is returned
+ * rather than thrown, like every other call in this file.
+ */
+export async function readBookmarks(): Promise<Result<Map<string, Bookmark>>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("read_failed", "the bridge is missing");
+
+  // The Result first, then its value. Handing the whole envelope to the decoder
+  // is the shape mistake this boundary invites, and it fails as "reply must be
+  // an object" — which reads like a main-process fault rather than a caller's.
+  const reply = await bridge.bookmarksRead({});
+  if (isFailure(reply)) return reply;
+
+  const decoded = decodeBookmarksReply(reply.value);
+  if (isFailure(decoded)) return decoded;
+
+  return success(
+    new Map(decoded.value.bookmarks.map(({ letter, bookmark }) => [letter, bookmark])),
+  );
 }

@@ -41,6 +41,10 @@ export interface Bridge {
   trash(request: unknown): Promise<Result<unknown>>;
   /** Hand an entry to whatever the desktop says opens it. */
   open(request: unknown): Promise<Result<unknown>>;
+  /** Read the bookmark store, seeding it on a first run. */
+  bookmarksRead(request: unknown): Promise<Result<unknown>>;
+  /** Replace the bookmark store. */
+  bookmarksWrite(request: unknown): Promise<Result<unknown>>;
   /** Follow a running transfer. */
   onTransferProgress(listener: (event: unknown) => void): Unsubscribe;
   /** Receive one batch of a streamed listing. */

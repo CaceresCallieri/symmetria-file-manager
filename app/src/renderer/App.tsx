@@ -13,6 +13,7 @@ import { StatusStrip } from "./components/StatusStrip.tsx";
 import { TabBar } from "./components/TabBar.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
 import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
+import { useBookmarks } from "./useBookmarks.ts";
 import { useFileOps } from "./useFileOps.ts";
 import { useKeyActions } from "./useKeyActions.ts";
 import { usePreview } from "./usePreview.ts";
@@ -45,7 +46,8 @@ export function App({ startPath }: AppProps = {}) {
     path: tabs.pane.path,
     moveTo: tabs.moveTo,
   });
-  const { actions, modes, state } = useKeyActions(tabs, ops, search);
+  const bookmarks = useBookmarks();
+  const { actions, modes, state } = useKeyActions(tabs, ops, search, bookmarks);
   const preview = usePreview(state.cursorEntry?.path ?? null);
 
   const context = useMemo<KeyContext>(

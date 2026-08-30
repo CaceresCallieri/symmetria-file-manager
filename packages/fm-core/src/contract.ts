@@ -1,3 +1,4 @@
+import type { Bookmark } from "./bookmarks.ts";
 import type { EntrySummary, FsEntry } from "./entry.ts";
 import type { SortMode } from "./sort.ts";
 
@@ -212,6 +213,21 @@ export interface DescribeReply {
   readonly head: Uint8Array;
 }
 
+/**
+ * The bookmark store, as it crosses the boundary.
+ *
+ * A list of pairs rather than a `Map`: structured clone carries a `Map`, but
+ * every other reply on this boundary is plain data and one exception would be
+ * a thing to remember. The two ends convert at their own edges.
+ */
+export interface BookmarksReply {
+  readonly bookmarks: readonly { readonly letter: string; readonly bookmark: Bookmark }[];
+}
+
+export interface BookmarksWriteRequest {
+  readonly bookmarks: readonly { readonly letter: string; readonly bookmark: Bookmark }[];
+}
+
 export interface PreviewUrlReply {
   readonly url: string;
 }
@@ -254,6 +270,7 @@ export type IpcReply =
   | Result<PreviewUrlReply>
   | Result<TransferReply>
   | Result<RenameReply>
+  | Result<BookmarksReply>
   | Result<null>;
 
 // ── decoding ──────────────────────────────────────────────────────────────
@@ -736,3 +753,58 @@ export const decodeTransferProgress: Decoder<TransferProgress> = (raw) => {
   }
   return success({ transferId, done, total });
 };
+
+/**
+ * One letter-and-bookmark pair, decoded.
+ *
+ * The renderer is sandboxed and this reply reaches it, so the shape is checked
+ * rather than trusted — the same rule every other reply on this boundary
+ * follows. A malformed pair fails the whole reply: a partly-decoded bookmark
+ * list would leave the overlays advertising a letter that goes nowhere.
+ */
+function decodeBookmarkPair(raw: unknown): { letter: string; bookmark: Bookmark } | null {
+  if (!isRecord(raw)) return null;
+
+  const letter = stringField(raw, "letter");
+  const bookmark = raw["bookmark"];
+  if (letter === null || !isRecord(bookmark)) return null;
+
+  const path = stringField(bookmark, "path");
+  const label = stringField(bookmark, "label");
+  if (path === null || label === null) return null;
+
+  return { letter, bookmark: { path, label } };
+}
+
+/**
+ * The bookmark list, decoded once for both directions.
+ *
+ * The two channels differ only in which failure code they report and what they
+ * call the payload — a reply cannot be fixed by asking differently, a request
+ * can, and the codes say so. Everything else about the shape is identical, so
+ * it is written once.
+ */
+function decodeBookmarkList(
+  code: FailureCode,
+  noun: string,
+  raw: unknown,
+): Result<{ bookmarks: { letter: string; bookmark: Bookmark }[] }> {
+  if (!isRecord(raw)) return failure(code, `${noun} must be an object`);
+
+  const list = raw["bookmarks"];
+  if (!Array.isArray(list)) return failure(code, `${noun}.bookmarks must be an array`);
+
+  const bookmarks: { letter: string; bookmark: Bookmark }[] = [];
+  for (const element of list) {
+    const pair = decodeBookmarkPair(element);
+    if (pair === null) return failure(code, `${noun}.bookmarks holds a malformed entry`);
+    bookmarks.push(pair);
+  }
+  return success({ bookmarks });
+}
+
+export const decodeBookmarksReply: Decoder<BookmarksReply> = (raw) =>
+  decodeBookmarkList("invalid_reply", "reply", raw);
+
+export const decodeBookmarksWriteRequest: Decoder<BookmarksWriteRequest> = (raw) =>
+  decodeBookmarkList("invalid_request", "request", raw);
