@@ -1,6 +1,6 @@
 import type { FsEntry } from "@symmetria/fm-core/entry";
 
-import { FileList } from "./FileList.tsx";
+import { FileList, NO_SELECTION } from "./FileList.tsx";
 
 export interface MillerColumnsProps {
   readonly path: string;
@@ -9,6 +9,8 @@ export interface MillerColumnsProps {
   readonly cursorIndex: number;
   /** Which entry the parent column sits on — the directory we are inside. */
   readonly parentCursorName: string;
+  /** Marked entries in the CURRENT column, by name. */
+  readonly selection?: ReadonlySet<string>;
 }
 
 /**
@@ -24,6 +26,7 @@ export function MillerColumns({
   entries,
   cursorIndex,
   parentCursorName,
+  selection,
 }: MillerColumnsProps) {
   // NOT clamped to 0. If the directory we are inside has been renamed or
   // removed between reads, clamping would highlight whatever sits at index
@@ -33,8 +36,18 @@ export function MillerColumns({
 
   return (
     <div className="columns" data-path={path}>
-      <FileList entries={parentEntries} cursorIndex={parentCursor} testId="column-parent" />
-      <FileList entries={entries} cursorIndex={cursorIndex} testId="column-current" />
+      <FileList
+        entries={parentEntries}
+        cursorIndex={parentCursor}
+        testId="column-parent"
+        selection={NO_SELECTION}
+      />
+      <FileList
+        entries={entries}
+        cursorIndex={cursorIndex}
+        testId="column-current"
+        selection={selection ?? NO_SELECTION}
+      />
       <div className="list" data-testid="column-preview">
         <span>{entries[cursorIndex]?.name ?? ""}</span>
       </div>

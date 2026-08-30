@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import type { FsEntry } from "../src/entry.ts";
 import {
   breadcrumbs,
+  clearSelection,
   createPane,
   cursorEntry,
   enterDirectory,
   leaveDirectory,
   moveCursor,
+  type PaneState,
   setEntries,
+  toggleSelection,
 } from "../src/pane.ts";
 
 function entry(name: string, kind: FsEntry["kind"] = "file"): FsEntry {
@@ -136,5 +139,71 @@ describe("breadcrumbs", () => {
 
   it("ignores a trailing slash", () => {
     expect(breadcrumbs("/home/jc/")).toEqual(breadcrumbs("/home/jc"));
+  });
+});
+
+/** Put the cursor somewhere without going through a key. */
+function setCursor(pane: PaneState, index: number): PaneState {
+  return moveCursor(pane, index - pane.cursorIndex);
+}
+
+describe("selection", () => {
+  const files = [entry("a.txt"), entry("b.txt"), entry("c.txt")];
+
+  function loaded(): PaneState {
+    return setEntries(createPane("/tmp"), files);
+  }
+
+  it("marks the entry under the cursor and steps past it", () => {
+    // Advancing is what makes marking a run of files one repeated keystroke
+    // rather than an alternation of two.
+    const marked = toggleSelection(loaded());
+
+    expect([...marked.selection]).toEqual(["a.txt"]);
+    expect(marked.cursorIndex).toBe(1);
+  });
+
+  it("unmarks an entry that was already marked", () => {
+    const twice = toggleSelection(setCursor(toggleSelection(loaded()), 0));
+
+    expect([...twice.selection]).toEqual([]);
+  });
+
+  it("stops at the last entry rather than wrapping", () => {
+    let pane = loaded();
+    for (let i = 0; i < 10; i++) pane = toggleSelection(pane);
+
+    expect(pane.cursorIndex).toBe(files.length - 1);
+  });
+
+  it("does nothing in an empty directory", () => {
+    const empty = createPane("/tmp");
+    expect(toggleSelection(empty)).toBe(empty);
+  });
+
+  it("clears every mark, and returns the same pane when there was none", () => {
+    const marked = toggleSelection(loaded());
+
+    expect(clearSelection(marked).selection.size).toBe(0);
+    const clean = loaded();
+    expect(clearSelection(clean)).toBe(clean);
+  });
+
+  it("drops a mark for an entry that disappeared from the listing", () => {
+    // Otherwise the name stays marked and a later operation acts on whatever is
+    // recreated under it.
+    const marked = toggleSelection(loaded());
+    const refreshed = setEntries(marked, [entry("b.txt"), entry("c.txt")]);
+
+    expect([...refreshed.selection]).toEqual([]);
+  });
+
+  it("does not carry a selection into another directory", () => {
+    // The names would still match, and an operation would act on entries that
+    // merely share a name with what was marked.
+    const marked = toggleSelection(setEntries(createPane("/tmp"), [entry("sub", "directory")]));
+
+    expect(enterDirectory(setCursor(marked, 0)).selection.size).toBe(0);
+    expect(leaveDirectory(marked).selection.size).toBe(0);
   });
 });

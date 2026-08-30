@@ -1,7 +1,7 @@
 import type { BookmarkSubMode, KeyActions, KeyState } from "@symmetria/fm-core/keys/types";
 import { useMemo, useState } from "react";
 
-import type { Pane } from "./usePane.ts";
+import type { Tabs } from "./useTabs.ts";
 
 /**
  * The host's half of the keyboard contract.
@@ -46,7 +46,7 @@ function halfPageRows(): number {
   return Math.max(1, Math.floor(viewport / 2 / 24));
 }
 
-export function useKeyActions(pane: Pane): KeyWiring {
+export function useKeyActions(tabs: Tabs): KeyWiring {
   const [chordPrefix, setChordPrefix] = useState("");
   const [bookmarkSubMode, setBookmarkSubMode] = useState<BookmarkSubMode | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -57,15 +57,15 @@ export function useKeyActions(pane: Pane): KeyWiring {
 
     return {
       // Navigation — the operations this phase can actually perform.
-      moveDown: () => pane.moveBy(1),
-      moveUp: () => pane.moveBy(-1),
-      jumpToTop: () => pane.moveTo(0),
-      jumpToBottom: () => pane.moveTo(pane.state.entries.length - 1),
-      halfPageDown: () => pane.moveBy(halfPageRows()),
-      halfPageUp: () => pane.moveBy(-halfPageRows()),
-      activate: () => pane.enter(),
-      goUp: () => pane.leave(),
-      enterDirectory: () => pane.enter(),
+      moveDown: () => tabs.moveBy(1),
+      moveUp: () => tabs.moveBy(-1),
+      jumpToTop: () => tabs.moveTo(0),
+      jumpToBottom: () => tabs.moveTo(tabs.pane.entries.length - 1),
+      halfPageDown: () => tabs.moveBy(halfPageRows()),
+      halfPageUp: () => tabs.moveBy(-halfPageRows()),
+      activate: () => tabs.enter(),
+      goUp: () => tabs.leave(),
+      enterDirectory: () => tabs.enter(),
       goHome: soon("Go home"),
       jumpDirectoryFileBoundary: soon("Jump to the directory/file boundary"),
       dismiss: () => setMessage(null),
@@ -83,8 +83,8 @@ export function useKeyActions(pane: Pane): KeyWiring {
       paste: soon("Paste"),
       copyToClipboard: soon("Copy to clipboard"),
 
-      toggleSelection: soon("Selection"),
-      clearSelection: soon("Selection"),
+      toggleSelection: () => tabs.toggleMark(),
+      clearSelection: () => tabs.clearMarks(),
 
       startSearch: soon("Search"),
       nextMatch: soon("Search"),
@@ -107,12 +107,12 @@ export function useKeyActions(pane: Pane): KeyWiring {
       toggleHidden: soon("Hidden files"),
       toggleHtmlRender: soon("The HTML preview"),
       openContextMenu: soon("The context menu"),
-      openCopyingPath: () => pane.enter(),
+      openCopyingPath: () => tabs.enter(),
 
-      tabNew: soon("Tabs"),
-      tabClose: soon("Tabs"),
-      tabNext: soon("Tabs"),
-      tabPrevious: soon("Tabs"),
+      tabNew: () => tabs.open(),
+      tabClose: () => tabs.close(),
+      tabNext: () => tabs.goNext(),
+      tabPrevious: () => tabs.goPrevious(),
 
       toggleAudioPlayback: soon("Audio playback"),
 
@@ -125,12 +125,12 @@ export function useKeyActions(pane: Pane): KeyWiring {
       treeToggleGitignore: soon("The tree view"),
       treeRefresh: soon("The tree view"),
     };
-  }, [pane]);
+  }, [tabs]);
 
   const state = useMemo<KeyState>(() => {
-    const entry = pane.state.entries[pane.state.cursorIndex];
+    const entry = tabs.pane.entries[tabs.pane.cursorIndex];
     return {
-      selectedCount: 0,
+      selectedCount: tabs.pane.selection.size,
       searchActive: false,
       matchCount: 0,
       cursorEntry:
@@ -138,7 +138,7 @@ export function useKeyActions(pane: Pane): KeyWiring {
           ? null
           : {
               name: entry.name,
-              path: `${pane.state.path}/${entry.name}`,
+              path: `${tabs.pane.path}/${entry.name}`,
               isDirectory: entry.kind === "directory",
               // Both need a MIME type the renderer does not have yet; previews
               // are the phase that brings one.
@@ -147,7 +147,7 @@ export function useKeyActions(pane: Pane): KeyWiring {
             },
       picker: { active: false, saveMode: false, fileOps: false, multiple: false, directory: false },
     };
-  }, [pane.state]);
+  }, [tabs.pane]);
 
   const modes = useMemo<KeyModes>(
     () => ({

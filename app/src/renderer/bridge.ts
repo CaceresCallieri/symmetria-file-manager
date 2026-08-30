@@ -1,4 +1,5 @@
 import {
+  decodeChangedEvent,
   decodeListReply,
   failure,
   isFailure,
@@ -72,6 +73,32 @@ export async function listDirectory(
   return isFailure(reply) ? reply : decodeListReply(reply.value);
 }
 
+/**
+ * Every live watch in this renderer, by subscription id.
+ *
+ * ONE bridge listener serves all of them, and it delivers each event only to
+ * the subscription it names.
+ *
+ * Both halves of that were defects. A listener per watch meant a change in any
+ * directory woke every open tab — O(tabs) re-listings per filesystem event —
+ * and eleven tabs was enough for Electron to print
+ * `MaxListenersExceededWarning: 11 symmetria-fm:changed listeners added`. And
+ * the callback ignored the event payload entirely, so there was nothing to
+ * filter ON: `decodeChangedEvent` existed and had no consumer, which is usually
+ * the sign that a message is being taken on faith.
+ */
+const subscribers = new Map<string, () => void>();
+let listening: Unsubscribe | null = null;
+
+function deliver(raw: unknown): void {
+  const event = decodeChangedEvent(raw);
+  // A malformed push is dropped rather than broadcast. Waking every tab on an
+  // event nobody can attribute is how the fan-out came back.
+  if (isFailure(event)) return;
+
+  subscribers.get(event.value.subscriptionId)?.();
+}
+
 /** Watch a directory, and stop watching when the returned function is called. */
 export async function watchDirectory(
   path: string,
@@ -81,19 +108,29 @@ export async function watchDirectory(
   const bridge = getBridge();
   if (bridge === null) return () => undefined;
 
-  const stopListening = bridge.onChanged(() => onChanged());
+  subscribers.set(subscriptionId, onChanged);
+  listening ??= bridge.onChanged(deliver);
+
+  const release = () => {
+    subscribers.delete(subscriptionId);
+    if (subscribers.size === 0) {
+      listening?.();
+      listening = null;
+    }
+  };
+
   const started = await bridge.watch({ path, subscriptionId });
 
-  // A watch that failed to start still leaves a listener attached, so the
-  // teardown runs either way. Half-cleaning up is how a listener outlives the
-  // pane that owns it and fires against a component that is gone.
+  // A watch that failed to start still left a subscriber registered, so the
+  // teardown runs either way. Half-cleaning up is how a callback outlives the
+  // tab that owns it.
   if (isFailure(started)) {
-    stopListening();
+    release();
     return () => undefined;
   }
 
   return () => {
-    stopListening();
+    release();
     void bridge.unwatch({ subscriptionId });
   };
 }

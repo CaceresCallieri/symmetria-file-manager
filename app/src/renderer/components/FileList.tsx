@@ -8,7 +8,18 @@ export interface FileListProps {
   readonly entries: readonly FsEntry[];
   readonly cursorIndex: number;
   readonly testId: string;
+  /** Marked entries, by name. Empty in the columns that cannot be marked. */
+  readonly selection: ReadonlySet<string>;
 }
+
+/**
+ * Nothing marked.
+ *
+ * A shared frozen instance rather than a fresh `new Set()` per render: the
+ * parent and preview columns can never be marked, and a new set each time would
+ * change their props' identity on every keystroke.
+ */
+export const NO_SELECTION: ReadonlySet<string> = new Set();
 
 /** Row height in pixels. Fixed, so the virtualiser needs no measurement pass. */
 const ROW_HEIGHT = 24;
@@ -70,7 +81,7 @@ export function observeWithFallback(
  * they show three levels and never expand a subtree — and decision D5 removed
  * automatic expansion entirely. This component handles the other half.
  */
-export function FileList({ entries, cursorIndex, testId }: FileListProps) {
+export function FileList({ entries, cursorIndex, testId, selection }: FileListProps) {
   // A callback ref into state, not `useRef`.
   //
   // A `useRef` is null during the first render, so the virtualiser has no
@@ -188,7 +199,7 @@ export function FileList({ entries, cursorIndex, testId }: FileListProps) {
                 transform: `translateY(${item.start}px)`,
               }}
             >
-              <FileRow entry={entry} isCursor={isCursor} />
+              <FileRow entry={entry} isCursor={isCursor} isMarked={selection.has(entry.name)} />
             </div>
           );
         })}

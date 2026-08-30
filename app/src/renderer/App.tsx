@@ -6,10 +6,11 @@ import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { MillerColumns } from "./components/MillerColumns.tsx";
 import { PathBar } from "./components/PathBar.tsx";
 import { StatusBar } from "./components/StatusBar.tsx";
+import { TabBar } from "./components/TabBar.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
 import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { useKeyActions } from "./useKeyActions.ts";
-import { usePane } from "./usePane.ts";
+import { useTabs } from "./useTabs.ts";
 
 /**
  * Where a window opens when nothing says otherwise.
@@ -29,8 +30,8 @@ export interface AppProps {
 }
 
 export function App({ startPath }: AppProps = {}) {
-  const pane = usePane(startPath ?? initialPath());
-  const { actions, modes, state } = useKeyActions(pane);
+  const tabs = useTabs(startPath ?? initialPath());
+  const { actions, modes, state } = useKeyActions(tabs);
 
   const context = useMemo<KeyContext>(
     // Miller is the only view that exists. The tree rows are ported and
@@ -56,18 +57,27 @@ export function App({ startPath }: AppProps = {}) {
 
   return (
     <main className="app">
-      <PathBar path={pane.state.path} />
-      {pane.error === null ? null : (
+      {tabs.showBar ? (
+        <TabBar
+          views={tabs.views}
+          activeIndex={tabs.activeIndex}
+          onActivate={tabs.activate}
+          onClose={tabs.close}
+        />
+      ) : null}
+      <PathBar path={tabs.pane.path} />
+      {tabs.error === null ? null : (
         <p data-testid="pane-error" className="pane-error">
-          {pane.error}
+          {tabs.error}
         </p>
       )}
       <MillerColumns
-        path={pane.state.path}
-        parentEntries={pane.parentEntries}
-        entries={pane.state.entries}
-        cursorIndex={pane.state.cursorIndex}
-        parentCursorName={pane.parentCursorName}
+        path={tabs.pane.path}
+        parentEntries={tabs.parentEntries}
+        entries={tabs.pane.entries}
+        cursorIndex={tabs.pane.cursorIndex}
+        parentCursorName={tabs.parentCursorName}
+        selection={tabs.pane.selection}
       />
       <WhichKeyOverlay
         prefix={modes.chordPrefix}
@@ -79,10 +89,10 @@ export function App({ startPath }: AppProps = {}) {
         </p>
       )}
       <StatusBar
-        entryCount={pane.state.entries.length}
+        entryCount={tabs.pane.entries.length}
         selectedCount={state.selectedCount}
-        sort={pane.sort}
-        showHidden={pane.showHidden}
+        sort={tabs.sort}
+        showHidden={tabs.showHidden}
       />
       {modes.helpOpen ? <HelpOverlay context={context} onClose={modes.closeHelp} /> : null}
     </main>

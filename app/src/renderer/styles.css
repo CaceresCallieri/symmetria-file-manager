@@ -96,6 +96,49 @@ body {
   background: var(--overlay-emphasis);
 }
 
+/* The mark colour is hardcoded rather than taken from the palette, for the same
+   reason the Qt build hardcodes its indicators: a wallpaper-derived scheme can
+   land anywhere, and an indicator that stops being legible is worse than one
+   that does not match. */
+.row--marked .row__name {
+  color: #d7a3a3;
+}
+
+.row__mark {
+  width: 8px;
+  color: #d7a3a3;
+}
+
+.tab-bar {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.tab {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 2px 4px;
+  border-radius: 6px;
+  background: var(--overlay-subtle);
+}
+
+.tab--active {
+  background: var(--overlay-emphasis);
+  font-weight: 600;
+}
+
+.tab__name,
+.tab__close {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
 .row[data-kind="directory"] .row__name {
   font-weight: 600;
 }

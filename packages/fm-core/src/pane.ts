@@ -27,6 +27,18 @@ export interface PaneState {
    * rather than a list that resets under you.
    */
   readonly cursorMemory: ReadonlyMap<string, string>;
+  /**
+   * The marked entries, by name.
+   *
+   * Per pane, so it is per tab the moment tabs exist — a selection that
+   * followed the window would let a file operation act on entries the user
+   * marked somewhere else entirely.
+   *
+   * Names rather than paths: an entry belongs to one directory, so the pane's
+   * own path completes it. What the selection is FOR arrives with the file
+   * operations; what it must be is per pane, and that is decided here.
+   */
+  readonly selection: ReadonlySet<string>;
 }
 
 /**
@@ -46,7 +58,7 @@ export interface Breadcrumb {
 }
 
 export function createPane(path: string): PaneState {
-  return { path, entries: [], cursorIndex: 0, cursorMemory: new Map() };
+  return { path, entries: [], cursorIndex: 0, cursorMemory: new Map(), selection: new Set() };
 }
 
 export function cursorEntry(pane: PaneState): FsEntry | null {
@@ -71,7 +83,16 @@ export function setEntries(pane: PaneState, entries: readonly FsEntry[]): PaneSt
   const cursorIndex =
     byName >= 0 ? byName : Math.min(pane.cursorIndex, Math.max(entries.length - 1, 0));
 
-  const next = { ...pane, entries, cursorIndex };
+  // Drop marks for entries that are gone.
+  //
+  // A selection is a set of NAMES, so a file deleted underfoot would leave its
+  // name marked — and a later operation would act on whatever is recreated with
+  // that name. Pruning on every refresh keeps the mark and the entry together.
+  const present = new Set(entries.map((e) => e.name));
+  const kept = [...pane.selection].filter((name) => present.has(name));
+  const selection = kept.length === pane.selection.size ? pane.selection : new Set(kept);
+
+  const next = { ...pane, entries, cursorIndex, selection };
 
   // A miss means the remembered entry is gone. Leaving the old name in memory
   // means that if a file with that name is ever recreated here, the cursor
@@ -127,6 +148,10 @@ export function enterDirectory(pane: PaneState): PaneState {
     entries: [],
     cursorIndex: 0,
     cursorMemory: remember(pane, pane.cursorIndex),
+    // A selection does not survive leaving the directory it was made in. The
+    // names would still match in the new one, and a file operation would then
+    // act on entries that merely share a name with what was marked.
+    selection: new Set(),
   };
 }
 
@@ -135,7 +160,36 @@ export function leaveDirectory(pane: PaneState): PaneState {
   const parent = parentOf(pane.path);
   if (parent === pane.path) return pane;
 
-  return { path: parent, entries: [], cursorIndex: 0, cursorMemory: pane.cursorMemory };
+  return {
+    path: parent,
+    entries: [],
+    cursorIndex: 0,
+    cursorMemory: pane.cursorMemory,
+    selection: new Set(),
+  };
+}
+
+/**
+ * Mark or unmark the entry under the cursor, and step past it.
+ *
+ * Advancing is what makes marking a run of files a repeated single keystroke
+ * rather than an alternation of two. It stops at the last entry rather than
+ * wrapping, for the same reason cursor movement does.
+ */
+export function toggleSelection(pane: PaneState): PaneState {
+  const target = cursorEntry(pane);
+  if (target === null) return pane;
+
+  const selection = new Set(pane.selection);
+  if (!selection.delete(target.name)) selection.add(target.name);
+
+  const cursorIndex = Math.min(pane.cursorIndex + 1, pane.entries.length - 1);
+  return { ...pane, selection, cursorIndex, cursorMemory: remember(pane, cursorIndex) };
+}
+
+/** Unmark everything. Returns the pane unchanged when nothing was marked. */
+export function clearSelection(pane: PaneState): PaneState {
+  return pane.selection.size === 0 ? pane : { ...pane, selection: new Set() };
 }
 
 /**

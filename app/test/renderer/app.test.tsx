@@ -116,7 +116,9 @@ describe("App, wired to a bridge", () => {
     // A watch per navigation that is never released is how the inotify budget
     // disappears during ordinary use — the same failure that removed the
     // recursive watcher, arriving by a slower route.
-    await waitFor(() => expect(log.unwatched).toContain("pane:/home/jc"));
+    // The id names the tab AND the directory, so a tab that navigates releases
+    // the watch it held rather than the one it now wants.
+    await waitFor(() => expect(log.unwatched).toContain("tab-0:/home/jc"));
   });
 });
 

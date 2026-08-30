@@ -25,6 +25,13 @@ const TREE = new Map([
 export interface BridgeLog {
   readonly listed: string[];
   readonly unwatched: string[];
+  readonly watched: string[];
+  /** How many listeners the renderer attached to the change channel. */
+  listenerCount(): number;
+  /** Push a change for one subscription, as the main process would. */
+  emitChange(subscriptionId: string): void;
+  /** Add an entry to a directory, so a change has something to report. */
+  addEntry(path: string, name: string): void;
 }
 
 /**
@@ -37,20 +44,26 @@ export interface BridgeLog {
 export function installBridge(): BridgeLog {
   const listed: string[] = [];
   const unwatched: string[] = [];
+  const watched: string[] = [];
+  const listeners = new Set<(payload: unknown) => void>();
+  const tree = new Map([...TREE].map(([path, entries]) => [path, [...entries]]));
 
   const bridge: Bridge = {
     version: "test",
     list: (request) => {
       const path = (request as { path: string }).path;
       listed.push(path);
-      const entries = TREE.get(path);
+      const entries = tree.get(path);
       return Promise.resolve(
         entries === undefined
           ? { ok: false as const, error: { code: "scan_failed" as const, message: `no ${path}` } }
           : { ok: true as const, value: { entries, total: entries.length, streamId: null } },
       );
     },
-    watch: () => Promise.resolve({ ok: true as const, value: null }),
+    watch: (request) => {
+      watched.push((request as { subscriptionId: string }).subscriptionId);
+      return Promise.resolve({ ok: true as const, value: null });
+    },
     unwatch: (request) => {
       unwatched.push((request as { subscriptionId: string }).subscriptionId);
       return Promise.resolve({ ok: true as const, value: null });
@@ -58,11 +71,26 @@ export function installBridge(): BridgeLog {
     readText: () => Promise.resolve({ ok: true as const, value: null }),
     cancel: () => Promise.resolve({ ok: true as const, value: null }),
     onListBatch: () => () => undefined,
-    onChanged: () => () => undefined,
+    onChanged: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
   };
 
   Object.defineProperty(window, BRIDGE_KEY, { value: bridge, configurable: true, writable: true });
-  return { listed, unwatched };
+
+  return {
+    listed,
+    unwatched,
+    watched,
+    listenerCount: () => listeners.size,
+    emitChange: (subscriptionId) => {
+      for (const listener of listeners) listener({ subscriptionId, changed: [] });
+    },
+    addEntry: (path, name) => {
+      tree.get(path)?.push(entry(name));
+    },
+  };
 }
 
 /** The names visible in one column, in order. */
