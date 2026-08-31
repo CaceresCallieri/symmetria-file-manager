@@ -36,6 +36,8 @@ export const REQUEST_CHANNELS = {
   rename: "symmetria-fm:rename",
   /** Send entries to the desktop trash. */
   trash: "symmetria-fm:trash",
+  /** The directories zoxide records this user going to. */
+  frecent: "symmetria-fm:frecent",
   /** Put text or an image on the system clipboard. */
   clipboard: "symmetria-fm:clipboard",
   /** Hand an entry to whatever the desktop says opens it. */

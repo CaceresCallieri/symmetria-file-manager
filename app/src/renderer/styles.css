@@ -262,6 +262,66 @@ body {
   align-items: baseline;
 }
 
+/*
+ * The frecent-directory list.
+ *
+ * It borrows `.overlay` and `.overlay__panel` from the help sheet rather than
+ * positioning itself: two ways to centre a dialog are two things to keep in
+ * step with the tokens.
+ */
+.zoxide__query {
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  outline: none;
+}
+
+.zoxide__problem {
+  margin: 12px 0 0;
+  color: var(--muted-foreground);
+}
+
+.zoxide__list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* No transition and no gradient, for the reason every row fill in this file
+   has none: a per-row animation stutters during fast movement. */
+.zoxide__row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.zoxide__row--active {
+  background: var(--accent);
+}
+
+.zoxide__score {
+  flex: 0 0 auto;
+  min-width: 48px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+/* The same three properties a row's name needs. A long path is the normal case
+   here — these are whole absolute paths — so eliding is not the exception. */
+.zoxide__path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 kbd {
   padding: 1px 5px;
   border-radius: var(--radius-sm);

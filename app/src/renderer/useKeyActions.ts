@@ -27,8 +27,10 @@ interface KeyModes {
   readonly chordPrefix: string;
   readonly bookmarkSubMode: BookmarkSubMode | null;
   readonly helpOpen: boolean;
+  readonly zoxideOpen: boolean;
   readonly message: string | null;
   closeHelp(): void;
+  closeZoxide(): void;
   clearMessage(): void;
 }
 
@@ -81,6 +83,7 @@ export function useKeyActions(
   const [chordPrefix, setChordPrefix] = useState("");
   const [bookmarkSubMode, setBookmarkSubMode] = useState<BookmarkSubMode | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [zoxideOpen, setZoxideOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const actions = useMemo<KeyActions>(() => {
@@ -128,7 +131,7 @@ export function useKeyActions(
       previousMatch: () => search.goPrevious(),
       startFlash: soon("Flash jump"),
       openFuzzyFinder: soon("The fuzzy finder"),
-      openZoxide: soon("Zoxide"),
+      openZoxide: () => setZoxideOpen(true),
 
       // Chords resolve for real; what they resolve TO may not exist yet.
       setChordPrefix,
@@ -227,11 +230,13 @@ export function useKeyActions(
       chordPrefix,
       bookmarkSubMode,
       helpOpen,
+      zoxideOpen,
       message,
       closeHelp: () => setHelpOpen(false),
+      closeZoxide: () => setZoxideOpen(false),
       clearMessage: () => setMessage(null),
     }),
-    [chordPrefix, bookmarkSubMode, helpOpen, message],
+    [chordPrefix, bookmarkSubMode, helpOpen, zoxideOpen, message],
   );
 
   return { actions, modes, state };

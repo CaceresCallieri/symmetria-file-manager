@@ -148,6 +148,7 @@ export function inertBridge(): Bridge {
     trash: ok,
     open: ok,
     clipboard: ok,
+    frecent: ok,
     cancelTransfer: ok,
     bookmarksRead: ok,
     bookmarksWrite: ok,
@@ -220,6 +221,8 @@ export interface BridgeLog {
    * claimed to test was there at all. It was written that way first.
    */
   holdNextList(path: string, names: readonly string[]): () => void;
+  /** Make the next frecent-list request fail with this reason. */
+  failNextZoxide(reason: string): void;
   /** The letters each bookmark write persisted, in COMPLETION order. */
   readonly bookmarkWrites: string[];
   /** Make the next transfer report these names as already present. */
@@ -260,6 +263,7 @@ export function installBridge(): BridgeLog {
   /** Which path's next listing is held, and what it answers with. */
   let heldList: { readonly path: string; readonly names: readonly string[] } | null = null;
   let releaseHeldList: (() => void) | null = null;
+  let zoxideFailure: string | null = null;
   const progressListeners = new Set<(payload: unknown) => void>();
   const listeners = new Set<(payload: unknown) => void>();
   const tree = new Map([...TREE].map(([path, entries]) => [path, [...entries]]));
@@ -328,6 +332,30 @@ export function installBridge(): BridgeLog {
       return Promise.resolve({
         ok: true as const,
         value: { text, bytesRead: text.length, truncated },
+      });
+    },
+    frecent: () => {
+      ops.push("zoxide");
+      if (zoxideFailure !== null) {
+        const reason = zoxideFailure;
+        zoxideFailure = null;
+        return Promise.resolve({
+          ok: false as const,
+          error: { code: "read_failed" as const, message: reason },
+        });
+      }
+      // The order zoxide gives, which is by frecency and not alphabetical —
+      // asserting "most frecent first" against an alphabetical fixture would
+      // prove nothing.
+      return Promise.resolve({
+        ok: true as const,
+        value: {
+          entries: [
+            { score: 4536, path: "/home/jc/Downloads" },
+            { score: 446, path: "/home/jc/work/sales/bambin" },
+            { score: 278, path: "/home/jc/.dotfiles" },
+          ],
+        },
       });
     },
     clipboard: (request) => {
@@ -521,6 +549,9 @@ export function installBridge(): BridgeLog {
         releaseHeldList = null;
         release?.();
       };
+    },
+    failNextZoxide: (reason) => {
+      zoxideFailure = reason;
     },
     holdNextTransfer: () => {
       holdOnce = true;

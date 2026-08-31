@@ -43,6 +43,8 @@ export interface Bridge {
   open(request: unknown): Promise<Result<unknown>>;
   /** Put text or an image on the system clipboard. */
   clipboard(request: unknown): Promise<Result<unknown>>;
+  /** The directories zoxide records this user going to. */
+  frecent(request: unknown): Promise<Result<unknown>>;
   /** Read the bookmark store, seeding it on a first run. */
   bookmarksRead(request: unknown): Promise<Result<unknown>>;
   /** Replace the bookmark store. */

@@ -38,6 +38,7 @@ import { kindOf, scanDirectory } from "../fs/scan.ts";
 import { type ChangedEntry, type StopWatching, watchDirectory } from "../fs/watch.ts";
 import { copyImage, copyText } from "../ops/clipboard.ts";
 import { operations } from "../ops/index.ts";
+import { frecentDirectories } from "../ops/zoxide.ts";
 import { authorisePreview } from "../previewTokens.ts";
 import { previewUrlFor } from "../protocol.ts";
 import { CHANNELS, REQUEST_CHANNELS } from "./channels.ts";
@@ -402,6 +403,14 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
       return success(null);
     }),
   );
+
+  ipc.handle(CHANNELS.frecent, async () => {
+    const listed = await frecentDirectories();
+    // `read_failed` and not a spawn-specific code: from the renderer's side
+    // this is one thing — the list could not be read — and the reason worth
+    // showing is the message, not the class.
+    return listed.ok ? success({ entries: listed.entries }) : failure("read_failed", listed.reason);
+  });
 
   ipc.handle(
     CHANNELS.clipboard,

@@ -20,6 +20,7 @@ import { StatusBar } from "./components/StatusBar.tsx";
 import { StatusStrip } from "./components/StatusStrip.tsx";
 import { TabBar } from "./components/TabBar.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
+import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
 import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { useBookmarks } from "./useBookmarks.ts";
 import { useFileOps } from "./useFileOps.ts";
@@ -120,7 +121,9 @@ export function App(props: AppProps = {}) {
     () => ({
       // One gate for every dialog: the help sheet and the operation dialogs
       // share it, so two can never be open at once.
-      modalOpen: modes.helpOpen || ops.modal.kind !== "none",
+      // The zoxide list joins the same gate: it is a dialog with a text field,
+      // and two of those open at once would each think the keyboard was theirs.
+      modalOpen: modes.helpOpen || modes.zoxideOpen || ops.modal.kind !== "none",
       bookmarkSubMode: modes.bookmarkSubMode,
       chordPrefix: modes.chordPrefix,
       // Flash jump is a text-input mode that arrives with its own phase. Until
@@ -133,7 +136,14 @@ export function App(props: AppProps = {}) {
       // dispatcher's.
       textInputFocused: search.active,
     }),
-    [modes.helpOpen, modes.bookmarkSubMode, modes.chordPrefix, ops.modal.kind, search.active],
+    [
+      modes.helpOpen,
+      modes.zoxideOpen,
+      modes.bookmarkSubMode,
+      modes.chordPrefix,
+      ops.modal.kind,
+      search.active,
+    ],
   );
 
   useKeyDispatch({ mode, context });
@@ -223,6 +233,15 @@ export function App(props: AppProps = {}) {
         reverse={tabs.reverse}
         showHidden={tabs.showHidden}
       />
+      {modes.zoxideOpen ? (
+        <ZoxidePopup
+          onChoose={(path) => {
+            modes.closeZoxide();
+            tabs.navigate(path);
+          }}
+          onClose={modes.closeZoxide}
+        />
+      ) : null}
       {modes.helpOpen ? (
         <HelpOverlay context={context} bookmarks={bookmarks.byLetter} onClose={modes.closeHelp} />
       ) : null}

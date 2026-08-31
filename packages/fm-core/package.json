@@ -22,6 +22,7 @@
     "./history": "./src/history.ts",
     "./pane": "./src/pane.ts",
     "./windowUrl": "./src/windowUrl.ts",
+    "./zoxide": "./src/zoxide.ts",
     "./keys/types": "./src/keys/types.ts",
     "./keys/registry": "./src/keys/registry.ts",
     "./keys/dispatch": "./src/keys/dispatch.ts",

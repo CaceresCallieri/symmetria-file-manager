@@ -6,12 +6,14 @@ import {
   decodeBookmarksReply,
   decodeChangedEvent,
   decodeDescribeReply,
+  decodeFrecentReply,
   decodeListReply,
   decodePreviewUrlReply,
   decodeReadTextReply,
   decodeRenameReply,
   decodeTransferProgress,
   decodeTransferReply,
+  type FrecentReply,
   failure,
   isFailure,
   type ListReply,
@@ -165,6 +167,21 @@ export async function copyToClipboard(request: ClipboardRequest): Promise<Result
 
   const reply = await bridge.clipboard(request);
   return isFailure(reply) ? reply : success(null);
+}
+
+/**
+ * The directories zoxide records this user going to, most frecent first.
+ *
+ * Asked for ONCE when the popup opens. Narrowing happens in the renderer, so
+ * typing costs nothing — a query per keystroke would spawn a process per
+ * character.
+ */
+export async function frecentDirectories(): Promise<Result<FrecentReply>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("read_failed", MISSING_BRIDGE);
+
+  const reply = await bridge.frecent({});
+  return isFailure(reply) ? reply : decodeFrecentReply(reply.value);
 }
 
 /** Read the head of a file as text. */

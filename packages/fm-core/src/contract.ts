@@ -223,6 +223,18 @@ export interface DescribeReply {
 }
 
 /**
+ * The frecent directories zoxide knows, as they cross the boundary.
+ *
+ * A failure is a value here as everywhere else, and one distinction earns its
+ * place: "zoxide is not installed" is something the user can fix in one
+ * command, and an empty list is simply how a fresh database looks. A popup
+ * showing nothing cannot tell them apart.
+ */
+export interface FrecentReply {
+  readonly entries: readonly { readonly score: number; readonly path: string }[];
+}
+
+/**
  * The bookmark store, as it crosses the boundary.
  *
  * A list of pairs rather than a `Map`: structured clone carries a `Map`, but
@@ -280,6 +292,7 @@ export type IpcReply =
   | Result<TransferReply>
   | Result<RenameReply>
   | Result<BookmarksReply>
+  | Result<FrecentReply>
   | Result<null>;
 
 // ── decoding ──────────────────────────────────────────────────────────────
@@ -513,6 +526,35 @@ export type ClipboardRequest =
   | { readonly kind: "text"; readonly text: string }
   /** A path for the MAIN process to read. The renderer cannot open a file. */
   | { readonly kind: "image"; readonly path: string };
+
+/**
+ * The frecent list, as the renderer receives it.
+ *
+ * Parsed rather than trusted, like every other reply on this boundary. A row
+ * missing either half is dropped rather than failing the whole list: one
+ * unreadable entry should not cost the user the other forty.
+ */
+export const decodeFrecentReply: Decoder<FrecentReply> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_reply", "reply must be an object");
+
+  const listed = raw["entries"];
+  if (!Array.isArray(listed)) return failure("invalid_reply", "reply.entries must be an array");
+
+  const entries: { score: number; path: string }[] = [];
+  for (const row of listed) {
+    if (!isRecord(row)) continue;
+    const score = row["score"];
+    const path = row["path"];
+    // `typeof NaN === "number"`, so the type test alone lets a NaN through —
+    // and a NaN score sorts unpredictably and renders as nothing.
+    if (typeof score !== "number" || !Number.isFinite(score)) continue;
+    if (typeof path !== "string") continue;
+    if (!path.startsWith("/")) continue;
+    entries.push({ score, path });
+  }
+
+  return success({ entries });
+};
 
 export const decodeClipboardRequest: Decoder<ClipboardRequest> = (raw) => {
   if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
