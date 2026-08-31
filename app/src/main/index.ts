@@ -100,6 +100,89 @@ async function reportAndQuit(window: BrowserWindow): Promise<void> {
       } catch { return false; }
     })(),
     bridgeKeys: Object.keys(window[${JSON.stringify(BRIDGE_KEY)}]).sort().join(","),
+    // How a row lays out when its name is too wide for its column.
+    //
+    // Measured here because it cannot be measured anywhere else. The renderer
+    // suite runs under happy-dom, which has no layout engine and computes no
+    // cascade: it reports a flex-shrink no algorithm ever ran and a bounding
+    // rect of zeros. Only a real Chromium can tell an aligned row from a
+    // misaligned one.
+    //
+    // It measures the COMPONENT'S OWN row rather than markup of its own,
+    // lengthening the name in place to force the overflow. A probe that built
+    // its own row would be measuring its own styles and would pass whatever the
+    // stylesheet said.
+    rowLayout: await (async () => {
+      const findRow = async () => {
+        // The listing is asynchronous, and this runs at did-finish-load — the
+        // page is up well before the first directory answers.
+        for (let i = 0; i < 100; i++) {
+          const found =
+            document.querySelector('[data-testid="column-current"] [data-testid="row"]') ??
+            document.querySelector('[data-testid="row"]');
+          if (found !== null) return found;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return null;
+      };
+
+      const row = await findRow();
+      if (row === null) return "no-row";
+
+      const mark = row.querySelector(".row__mark");
+      const name = row.querySelector(".row__name");
+      const icon = row.querySelector(".file-icon");
+      if (mark === null || name === null || icon === null) return "row-missing-parts";
+
+      const original = name.textContent;
+      const fittingIconLeft = icon.getBoundingClientRect().left;
+
+      // The trailing symlink arrow is drawn only for a symlink, and the home
+      // directory need not contain one. Added to the real row so it inherits
+      // the real cascade.
+      const link = document.createElement("span");
+      link.className = "row__link";
+      link.textContent = "→";
+
+      // The restore is in a finally, and that is not defensive habit. Without
+      // it, a measurement that throws escapes this function, app.exit(0) is
+      // never reached, and the launch hangs until the harness's 45-second
+      // timeout kills it — a probe bug arriving disguised as a timeout, which
+      // is the hardest shape of failure to read.
+      let measured;
+      try {
+        name.textContent = "overflow".repeat(60);
+        row.appendChild(link);
+
+        measured = {
+          fittingIconLeft,
+          overflowingIconLeft: icon.getBoundingClientRect().left,
+          overflowingMarkWidth: mark.getBoundingClientRect().width,
+          overflowingLinkWidth: link.getBoundingClientRect().width,
+          // Reported so a mis-escaped literal cannot pass as an arrow. This
+          // string crosses two levels of escaping to reach the page, and a
+          // width alone would be satisfied by the six characters of a broken
+          // escape as readily as by the glyph.
+          overflowingLinkText: link.textContent,
+          // Clipping is what an ellipsis needs. With no overflow rule the item
+          // never shrinks, so its content box equals its content and the two
+          // are identical.
+          nameClipped: name.clientWidth < name.scrollWidth,
+        };
+      } finally {
+        link.remove();
+        name.textContent = original;
+      }
+
+      // Measured AFTER the finally, so it reports on the restoration itself.
+      // The containment test asks about this probe's OWN node rather than about
+      // any row__link element, which a genuinely symlinked row would carry too.
+      //
+      // NOTE: no backticks anywhere inside this probe. The whole thing is one
+      // template literal, so a backtick even in a comment ends the string and
+      // everything after it is parsed as TypeScript.
+      return { ...measured, rowRestored: name.textContent === original && !row.contains(link) };
+    })(),
   }))()`);
 
   process.stdout.write(

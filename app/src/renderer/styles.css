@@ -110,8 +110,50 @@ body {
   color: var(--marked);
 }
 
+/*
+ * ── Why every box in a row states its flex behaviour ────────────────────────
+ *
+ * A row is a flex container and `white-space: nowrap` is inherited from it, so
+ * a name wider than the column overflows. Flexbox answers an overflow by
+ * shrinking whatever can shrink — and it measured the row's boxes like this:
+ * the name could not shrink (nowrap text has a min-content width equal to the
+ * whole string, and `min-width: auto` holds it there), the icon could not
+ * (`.file-icon` already declares `flex: 0 0 auto`), and the arrow could not
+ * (its glyph is its min-content width). That left the mark, an EMPTY span with
+ * an explicit width, whose min-content width is zero.
+ *
+ * So it collapsed to nothing and dragged the icon and the name eight pixels
+ * left, on exactly the rows too long to read — measured in a real Chromium at
+ * 246.328125 for a row that fits and 238.328125 for one that does not.
+ *
+ * The rules below fix it and then over-state it: the icon and the arrow are
+ * pinned too, though neither shrinks today. A row is where a box gets added,
+ * and the next empty one would reproduce this exactly.
+ */
 .row__mark {
-  width: 8px;
+  flex: 0 0 8px;
+}
+
+.row__link {
+  flex: 0 0 auto;
+}
+
+/*
+ * `min-width: 0` is not optional and is the part that looks removable.
+ * `text-overflow` needs `overflow: hidden`, and `overflow: hidden` can do
+ * nothing while `min-width: auto` holds the item at the width of its whole
+ * string — the box never gets smaller than its text, so there is no overflow
+ * to clip and no ellipsis to draw.
+ *
+ * A search match is elided like any other row. Qt draws a match unelided
+ * (`FileListItem.qml:201`) so the whole name can be read; carrying that over
+ * would put the matching row back outside its column, which is the defect this
+ * rule exists to fix. The deviation is deliberate — see the plan's decisions.
+ */
+.row__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tab-bar {

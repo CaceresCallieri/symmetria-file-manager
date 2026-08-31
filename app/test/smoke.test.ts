@@ -41,9 +41,17 @@ function electronBinary(): string {
   return root;
 }
 
-describe("the application boots", () => {
-  const report = launchAndReport();
+/**
+ * One launch for every suite in this file.
+ *
+ * It was declared inside the first `describe`, which was fine while there was
+ * only one. A second suite reading it would either not see it at all or, if
+ * each declared its own, boot a whole second Electron process to ask the same
+ * running application the same questions.
+ */
+const report = launchAndReport();
 
+describe("the application boots", () => {
   it("creates exactly one window", () => {
     expect(report.windowCount).toBe(1);
   });
@@ -98,5 +106,80 @@ describe("the application boots", () => {
   it("exposes the bridge to the renderer and nothing besides", () => {
     expect(report.rendererBridgePresent).toBe(true);
     expect(report.rendererHasNodeProcess).toBe(false);
+  });
+});
+
+/**
+ * Phase 1 of run 3 — a row whose name overflows its column.
+ *
+ * These five assertions cannot live in the renderer suite. It runs under
+ * happy-dom, which has no layout engine and computes no cascade, so every
+ * measurement below would read zero there whatever the stylesheet said. This
+ * project has already paid for that blind spot once: a marked row's icon stayed
+ * foreground-white beside its coloured name, because the icon is the name's
+ * sibling rather than its child, and only a real browser could see it.
+ *
+ * The numbers come from the probe in `main/index.ts`, which lengthens a REAL
+ * row's name in place rather than building a row of its own.
+ */
+interface RowLayout {
+  readonly fittingIconLeft: number;
+  readonly overflowingIconLeft: number;
+  readonly overflowingMarkWidth: number;
+  readonly overflowingLinkWidth: number;
+  readonly overflowingLinkText: string;
+  readonly nameClipped: boolean;
+  readonly rowRestored: boolean;
+}
+
+describe("a row whose name is too wide for its column", () => {
+  // SAFETY: the probe returns either this exact shape or one of two string
+  // sentinels, `"no-row"` and `"row-missing-parts"`. The first assertion below
+  // rejects a sentinel before any other test reads a field, so every field
+  // access under this cast runs only where the shape held.
+  const layout = report.rowLayout as RowLayout;
+
+  it("was measured at all", () => {
+    // A string here is the probe reporting it found no row to measure, which
+    // would make every assertion below vacuously true.
+    expect(report.rowLayout, `probe said: ${JSON.stringify(report.rowLayout)}`).toBeTypeOf(
+      "object",
+    );
+    expect(layout.fittingIconLeft).toBeTypeOf("number");
+    expect(layout.overflowingIconLeft).toBeTypeOf("number");
+  });
+
+  it("starts its icon where a row that fits starts its icon", () => {
+    // The defect this phase exists to fix. Measured at 8 CSS pixels: the
+    // eight-pixel mark box was the only shrinkable item in the row, so the flex
+    // algorithm recovered the overflow by collapsing it, dragging the icon and
+    // the name left with it.
+    expect(layout.overflowingIconLeft).toBe(layout.fittingIconLeft);
+  });
+
+  it("clips the name, which is what an ellipsis needs", () => {
+    expect(layout.nameClipped).toBe(true);
+  });
+
+  it("keeps the eight pixels of the leading mark", () => {
+    expect(layout.overflowingMarkWidth).toBe(8);
+  });
+
+  it("still draws the trailing symlink arrow", () => {
+    expect(layout.overflowingLinkWidth).toBeGreaterThan(0);
+    // A width alone does not prove it is an arrow. The string crosses two
+    // levels of escaping to reach the page, and a broken escape would arrive
+    // as six literal characters that measure wider than the glyph, not
+    // narrower — so the width assertion above would pass on it.
+    expect(layout.overflowingLinkText).toBe("→");
+  });
+
+  it("puts the row back exactly as it found it", () => {
+    // The probe rewrites a live row to force the overflow. Review found the
+    // restore was not in a `finally`: a measurement that threw would escape
+    // `reportAndQuit`, `app.exit(0)` would never run, and the launch would hang
+    // until the harness's 45-second timeout — a probe bug arriving disguised as
+    // a timeout, which is the hardest kind of failure to read.
+    expect(layout.rowRestored).toBe(true);
   });
 });
