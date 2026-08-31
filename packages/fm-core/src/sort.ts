@@ -106,14 +106,22 @@ function compareDigitRuns(a: string, b: string): number {
   return left < right ? -1 : 1;
 }
 
-/** Sort a copy. The input is never mutated, so a caller's array stays stable. */
+/**
+ * Sort a copy. The input is never mutated, so a caller's array stays stable.
+ *
+ * The third parameter is `reverse` and not `descending`, which it was called
+ * until the wire contract grew a field for it. Every other surface — the
+ * request, the renderer's listing options, the status bar — says `reverse`, and
+ * one concept under two names is a rename waiting to happen at whichever
+ * boundary is edited next.
+ */
 export function sortEntries(
   entries: readonly FsEntry[],
   mode: SortMode,
-  descending = false,
+  reverse = false,
 ): FsEntry[] {
   const sorted = [...entries].sort((a, b) => compareEntries(a, b, mode));
-  if (!descending) return sorted;
+  if (!reverse) return sorted;
 
   // Reversing wholesale would put files above directories. Reverse each group.
   const dirs = sorted.filter((e) => e.kind === "directory").reverse();

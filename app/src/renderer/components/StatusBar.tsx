@@ -4,6 +4,7 @@ export interface StatusBarProps {
   readonly entryCount: number;
   readonly selectedCount: number;
   readonly sort: SortMode;
+  readonly reverse: boolean;
   readonly showHidden: boolean;
 }
 
@@ -14,12 +15,22 @@ export interface StatusBarProps {
  * entries" with hidden files off is a different claim from the same number with
  * them on, and a user who cannot see which is in force cannot trust either.
  */
-export function StatusBar({ entryCount, selectedCount, sort, showHidden }: StatusBarProps) {
+export function StatusBar({
+  entryCount,
+  selectedCount,
+  sort,
+  reverse,
+  showHidden,
+}: StatusBarProps) {
   return (
     <footer data-testid="status-bar" className="status-bar">
       <span>{entryCount} entries</span>
       {selectedCount > 0 ? <span>{selectedCount} selected</span> : null}
-      <span>sort: {sort}</span>
+      {/* The direction is an arrow rather than the word "reversed", because it
+          sits beside the mode name and reads as one phrase: "sort: size ↓". */}
+      <span>
+        sort: {sort} {reverse ? "↓" : "↑"}
+      </span>
       {showHidden ? <span>hidden shown</span> : null}
     </footer>
   );

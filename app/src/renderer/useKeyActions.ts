@@ -147,11 +147,11 @@ export function useKeyActions(
         if (bookmarks.pathFor(letter) !== null) setMessage(`${letter} removed`);
         bookmarks.remove(letter);
       },
-      setSort: soon("Sorting"),
+      setSort: (sort, reverse) => tabs.setSort(sort, reverse),
       showMessage: setMessage,
 
       toggleViewMode: soon("The tree view"),
-      toggleHidden: soon("Hidden files"),
+      toggleHidden: () => tabs.toggleHidden(),
       toggleHtmlRender: soon("The HTML preview"),
       openContextMenu: soon("The context menu"),
       openCopyingPath: () => ops.open(),

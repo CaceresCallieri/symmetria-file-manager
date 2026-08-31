@@ -80,6 +80,15 @@ export interface ListRequest {
   readonly path: string;
   readonly showHidden: boolean;
   readonly sort: SortMode;
+  /**
+   * Largest, newest or last first.
+   *
+   * A property of the COMPARISON and not of the answer. `sortEntries` reverses
+   * the directory group and the file group separately, so directories stay
+   * above files in every order; reversing the finished listing would lift the
+   * files above them, which is the one rule every mode holds.
+   */
+  readonly reverse: boolean;
   readonly stream: boolean;
   /**
    * The caller's name for this request, so it can cancel it.
@@ -348,6 +357,10 @@ export const decodeListRequest: Decoder<ListRequest> = (raw) => {
     path: path.value,
     showHidden: raw.showHidden === true,
     sort,
+    // Absent means not reversed, the same shape `showHidden` takes. A main
+    // process that predates this field is what the comment above describes,
+    // and a renderer that predates it simply never sends it.
+    reverse: raw.reverse === true,
     stream: raw.stream === true,
     streamId: streamId.value,
   });

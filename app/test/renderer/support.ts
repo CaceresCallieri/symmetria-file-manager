@@ -148,8 +148,25 @@ export function inertBridge(): Bridge {
   };
 }
 
+/** What a listing was asked for, beyond its path. */
+export interface ListAsk {
+  readonly path: string;
+  readonly sort: string;
+  readonly reverse: boolean;
+  readonly showHidden: boolean;
+}
+
 export interface BridgeLog {
   readonly listed: string[];
+  /**
+   * Every listing request in full, not only its path.
+   *
+   * `listed` records paths, which is all any test needed while the listing
+   * options were module constants. Ordering and hidden files are decided by the
+   * MAIN process, so what the renderer can be held to is the request it sends —
+   * and this is the only place that is observable.
+   */
+  readonly listAsks: ListAsk[];
   readonly unwatched: string[];
   readonly watched: string[];
   /** Every operation the renderer asked the main process to perform. */
@@ -177,6 +194,23 @@ export interface BridgeLog {
    * only way to observe whether they were serialised at all.
    */
   holdNextBookmarkWrite(): () => void;
+  /**
+   * Hold the next listing OF ONE PATH open, answering it with `names` when
+   * released.
+   *
+   * Every other listing in this fixture resolves in the same tick, so a load
+   * can never still be in flight when the next one starts — which is exactly
+   * the window a stale reply would land in. Naming the entries the held reply
+   * carries is what makes the staleness visible: a name that only the held
+   * reply knows about either reaches the column or is correctly discarded.
+   *
+   * The path is required, and that is not convenience. A change of listing
+   * options re-lists the parent column too, and its effect is declared first —
+   * so a hold that took whichever listing came next took the PARENT's, left the
+   * current column loading normally, and passed whether or not the thing it
+   * claimed to test was there at all. It was written that way first.
+   */
+  holdNextList(path: string, names: readonly string[]): () => void;
   /** The letters each bookmark write persisted, in COMPLETION order. */
   readonly bookmarkWrites: string[];
   /** Make the next transfer report these names as already present. */
@@ -204,6 +238,7 @@ export interface BridgeLog {
  */
 export function installBridge(): BridgeLog {
   const listed: string[] = [];
+  const listAsks: ListAsk[] = [];
   const unwatched: string[] = [];
   const watched: string[] = [];
   const described: string[] = [];
@@ -213,6 +248,9 @@ export function installBridge(): BridgeLog {
   const transferIds: string[] = [];
   const bookmarkWrites: string[] = [];
   let releaseNextWrite: (() => void) | null = null;
+  /** Which path's next listing is held, and what it answers with. */
+  let heldList: { readonly path: string; readonly names: readonly string[] } | null = null;
+  let releaseHeldList: (() => void) | null = null;
   const progressListeners = new Set<(payload: unknown) => void>();
   const listeners = new Set<(payload: unknown) => void>();
   const tree = new Map([...TREE].map(([path, entries]) => [path, [...entries]]));
@@ -221,8 +259,46 @@ export function installBridge(): BridgeLog {
     ...inertBridge(),
     version: "test",
     list: (request) => {
-      const path = (request as { path: string }).path;
+      const ask = request as {
+        path: string;
+        sort?: string;
+        reverse?: boolean;
+        showHidden?: boolean;
+      };
+      const path = ask.path;
       listed.push(path);
+      listAsks.push({
+        path,
+        sort: ask.sort ?? "alphabetical",
+        reverse: ask.reverse === true,
+        showHidden: ask.showHidden === true,
+      });
+      // The stored order is returned verbatim, deliberately. Ordering and
+      // hiding happen in the main process, and a stub that applied them here
+      // would be a second implementation of them — one this fixture's own
+      // listings do not even satisfy, since `/home/jc` puts files between
+      // directories, which no real listing ever does. Ordering is proved
+      // against the real handler in `app/test/ipc.test.ts` and against the
+      // comparators in the shared package; what is proved here is the request.
+      // A held listing answers with names the test chose, and only when the
+      // test lets it. It is claimed here rather than in `holdNextList` so the
+      // FIRST list after arming is the one held, whichever tab makes it.
+      if (heldList !== null && heldList.path === path) {
+        const names = heldList.names;
+        heldList = null;
+        return new Promise((resolve) => {
+          releaseHeldList = () =>
+            resolve({
+              ok: true as const,
+              value: {
+                entries: names.map((name) => entry(name)),
+                total: names.length,
+                streamId: null,
+              },
+            });
+        });
+      }
+
       const entries = tree.get(path);
       return Promise.resolve(
         entries === undefined
@@ -405,6 +481,7 @@ export function installBridge(): BridgeLog {
 
   return {
     listed,
+    listAsks,
     unwatched,
     watched,
     described,
@@ -420,6 +497,14 @@ export function installBridge(): BridgeLog {
       return () => {
         const release = releaseNextWrite;
         releaseNextWrite = null;
+        release?.();
+      };
+    },
+    holdNextList: (path, names) => {
+      heldList = { path, names };
+      return () => {
+        const release = releaseHeldList;
+        releaseHeldList = null;
         release?.();
       };
     },

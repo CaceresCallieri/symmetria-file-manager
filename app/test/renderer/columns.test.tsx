@@ -187,7 +187,15 @@ describe("PathBar", () => {
 
 describe("StatusBar", () => {
   it("shows the entry count, the selection count and the sort mode", () => {
-    render(<StatusBar entryCount={42} selectedCount={3} sort="natural" showHidden={false} />);
+    render(
+      <StatusBar
+        entryCount={42}
+        selectedCount={3}
+        sort="natural"
+        reverse={false}
+        showHidden={false}
+      />,
+    );
 
     const bar = screen.getByTestId("status-bar");
     expect(bar.textContent).toContain("42");
@@ -196,13 +204,29 @@ describe("StatusBar", () => {
   });
 
   it("says nothing about a selection when there is none", () => {
-    render(<StatusBar entryCount={42} selectedCount={0} sort="alphabetical" showHidden={false} />);
+    render(
+      <StatusBar
+        entryCount={42}
+        selectedCount={0}
+        sort="alphabetical"
+        reverse={false}
+        showHidden={false}
+      />,
+    );
 
     expect(screen.getByTestId("status-bar").textContent).not.toMatch(/selected/i);
   });
 
   it("says when hidden files are shown, because it changes what the count means", () => {
-    render(<StatusBar entryCount={42} selectedCount={0} sort="alphabetical" showHidden={true} />);
+    render(
+      <StatusBar
+        entryCount={42}
+        selectedCount={0}
+        sort="alphabetical"
+        reverse={false}
+        showHidden={true}
+      />,
+    );
 
     expect(screen.getByTestId("status-bar").textContent).toMatch(/hidden/i);
   });

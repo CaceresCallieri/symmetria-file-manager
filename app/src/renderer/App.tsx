@@ -161,6 +161,7 @@ export function App({ startPath }: AppProps = {}) {
         entryCount={tabs.pane.entries.length}
         selectedCount={state.selectedCount}
         sort={tabs.sort}
+        reverse={tabs.reverse}
         showHidden={tabs.showHidden}
       />
       {modes.helpOpen ? (

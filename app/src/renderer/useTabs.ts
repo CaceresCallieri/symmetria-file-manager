@@ -11,10 +11,18 @@ import {
   toggleSelection,
 } from "@symmetria/fm-core/pane";
 import type { SortMode } from "@symmetria/fm-core/sort";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import type { Unsubscribe } from "../preload/bridge.ts";
-import { listDirectory, watchDirectory } from "./bridge.ts";
+import { type ListOptions, listDirectory, watchDirectory } from "./bridge.ts";
 import {
   activateTab,
   activePane,
@@ -30,15 +38,25 @@ import {
 } from "./state/tabs.ts";
 
 /**
- * Sorting and hidden files are fixed for now.
+ * How a listing is asked for. One of these per WINDOW, not per tab.
  *
- * Both are keyboard operations that need a place to live per tab; the sort
- * chord and the hidden-file toggle are wired when the operations they drive
- * exist. Holding them as constants rather than as state with no control bound
- * to it keeps the status bar reporting what is actually in force.
+ * Per tab was the better fit for the structure here — a tab already carries its
+ * own path, cursor and selection — and the operator chose against it: an order
+ * is how you want to read, not where you are. So switching tabs never changes
+ * the order, and changing the order applies to every tab.
+ *
+ * An alias and not a second interface. It is exactly what `listDirectory`
+ * takes, and two structurally identical shapes one file apart would drift the
+ * first time a field was added to one of them.
  */
-const SORT: SortMode = "natural";
-const SHOW_HIDDEN = false;
+type ListingOptions = ListOptions;
+
+const INITIAL_OPTIONS: ListingOptions = { sort: "natural", reverse: false, showHidden: false };
+
+/** Whether two option sets would produce the same listing. */
+function sameOptions(a: ListingOptions, b: ListingOptions): boolean {
+  return a.sort === b.sort && a.reverse === b.reverse && a.showHidden === b.showHidden;
+}
 
 /** What the tab bar draws. */
 export interface TabView {
@@ -56,9 +74,13 @@ export interface Tabs {
   readonly activeIndex: number;
   readonly showBar: boolean;
   readonly sort: SortMode;
+  readonly reverse: boolean;
   readonly showHidden: boolean;
   readonly error: string | null;
   readonly loading: boolean;
+
+  setSort(sort: SortMode, reverse: boolean): void;
+  toggleHidden(): void;
 
   moveBy(delta: number): void;
   moveTo(index: number): void;
@@ -112,41 +134,37 @@ function nameOf(path: string): string {
   );
 }
 
+/** What a tab needs remembered about its own reads. */
+interface DirectoryLoader {
+  /** Read one tab's directory and put the result in its pane. */
+  loadTab(id: string, path: string): void;
+  /** Forget everything remembered about a tab, when it closes. */
+  release(id: string): void;
+  /**
+   * Which options a tab's entries were actually listed under, or undefined
+   * where it has never been listed at all.
+   *
+   * A function rather than the ref itself. Handing the ref out put a mutable
+   * object in a caller's effect, which the exhaustive-dependencies rule reads —
+   * correctly — as an undeclared dependency, and the fix it proposes for that
+   * shape is meaningless. This is stable, so it is an ordinary dependency.
+   */
+  listedOptionsFor(id: string): ListingOptions | undefined;
+}
+
 /**
- * Several locations open at once, each keeping its own cursor and selection.
+ * Reading a directory into a tab, and the four things it has to remember.
  *
- * Every tab reads and watches its own directory, including the ones in the
- * background — switching to a tab must show what is there now, not what was
- * there when it was last looked at.
- *
- * **Watcher lifetime is the leak this can introduce.** A tab that closes must
- * release its watch, and a tab that navigates must release the old one before
- * taking the new. Both are handled by one reconciler keyed on tab identity, so
- * neither depends on a caller remembering to clean up.
+ * Extracted from `useTabs` rather than living in it: every map here exists for
+ * a race or a recovery in this one operation, and none of them is any business
+ * of the tab collection, the watches or the keyboard actions that share that
+ * hook. Each map's own reason is on its declaration.
  */
-export function useTabs(initialPath: string): Tabs {
-  const [state, setState] = useState<TabsState>(() => createTabs(initialPath));
-  const [parentEntries, setParentEntries] = useState<readonly FsEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const pane = activePane(state);
-  if (pane === null) {
-    // Unreachable by construction: `closeTab` reports the last close by
-    // returning null rather than by emptying the list, so the collection is
-    // never empty. Stated rather than papered over with a fallback pane, which
-    // would render an empty directory and look like a filesystem problem.
-    throw new Error("the tab collection is empty, which closeTab never produces");
-  }
-  const activePath = pane.path;
-
-  // What the reconciler below actually cares about: which tabs exist and where
-  // each one points. Every cursor move rebuilds `state.tabs`, so depending on
-  // the array itself would re-run the reconciler on every keystroke. The
-  // reconciler reads its tabs back OUT of this string rather than from a ref,
-  // so what it depends on and what it uses are the same thing.
-  const topology = state.tabs.map((tab) => `${tab.id}${FIELD}${tab.pane.path}`).join(RECORD);
-
+function useDirectoryLoader(
+  optionsRef: RefObject<ListingOptions>,
+  setState: Dispatch<SetStateAction<TabsState>>,
+  setError: Dispatch<SetStateAction<string | null>>,
+): DirectoryLoader {
   // Which read is the current one, per tab.
   //
   // Navigating faster than the disk answers is normal with a held key, and
@@ -182,52 +200,102 @@ export function useTabs(initialPath: string): Tabs {
    */
   const reverting = useRef(new Set<string>());
 
-  const loadTab = useCallback((id: string, path: string) => {
-    const mine = (generation.current.get(id) ?? 0) + 1;
-    generation.current.set(id, mine);
+  /**
+   * Which options each tab's entries were actually listed under.
+   *
+   * A background tab keeps showing what it last read, so changing the order
+   * would otherwise leave one window holding two orders at once — the thing
+   * the operator chose against. Recording it here rather than re-listing every
+   * open tab on each keystroke means one directory scan per change instead of
+   * one per tab; a tab that was not looking gets its new order on the way in.
+   */
+  const listedUnder = useRef(new Map<string, ListingOptions>());
 
-    void listDirectory(path, { showHidden: SHOW_HIDDEN, sort: SORT }).then((reply) => {
-      if (generation.current.get(id) !== mine) return;
+  /** What a failed listing puts in the pane, and whether it is a retreat. */
+  const failed = useCallback(
+    (id: string, attempted: string, message: string) => {
+      setError(message);
+      reverting.current.delete(id);
 
-      if (isFailure(reply)) {
-        setError(reply.error.message);
-        reverting.current.delete(id);
-
-        // Go back to the last place that worked. Changing the path here feeds
-        // the reconciler, which re-lists it and re-arms its watch — the same
-        // route any other navigation takes, so there is no second code path for
-        // "navigating backwards".
-        const previousPath = lastGood.current.get(id);
-        if (previousPath !== undefined && previousPath !== path) {
-          reverting.current.add(id);
-          setState((previous) =>
-            updatePaneById(previous, id, (p) => ({ ...p, path: previousPath, entries: [] })),
-          );
-          return;
-        }
-
+      // Go back to the last place that worked. Changing the path here feeds
+      // the reconciler, which re-lists it and re-arms its watch — the same
+      // route any other navigation takes, so there is no second code path for
+      // "navigating backwards".
+      const previousPath = lastGood.current.get(id);
+      if (previousPath === undefined || previousPath === attempted) {
         // Nowhere to go back TO — the window opened here. Staying with an empty
         // listing and the error is the honest answer.
         setState((previous) => updatePaneById(previous, id, (p) => setEntries(p, [])));
         return;
       }
-      // A revert's own load must NOT clear the message that caused it. Any
-      // other successful load may: it means the user went somewhere real.
-      const recovering = reverting.current.delete(id);
-      if (!recovering) setError(null);
-      lastGood.current.set(id, path);
+
+      reverting.current.add(id);
       setState((previous) =>
-        updatePaneById(previous, id, (p) => setEntries(p, reply.value.entries)),
+        updatePaneById(previous, id, (p) => ({ ...p, path: previousPath, entries: [] })),
       );
-    });
+    },
+    [setError, setState],
+  );
+
+  const loadTab = useCallback(
+    (id: string, path: string) => {
+      const mine = (generation.current.get(id) ?? 0) + 1;
+      generation.current.set(id, mine);
+
+      const asked = optionsRef.current;
+      listedUnder.current.set(id, asked);
+
+      void listDirectory(path, asked).then((reply) => {
+        if (generation.current.get(id) !== mine) return;
+
+        if (isFailure(reply)) {
+          failed(id, path, reply.error.message);
+          return;
+        }
+
+        // A revert's own load must NOT clear the message that caused it. Any
+        // other successful load may: it means the user went somewhere real.
+        const recovering = reverting.current.delete(id);
+        if (!recovering) setError(null);
+        lastGood.current.set(id, path);
+        setState((previous) =>
+          updatePaneById(previous, id, (p) => setEntries(p, reply.value.entries)),
+        );
+      });
+    },
+    [failed, optionsRef, setError, setState],
+  );
+
+  // Four maps keyed by tab id, and none of them was pruned — so every tab a
+  // session ever opened stayed in all of them for the life of the window.
+  // Bounded in practice and still wrong; the watch reconciler releases its own
+  // slot this way, and these are the same kind of thing.
+  const release = useCallback((id: string) => {
+    generation.current.delete(id);
+    lastGood.current.delete(id);
+    reverting.current.delete(id);
+    listedUnder.current.delete(id);
   }, []);
 
-  // One reconciler for reads and watches, over every tab.
-  //
-  // It compares what is running against what the tabs now are, so a closed tab
-  // releases its watch and a navigated tab swaps its own — without any caller
-  // knowing that watches exist. `live` outlives each run, which is what makes
-  // "release what is gone" expressible at all.
+  const listedOptionsFor = useCallback((id: string) => listedUnder.current.get(id), []);
+
+  return { loadTab, release, listedOptionsFor };
+}
+
+/**
+ * One watch per tab, kept in step with where the tabs point.
+ *
+ * It compares what is running against what the tabs now are, so a closed tab
+ * releases its watch and a navigated tab swaps its own — without any caller
+ * knowing that watches exist. `live` outlives each run, which is what makes
+ * "release what is gone" expressible at all.
+ *
+ * `topology` is a STRING of tab ids and paths rather than the tab array,
+ * because every cursor move rebuilds that array and would re-run all of this on
+ * every keystroke. The reconciler reads its tabs back out of the string, so
+ * what it depends on and what it uses are the same thing.
+ */
+function useWatchReconciler(topology: string, loadTab: (id: string, path: string) => void): void {
   const live = useRef(new Map<string, WatchSlot>());
 
   useEffect(() => {
@@ -265,6 +333,67 @@ export function useTabs(initialPath: string): Tabs {
       running.clear();
     };
   }, []);
+}
+
+/**
+ * Several locations open at once, each keeping its own cursor and selection.
+ *
+ * Every tab reads and watches its own directory, including the ones in the
+ * background — switching to a tab must show what is there now, not what was
+ * there when it was last looked at.
+ *
+ * **Watcher lifetime is the leak this can introduce.** A tab that closes must
+ * release its watch, and a tab that navigates must release the old one before
+ * taking the new. Both are handled by one reconciler keyed on tab identity, so
+ * neither depends on a caller remembering to clean up.
+ */
+export function useTabs(initialPath: string): Tabs {
+  const [state, setState] = useState<TabsState>(() => createTabs(initialPath));
+  const [parentEntries, setParentEntries] = useState<readonly FsEntry[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [options, setOptions] = useState<ListingOptions>(INITIAL_OPTIONS);
+
+  // Read by `loadTab`, which must not depend on the options.
+  //
+  // `loadTab` is the callback a watcher holds for the life of its watch. If it
+  // closed over the options it would keep whichever ones were in force when the
+  // watch was armed, so a file appearing in a directory would silently re-list
+  // it in the previous order. The ref is what makes every load — first, watched
+  // or re-listed — read the same current answer.
+  //
+  // Assigned in an effect and not in the render body. React's contract says a
+  // ref is not written during rendering, and a render that is discarded or
+  // replayed would leave a value from it behind. This effect is declared BEFORE
+  // every effect that calls `loadTab`, and effects run in declaration order
+  // within a commit — so the ordering guarantee the render-body write gave is
+  // unchanged. The initial value comes from `useRef`, which covers the first
+  // load before any effect has run.
+  const optionsRef = useRef(options);
+  useEffect(() => {
+    optionsRef.current = options;
+  });
+
+  const pane = activePane(state);
+  if (pane === null) {
+    // Unreachable by construction: `closeTab` reports the last close by
+    // returning null rather than by emptying the list, so the collection is
+    // never empty. Stated rather than papered over with a fallback pane, which
+    // would render an empty directory and look like a filesystem problem.
+    throw new Error("the tab collection is empty, which closeTab never produces");
+  }
+  const activePath = pane.path;
+
+  // What the reconciler below actually cares about: which tabs exist and where
+  // each one points. Every cursor move rebuilds `state.tabs`, so depending on
+  // the array itself would re-run the reconciler on every keystroke. The
+  // reconciler reads its tabs back OUT of this string rather than from a ref,
+  // so what it depends on and what it uses are the same thing.
+  const topology = state.tabs.map((tab) => `${tab.id}${FIELD}${tab.pane.path}`).join(RECORD);
+
+  const { loadTab, release, listedOptionsFor } = useDirectoryLoader(optionsRef, setState, setError);
+
+  useWatchReconciler(topology, loadTab);
 
   // The parent column belongs to the active tab only: no background tab shows
   // one, so reading it for all of them would be work nobody sees.
@@ -277,7 +406,7 @@ export function useTabs(initialPath: string): Tabs {
 
     let current = true;
     setLoading(true);
-    void listDirectory(parentPath, { showHidden: SHOW_HIDDEN, sort: SORT }).then((reply) => {
+    void listDirectory(parentPath, options).then((reply) => {
       if (!current) return;
       setLoading(false);
       setParentEntries(isFailure(reply) ? [] : reply.value.entries);
@@ -286,35 +415,53 @@ export function useTabs(initialPath: string): Tabs {
     return () => {
       current = false;
     };
-  }, [activePath]);
+    // The parent column is a listing like any other, so it re-reads when the
+    // order does. Without `options` here the two columns would disagree, which
+    // is more confusing than either order on its own.
+  }, [activePath, options]);
+
+  /**
+   * Bring the visible tab's listing up to date with the current options.
+   *
+   * One rule covers two situations that look different and are not: the order
+   * changed while this tab was on screen, and the user switched to a tab that
+   * was in the background when it changed. Both are "what is in front of me was
+   * listed under different options", and both are answered by re-listing it.
+   */
+  const activeId = state.tabs[state.activeIndex]?.id;
+  useEffect(() => {
+    if (activeId === undefined) return;
+
+    const under = listedOptionsFor(activeId);
+    // Never listed at all is the reconciler's job, not this one. Claiming it
+    // here would start a second read of the same directory on every open.
+    if (under === undefined || sameOptions(under, options)) return;
+
+    loadTab(activeId, activePath);
+  }, [activeId, activePath, options, loadTab, listedOptionsFor]);
 
   const changeActive = useCallback((change: (p: PaneState) => PaneState) => {
     setState((previous) => updateActivePane(previous, change));
   }, []);
 
-  const close = useCallback((index?: number) => {
-    setState((previous) => {
-      // Release the per-tab bookkeeping with the tab. Three maps are keyed by
-      // tab id and none of them was pruned, so every tab a session ever opened
-      // stayed in all three for the life of the window. Bounded in practice and
-      // still wrong; the reconciler already releases the WATCH this way, and
-      // these are the same kind of thing.
-      const closing = previous.tabs[index ?? previous.activeIndex]?.id;
-      if (closing !== undefined) {
-        generation.current.delete(closing);
-        lastGood.current.delete(closing);
-        reverting.current.delete(closing);
-      }
+  const close = useCallback(
+    (index?: number) => {
+      setState((previous) => {
+        // Release the per-tab bookkeeping with the tab.
+        const closing = previous.tabs[index ?? previous.activeIndex]?.id;
+        if (closing !== undefined) release(closing);
 
-      const next = closeTab(previous, index ?? previous.activeIndex);
-      if (next !== null) return next;
+        const next = closeTab(previous, index ?? previous.activeIndex);
+        if (next !== null) return next;
 
-      // The last tab is gone, so there is nothing left to be a window for. The
-      // watches go with it through the unmount cleanup above.
-      window.close();
-      return previous;
-    });
-  }, []);
+        // The last tab is gone, so there is nothing left to be a window for. The
+        // watches go with it through the unmount cleanup above.
+        window.close();
+        return previous;
+      });
+    },
+    [release],
+  );
 
   return {
     pane,
@@ -327,10 +474,15 @@ export function useTabs(initialPath: string): Tabs {
     })),
     activeIndex: state.activeIndex,
     showBar: showTabBar(state),
-    sort: SORT,
-    showHidden: SHOW_HIDDEN,
+    sort: options.sort,
+    reverse: options.reverse,
+    showHidden: options.showHidden,
     error,
     loading,
+
+    setSort: (sort, reverse) => setOptions((previous) => ({ ...previous, sort, reverse })),
+    toggleHidden: () =>
+      setOptions((previous) => ({ ...previous, showHidden: !previous.showHidden })),
 
     moveBy: (delta) => changeActive((p) => moveCursor(p, delta)),
     moveTo: (index) => changeActive((p) => moveCursor(p, index - p.cursorIndex)),

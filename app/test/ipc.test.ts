@@ -68,6 +68,8 @@ let root: string;
 let kinds: string;
 /** More entries than the preview cap, so the cap is observable. */
 let capped: string;
+/** Mixed kinds and distinct sizes, for the ordering assertions. */
+let ordered: string;
 const BIG_COUNT = MAX_DIRECTORY_PREVIEW_ENTRIES + 37;
 
 beforeAll(async () => {
@@ -85,6 +87,16 @@ beforeAll(async () => {
   await symlink(join(kinds, "sub"), join(kinds, "link-to-dir"));
   await symlink(join(kinds, "alpha.txt"), join(kinds, "link-to-file"));
   await symlink(join(kinds, "gone"), join(kinds, "link-broken"));
+
+  // Distinct sizes and two directories, so every ordering question below has a
+  // different right answer and none of them can be satisfied by accident.
+  ordered = join(scratch, "ordered");
+  await mkdir(ordered);
+  await mkdir(join(ordered, "a-dir"));
+  await mkdir(join(ordered, "z-dir"));
+  await writeFile(join(ordered, "small.txt"), "x");
+  await writeFile(join(ordered, "mid.txt"), "x".repeat(50));
+  await writeFile(join(ordered, "big.txt"), "x".repeat(300));
 
   capped = join(scratch, "capped");
   await mkdir(capped);
@@ -119,6 +131,85 @@ describe("the bridge returns what the main process produced", () => {
     expect(reply.ok).toBe(false);
     if (reply.ok) return;
     expect(reply.error.code).toBe("scan_failed");
+  });
+});
+
+/**
+ * Ordering, against the real handler.
+ *
+ * Not in the renderer suite, and not because it would be inconvenient there:
+ * the renderer never orders anything. It sends a request and the main process
+ * decides, so this is the only place the two halves meet on real files.
+ *
+ * `listing` keeps the returned order. The helper above it sorts, which is
+ * exactly what an ordering assertion must not do.
+ */
+function listing(value: unknown): string[] {
+  return (value as ListReply).entries.map((e: FsEntry) => e.name);
+}
+
+describe("the listing comes back in the order that was asked for", () => {
+  it("puts the smallest file first when asked for the size order", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    const reply = await ipc.invoke(CHANNELS.list, { path: ordered, sort: "size" });
+
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    expect(listing(reply.value)).toEqual(["a-dir", "z-dir", "small.txt", "mid.txt", "big.txt"]);
+  });
+
+  it("puts the largest first when the order is reversed", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    const reply = await ipc.invoke(CHANNELS.list, {
+      path: ordered,
+      sort: "size",
+      reverse: true,
+    });
+
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    // The directories are reversed among themselves and STAY ABOVE the files.
+    // Reversing the finished array would have put `big.txt` first and the
+    // directories last, which is the one thing every order holds against.
+    expect(listing(reply.value)).toEqual(["z-dir", "a-dir", "big.txt", "mid.txt", "small.txt"]);
+  });
+
+  it("keeps directories above files in every order, reversed or not", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    for (const sort of ["alphabetical", "modified", "size", "extension", "natural"]) {
+      for (const reverse of [false, true]) {
+        const reply = await ipc.invoke(CHANNELS.list, { path: ordered, sort, reverse });
+        expect(reply.ok).toBe(true);
+        if (!reply.ok) return;
+
+        const kinds = (reply.value as ListReply).entries.map((e: FsEntry) => e.kind);
+        const lastDirectory = kinds.lastIndexOf("directory");
+        const firstFile = kinds.indexOf("file");
+        expect(lastDirectory, `${sort} reverse=${reverse}`).toBeLessThan(firstFile);
+      }
+    }
+  });
+
+  it("treats a missing reverse field as not reversed", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { send: () => {} });
+
+    const withOut = await ipc.invoke(CHANNELS.list, { path: ordered, sort: "size" });
+    const withFalse = await ipc.invoke(CHANNELS.list, {
+      path: ordered,
+      sort: "size",
+      reverse: false,
+    });
+
+    expect(withOut.ok && withFalse.ok).toBe(true);
+    if (!withOut.ok || !withFalse.ok) return;
+    expect(listing(withOut.value)).toEqual(listing(withFalse.value));
   });
 });
 

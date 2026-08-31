@@ -57,6 +57,7 @@ function getBridge(): Bridge | null {
 export interface ListOptions {
   readonly showHidden: boolean;
   readonly sort: SortMode;
+  readonly reverse: boolean;
 }
 
 const MISSING_BRIDGE = "the preload bridge is not present; this build is incomplete";
@@ -81,6 +82,7 @@ export async function listDirectory(
     path,
     showHidden: options.showHidden,
     sort: options.sort,
+    reverse: options.reverse,
     stream: false,
     streamId: null,
   });

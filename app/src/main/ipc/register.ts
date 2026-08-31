@@ -225,6 +225,7 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
         const shown = sortEntries(
           filterEntries(raw, { showHidden: request.showHidden }),
           request.sort,
+          request.reverse,
         );
 
         if (!request.stream) {
