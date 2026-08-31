@@ -1,3 +1,10 @@
+import {
+  emptyHistory,
+  type History,
+  stepBack,
+  stepForward,
+  visit,
+} from "@symmetria/fm-core/history";
 import { createPane, type PaneState } from "@symmetria/fm-core/pane";
 
 /**
@@ -28,6 +35,33 @@ interface Tab {
    */
   readonly id: string;
   readonly pane: PaneState;
+  /**
+   * Where this tab has been. Per tab, unlike the listing options.
+   *
+   * A tab is a browsing context and its trail belongs to it: switching tabs
+   * must not change where `-` goes, any more than opening a second browser tab
+   * changes the first one's Back button. The order a listing is in is a
+   * different kind of thing — that is how you want to read, not where you are,
+   * and the operator chose to make it one setting for the window.
+   */
+  readonly history: History;
+  /**
+   * The trail as it was before the move now in flight.
+   *
+   * Navigation is optimistic: the pane's path changes and the trail is recorded
+   * before the listing answers, because waiting for the disk is what would make
+   * entering a directory feel slow. So by the time a directory turns out to be
+   * unreadable, the move is already in the trail — and putting the PANE back is
+   * only half of putting things back.
+   *
+   * A snapshot rather than an undo operation, because the two ways to arrive
+   * somewhere unreadable damage the trail differently. A normal navigation
+   * discards the forward trail on the way in, and popping the back entry does
+   * not bring it back. A step backward records nothing at all, so there is no
+   * entry to pop — and it still leaves the trail one press out of position.
+   * Restoring the whole thing answers both without knowing which happened.
+   */
+  readonly historyBeforeMove: History;
 }
 
 export interface TabsState {
@@ -38,7 +72,18 @@ export interface TabsState {
 }
 
 export function createTabs(path: string): TabsState {
-  return { tabs: [{ id: "tab-0", pane: createPane(path) }], activeIndex: 0, nextId: 1 };
+  return {
+    tabs: [
+      {
+        id: "tab-0",
+        pane: createPane(path),
+        history: emptyHistory(),
+        historyBeforeMove: emptyHistory(),
+      },
+    ],
+    activeIndex: 0,
+    nextId: 1,
+  };
 }
 
 function activeTab(state: TabsState): Tab | null {
@@ -63,7 +108,15 @@ export function showTabBar(state: TabsState): boolean {
  */
 export function openTab(state: TabsState, path: string): TabsState {
   const at = state.activeIndex + 1;
-  const tab: Tab = { id: `tab-${state.nextId}`, pane: createPane(path) };
+  // A fresh trail. The new tab did not come from anywhere the old one had
+  // been, and inheriting the trail would let `-` in it walk somewhere it never
+  // was.
+  const tab: Tab = {
+    id: `tab-${state.nextId}`,
+    pane: createPane(path),
+    history: emptyHistory(),
+    historyBeforeMove: emptyHistory(),
+  };
 
   return {
     tabs: [...state.tabs.slice(0, at), tab, ...state.tabs.slice(at)],
@@ -155,7 +208,117 @@ export function updateActivePane(
   const pane = change(current.pane);
   if (pane === current.pane) return state;
 
+  return withActiveTab(state, { ...current, pane });
+}
+
+/**
+ * Replace the active tab, leaving every other one alone.
+ *
+ * Four transitions end this way and three of them had written it out. The copy
+ * inside `navigateActivePane` was byte-identical to the whole of
+ * `updateActivePane`, which is the shape a duplication check exists to find.
+ */
+function withActiveTab(state: TabsState, tab: Tab): TabsState {
   const tabs = [...state.tabs];
-  tabs[state.activeIndex] = { ...current, pane };
+  tabs[state.activeIndex] = tab;
+  return { ...state, tabs };
+}
+
+/**
+ * Navigate the active tab, recording where it came from.
+ *
+ * The one route a deliberate move takes, so "a navigation is remembered" is a
+ * property of this function rather than a rule every caller has to remember.
+ * Two things deliberately do NOT come through here and so leave no trace:
+ *
+ * - a step back or forward, which would otherwise put the place it just left
+ *   back on the stack and oscillate;
+ * - the pane's own retreat after a listing fails, which is a repair rather than
+ *   a place the user went.
+ */
+export function navigateActivePane(
+  state: TabsState,
+  change: (pane: PaneState) => PaneState,
+): TabsState {
+  // A navigation IS an ordinary pane update that also remembers. Built on top
+  // of one rather than beside it: the two had the same four opening lines, and
+  // a second copy of "apply a change to the active tab, or do nothing" is a
+  // place for the two to disagree about what "nothing" means.
+  const moved = updateActivePane(state, change);
+  if (moved === state) return state;
+
+  const before = state.tabs[state.activeIndex];
+  const after = moved.tabs[state.activeIndex];
+  if (before === undefined || after === undefined) return moved;
+
+  // A move that stays in the same directory is a cursor move, not a
+  // navigation. `enterDirectory` on a file returns exactly that.
+  if (after.pane.path === before.pane.path) return moved;
+
+  return withActiveTab(moved, {
+    ...after,
+    history: visit(before.history, before.pane.path),
+    historyBeforeMove: before.history,
+  });
+}
+
+/** Which way along the trail. */
+export type HistoryDirection = "back" | "forward";
+
+/**
+ * Walk the active tab's trail one step, or leave everything alone.
+ *
+ * The pane is emptied the same way `navigate` empties it, so the listing that
+ * arrives replaces nothing and the cursor memory puts the cursor back where it
+ * was left in that directory.
+ */
+export function stepActiveHistory(state: TabsState, direction: HistoryDirection): TabsState {
+  const current = state.tabs[state.activeIndex];
+  if (current === undefined) return state;
+
+  const step =
+    direction === "back"
+      ? stepBack(current.history, current.pane.path)
+      : stepForward(current.history, current.pane.path);
+  if (step === null) return state;
+
+  return withActiveTab(state, {
+    ...current,
+    pane: { ...current.pane, path: step.path, entries: [], cursorIndex: 0 },
+    history: step.history,
+    // A step is as optimistic as any other move, and the directory it returns
+    // to may have stopped being readable since it was last seen.
+    historyBeforeMove: current.history,
+  });
+}
+
+/**
+ * Send a tab back to a path that worked, after a listing failed.
+ *
+ * Distinct from `updatePaneById`, which this used to be, because putting the
+ * PANE back is only half of putting things back: the move was recorded on the
+ * way in, so the trail has to be restored too. It is restored wholesale from
+ * the snapshot the move itself left — see `historyBeforeMove` for why an undo
+ * operation could not do it.
+ *
+ * Only ever called where the attempted path differs from the last good one, so
+ * a watcher refresh that fails on the directory the pane is already in cannot
+ * reach it and cannot undo a move the user really made.
+ *
+ * By id and not on the active tab, because a background tab's listing can fail
+ * too and the answer must reach the tab that asked.
+ */
+export function revertPaneById(state: TabsState, id: string, path: string): TabsState {
+  const index = state.tabs.findIndex((tab) => tab.id === id);
+  const current = state.tabs[index];
+  // The tab closed while its read was in flight. Nothing to put back.
+  if (current === undefined) return state;
+
+  const tabs = [...state.tabs];
+  tabs[index] = {
+    ...current,
+    pane: { ...current.pane, path, entries: [] },
+    history: current.historyBeforeMove,
+  };
   return { ...state, tabs };
 }

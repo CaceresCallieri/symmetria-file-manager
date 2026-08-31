@@ -28,10 +28,13 @@ import {
   activePane,
   closeTab,
   createTabs,
+  navigateActivePane,
   nextTab,
   openTab,
   previousTab,
+  revertPaneById,
   showTabBar,
+  stepActiveHistory,
   type TabsState,
   updateActivePane,
   updatePaneById,
@@ -81,6 +84,9 @@ export interface Tabs {
 
   setSort(sort: SortMode, reverse: boolean): void;
   toggleHidden(): void;
+
+  historyBack(): void;
+  historyForward(): void;
 
   moveBy(delta: number): void;
   moveTo(index: number): void;
@@ -230,9 +236,7 @@ function useDirectoryLoader(
       }
 
       reverting.current.add(id);
-      setState((previous) =>
-        updatePaneById(previous, id, (p) => ({ ...p, path: previousPath, entries: [] })),
-      );
+      setState((previous) => revertPaneById(previous, id, previousPath));
     },
     [setError, setState],
   );
@@ -440,8 +444,14 @@ export function useTabs(initialPath: string): Tabs {
     loadTab(activeId, activePath);
   }, [activeId, activePath, options, loadTab, listedOptionsFor]);
 
+  /** A cursor move or a selection change: the pane changes, the trail does not. */
   const changeActive = useCallback((change: (p: PaneState) => PaneState) => {
     setState((previous) => updateActivePane(previous, change));
+  }, []);
+
+  /** A deliberate move to another directory, which the trail remembers. */
+  const goTo = useCallback((change: (p: PaneState) => PaneState) => {
+    setState((previous) => navigateActivePane(previous, change));
   }, []);
 
   const close = useCallback(
@@ -480,15 +490,18 @@ export function useTabs(initialPath: string): Tabs {
     error,
     loading,
 
+    historyBack: () => setState((previous) => stepActiveHistory(previous, "back")),
+    historyForward: () => setState((previous) => stepActiveHistory(previous, "forward")),
+
     setSort: (sort, reverse) => setOptions((previous) => ({ ...previous, sort, reverse })),
     toggleHidden: () =>
       setOptions((previous) => ({ ...previous, showHidden: !previous.showHidden })),
 
     moveBy: (delta) => changeActive((p) => moveCursor(p, delta)),
     moveTo: (index) => changeActive((p) => moveCursor(p, index - p.cursorIndex)),
-    enter: () => changeActive(enterDirectory),
-    leave: () => changeActive(leaveDirectory),
-    navigate: (path) => changeActive((p) => ({ ...p, path, entries: [], cursorIndex: 0 })),
+    enter: () => goTo(enterDirectory),
+    leave: () => goTo(leaveDirectory),
+    navigate: (path) => goTo((p) => ({ ...p, path, entries: [], cursorIndex: 0 })),
     toggleMark: () => changeActive(toggleSelection),
     clearMarks: () => changeActive(clearSelection),
 

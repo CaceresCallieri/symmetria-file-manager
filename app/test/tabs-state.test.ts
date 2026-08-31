@@ -5,10 +5,13 @@ import {
   activePane,
   closeTab,
   createTabs,
+  navigateActivePane,
   nextTab,
   openTab,
   previousTab,
+  revertPaneById,
   showTabBar,
+  stepActiveHistory,
   type TabsState,
   updateActivePane,
   updatePaneById,
@@ -152,5 +155,93 @@ describe("updating one tab", () => {
     const state = closeTab(four(), 1) as TabsState;
 
     expect(updatePaneById(state, "tab-1", (pane) => ({ ...pane, cursorIndex: 9 }))).toBe(state);
+  });
+});
+
+/** Move the active pane to a path, the way a deliberate navigation does. */
+function goTo(state: TabsState, path: string): TabsState {
+  return navigateActivePane(state, (pane) => ({ ...pane, path, entries: [], cursorIndex: 0 }));
+}
+
+/** Where the active tab is. */
+function at(state: TabsState): string {
+  return activePane(state)?.path ?? "";
+}
+
+/**
+ * A navigation that fails, and what it must leave behind.
+ *
+ * The pane's path moves BEFORE the listing answers — that is what makes
+ * entering a directory feel instant — so a navigation that turns out to be
+ * unreadable has already been recorded by the time anyone finds out. Putting
+ * the pane back is not enough: the trail has to go back to exactly what it was,
+ * or the failed attempt keeps costing keystrokes afterwards.
+ */
+describe("a navigation that fails", () => {
+  it("leaves no step behind for a later back press to waste itself on", () => {
+    let state = createTabs("/a");
+    state = goTo(state, "/b");
+
+    // Into a directory that turns out not to be readable.
+    state = goTo(state, "/b/locked");
+    state = revertPaneById(state, "tab-0", "/b");
+    expect(at(state)).toBe("/b");
+
+    // ONE step must reach `/a`. Two would mean the failure left a step.
+    state = stepActiveHistory(state, "back");
+
+    expect(at(state)).toBe("/a");
+  });
+
+  it("does not destroy a forward trail it never touched", () => {
+    // The user stepped back, so there is somewhere to go forward TO. A failed
+    // attempt in between must not take that away: they ended up exactly where
+    // they started, and `=` still means the same thing it did before.
+    let state = createTabs("/a");
+    state = goTo(state, "/b");
+    state = stepActiveHistory(state, "back");
+    expect(at(state)).toBe("/a");
+
+    state = goTo(state, "/a/locked");
+    state = revertPaneById(state, "tab-0", "/a");
+    expect(at(state)).toBe("/a");
+
+    state = stepActiveHistory(state, "forward");
+
+    expect(at(state)).toBe("/b");
+  });
+
+  it("puts the trail back when the unreadable directory was reached by a back step", () => {
+    // A history step does not record anything, so there is no visit to undo —
+    // and the trail still has to end up as it was, or `=` returns to the
+    // directory the pane is already standing in and the press does nothing.
+    let state = createTabs("/a");
+    state = goTo(state, "/b");
+
+    // Back to `/a`, which has since become unreadable.
+    state = stepActiveHistory(state, "back");
+    state = revertPaneById(state, "tab-0", "/b");
+    expect(at(state)).toBe("/b");
+
+    // The trail is what it was before that press: back to `/a` is available
+    // again, and forward is empty.
+    state = stepActiveHistory(state, "forward");
+    expect(at(state)).toBe("/b");
+
+    state = stepActiveHistory(state, "back");
+    expect(at(state)).toBe("/a");
+  });
+});
+
+describe("the trail belongs to one tab", () => {
+  it("gives a new tab a trail of its own", () => {
+    let state = createTabs("/a");
+    state = goTo(state, "/b");
+    state = openTab(state, "/b");
+
+    // The new tab came from nowhere, so it has nowhere to go back to.
+    const stepped = stepActiveHistory(state, "back");
+
+    expect(at(stepped)).toBe("/b");
   });
 });

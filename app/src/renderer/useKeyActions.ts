@@ -97,8 +97,8 @@ export function useKeyActions(
       },
       dismiss: () => setMessage(null),
 
-      historyBack: soon("History"),
-      historyForward: soon("History"),
+      historyBack: () => tabs.historyBack(),
+      historyForward: () => tabs.historyForward(),
 
       trash: () => ops.requestDelete(),
       rename: (withExtension) => ops.requestRename(withExtension),
