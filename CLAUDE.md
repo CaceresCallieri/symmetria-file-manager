@@ -152,16 +152,22 @@ describes the QML gate, these sections are what runs it.
 Run these change-scoped checks during `/seal`, `/code-review`, and ad-hoc review. Substitute `<base>` with the commit the review target diffs against: the parent of one reviewed commit, or `<oldest>^` for a commit range.
 
 ```bash
-pnpm exec biome check --changed --since=<base> --reporter=summary --no-errors-on-unmatched  # lint + format + a11y
+{ git diff --name-only --diff-filter=ACMR <base>; git ls-files --others --exclude-standard; } | sort -u | xargs -r pnpm exec biome check --reporter=summary --no-errors-on-unmatched  # lint + format + a11y
 git diff -z --name-only --diff-filter=ACMR <base> -- '*.js' '*.jsx' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.mts' '*.cts' | xargs -0 -r pnpm exec oxlint --config anti-slop.config.mjs --disable-nested-config --format agent --  # command-id: typescript.anti-slop.changed.v1; type-evidence policy; errors gate, pilot warnings advise
 pnpm exec tsc -p packages/fm-core --noEmit --pretty false  # types — whole package, never diff-scoped
+pnpm exec tsc -p app/tsconfig.main.json --noEmit --pretty false  # types — main process: Node, no DOM
+pnpm exec tsc -p app/tsconfig.renderer.json --noEmit --pretty false  # types — renderer: DOM, no Node
 pnpm exec fallow audit --changed-since <base> --format compact  # dead code, complexity, duplication; new findings gate
 git diff -z --name-only --diff-filter=ACMR <base> -- '*.qml' | xargs -0 -r tools/quality/check-qml.sh  # QML gate, scoped to changed files; exits 0 when none changed
 ```
 
+**Biome is given an explicit file list, and `--changed --since=<base>` is wrong here.** That flag reads COMMITTED state. `/code-review` and any ad-hoc review look at a working tree, where it reports `Checked 0 files` and exits 0 with eleven files modified — a silent pass, which is the worst shape a check can fail in. The list form above covers both cases, because `git diff --name-only <base>` against a working tree includes uncommitted edits.
+
+**The `git ls-files --others` half is not optional.** `git diff` alone cannot see an untracked file, so a phase's brand-new source and test files are invisible to the formatter and the linter until the moment they are committed. That happened: two whole new test files went unchecked for a phase before anyone noticed.
+
 Biome, `tsc` and the QML gate exit non-zero on findings. Anti-slop exits non-zero for its eight error rules; its seven pilot warnings print and exit zero. Fallow uses the gating `audit` command. The QML line exits 0 when the change touches no `.qml` file, which is the normal case for the Electron tree.
 
-**One `tsc` line per context, not one for the tree.** The three contexts must not share a `lib`: `packages/fm-core` is imported by both processes and gets no DOM; the main process gets Node and no DOM; the sandboxed renderer gets DOM and no Node. A shared `lib` would let a `window` reference type-check inside the main process and a `node:fs` import type-check inside the renderer. Only the `fm-core` line is listed above because `app/src/` has no files yet — `app/tsconfig.main.json` and `app/tsconfig.renderer.json` are written and correct, and their two lines join this block when the sources land.
+**One `tsc` line per context, not one for the tree.** The three contexts must not share a `lib`: `packages/fm-core` is imported by both processes and gets no DOM; the main process gets Node and no DOM; the sandboxed renderer gets DOM and no Node. A shared `lib` would let a `window` reference type-check inside the main process and a `node:fs` import type-check inside the renderer. All three lines are in the fence above. The rule earns its keep in practice, not only in principle: `packages/fm-core/src/windowUrl.ts` reaches for `URLSearchParams` and cannot have it, because that package compiles against no environment at all — which is what forced a hand-rolled parse, and the hand-rolled one turned out to be more correct anyway (`URLSearchParams` decodes `+` as a space, so a directory named `c++` would come back wrong).
 
 **`--with-callers` is yours to add, and the fence will not do it for you.** When a change alters a QML component's public API, the Quality Gate above requires `tools/quality/check-qml.sh --with-callers <component.qml>`. The scoped line in this fence never runs that form, so a reviewer who runs the fence and stops has skipped the one check that catches an API break at its call site.
 
@@ -169,7 +175,7 @@ Biome, `tsc` and the QML gate exit non-zero on findings. Anti-slop exits non-zer
 
 This project prose is the runtime classification authority. A blocking finding prevents completion until it is fixed or suppressed narrowly with a reason. A listed advisory finding remains review evidence but does not prevent completion. A command that cannot execute is a tooling failure: report it and continue the review. Suppressions live in `biome.jsonc`, `anti-slop.config.mjs`, `.fallowrc.jsonc`, `knip.json` and `.qmllint.ini`, each beside a reason.
 
-**Tests never enter this section, tracked or not** — the catalog excludes them by contract. Vitest and `ctest` are repository-gate concerns only.
+**Tests never enter this section, tracked or not** — the catalog excludes them by contract. Vitest and `ctest` are repository-gate concerns only. Run them as their own invocation beside this fence; the command and the trap it hides are in *Full-Project Checks* below.
 
 ## Full-Project Checks
 
@@ -179,6 +185,9 @@ Run every command during `/tech-debt`, a full codebase audit, and CI. Run all li
 pnpm exec biome check . --reporter=summary  # lint + format + a11y — complete project
 pnpm exec oxlint --config anti-slop.config.mjs --disable-nested-config --format stylish -- .  # command-id: typescript.anti-slop.full.v1; type-evidence policy; errors gate, pilot warnings feed tech debt
 pnpm exec tsc -p packages/fm-core --noEmit --pretty false  # types — complete package
+pnpm exec tsc -p app/tsconfig.main.json --noEmit --pretty false  # types — main process: Node, no DOM
+pnpm exec tsc -p app/tsconfig.renderer.json --noEmit --pretty false  # types — renderer: DOM, no Node
+pnpm -r test  # the whole suite, per package. NEVER `vitest` from the root — see below
 pnpm exec knip --reporter json  # files, exports, dependencies, and the workspace package graph
 pnpm exec fallow dead-code --fail-on-issues  # whole-project dead code; any issue gates
 pnpm exec fallow health --score --hotspots --fail-on-issues  # complexity, cycles, and health hotspots
@@ -189,11 +198,17 @@ pnpm exec fallow dupes --fail-on-issues  # whole-project duplication
 
 This gate starts clean. Every blocking finding must be fixed or suppressed narrowly with a reason before setup is complete. Listed advisory findings remain visible for `/tech-debt` and do not prevent adoption. A command that cannot execute is a tooling failure and does not hide results from the remaining commands.
 
-**Three commands are deliberately absent, and none of them is an oversight.**
+**Run the suite as `pnpm -r test`, and NEVER as `vitest` from the repository root.** There is no vitest config at the root. The app's lives at `app/vitest.config.ts`, and it carries two things that are silently lost when the root form is used:
+
+- **`globalSetup`, which BUILDS the bundles the smoke test launches.** Without it the smoke test launches whatever `app/dist-electron/` happens to hold, so it asserts against a stale build and passes for code that is no longer there. It did exactly that for three phases before anyone noticed, and what caught it was a deliberate change to the bridge surface that should have failed and did not.
+- **`fileParallelism: false`.** The smoke test spawns a real Electron under a virtual display and must never race a second copy of itself, and the renderer suites starve each other's `waitFor` timers when they run in parallel — which produced flakes in two different files that were mistaken for product bugs.
+
+`pnpm -r test` runs each package under its own config, which is the only form that honours both.
+
+**Two commands are deliberately absent, and neither is an oversight.**
 
 - **The QML full-tree sweep.** `tools/quality/check-qml.sh` with no arguments exits 1 on the pre-existing baseline recorded in `.claude/project-standards.md`, so it can never satisfy a gate that starts clean. Encoding a permanent exemption for it here would be exactly the hidden baseline this contract forbids. Changed-file cleanliness is enforced by the scoped line in the change gate; the full-tree sweep is `/tech-debt` input, described in the Quality Gate section above. Do not add it to this fence.
 - **`ctest`.** It cannot run until `plugin/build` exists — see Build & Run → Running Tests. Add its line once a build directory is produced; a line that fails for every reviewer is worse than an absent one.
-- **`pnpm exec vitest run`.** It belongs here the moment a tracked suite exists. The catalog forbids adding it earlier, because Vitest exits non-zero with no tests and that would make this gate permanently red.
 
 ## Architecture
 
