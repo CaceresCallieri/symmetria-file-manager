@@ -1,6 +1,7 @@
 import type { CascadeMode } from "@symmetria/fm-core/keys/cascade";
 import type { KeyContext } from "@symmetria/fm-core/keys/types";
 import { entryAt, isDirectoryEntry, joinPath, parentOf } from "@symmetria/fm-core/pane";
+import { homeFromSearch } from "@symmetria/fm-core/windowUrl";
 import { useMemo } from "react";
 
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
@@ -27,18 +28,34 @@ import { useTabs } from "./useTabs.ts";
  * a window elsewhere without a second channel. Falling back to `/` rather than
  * throwing keeps a window with a malformed hash usable.
  */
-function initialPath(): string {
-  const requested = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+function initialPath(override?: string): string {
+  const requested = override ?? decodeURIComponent(window.location.hash.replace(/^#/, ""));
   return requested.startsWith("/") ? requested : "/";
+}
+
+/**
+ * Where the tilde goes.
+ *
+ * Read through `homeFromSearch`, which the MAIN process's URL builder is the
+ * other half of — see that module for why the query and the fragment are two
+ * different facts. A new IPC channel was the alternative and is more privileged
+ * surface for one constant; reading it from the `h` bookmark was the other, and
+ * the user can unbind `h`.
+ */
+function homePath(override?: string): string {
+  return override ?? homeFromSearch(window.location.search);
 }
 
 export interface AppProps {
   /** Overridden by tests, which must not depend on the real location. */
   readonly startPath?: string;
+  /** Overridden by tests, for the same reason. */
+  readonly homePath?: string;
 }
 
-export function App({ startPath }: AppProps = {}) {
-  const tabs = useTabs(startPath ?? initialPath());
+export function App(props: AppProps = {}) {
+  const tabs = useTabs(initialPath(props.startPath));
+  const home = homePath(props.homePath);
   const ops = useFileOps(tabs);
   const search = useSearch({
     entries: tabs.pane.entries,
@@ -47,7 +64,7 @@ export function App({ startPath }: AppProps = {}) {
     moveTo: tabs.moveTo,
   });
   const bookmarks = useBookmarks();
-  const { actions, modes, state } = useKeyActions(tabs, ops, search, bookmarks);
+  const { actions, modes, state } = useKeyActions(tabs, ops, search, bookmarks, home);
   const preview = usePreview(state.cursorEntry?.path ?? null);
 
   const context = useMemo<KeyContext>(

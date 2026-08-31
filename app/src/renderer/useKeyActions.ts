@@ -1,6 +1,6 @@
 import { isReservedLetter, labelFor } from "@symmetria/fm-core/bookmarks";
 import type { BookmarkSubMode, KeyActions, KeyState } from "@symmetria/fm-core/keys/types";
-import { cursorEntry, isDirectoryEntry } from "@symmetria/fm-core/pane";
+import { boundaryIndex, cursorEntry, isDirectoryEntry } from "@symmetria/fm-core/pane";
 import { useMemo, useState } from "react";
 import type { Bookmarks } from "./useBookmarks.ts";
 import type { FileOps } from "./useFileOps.ts";
@@ -65,6 +65,8 @@ export function useKeyActions(
   ops: FileOps,
   search: Search,
   bookmarks: Bookmarks,
+  /** Where the tilde goes. Supplied by the caller, which reads the window URL. */
+  home: string,
 ): KeyWiring {
   const [chordPrefix, setChordPrefix] = useState("");
   const [bookmarkSubMode, setBookmarkSubMode] = useState<BookmarkSubMode | null>(null);
@@ -86,8 +88,13 @@ export function useKeyActions(
       activate: () => (isDirectoryUnderCursor(tabs) ? tabs.enter() : ops.open()),
       goUp: () => tabs.leave(),
       enterDirectory: () => (isDirectoryUnderCursor(tabs) ? tabs.enter() : ops.open()),
-      goHome: soon("Go home"),
-      jumpDirectoryFileBoundary: soon("Jump to the directory/file boundary"),
+      goHome: () => tabs.navigate(home),
+      jumpDirectoryFileBoundary: () => {
+        // -1 means the listing holds one kind, or none. Leaving the cursor put
+        // is the honest answer: there is no other block to be at the start of.
+        const target = boundaryIndex(tabs.pane);
+        if (target >= 0) tabs.moveTo(target);
+      },
       dismiss: () => setMessage(null),
 
       historyBack: soon("History"),
@@ -172,7 +179,7 @@ export function useKeyActions(
       treeToggleGitignore: soon("The tree view"),
       treeRefresh: soon("The tree view"),
     };
-  }, [tabs, ops, search, bookmarks]);
+  }, [tabs, ops, search, bookmarks, home]);
 
   const state = useMemo<KeyState>(() => {
     const entry = tabs.pane.entries[tabs.pane.cursorIndex];

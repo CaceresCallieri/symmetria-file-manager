@@ -17,6 +17,21 @@ export interface PaneState {
    * search results, say — would silently pick the wrong entry.
    */
   readonly path: string;
+  /**
+   * The listing, in the order the MAIN process produced it.
+   *
+   * **INVARIANT: directories come first, as one contiguous block.**
+   * `compareEntries` establishes it in every mode and in both directions, and
+   * `sortEntries` preserves it when it reverses by reversing each group on its
+   * own. Every listing reaches a pane through that one function today.
+   *
+   * `boundaryIndex` is the one reader that DEPENDS on it rather than merely
+   * benefiting from it: it takes the first entry of the opposite kind as the
+   * boundary, which is only the boundary while the kinds are contiguous. A
+   * listing assembled some other way — a flattened search result, a hand-built
+   * fixture, an incremental watcher diff that appends — would not fail loudly
+   * there. It would move the cursor somewhere plausible and wrong.
+   */
   readonly entries: readonly FsEntry[];
   readonly cursorIndex: number;
   /**
@@ -97,6 +112,32 @@ export function isDirectoryEntry(entry: FsEntry | null): boolean {
  * a file, not on an index, so moving the cursor under them is how the wrong
  * file gets deleted. When the name is gone, the index is clamped into range.
  */
+/**
+ * Where the directories stop and the files begin, from where the cursor is.
+ *
+ * From a directory it is the first non-directory; from anything else it is the
+ * first directory. Returns -1 where there is nowhere to go — an empty listing,
+ * or one holding a single kind.
+ *
+ * The two kinds are always contiguous blocks, because `compareEntries` puts
+ * directories first in every order and in both directions. That is what makes
+ * "the first entry of the opposite kind" the boundary rather than merely some
+ * entry on the other side of it.
+ *
+ * It asks `isDirectoryEntry` rather than testing for `kind === "file"`. A
+ * socket, a device node or a broken symlink comes back as `other`, and it
+ * belongs on the side Tab reaches from a directory; testing for `file` would
+ * skip past it and land somewhere the user did not ask for. -1 follows
+ * `nextMatch` in `search.ts`, which reports "nowhere" the same way.
+ */
+export function boundaryIndex(pane: PaneState): number {
+  const from = cursorEntry(pane);
+  if (from === null) return -1;
+
+  const wantDirectory = !isDirectoryEntry(from);
+  return pane.entries.findIndex((entry) => isDirectoryEntry(entry) === wantDirectory);
+}
+
 export function setEntries(pane: PaneState, entries: readonly FsEntry[]): PaneState {
   // Memory is the only source of truth once populated. An earlier draft also
   // fell back to the current cursor entry, which could only ever fire on a

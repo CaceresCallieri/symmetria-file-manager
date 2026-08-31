@@ -1,10 +1,10 @@
 import { fileURLToPath, pathToFileURL } from "node:url";
-
+import { homeQuery } from "@symmetria/fm-core/windowUrl";
 import { app, BrowserWindow, ipcMain } from "electron";
-
 import { BRIDGE_KEY } from "../preload/bridge.ts";
 import { electronIpcSurface } from "./ipc/electronSurface.ts";
 import { createRegistry } from "./ipc/register.ts";
+
 import { APP_ENTRY_URL, handleAppScheme, registerAppScheme } from "./protocol.ts";
 import { buildWindowOptions } from "./window.ts";
 
@@ -43,10 +43,13 @@ function createWindow(): BrowserWindow {
     window.show();
   });
 
-  // The starting directory travels in the URL fragment. A fragment never
-  // reaches the scheme handler — it is resolved in the page — so this adds a
-  // parameter without widening the surface `protocol.ts` has to validate.
-  void window.loadURL(`${APP_ENTRY_URL}#${encodeURIComponent(app.getPath("home"))}`);
+  // Two facts, carried separately on purpose: the fragment is where this window
+  // OPENS, the query is where HOME is. Neither reaches the scheme handler —
+  // `protocol.ts` reads only the hostname and the pathname — so both add a
+  // parameter without widening the surface it has to validate. See
+  // `windowUrl.ts` for why they must not be conflated.
+  const home = app.getPath("home");
+  void window.loadURL(`${APP_ENTRY_URL}${homeQuery(home)}#${encodeURIComponent(home)}`);
   return window;
 }
 

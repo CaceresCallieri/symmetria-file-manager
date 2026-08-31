@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { FsEntry } from "../src/entry.ts";
 import {
+  boundaryIndex,
   breadcrumbs,
   clearSelection,
   createPane,
@@ -262,5 +263,49 @@ describe("deciding whether something can be entered", () => {
   it("says no for a broken link, which the scan reports as other", () => {
     const broken: FsEntry = { ...entry("to-nowhere", "other"), isSymlink: true };
     expect(isDirectoryEntry(broken)).toBe(false);
+  });
+});
+
+describe("the directory / file boundary", () => {
+  // Directories sort first in every order, so the two kinds are always
+  // contiguous blocks and "the first entry of the opposite kind" is exactly
+  // where one block ends and the other begins.
+  it("goes from a directory to the first file", () => {
+    const pane = setEntries(createPane("/home/jc"), listing);
+    expect(cursorEntry(pane)?.name).toBe("src");
+
+    expect(boundaryIndex(pane)).toBe(1);
+  });
+
+  it("goes from a file back to the first directory", () => {
+    let pane = setEntries(createPane("/home/jc"), listing);
+    pane = moveCursor(pane, 3);
+    expect(cursorEntry(pane)?.name).toBe("c.txt");
+
+    expect(boundaryIndex(pane)).toBe(0);
+  });
+
+  it("reports nowhere to go in a listing of one kind", () => {
+    const filesOnly = setEntries(createPane("/tmp"), [entry("a.txt"), entry("b.txt")]);
+    const dirsOnly = setEntries(createPane("/tmp"), [
+      entry("one", "directory"),
+      entry("two", "directory"),
+    ]);
+
+    expect(boundaryIndex(filesOnly)).toBe(-1);
+    expect(boundaryIndex(dirsOnly)).toBe(-1);
+  });
+
+  it("reports nowhere to go in an empty listing", () => {
+    expect(boundaryIndex(setEntries(createPane("/tmp"), []))).toBe(-1);
+  });
+
+  it("treats every non-directory kind as the file side", () => {
+    // A socket, a device node or a broken symlink comes back as `other`. It is
+    // not a directory, so it belongs to the block Tab jumps to from one — and
+    // testing `kind === "file"` rather than "not a directory" would strand the
+    // cursor when the first non-directory happened to be one of them.
+    const pane = setEntries(createPane("/tmp"), [entry("d", "directory"), entry("sock", "other")]);
+    expect(boundaryIndex(pane)).toBe(1);
   });
 });
