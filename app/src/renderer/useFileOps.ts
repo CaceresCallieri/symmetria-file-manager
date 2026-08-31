@@ -1,6 +1,8 @@
-import type { TransferMode } from "@symmetria/fm-core/contract";
+import { clipboardText } from "@symmetria/fm-core/clipboard";
+import type { Result, TransferMode } from "@symmetria/fm-core/contract";
 import { isFailure } from "@symmetria/fm-core/contract";
-import { entryAt, joinPath } from "@symmetria/fm-core/pane";
+import type { CopyTarget } from "@symmetria/fm-core/keys/types";
+import { cursorEntry, entryAt, joinPath } from "@symmetria/fm-core/pane";
 import { useCallback, useMemo, useState } from "react";
 
 import {
@@ -9,6 +11,7 @@ import {
   onTransferProgress,
   openPath,
   renamePath,
+  copyToClipboard as sendToClipboard,
   transferEntries,
   trashPaths,
 } from "./bridge.ts";
@@ -88,6 +91,14 @@ export interface FileOps {
   open(): void;
   /** Hand the entry at this index to the desktop, whatever is marked. */
   openAt(index: number): void;
+  /**
+   * Put something about the marked entries — or the cursor — on the clipboard.
+   *
+   * Here rather than beside the keyboard actions because the rule for WHICH
+   * entries an operation acts on lives here, and it is the same rule the copy,
+   * the move and the delete already follow.
+   */
+  copyToClipboard(target: CopyTarget): void;
 
   confirmDelete(): void;
   confirmRename(name: string): void;
@@ -121,18 +132,31 @@ export function useFileOps(tabs: Tabs): FileOps {
    */
   const targets = useMemo(() => {
     const marked = [...pane.selection];
-    if (marked.length > 0) return marked.map((name) => `${pane.path}/${name}`);
+    if (marked.length > 0) return marked.map((name) => joinPath(pane.path, name));
 
     const cursor = pane.entries[pane.cursorIndex];
-    return cursor === undefined ? [] : [`${pane.path}/${cursor.name}`];
+    return cursor === undefined ? [] : [joinPath(pane.path, cursor.name)];
   }, [pane]);
 
-  /** Hand one path to the desktop, reporting a refusal in the status strip. */
-  const openOne = useCallback((path: string) => {
-    void openPath(path).then((reply) => {
-      if (isFailure(reply)) setMessage(reply.error.message);
-    });
+  /**
+   * Say what went wrong, and say nothing when nothing did.
+   *
+   * Every operation on this bridge answers with a value rather than throwing,
+   * so "await it and surface a failure" is the shape all of them share. It was
+   * written out once per operation before there were several.
+   */
+  const report = useCallback(async (work: Promise<Result<unknown>>) => {
+    const reply = await work;
+    if (isFailure(reply)) setMessage(reply.error.message);
   }, []);
+
+  /** Hand one path to the desktop, reporting a refusal in the status strip. */
+  const openOne = useCallback(
+    (path: string) => {
+      void report(openPath(path));
+    },
+    [report],
+  );
 
   const take = useCallback(
     (mode: TransferMode) => {
@@ -209,7 +233,7 @@ export function useFileOps(tabs: Tabs): FileOps {
 
       setModal({
         kind: "rename",
-        path: `${pane.path}/${cursor.name}`,
+        path: joinPath(pane.path, cursor.name),
         name: cursor.name,
         selectTo: withExtension ? cursor.name.length : stemLength(cursor.name),
       });
@@ -240,7 +264,7 @@ export function useFileOps(tabs: Tabs): FileOps {
       const trimmed = name.replace(/\/+$/, "");
       if (trimmed === "") return;
 
-      void createPath({ path: `${pane.path}/${trimmed}`, kind }).then((reply) => {
+      void createPath({ path: joinPath(pane.path, trimmed), kind }).then((reply) => {
         if (isFailure(reply)) {
           setMessage(reply.error.message);
           return;
@@ -290,6 +314,21 @@ export function useFileOps(tabs: Tabs): FileOps {
     openAt: (index) => {
       const entry = entryAt(pane, index);
       if (entry !== null) openOne(joinPath(pane.path, entry.name));
+    },
+    copyToClipboard: (target) => {
+      if (target !== "imageBytes") {
+        void report(
+          sendToClipboard({ kind: "text", text: clipboardText(target, targets, pane.path) }),
+        );
+        return;
+      }
+
+      // The image is whatever the CURSOR is on, never the marked set: the
+      // clipboard holds one image, and picking one of several marked files
+      // would be a guess.
+      const entry = cursorEntry(pane);
+      if (entry === null) return;
+      void report(sendToClipboard({ kind: "image", path: joinPath(pane.path, entry.name) }));
     },
 
     confirmDelete,

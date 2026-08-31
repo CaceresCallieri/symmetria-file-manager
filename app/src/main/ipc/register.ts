@@ -7,6 +7,7 @@ import {
   decodeBookmarksWriteRequest,
   decodeCancelRequest,
   decodeCancelTransferRequest,
+  decodeClipboardRequest,
   decodeCreateRequest,
   decodeDescribeRequest,
   decodeListRequest,
@@ -35,6 +36,7 @@ import { defaultBookmarksPath, readOrSeedBookmarks, saveBookmarks } from "../boo
 import { mimeTables } from "../fs/mimeTables.ts";
 import { kindOf, scanDirectory } from "../fs/scan.ts";
 import { type ChangedEntry, type StopWatching, watchDirectory } from "../fs/watch.ts";
+import { copyImage, copyText } from "../ops/clipboard.ts";
 import { operations } from "../ops/index.ts";
 import { authorisePreview } from "../previewTokens.ts";
 import { previewUrlFor } from "../protocol.ts";
@@ -398,6 +400,22 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
     guard(decodeTrashRequest, "write_failed", async (request) => {
       await operations.trash(request.paths);
       return success(null);
+    }),
+  );
+
+  ipc.handle(
+    CHANNELS.clipboard,
+    guard(decodeClipboardRequest, "write_failed", async (request) => {
+      if (request.kind === "text") {
+        copyText(request.text);
+        return success(null);
+      }
+
+      // Reported as a value rather than thrown. A file that is not an image —
+      // or one that vanished between the keystroke and the read — is an
+      // ordinary thing for a user to point at, not an exceptional one.
+      const problem = copyImage(request.path);
+      return problem === null ? success(null) : failure("write_failed", problem);
     }),
   );
 

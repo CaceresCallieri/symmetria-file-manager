@@ -501,6 +501,40 @@ export const decodeTrashRequest: Decoder<TrashRequest> = (raw) => {
 
 export const decodeOpenRequest: Decoder<OpenRequest> = decodePathOnly;
 
+/**
+ * Put something on the system clipboard.
+ *
+ * ONE channel with a discriminant rather than two channels, because every name
+ * on the privileged surface is a thing the sandboxed renderer can reach and the
+ * smoke test asserts that list exactly. Two destinations that differ only in
+ * what they carry do not earn two doors.
+ */
+export type ClipboardRequest =
+  | { readonly kind: "text"; readonly text: string }
+  /** A path for the MAIN process to read. The renderer cannot open a file. */
+  | { readonly kind: "image"; readonly path: string };
+
+export const decodeClipboardRequest: Decoder<ClipboardRequest> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
+
+  const kind = raw["kind"];
+  if (kind === "text") {
+    const text = stringField(raw, "text");
+    // An empty string is a legitimate copy — it is what an empty selection
+    // yields — so the check is the TYPE, never the length.
+    return text === null
+      ? failure("invalid_request", "text must be a string")
+      : success({ kind, text });
+  }
+
+  if (kind === "image") {
+    const path = decodePath(raw["path"]);
+    return isFailure(path) ? path : success({ kind, path: path.value });
+  }
+
+  return failure("invalid_request", "kind must be text or image");
+};
+
 export const decodeCancelTransferRequest: Decoder<CancelTransferRequest> = (raw) => {
   if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
 

@@ -36,6 +36,7 @@ const bridge: Bridge = {
   rename: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.rename, request),
   trash: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.trash, request),
   open: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.open, request),
+  clipboard: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.clipboard, request),
   bookmarksRead: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.bookmarksRead, request),
   bookmarksWrite: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.bookmarksWrite, request),
   onListBatch: (listener) => listen(PUSH_CHANNELS.listBatch, listener),

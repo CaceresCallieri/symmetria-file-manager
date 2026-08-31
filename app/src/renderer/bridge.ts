@@ -1,5 +1,6 @@
 import type { Bookmark } from "@symmetria/fm-core/bookmarks";
 import {
+  type ClipboardRequest,
   type CreateRequest,
   type DescribeReply,
   decodeBookmarksReply,
@@ -148,6 +149,22 @@ export async function previewUrl(path: string): Promise<Result<string>> {
 
   const decoded = decodePreviewUrlReply(reply.value);
   return isFailure(decoded) ? decoded : { ok: true, value: decoded.value.url };
+}
+
+/**
+ * Put text or an image on the system clipboard.
+ *
+ * The image travels as a PATH for the main process to read, not as bytes. The
+ * renderer is sandboxed and has no way to open a file, which is the whole
+ * reason this crosses the bridge rather than reaching the platform clipboard
+ * directly.
+ */
+export async function copyToClipboard(request: ClipboardRequest): Promise<Result<null>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("write_failed", MISSING_BRIDGE);
+
+  const reply = await bridge.clipboard(request);
+  return isFailure(reply) ? reply : success(null);
 }
 
 /** Read the head of a file as text. */

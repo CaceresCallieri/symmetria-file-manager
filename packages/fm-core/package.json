@@ -18,6 +18,7 @@
     "./bookmarks": "./src/bookmarks.ts",
     "./glob": "./src/glob.ts",
     "./contract": "./src/contract.ts",
+    "./clipboard": "./src/clipboard.ts",
     "./history": "./src/history.ts",
     "./pane": "./src/pane.ts",
     "./windowUrl": "./src/windowUrl.ts",

@@ -66,6 +66,10 @@ const TREE = new Map([
   ],
   ["/home/jc/projects", [entry("alpha", "directory"), entry("beta.md")]],
   ["/home/jc/empty", []],
+  // Reached only by opening a window on it directly. Deliberately NOT listed in
+  // the home directory above: adding an entry there shifts every index after
+  // it, and the whole suite counts `j` presses from the top.
+  ["/home/jc/pictures", [entry("shot.png")]],
   ["/home/jc/many", MANY],
 ]);
 
@@ -92,6 +96,10 @@ const FILES = new Map<string, { readonly mime: string | null; readonly text: str
   ["/home/jc/notes.txt", { mime: "text/plain", text: "plain notes\nsecond line\n" }],
   ["/home/jc/todo.txt", { mime: "text/plain", text: "todo\n" }],
   ["/home/jc/projects/beta.md", { mime: "text/markdown", text: "# beta\n\ntext\n" }],
+  // An image, for the copy chord's image row. Its bytes are irrelevant here:
+  // what routes an entry to the image preview — and therefore what makes the
+  // `i` row appear — is the MIME type the main process reports.
+  ["/home/jc/pictures/shot.png", { mime: "image/png", text: "" }],
 ]);
 
 /** What a capped read of a fixture file returned. */
@@ -139,6 +147,7 @@ export function inertBridge(): Bridge {
     rename: ok,
     trash: ok,
     open: ok,
+    clipboard: ok,
     cancelTransfer: ok,
     bookmarksRead: ok,
     bookmarksWrite: ok,
@@ -320,6 +329,11 @@ export function installBridge(): BridgeLog {
         ok: true as const,
         value: { text, bytesRead: text.length, truncated },
       });
+    },
+    clipboard: (request) => {
+      const ask = request as { kind: string; text?: string; path?: string };
+      ops.push(`clipboard ${ask.kind} ${ask.kind === "text" ? ask.text : ask.path}`);
+      return Promise.resolve({ ok: true as const, value: null });
     },
     cancel: () => Promise.resolve({ ok: true as const, value: null }),
     describe: (request) => {

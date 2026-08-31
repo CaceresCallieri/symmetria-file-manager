@@ -1,6 +1,6 @@
 import { isReservedLetter, labelFor } from "@symmetria/fm-core/bookmarks";
 import type { BookmarkSubMode, KeyActions, KeyState } from "@symmetria/fm-core/keys/types";
-import { boundaryIndex, cursorEntry, isDirectoryEntry } from "@symmetria/fm-core/pane";
+import { boundaryIndex, cursorEntry, isDirectoryEntry, joinPath } from "@symmetria/fm-core/pane";
 import { useMemo, useState } from "react";
 import type { Bookmarks } from "./useBookmarks.ts";
 import type { FileOps } from "./useFileOps.ts";
@@ -67,6 +67,16 @@ export function useKeyActions(
   bookmarks: Bookmarks,
   /** Where the tilde goes. Supplied by the caller, which reads the window URL. */
   home: string,
+  /**
+   * The MIME type of the image under the cursor, or null when it is not one.
+   *
+   * Supplied by the caller because the answer comes from the preview, which
+   * asks the main process about the cursor entry and is debounced. This hook
+   * has no way to know it, and the field it fills was hardcoded to "not an
+   * image" from the phase that introduced it — so the copy chord's image row
+   * never appeared and `i` always answered "Not an image".
+   */
+  cursorImageMime: string | null,
 ): KeyWiring {
   const [chordPrefix, setChordPrefix] = useState("");
   const [bookmarkSubMode, setBookmarkSubMode] = useState<BookmarkSubMode | null>(null);
@@ -108,7 +118,7 @@ export function useKeyActions(
       yank: () => ops.yank(),
       cut: () => ops.cut(),
       paste: () => ops.paste(),
-      copyToClipboard: soon("Copy to clipboard"),
+      copyToClipboard: (target) => ops.copyToClipboard(target),
 
       toggleSelection: () => tabs.toggleMark(),
       clearSelection: () => tabs.clearMarks(),
@@ -192,16 +202,25 @@ export function useKeyActions(
           ? null
           : {
               name: entry.name,
-              path: `${tabs.pane.path}/${entry.name}`,
+              path: joinPath(tabs.pane.path, entry.name),
               isDirectory: entry.kind === "directory",
-              // Both need a MIME type the renderer does not have yet; previews
-              // are the phase that brings one.
-              isImage: false,
-              mimeType: "",
+              // Both come from the preview's route, which the caller resolves
+              // and hands in. They therefore AGREE by construction FROM THIS
+              // HOST: the router only reports an image for a MIME its tables
+              // call one, so the chord's second guard — "Can't copy this image
+              // format" — cannot fire here.
+              //
+              // That guard is NOT dead code. The chord lives in the shared
+              // package, its own suite drives it against a hand-built context
+              // where the two disagree, and a host that fed a real content
+              // sniff in here would reach it — an RPG-Maker `.rpgmvp` sniffs as
+              // an image and reports `application/octet-stream`.
+              isImage: cursorImageMime !== null,
+              mimeType: cursorImageMime ?? "",
             },
       picker: { active: false, saveMode: false, fileOps: false, multiple: false, directory: false },
     };
-  }, [tabs.pane, search.active, search.matchCount]);
+  }, [tabs.pane, search.active, search.matchCount, cursorImageMime]);
 
   const modes = useMemo<KeyModes>(
     () => ({

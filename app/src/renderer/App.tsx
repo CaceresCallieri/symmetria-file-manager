@@ -1,6 +1,13 @@
 import type { CascadeMode } from "@symmetria/fm-core/keys/cascade";
 import type { KeyContext } from "@symmetria/fm-core/keys/types";
-import { entryAt, isDirectoryEntry, joinPath, parentOf } from "@symmetria/fm-core/pane";
+import {
+  cursorEntry,
+  entryAt,
+  isDirectoryEntry,
+  joinPath,
+  type PaneState,
+  parentOf,
+} from "@symmetria/fm-core/pane";
 import { homeFromSearch } from "@symmetria/fm-core/windowUrl";
 import { useMemo } from "react";
 
@@ -17,7 +24,7 @@ import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { useBookmarks } from "./useBookmarks.ts";
 import { useFileOps } from "./useFileOps.ts";
 import { useKeyActions } from "./useKeyActions.ts";
-import { usePreview } from "./usePreview.ts";
+import { type Preview, usePreview } from "./usePreview.ts";
 import { useSearch } from "./useSearch.ts";
 import { useTabs } from "./useTabs.ts";
 
@@ -46,6 +53,26 @@ function homePath(override?: string): string {
   return override ?? homeFromSearch(window.location.search);
 }
 
+/** The absolute path of the entry under the cursor, or none. */
+function cursorPathOf(pane: PaneState): string | null {
+  const entry = cursorEntry(pane);
+  return entry === null ? null : joinPath(pane.path, entry.name);
+}
+
+/**
+ * The MIME type of the image under the cursor, or null.
+ *
+ * Only when the preview describes THIS entry. It is debounced by 150 ms so a
+ * fast j/k does not describe every row it passes over — which means that just
+ * after a cursor move the route still describes the previous entry, and copying
+ * the image the cursor has just left is exactly the kind of wrong that looks
+ * right.
+ */
+function cursorImageMimeOf(preview: Preview, cursorPath: string | null): string | null {
+  if (preview.path !== cursorPath) return null;
+  return preview.route.kind === "image" ? preview.route.mime : null;
+}
+
 export interface AppProps {
   /** Overridden by tests, which must not depend on the real location. */
   readonly startPath?: string;
@@ -64,8 +91,23 @@ export function App(props: AppProps = {}) {
     moveTo: tabs.moveTo,
   });
   const bookmarks = useBookmarks();
-  const { actions, modes, state } = useKeyActions(tabs, ops, search, bookmarks, home);
-  const preview = usePreview(state.cursorEntry?.path ?? null);
+
+  // The preview is resolved BEFORE the key actions, not after, because one of
+  // those actions needs its answer: the copy chord's image row asks whether the
+  // cursor is on an image, and only the preview knows. Its input is the cursor
+  // path, which comes straight from the pane — so there is no cycle, only an
+  // order.
+  const cursorPath = cursorPathOf(tabs.pane);
+  const preview = usePreview(cursorPath);
+
+  const { actions, modes, state } = useKeyActions(
+    tabs,
+    ops,
+    search,
+    bookmarks,
+    home,
+    cursorImageMimeOf(preview, cursorPath),
+  );
 
   const context = useMemo<KeyContext>(
     // Miller is the only view that exists. The tree rows are ported and

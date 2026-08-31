@@ -41,6 +41,8 @@ export interface Bridge {
   trash(request: unknown): Promise<Result<unknown>>;
   /** Hand an entry to whatever the desktop says opens it. */
   open(request: unknown): Promise<Result<unknown>>;
+  /** Put text or an image on the system clipboard. */
+  clipboard(request: unknown): Promise<Result<unknown>>;
   /** Read the bookmark store, seeding it on a first run. */
   bookmarksRead(request: unknown): Promise<Result<unknown>>;
   /** Replace the bookmark store. */

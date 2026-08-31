@@ -97,9 +97,16 @@ describe("the application boots", () => {
   it("exposes only the declared bridge methods", () => {
     // An exact string, so a method added to the privileged surface is a
     // deliberate edit here rather than something that slips in. `bookmarksRead`
-    // and `bookmarksWrite` joined it when the bookmark store landed.
+    // and `bookmarksWrite` joined it when the bookmark store landed;
+    // `clipboard` when the copy chord did.
+    //
+    // RUN THIS SUITE WITH `pnpm -r test`, never with `vitest` from the
+    // repository root. The root has no vitest config, so the app's own
+    // `globalSetup` — which BUILDS the bundles this test launches — does not
+    // run, and this assertion then reads a stale build and passes against code
+    // that is no longer there. It did exactly that for three phases.
     expect(report.bridgeKeys).toBe(
-      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,create,describe,list,onChanged,onListBatch,onTransferProgress,open,previewUrl,readText,rename,transfer,trash,unwatch,version,watch",
+      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,clipboard,create,describe,list,onChanged,onListBatch,onTransferProgress,open,previewUrl,readText,rename,transfer,trash,unwatch,version,watch",
     );
   });
 
