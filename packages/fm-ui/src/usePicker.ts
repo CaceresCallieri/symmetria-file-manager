@@ -73,11 +73,18 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs): Pick
   const [saveName, setSaveName] = useState(request?.options.suggestedName ?? "");
   const saveNameRef = useRef<HTMLInputElement | null>(null);
 
-  const selectedPaths = useMemo(
+  const selected = useMemo(
     // The selection is a set of NAMES — a file deleted underfoot must not leave
-    // a stale path behind — so the answer has to be joined here.
-    () => [...tabs.pane.selection].map((name) => joinPath(tabs.pane.path, name)),
-    [tabs.pane.selection, tabs.pane.path],
+    // a stale path behind — so the path is joined here. The KIND travels with
+    // it because a type-constrained dialog must not return a folder to a caller
+    // that asked for a file, and a bare path cannot say which it is.
+    () =>
+      [...tabs.pane.selection].flatMap((name) => {
+        const entry = tabs.pane.entries.find((each) => each.name === name);
+        if (entry === undefined) return [];
+        return [{ path: joinPath(tabs.pane.path, name), isDirectory: isDirectoryEntry(entry) }];
+      }),
+    [tabs.pane.selection, tabs.pane.path, tabs.pane.entries],
   );
 
   const context = useMemo<PickerSelectionContext | null>(() => {
@@ -89,7 +96,7 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs): Pick
       saveMode: request.options.saveMode,
       currentPath: tabs.pane.path,
       suggestedName: saveName,
-      selectedPaths,
+      selected,
       cursorEntry:
         entry === null
           ? null
@@ -98,7 +105,7 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs): Pick
               isDirectory: isDirectoryEntry(entry),
             },
     };
-  }, [request, tabs.pane, saveName, selectedPaths]);
+  }, [request, tabs.pane, saveName, selected]);
 
   const fifo = request?.fifo ?? null;
 
@@ -154,5 +161,13 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs): Pick
   // arrow each render would rebuild that table on every keystroke.
   const focusSaveName = useCallback(() => saveNameRef.current?.focus(), []);
 
-  return { state, chrome, focusSaveName, cancelIfActive: cancel, confirmIfActive: confirm };
+  // **The whole object is memoised, and without this the memos above are
+  // decoration.** `useKeyActions` depends on this value, so a fresh literal
+  // each render rebuilds the entire action table on every keystroke — which is
+  // exactly what the comment above claimed it prevented. Review found the
+  // contradiction.
+  return useMemo(
+    () => ({ state, chrome, focusSaveName, cancelIfActive: cancel, confirmIfActive: confirm }),
+    [state, chrome, focusSaveName, cancel, confirm],
+  );
 }

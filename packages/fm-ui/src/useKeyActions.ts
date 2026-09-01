@@ -219,7 +219,23 @@ export function useKeyActions(
       toggleHidden: () => tabs.toggleHidden(),
       toggleHtmlRender: soon("The HTML preview"),
       openContextMenu: soon("The context menu"),
-      openCopyingPath: () => ops.open(),
+      openCopyingPath: () => {
+        // **The same hole as plain Enter, one key over.** Review found it right
+        // after the Enter fix landed: this handed the cursor entry to the
+        // desktop's default application unconditionally, including from inside
+        // a dialog — and a dialog that spawns a terminal on the operator's
+        // session is the defect verification actually watched happen.
+        //
+        // In a dialog the binding does what its name says and no more: the path
+        // goes on the clipboard, and the dialog confirms. Outside one it is the
+        // ordinary open it has always been.
+        if (!picker.state.active) {
+          ops.open();
+          return;
+        }
+        ops.copyToClipboard("path");
+        picker.confirmIfActive();
+      },
 
       tabNew: () => tabs.open(),
       tabClose: () => tabs.close(),

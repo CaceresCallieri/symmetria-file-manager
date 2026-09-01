@@ -30,7 +30,7 @@ const BASE: PickerSelectionContext = {
   saveMode: false,
   currentPath: "/home/jc/Downloads",
   suggestedName: "",
-  selectedPaths: [],
+  selected: [],
   cursorEntry: null,
 };
 
@@ -42,7 +42,10 @@ describe("a multi-select picker", () => {
     const out = resolvePickerSelection({
       ...BASE,
       multiple: true,
-      selectedPaths: ["/home/jc/a.txt", "/home/jc/b.txt"],
+      selected: [
+        { path: "/home/jc/a.txt", isDirectory: false },
+        { path: "/home/jc/b.txt", isDirectory: false },
+      ],
       cursorEntry: FILE,
     });
 
@@ -66,7 +69,10 @@ describe("a multi-select picker", () => {
       multiple: true,
       saveMode: true,
       suggestedName: "report.pdf",
-      selectedPaths: ["/home/jc/a.txt", "/home/jc/b.txt"],
+      selected: [
+        { path: "/home/jc/a.txt", isDirectory: false },
+        { path: "/home/jc/b.txt", isDirectory: false },
+      ],
     });
 
     expect(out).toEqual({ kind: "paths", paths: ["/home/jc/Downloads/report.pdf"] });
@@ -166,8 +172,35 @@ describe("the Accept button's label", () => {
 
   it("counts the marks in a multi-select dialog", () => {
     expect(
-      pickerAcceptLabel({ ...BASE, multiple: true, selectedPaths: ["/a", "/b", "/c"] }, ""),
+      pickerAcceptLabel(
+        {
+          ...BASE,
+          multiple: true,
+          selected: [
+            { path: "/a", isDirectory: false },
+            { path: "/b", isDirectory: false },
+            { path: "/c", isDirectory: false },
+          ],
+        },
+        "",
+      ),
     ).toBe("Select (3)");
+  });
+
+  it("counts only the marks the dialog would accept", () => {
+    // A folder marked in a file dialog is not part of the answer, so it must
+    // not be part of the count either — a button promising three when it
+    // returns two is worse than one that says nothing.
+    expect(
+      pickerAcceptLabel(
+        {
+          ...BASE,
+          multiple: true,
+          selected: [FILE, DIRECTORY, { path: "/x", isDirectory: false }],
+        },
+        "",
+      ),
+    ).toBe("Select (2)");
   });
 
   it("says Select otherwise", () => {
@@ -175,6 +208,43 @@ describe("the Accept button's label", () => {
     // "Open"; `StatusBar.qml` says "Select", and matching the application the
     // operator uses every day beats matching my own paraphrase of it.
     expect(pickerAcceptLabel({ ...BASE, cursorEntry: FILE }, "")).toBe("Select");
+  });
+});
+
+describe("marks the dialog will not take", () => {
+  it("are left out of the answer", () => {
+    // Review found this: the marked branch was the ONE place the entry's kind
+    // was never checked, so a caller that asked for files could be handed a
+    // folder the user happened to mark.
+    const out = resolvePickerSelection({
+      ...BASE,
+      multiple: true,
+      selected: [FILE, DIRECTORY],
+    });
+
+    expect(out).toEqual({ kind: "paths", paths: [FILE.path] });
+  });
+
+  it("fall back to the cursor when they are all unusable", () => {
+    const out = resolvePickerSelection({
+      ...BASE,
+      multiple: true,
+      selected: [DIRECTORY],
+      cursorEntry: FILE,
+    });
+
+    expect(out).toEqual({ kind: "paths", paths: [FILE.path] });
+  });
+
+  it("are the only ones counted in a folder dialog", () => {
+    const out = resolvePickerSelection({
+      ...BASE,
+      multiple: true,
+      directory: true,
+      selected: [FILE, DIRECTORY],
+    });
+
+    expect(out).toEqual({ kind: "paths", paths: [DIRECTORY.path] });
   });
 });
 
@@ -186,7 +256,13 @@ describe("whether the Accept button can be pressed", () => {
   });
 
   it("is available in a multi-select dialog once anything is marked", () => {
-    expect(pickerAcceptEnabled({ ...BASE, multiple: true, selectedPaths: ["/a"] })).toBe(true);
+    expect(
+      pickerAcceptEnabled({
+        ...BASE,
+        multiple: true,
+        selected: [{ path: "/a", isDirectory: false }],
+      }),
+    ).toBe(true);
   });
 
   it("is unavailable when the cursor is on the wrong kind of thing", () => {
@@ -207,14 +283,14 @@ describe("whether the Accept button can be pressed", () => {
       for (const directory of [false, true]) {
         for (const saveMode of [false, true]) {
           for (const cursorEntry of [null, FILE, DIRECTORY]) {
-            for (const selectedPaths of [[], ["/a"]]) {
-              const ctx = { ...BASE, multiple, directory, saveMode, cursorEntry, selectedPaths };
+            for (const selected of [[], [{ path: "/a", isDirectory: false }]]) {
+              const ctx = { ...BASE, multiple, directory, saveMode, cursorEntry, selected };
               const label = JSON.stringify({
                 multiple,
                 directory,
                 saveMode,
                 cursorEntry,
-                selectedPaths,
+                selected,
               });
               expect(pickerAcceptEnabled(ctx), label).toBe(
                 resolvePickerSelection(ctx).kind === "paths",

@@ -194,7 +194,11 @@ function Overlays({
 export function App(props: AppProps = {}) {
   const tabs = useTabs(initialPath(props.startPath));
   const home = homePath(props.homePath);
-  const picker = usePicker(pickerRequest(props.picker), tabs);
+  // Memoised because `pickerFromSearch` PARSES the URL: a fresh object each
+  // render would defeat every memo inside `usePicker`, and through it the whole
+  // key action table. The URL cannot change for this window's lifetime.
+  const request = useMemo(() => pickerRequest(props.picker), [props.picker]);
+  const picker = usePicker(request, tabs);
   const ops = useFileOps(tabs);
   const search = useSearch({
     entries: tabs.pane.entries,

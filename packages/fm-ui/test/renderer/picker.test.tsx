@@ -209,11 +209,27 @@ describe("the keys a dialog takes away", () => {
   it("keeps space marking usable in a multi-select dialog", async () => {
     // Space is suppressed in a picker EXCEPT under multi-select, where marking
     // before confirming is the whole point.
+    // On a FILE, because a folder marked in a file dialog is deliberately not
+    // counted — the button's number is the number of paths pressing it returns.
     await openPicker({ multiple: true });
+    await moveToFirstFile();
     fireEvent.keyDown(window, { key: " " });
     await act(async () => undefined);
 
     expect(screen.getByTestId("picker-accept").textContent).toBe("Select (1)");
+  });
+});
+
+describe("a mark the dialog will not take", () => {
+  it("is not counted on the button", async () => {
+    // The fixture opens on a directory, and this is a FILE dialog. Review found
+    // the marked branch was the one place an entry's kind was never checked, so
+    // a caller asking for files could be handed a folder the user had marked.
+    await openPicker({ multiple: true });
+    fireEvent.keyDown(window, { key: " " });
+    await act(async () => undefined);
+
+    expect(screen.getByTestId("picker-accept").textContent).toBe("Select");
   });
 });
 

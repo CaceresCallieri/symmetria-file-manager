@@ -30,7 +30,7 @@ export interface PickerSelectionContext {
   readonly currentPath: string;
   /** What is in the save-filename field, which the user may have edited. */
   readonly suggestedName: string;
-  readonly selectedPaths: readonly string[];
+  readonly selected: readonly PickerCursorEntry[];
   readonly cursorEntry: PickerCursorEntry | null;
 }
 
@@ -38,6 +38,23 @@ export type PickerResolution =
   | { readonly kind: "paths"; readonly paths: readonly string[] }
   /** Confirming would answer nothing, so it must not answer at all. */
   | { readonly kind: "refused"; readonly reason: string };
+
+/**
+ * The marks this dialog would actually accept.
+ *
+ * Type-filtered, like the single-cursor branch and for the same reason. The Qt
+ * build filters at MARK time; this port filters here, which reaches the same
+ * place from the other end — a folder marked in a file-only dialog is simply
+ * not part of the answer. Without it a caller that asked for files could be
+ * handed a directory, and review found the marked branch was the one place the
+ * kind was never checked at all.
+ *
+ * Shared with the LABEL, so the number on the button is the number of paths
+ * pressing it returns.
+ */
+function usableMarks(context: PickerSelectionContext): readonly PickerCursorEntry[] {
+  return context.selected.filter((each) => each.isDirectory === context.directory);
+}
 
 /** Join without doubling the separator — `currentPath` is `/` at the root. */
 function joinName(directory: string, name: string): string {
@@ -69,8 +86,9 @@ export function resolvePickerSelection(context: PickerSelectionContext): PickerR
     return { kind: "paths", paths: [path] };
   }
 
-  if (context.multiple && context.selectedPaths.length > 0) {
-    return { kind: "paths", paths: context.selectedPaths };
+  if (context.multiple) {
+    const usable = usableMarks(context);
+    if (usable.length > 0) return { kind: "paths", paths: usable.map((each) => each.path) };
   }
 
   // Everything below answers with the row under the cursor, including a
@@ -100,9 +118,13 @@ export function resolvePickerSelection(context: PickerSelectionContext): PickerR
 export function pickerAcceptLabel(context: PickerSelectionContext, acceptLabel: string): string {
   if (acceptLabel !== "") return acceptLabel;
   if (context.saveMode) return "Save";
-  if (context.multiple && context.selectedPaths.length > 0) {
-    return `Select (${context.selectedPaths.length})`;
-  }
+
+  // Counted the same way the answer is filtered, so the number on the button is
+  // the number of paths that would actually be returned. A count that included
+  // marks the dialog will not take would promise more than pressing it delivers.
+  const usable = usableMarks(context);
+  if (context.multiple && usable.length > 0) return `Select (${usable.length})`;
+
   // The Qt build's word. The plan said "Open"; `StatusBar.qml` says "Select",
   // and matching the application the operator uses daily is what parity means.
   return "Select";
