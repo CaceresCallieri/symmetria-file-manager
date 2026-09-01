@@ -2,7 +2,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { BRIDGE_KEY } from "@symmetria/fm-core/bridge";
 import { PICKER_FIFO_PREFIX } from "@symmetria/fm-core/command";
 import { failure } from "@symmetria/fm-core/contract";
-import { homeQuery } from "@symmetria/fm-core/windowUrl";
+import { homeQuery, pickerQuery } from "@symmetria/fm-core/windowUrl";
 import { PUSH_CHANNELS, REQUEST_CHANNELS } from "@symmetria/fm-main/ipc/channels";
 import type { ElectronTransport } from "@symmetria/fm-main/ipc/electronSurface";
 import { electronIpcSurface } from "@symmetria/fm-main/ipc/electronSurface";
@@ -656,12 +656,20 @@ function pickerWindowFactory(transport: ElectronTransport, registry: Registry): 
       if (!dialog.isDestroyed()) dialog.destroy();
     });
 
-    // The picker gets its own window URL, carrying the request. Phase 4 reads
-    // it; today the page opens as an ordinary browse view at the requested
-    // folder, which is what makes the window observable at all.
+    // The picker's own window URL, carrying the request itself.
+    //
+    // Three facts ride here and they are deliberately separate: the FRAGMENT is
+    // where this window opens, the `home` query is where the tilde goes, and
+    // the `picker` query is what kind of dialog this is. The renderer needs the
+    // last one at FIRST RENDER — a window that painted as an ordinary browse
+    // view and then turned into a dialog would be a visible flicker, and a
+    // request across the bridge arrives a frame or two late by construction.
     const home = app.getPath("home");
     const opensAt = command.options.currentFolder === "" ? home : command.options.currentFolder;
-    void dialog.loadURL(`${APP_ENTRY_URL}${homeQuery(home)}#${encodeURIComponent(opensAt)}`);
+    const request = { fifo: command.fifo, options: command.options };
+    void dialog.loadURL(
+      `${APP_ENTRY_URL}${homeQuery(home)}&${pickerQuery(request).slice(1)}#${encodeURIComponent(opensAt)}`,
+    );
 
     /**
      * Give back what this window was holding, at most once.

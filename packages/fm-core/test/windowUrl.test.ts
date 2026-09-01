@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { homeFromSearch, homeQuery } from "../src/windowUrl.ts";
+import { homeFromSearch, homeQuery, pickerFromSearch, pickerQuery } from "../src/windowUrl.ts";
 
 /**
  * The two ends of one agreement between two processes.
@@ -80,5 +80,84 @@ describe("a window that was told nothing usable", () => {
     // `homeFromSearch` compares the whole key. A prefix match would read
     // `oldhome` as `home` and send the tilde to the wrong place.
     expect(homeFromSearch("?oldhome=%2Ftmp")).toBe("/");
+  });
+});
+
+describe("the picker request a window carries", () => {
+  it("round-trips every option through the URL", () => {
+    // The renderer needs these at FIRST RENDER: a dialog that paints as an
+    // ordinary browse window and then becomes a picker is visible, and a
+    // request over the bridge would arrive a frame or two late. The window URL
+    // is the mechanism already established for exactly this — see `homeQuery`.
+    const request = {
+      fifo: "/tmp/symmetria-picker-abc.fifo",
+      options: {
+        title: "Save your download",
+        acceptLabel: "Save",
+        multiple: false,
+        directory: false,
+        saveMode: true,
+        suggestedName: "report.pdf",
+        currentFolder: "/home/jc/Downloads",
+      },
+    } as const;
+
+    expect(pickerFromSearch(pickerQuery(request))).toEqual(request);
+  });
+
+  it("survives a directory whose name would confuse a form decoder", () => {
+    // `URLSearchParams` is not used here and this is why: its parser is the
+    // HTML form encoding, which decodes `+` as a space, so a directory named
+    // `c++` comes back as `c  `. The same trap `homeFromSearch` documents.
+    const request = {
+      fifo: "/tmp/symmetria-picker-abc.fifo",
+      options: {
+        title: "Pick a file from c++ & friends",
+        acceptLabel: "",
+        multiple: true,
+        directory: false,
+        saveMode: false,
+        suggestedName: "",
+        currentFolder: "/home/jc/code/c++",
+      },
+    } as const;
+
+    expect(pickerFromSearch(pickerQuery(request))).toEqual(request);
+  });
+
+  it("reports no picker for a window that is not one", () => {
+    // The browse window carries only the home query, and it must not be
+    // mistaken for a dialog with every option defaulted.
+    expect(pickerFromSearch("?home=%2Fhome%2Fjc")).toBe(null);
+    expect(pickerFromSearch("")).toBe(null);
+  });
+
+  it("reports no picker rather than throwing on a malformed value", () => {
+    // A URL is external input the moment anything else can set it, and a throw
+    // here would take the whole render down over a stray character.
+    for (const search of ["?picker=%zz", "?picker=not-json", "?picker=%7B%7D", "?picker=[]"]) {
+      expect(() => pickerFromSearch(search), search).not.toThrow();
+      expect(pickerFromSearch(search), search).toBe(null);
+    }
+  });
+
+  it("keeps the home query readable beside it", () => {
+    // Both travel on the same URL and neither may eat the other.
+    const request = {
+      fifo: "/tmp/symmetria-picker-abc.fifo",
+      options: {
+        title: "t",
+        acceptLabel: "",
+        multiple: false,
+        directory: true,
+        saveMode: false,
+        suggestedName: "",
+        currentFolder: "",
+      },
+    } as const;
+    const search = `${homeQuery("/home/jc")}&${pickerQuery(request).slice(1)}`;
+
+    expect(homeFromSearch(search)).toBe("/home/jc");
+    expect(pickerFromSearch(search)).toEqual(request);
   });
 });
