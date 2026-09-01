@@ -24,12 +24,16 @@ set -eu
 self=$(readlink -f "$0")
 APP_DIR=$(dirname "$(dirname "$self")")/app
 
+# 78 is EX_CONFIG from sysexits.h, and the unit tells systemd not to retry it.
+# A missing tree is not a transient fault: restarting every two seconds forever
+# would burn a core and say nothing useful. A failed BUILD below keeps exit 1,
+# because that one can succeed on the next try.
 if [ ! -d "$APP_DIR" ]; then
     notify-send "Symmetria FM (Electron)" "The application directory is gone: $APP_DIR"
-    exit 1
+    exit 78
 fi
 
-cd "$APP_DIR" || exit 1
+cd "$APP_DIR" || exit 78
 
 # Absolute paths, because the environment a keybinding or a systemd unit hands
 # this script includes almost nothing.

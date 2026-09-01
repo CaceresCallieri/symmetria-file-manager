@@ -109,10 +109,17 @@ reaches everything except the process that owns the socket. `ExecStopPost` stops
 that scope by glob.
 
 **`Restart=always` plus a correct liveness check is an infinite loop.** With an
-orphan holding the socket, every start refused — correctly, exit 1 — and was
-restarted two seconds later, six times in twenty seconds, each one paying a full
-Electron boot. `RestartPreventExitStatus=1` says a deliberate refusal is not a
-crash. The check was never the broken half.
+orphan holding the socket, every start refused — correctly — and was restarted
+two seconds later, six times in twenty seconds, each one paying a full Electron
+boot. `RestartPreventExitStatus` says a deliberate refusal is not a crash. The
+check was never the broken half.
+
+**That fix was itself wrong the first time, and worse than the bug.** It named
+exit `1`, which Node also uses for an uncaught exception and the launcher for a
+failed build — so it told systemd to give up after a real crash, which is the
+one thing `Restart=always` exists to prevent. The refusal now exits **69**
+(`EX_UNAVAILABLE`) and a missing application directory exits **78**
+(`EX_CONFIG`); those two are exempt and everything else still restarts.
 
 ## Verifying
 
@@ -120,8 +127,18 @@ crash. The check was never the broken half.
 systemctl --user status symmetria-fm-electron.service
 systemctl --user show-environment | grep WAYLAND_DISPLAY   # must be set, or the daemon cannot paint
 hyprctl clients -j | jq -r '.[] | select(.class=="symmetria-fm-electron") | .workspace.name'
+
+# After a stop, nothing should be left holding the socket. This is the ONLY
+# check that catches the ExecStopPost glob silently going stale: the line is
+# `-` prefixed, so if Chromium ever renames its transient scope the cleanup
+# stops matching and keeps reporting success.
+systemctl --user stop symmetria-fm-electron.service && sleep 3
+ss -lxp | grep symmetria-fm-electron   # want NO output
 ```
 
 An empty `WAYLAND_DISPLAY` in the user manager is the failure that looks like a
 broken application: the unit starts, cannot reach the compositor, and either
-restarts forever or serves windows nobody can see.
+restarts on a loop or serves windows nobody can see. It DOES keep restarting —
+that failure exits 1, and only 69 and 78 are exempt from `Restart=always`. The
+journal is where you will see it; `systemctl --user status` will show a
+climbing restart counter.

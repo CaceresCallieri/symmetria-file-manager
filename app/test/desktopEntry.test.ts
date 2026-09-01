@@ -128,6 +128,46 @@ describe("the systemd user unit", () => {
     expect(out).not.toMatch(/Unknown (key|section)/i);
   });
 
+  it("refuses to retry only the failures retrying cannot fix", () => {
+    // Both directives exist because of one live incident, and neither had a
+    // test until review pointed that out. The first version said `1`, which was
+    // WORSE than the loop it fixed: Node exits 1 for an uncaught exception and
+    // the launcher exits 1 on a failed build, so it also told systemd to stop
+    // restarting after a real crash. The codes here must stay specific.
+    const unit = read(UNIT);
+    const prevented = (iniValue(unit, "RestartPreventExitStatus") ?? "").split(/\s+/);
+
+    expect(prevented).toContain("69"); // another daemon holds the socket
+    expect(prevented).toContain("78"); // the application directory is gone
+    expect(prevented).not.toContain("1"); // a crash, and a failed build, must retry
+    expect(iniValue(unit, "Restart")).toBe("always");
+  });
+
+  it("uses those codes, rather than only declaring them", () => {
+    // A code the unit names and the program never produces protects nothing.
+    const daemon = read("app/src/main/index.ts");
+    const launcher = read(`bin/${IDENTIFIER}`);
+
+    expect(daemon).toMatch(/const ALREADY_RUNNING = 69/);
+    expect(daemon).toMatch(/app\.exit\(ALREADY_RUNNING\)/);
+    expect(launcher).toMatch(/exit 78/);
+    // The build failure keeps 1 on purpose: it can succeed on the next try.
+    expect(launcher).toMatch(/exit 1\b/);
+  });
+
+  it("cleans up the process Chromium moved out of the service cgroup", () => {
+    // Chromium relocates its browser process into a transient scope of its own,
+    // so `systemctl stop` reaches the wrapper and the zygotes but not the
+    // process holding the socket. Without this the next start refuses forever.
+    const unit = read(UNIT);
+    const post = iniValue(unit, "ExecStopPost") ?? "";
+
+    expect(post).toContain(`app-${IDENTIFIER}-*.scope`);
+    // The `-` prefix: on a clean stop the scope is already gone, and a stop
+    // that failed because there was nothing to clean up is not a failure.
+    expect(post.startsWith("-")).toBe(true);
+  });
+
   it("is the only copy of itself", () => {
     // Memory records the Qt unit existing in two unsynced copies, one here and
     // one in the operator's dotfiles, which then drifted. One real file and an

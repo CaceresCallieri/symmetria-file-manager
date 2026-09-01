@@ -22,6 +22,22 @@ registerAppScheme();
 const SMOKE = process.env.SYMMETRIA_FM_SMOKE === "1";
 
 /**
+ * "Another daemon already holds the socket." NOT exit 1.
+ *
+ * The unit tells systemd not to restart on this code, because retrying it can
+ * never succeed — and the value has to be one nothing else produces. Exit 1 was
+ * used here first and was wrong: Node exits 1 for an uncaught exception, and the
+ * launcher script exits 1 on three of its own failures, so
+ * `RestartPreventExitStatus=1` also told systemd to stop restarting after a real
+ * crash. That is the opposite of what `Restart=always` is for, and it turned a
+ * loop into a silent death.
+ *
+ * 69 is `EX_UNAVAILABLE` from sysexits.h — the service is unavailable to this
+ * process because another is providing it, which is exactly the situation.
+ */
+const ALREADY_RUNNING = 69;
+
+/**
  * There is no `app.setDesktopName()` in Electron 41 — an earlier draft of the
  * plan said there was, and it is wrong. Electron reads the Linux desktop-entry
  * name from the `desktopName` field of `package.json`, which is where
@@ -527,7 +543,7 @@ app.whenReady().then(async () => {
     // Exiting is the whole point of the check: two daemons would answer the
     // same socket and the user would get whichever won the race.
     process.stderr.write(`${claimed.error.message}\n`);
-    app.exit(1);
+    app.exit(ALREADY_RUNNING);
     return;
   }
   app.on("will-quit", () => void claimed.value.close());
