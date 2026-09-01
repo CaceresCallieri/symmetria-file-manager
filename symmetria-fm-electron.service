@@ -1,0 +1,37 @@
+[Unit]
+Description=Symmetria File Manager (Electron build)
+# The Qt daemon can start at `default.target` safely because it opens NO window
+# until something asks it to. This one paints a window as soon as it starts, so
+# it needs the Wayland socket immediately. A unit that starts before the
+# graphical session either dies in a restart loop or serves windows that never
+# appear — and the second failure looks like a broken application rather than a
+# broken unit.
+#
+# The session must also have made WAYLAND_DISPLAY visible to the user manager,
+# with `systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP`
+# or Hyprland's exec-once equivalent. Check with `systemctl --user show-environment`.
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/symmetria-fm-electron
+# Strip Hyprland's stale initial-workspace token before exec.
+#
+# THIS LINE IS LOAD-BEARING and is carried over from the Qt unit verbatim,
+# including this explanation. systemd starts this daemon once at login, on
+# whatever workspace was active then, and it inherits HL_INITIAL_WORKSPACE_TOKEN
+# from the session environment. Hyprland reads that token from
+# /proc/<pid>/environ and — with misc:initial_workspace_tracking at its default
+# — routes the daemon's FIRST window to the token's recorded workspace instead
+# of where the rule says. The symptom is that the very first file-manager window
+# after every login lands somewhere else.
+#
+# The unset MUST happen before exec: /proc/<pid>/environ is the exec-time
+# environment block, so an in-process unsetenv() would already be too late.
+# See Hyprland issue #5919.
+UnsetEnvironment=HL_INITIAL_WORKSPACE_TOKEN
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
