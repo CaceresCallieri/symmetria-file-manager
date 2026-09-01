@@ -153,7 +153,7 @@ function optionalBoolean(raw: Record<string, unknown>, field: string, fallback: 
  * being trusted because it is only a hint.
  */
 function decodeCurrentFolder(raw: Record<string, unknown>): Result<string> {
-  const value = raw["currentFolder"];
+  const value = raw.currentFolder;
   if (value === undefined || value === "") return success("");
   return decodePath(value);
 }
@@ -245,3 +245,50 @@ export function replyLine(result: Result<unknown>): string {
   }
   return `${JSON.stringify({ ok: true })}\n`;
 }
+
+/**
+ * What the dialog's own page says the user did.
+ *
+ * Decoded rather than trusted, for the same reason every other payload is: the
+ * renderer is sandboxed, but a boundary is a boundary and a malformed message
+ * must not reach the FIFO writer. The FIFO gets the full picker-path rules —
+ * one decoder, not a second looser copy — and every chosen path gets
+ * `decodePath`'s.
+ *
+ * Naming the FIFO is not authority to answer it: `PickerHost.answer` refuses a
+ * pipe that is not the open one, so a page cannot answer another dialog.
+ */
+export interface PickerAnswer {
+  readonly fifo: string;
+  readonly paths: readonly string[];
+}
+
+export const decodePickerAnswer: Decoder<PickerAnswer> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_request", "answer must be an object");
+
+  const fifo = decodeFifoPath(raw.fifo);
+  if (isFailure(fifo)) return fifo;
+
+  const paths = raw.paths;
+  if (!Array.isArray(paths)) return failure("invalid_request", "paths must be a list");
+
+  const decoded: string[] = [];
+  for (const each of paths) {
+    const path = decodePath(each);
+    if (isFailure(path)) return path;
+    decoded.push(path.value);
+  }
+
+  return success({ fifo: fifo.value, paths: decoded });
+};
+
+export interface PickerDismissal {
+  readonly fifo: string;
+}
+
+export const decodePickerDismissal: Decoder<PickerDismissal> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_request", "dismissal must be an object");
+  const fifo = decodeFifoPath(raw.fifo);
+  if (isFailure(fifo)) return fifo;
+  return success({ fifo: fifo.value });
+};

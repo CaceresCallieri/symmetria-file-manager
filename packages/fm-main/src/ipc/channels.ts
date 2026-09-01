@@ -55,6 +55,16 @@ export const REQUEST_CHANNELS = {
    * intercept it and every tab, cursor and scroll position goes with it.
    */
   hideWindow: "symmetria-fm:hide-window",
+  /**
+   * The user chose. Answer the caller waiting on this dialog's pipe.
+   *
+   * A HOST channel, like `hideWindow`: the registry is the privileged
+   * filesystem half and becomes an importable package, and answering a desktop
+   * portal is the one thing an embedding editor would never satisfy.
+   */
+  pickerConfirm: "symmetria-fm:picker-confirm",
+  /** The user cancelled, or the dialog is being dismissed. */
+  pickerCancel: "symmetria-fm:picker-cancel",
 } as const;
 
 /** Main process pushes, renderer listens. These are never handled. */

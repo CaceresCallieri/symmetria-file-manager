@@ -300,6 +300,30 @@ export async function hideWindow(): Promise<void> {
 }
 
 /**
+ * Tell the main process what the user chose, and for which dialog.
+ *
+ * The renderer cannot write a named pipe and must not try — it is sandboxed
+ * with no filesystem at all. It says WHAT was chosen; the main process owns the
+ * pipe, the exactly-once rule and the expiry. Naming the FIFO is not authority
+ * to answer it either: the host refuses one that is not the open picker's.
+ */
+export async function pickerConfirm(request: {
+  readonly fifo: string;
+  readonly paths: readonly string[];
+}): Promise<void> {
+  const bridge = getBridge();
+  if (bridge === null) return;
+  await bridge.pickerConfirm(request);
+}
+
+/** The user cancelled, or Escape reached the dialog. */
+export async function pickerCancel(request: { readonly fifo: string }): Promise<void> {
+  const bridge = getBridge();
+  if (bridge === null) return;
+  await bridge.pickerCancel(request);
+}
+
+/**
  * A path the daemon was asked, from outside, to open.
  *
  * The origin is another program entirely — the command-line tool, and later a

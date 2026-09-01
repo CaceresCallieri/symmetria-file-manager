@@ -1,7 +1,11 @@
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BRIDGE_KEY } from "@symmetria/fm-core/bridge";
-import { PICKER_FIFO_PREFIX } from "@symmetria/fm-core/command";
-import { failure } from "@symmetria/fm-core/contract";
+import {
+  decodePickerAnswer,
+  decodePickerDismissal,
+  PICKER_FIFO_PREFIX,
+} from "@symmetria/fm-core/command";
+import { failure, isFailure } from "@symmetria/fm-core/contract";
 import { homeQuery, pickerQuery } from "@symmetria/fm-core/windowUrl";
 import { PUSH_CHANNELS, REQUEST_CHANNELS } from "@symmetria/fm-main/ipc/channels";
 import type { ElectronTransport } from "@symmetria/fm-main/ipc/electronSurface";
@@ -814,6 +818,26 @@ app.whenReady().then(async () => {
     (fifo, payload) => writeToFifo(fifo, payload),
     pickerLifetimeOptions(),
   );
+
+  /**
+   * What the dialog's page says the user did.
+   *
+   * Decoded here rather than trusted. The picker window's renderer is sandboxed
+   * and this is still a boundary: a payload that failed to decode must not
+   * reach the FIFO writer, and `answer` itself refuses a FIFO that is not the
+   * open one, so a page cannot answer somebody else's dialog either.
+   */
+  ipcMain.handle(REQUEST_CHANNELS.pickerConfirm, async (_event, payload: unknown) => {
+    const request = decodePickerAnswer(payload);
+    if (isFailure(request)) return request;
+    return pickers.answer(request.value.fifo, request.value.paths);
+  });
+
+  ipcMain.handle(REQUEST_CHANNELS.pickerCancel, async (_event, payload: unknown) => {
+    const request = decodePickerDismissal(payload);
+    if (isFailure(request)) return request;
+    return pickers.cancel(request.value.fifo);
+  });
 
   const socketPath = daemonSocketPath();
   const claimed = await claimSocket(socketPath, socketCommandHandler(window, pickers));

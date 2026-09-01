@@ -285,14 +285,23 @@ describe("the channel surface is closed", () => {
     // Request channels only. A push channel is sent to and never handled, and
     // conflating the two made this assertion fail for a correct registry.
     //
-    // `hideWindow` is subtracted because it is a HOST channel: it hides the
-    // window, which the registry — the privileged filesystem half, and a
-    // package an embedding host will import — has no business knowing about.
-    // Its handler is registered directly in `main/index.ts`. Every OTHER
-    // request channel must still be here, which is what keeps this assertion
-    // worth having.
+    // Three channels are subtracted because they are HOST channels, and the
+    // reason is the same for all three: the registry is the privileged
+    // FILESYSTEM half and a package an embedding editor will import, so a
+    // window it must hide and a desktop portal it must answer are both things
+    // that host could never satisfy. Their handlers are registered directly in
+    // `main/index.ts`.
+    //
+    // Every OTHER request channel must still be here, which is what keeps this
+    // assertion worth having — it caught the picker channels being added to the
+    // shared map before this list knew about them.
+    const hostOwned: readonly string[] = [
+      REQUEST_CHANNELS.hideWindow,
+      REQUEST_CHANNELS.pickerConfirm,
+      REQUEST_CHANNELS.pickerCancel,
+    ];
     const registryOwned = Object.values(REQUEST_CHANNELS).filter(
-      (channel) => channel !== REQUEST_CHANNELS.hideWindow,
+      (channel) => !hostOwned.includes(channel),
     );
     expect(registered.sort()).toEqual(registryOwned.sort());
   });

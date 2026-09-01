@@ -1,3 +1,4 @@
+import type { Bookmark } from "@symmetria/fm-core/bookmarks";
 import type { CascadeMode } from "@symmetria/fm-core/keys/cascade";
 import type { KeyContext } from "@symmetria/fm-core/keys/types";
 import {
@@ -8,7 +9,11 @@ import {
   type PaneState,
   parentOf,
 } from "@symmetria/fm-core/pane";
-import { homeFromSearch } from "@symmetria/fm-core/windowUrl";
+import {
+  homeFromSearch,
+  type PickerWindowRequest,
+  pickerFromSearch,
+} from "@symmetria/fm-core/windowUrl";
 import { useMemo } from "react";
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { MillerColumns } from "./components/MillerColumns.tsx";
@@ -23,11 +28,12 @@ import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
 import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { useBookmarks } from "./useBookmarks.ts";
 import { useExternalOpen } from "./useExternalOpen.ts";
-import { useFileOps } from "./useFileOps.ts";
-import { useKeyActions } from "./useKeyActions.ts";
+import { type FileOps, useFileOps } from "./useFileOps.ts";
+import { type KeyWiring, useKeyActions } from "./useKeyActions.ts";
+import { usePicker } from "./usePicker.ts";
 import { type Preview, usePreview } from "./usePreview.ts";
 import { useSearch } from "./useSearch.ts";
-import { useTabs } from "./useTabs.ts";
+import { type Tabs, useTabs } from "./useTabs.ts";
 
 /**
  * Where a window opens when nothing says otherwise.
@@ -79,11 +85,116 @@ export interface AppProps {
   readonly startPath?: string;
   /** Overridden by tests, for the same reason. */
   readonly homePath?: string;
+  /**
+   * The dialog this window was opened for, when it is one.
+   *
+   * Read from the window URL in normal use — the renderer needs it at FIRST
+   * render, because a window that painted as a browse view and then became a
+   * dialog would flicker. Overridden by tests for the same reason the two above
+   * are: a test must not depend on the real location.
+   */
+  readonly picker?: PickerWindowRequest;
+}
+
+/** The dialog request this window carries, or null for the browse window. */
+function pickerRequest(override?: PickerWindowRequest): PickerWindowRequest | null {
+  return override ?? pickerFromSearch(window.location.search);
+}
+
+/**
+ * What the dispatch cascade needs to know about modes.
+ *
+ * Lifted out of `App` because the complexity gate scores a component as one
+ * function and this object is most of its branching — `App` reached a cognitive
+ * 16 against a bound of 15 the moment the picker was wired in. The same
+ * pressure produced `useExternalOpen` and `usePicker`; naming a thing is
+ * cheaper than arguing with the measurement.
+ */
+function cascadeModeFor(
+  modes: KeyWiring["modes"],
+  opsModalKind: string,
+  searchActive: boolean,
+): CascadeMode {
+  return {
+    // One gate for every dialog: the help sheet and the operation dialogs
+    // share it, so two can never be open at once. The zoxide list joins the
+    // same gate — it is a dialog with a text field, and two of those open at
+    // once would each think the keyboard was theirs.
+    modalOpen: modes.helpOpen || modes.zoxideOpen || opsModalKind !== "none",
+    bookmarkSubMode: modes.bookmarkSubMode,
+    chordPrefix: modes.chordPrefix,
+    // Flash jump is a text-input mode that arrives with its own phase. Until
+    // then nothing can enter it, so the cascade never reaches that step.
+    flashActive: false,
+    // The seam the cascade documented and nothing used until now. The field is
+    // a real `<input>`, so `useKeyDispatch` would report this anyway from the
+    // event target — stating it here as well means a key that arrives while the
+    // field is open but not yet focused is still not the dispatcher's.
+    textInputFocused: searchActive,
+  };
+}
+
+/**
+ * A double click: move the cursor to what was clicked, then act on it.
+ *
+ * The order is load-bearing. Acting first would enter or open whatever the
+ * cursor happened to be sitting on, which is almost never the row under the
+ * pointer. `entryAt` asks about the clicked index rather than the cursor for
+ * the same reason.
+ *
+ * The enter-or-open decision calls `isDirectoryEntry`, which is the same
+ * function `useKeyActions` calls for the Enter key. Not the same SHAPE of
+ * test — the same function, because two copies would eventually disagree
+ * about a symlinked directory, which the scan reports as `directory`
+ * precisely so it can be entered.
+ */
+function activateAt(tabs: Tabs, ops: FileOps, index: number): void {
+  tabs.moveTo(index);
+  if (isDirectoryEntry(entryAt(tabs.pane, index))) tabs.enter();
+  else ops.openAt(index);
+}
+
+/**
+ * The two things that sit above the panel and take the keyboard.
+ *
+ * A component rather than two conditionals inside `App`, for the reason the
+ * gate keeps making: a component is measured as one function, and `App` reached
+ * a cognitive 16 against a bound of 15 the moment the picker was wired in. They
+ * belong together anyway — both are gated by the same `modalOpen`, so only one
+ * can ever be showing.
+ */
+function Overlays({
+  modes,
+  context,
+  bookmarks,
+  onNavigate,
+}: {
+  readonly modes: KeyWiring["modes"];
+  readonly context: KeyContext;
+  readonly bookmarks: ReadonlyMap<string, Bookmark>;
+  onNavigate(path: string): void;
+}) {
+  if (modes.zoxideOpen) {
+    return (
+      <ZoxidePopup
+        onChoose={(path) => {
+          modes.closeZoxide();
+          onNavigate(path);
+        }}
+        onClose={modes.closeZoxide}
+      />
+    );
+  }
+  if (modes.helpOpen) {
+    return <HelpOverlay context={context} bookmarks={bookmarks} onClose={modes.closeHelp} />;
+  }
+  return null;
 }
 
 export function App(props: AppProps = {}) {
   const tabs = useTabs(initialPath(props.startPath));
   const home = homePath(props.homePath);
+  const picker = usePicker(pickerRequest(props.picker), tabs);
   const ops = useFileOps(tabs);
   const search = useSearch({
     entries: tabs.pane.entries,
@@ -113,6 +224,7 @@ export function App(props: AppProps = {}) {
     bookmarks,
     home,
     cursorImageMimeOf(preview, cursorPath),
+    picker,
   );
 
   const context = useMemo<KeyContext>(
@@ -123,55 +235,11 @@ export function App(props: AppProps = {}) {
   );
 
   const mode = useMemo<CascadeMode>(
-    () => ({
-      // One gate for every dialog: the help sheet and the operation dialogs
-      // share it, so two can never be open at once.
-      // The zoxide list joins the same gate: it is a dialog with a text field,
-      // and two of those open at once would each think the keyboard was theirs.
-      modalOpen: modes.helpOpen || modes.zoxideOpen || ops.modal.kind !== "none",
-      bookmarkSubMode: modes.bookmarkSubMode,
-      chordPrefix: modes.chordPrefix,
-      // Flash jump is a text-input mode that arrives with its own phase. Until
-      // then nothing can enter it, so the cascade never reaches that step.
-      flashActive: false,
-      // The seam the cascade documented and nothing used until now. The field
-      // is a real `<input>`, so `useKeyDispatch` would report this anyway from
-      // the event target — stating it here as well means a key that arrives
-      // while the field is open but not yet focused is still not the
-      // dispatcher's.
-      textInputFocused: search.active,
-    }),
-    [
-      modes.helpOpen,
-      modes.zoxideOpen,
-      modes.bookmarkSubMode,
-      modes.chordPrefix,
-      ops.modal.kind,
-      search.active,
-    ],
+    () => cascadeModeFor(modes, ops.modal.kind, search.active),
+    [modes, ops.modal.kind, search.active],
   );
 
   useKeyDispatch({ mode, context });
-
-  /**
-   * A double click: move the cursor to what was clicked, then act on it.
-   *
-   * The order is load-bearing. Acting first would enter or open whatever the
-   * cursor happened to be sitting on, which is almost never the row under the
-   * pointer. `entryAt` asks about the clicked index rather than the cursor for
-   * the same reason.
-   *
-   * The enter-or-open decision calls `isDirectoryEntry`, which is the same
-   * function `useKeyActions` calls for the Enter key. Not the same SHAPE of
-   * test — the same function, because two copies would eventually disagree
-   * about a symlinked directory, which the scan reports as `directory`
-   * precisely so it can be entered.
-   */
-  const activateAt = (index: number) => {
-    tabs.moveTo(index);
-    if (isDirectoryEntry(entryAt(tabs.pane, index))) tabs.enter();
-    else ops.openAt(index);
-  };
 
   /**
    * A click in the parent column: go to that sibling directory.
@@ -211,7 +279,7 @@ export function App(props: AppProps = {}) {
         selection={tabs.pane.selection}
         matches={search.matches}
         onSelect={tabs.moveTo}
-        onActivate={activateAt}
+        onActivate={(index) => activateAt(tabs, ops, index)}
         onLeaveTo={leaveTo}
         preview={{
           route: preview.route,
@@ -232,24 +300,19 @@ export function App(props: AppProps = {}) {
         onCancelTransfer={ops.cancelRunningTransfer}
       />
       <StatusBar
+        picker={picker.chrome}
         entryCount={tabs.pane.entries.length}
         selectedCount={state.selectedCount}
         sort={tabs.sort}
         reverse={tabs.reverse}
         showHidden={tabs.showHidden}
       />
-      {modes.zoxideOpen ? (
-        <ZoxidePopup
-          onChoose={(path) => {
-            modes.closeZoxide();
-            tabs.navigate(path);
-          }}
-          onClose={modes.closeZoxide}
-        />
-      ) : null}
-      {modes.helpOpen ? (
-        <HelpOverlay context={context} bookmarks={bookmarks.byLetter} onClose={modes.closeHelp} />
-      ) : null}
+      <Overlays
+        modes={modes}
+        context={context}
+        bookmarks={bookmarks.byLetter}
+        onNavigate={tabs.navigate}
+      />
       <OpsModals
         modal={ops.modal}
         onCancel={ops.closeModal}

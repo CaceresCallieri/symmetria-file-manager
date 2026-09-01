@@ -4,6 +4,7 @@ import { boundaryIndex, cursorEntry, isDirectoryEntry, joinPath } from "@symmetr
 import { useMemo, useState } from "react";
 import type { Bookmarks } from "./useBookmarks.ts";
 import type { FileOps } from "./useFileOps.ts";
+import type { Picker } from "./usePicker.ts";
 import type { Search } from "./useSearch.ts";
 import type { Tabs } from "./useTabs.ts";
 
@@ -79,6 +80,14 @@ export function useKeyActions(
    * never appeared and `i` always answered "Not an image".
    */
   cursorImageMime: string | null,
+  /**
+   * The dialog this window is, when it is one.
+   *
+   * The registry's picker suppression has been ported and INERT since the phase
+   * that introduced it, because the state below was built with `active: false`
+   * hardcoded. Threading the real thing here is what makes it run.
+   */
+  picker: Picker,
 ): KeyWiring {
   const [chordPrefix, setChordPrefix] = useState("");
   const [bookmarkSubMode, setBookmarkSubMode] = useState<BookmarkSubMode | null>(null);
@@ -108,7 +117,13 @@ export function useKeyActions(
         const target = boundaryIndex(tabs.pane);
         if (target >= 0) tabs.moveTo(target);
       },
-      dismiss: () => setMessage(null),
+      // Escape, once the cascade has found nothing else that wants it. In a
+      // dialog that is the user giving up, and the caller blocked on the pipe
+      // has to be told — the pre-pass routes Escape here.
+      dismiss: () => {
+        setMessage(null);
+        picker.cancelIfActive();
+      },
 
       historyBack: () => tabs.historyBack(),
       historyForward: () => tabs.historyForward(),
@@ -116,7 +131,8 @@ export function useKeyActions(
       trash: () => ops.requestDelete(),
       rename: (withExtension) => ops.requestRename(withExtension),
       createEntry: () => ops.requestCreate(),
-      editSaveName: soon("Editing the save name"),
+      // The `op.pickerSaveEdit` binding, gated on save mode by the registry.
+      editSaveName: () => picker.focusSaveName(),
 
       yank: () => ops.yank(),
       cut: () => ops.cut(),
@@ -192,7 +208,7 @@ export function useKeyActions(
       treeToggleGitignore: soon("The tree view"),
       treeRefresh: soon("The tree view"),
     };
-  }, [tabs, ops, search, bookmarks, home]);
+  }, [tabs, ops, search, bookmarks, home, picker.cancelIfActive, picker.focusSaveName]);
 
   const state = useMemo<KeyState>(() => {
     const entry = tabs.pane.entries[tabs.pane.cursorIndex];
@@ -221,9 +237,9 @@ export function useKeyActions(
               isImage: cursorImageMime !== null,
               mimeType: cursorImageMime ?? "",
             },
-      picker: { active: false, saveMode: false, fileOps: false, multiple: false, directory: false },
+      picker: picker.state,
     };
-  }, [tabs.pane, search.active, search.matchCount, cursorImageMime]);
+  }, [tabs.pane, search.active, search.matchCount, cursorImageMime, picker.state]);
 
   const modes = useMemo<KeyModes>(
     () => ({

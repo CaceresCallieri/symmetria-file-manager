@@ -189,6 +189,7 @@ describe("StatusBar", () => {
   it("shows the entry count, the selection count and the sort mode", () => {
     render(
       <StatusBar
+        picker={null}
         entryCount={42}
         selectedCount={3}
         sort="natural"
@@ -206,6 +207,7 @@ describe("StatusBar", () => {
   it("says nothing about a selection when there is none", () => {
     render(
       <StatusBar
+        picker={null}
         entryCount={42}
         selectedCount={0}
         sort="alphabetical"
@@ -220,6 +222,7 @@ describe("StatusBar", () => {
   it("says when hidden files are shown, because it changes what the count means", () => {
     render(
       <StatusBar
+        picker={null}
         entryCount={42}
         selectedCount={0}
         sort="alphabetical"

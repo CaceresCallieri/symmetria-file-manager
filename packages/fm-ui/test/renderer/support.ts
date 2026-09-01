@@ -156,6 +156,8 @@ export function inertBridge(): Bridge {
     onTransferProgress: () => () => undefined,
     onOpenPath: () => () => undefined,
     hideWindow: async () => ({ ok: true, value: null }),
+    pickerConfirm: async () => ({ ok: true, value: null }),
+    pickerCancel: async () => ({ ok: true, value: null }),
   };
 }
 
@@ -188,6 +190,16 @@ export interface BridgeLog {
    * stops it coming back.
    */
   readonly openSubscriptions: string[];
+  /**
+   * Every answer the dialog sent, with the pipe it named.
+   *
+   * The pipe is recorded and not only the paths, because answering the WRONG
+   * dialog is the failure that matters: a page that could name somebody else's
+   * FIFO would cancel their save dialog.
+   */
+  readonly pickerConfirms: { fifo: string; paths: string[] }[];
+  /** Every cancellation, by the pipe it named. */
+  readonly pickerCancels: string[];
   /** Deliver a path on that channel, as the daemon would. */
   emitOpenPath(path: string): void;
   /**
@@ -273,6 +285,8 @@ export interface BridgeLog {
 export function installBridge(): BridgeLog {
   const listed: string[] = [];
   const hidden: string[] = [];
+  const pickerConfirms: { fifo: string; paths: string[] }[] = [];
+  const pickerCancels: string[] = [];
   const openSubscriptions: string[] = [];
   const openListeners = new Set<(payload: unknown) => void>();
   const listAsks: ListAsk[] = [];
@@ -547,6 +561,15 @@ export function installBridge(): BridgeLog {
       hidden.push("hide");
       return { ok: true, value: null };
     },
+    pickerConfirm: async (request) => {
+      const asked = request as { fifo: string; paths: string[] };
+      pickerConfirms.push({ fifo: asked.fifo, paths: asked.paths });
+      return { ok: true, value: null };
+    },
+    pickerCancel: async (request) => {
+      pickerCancels.push((request as { fifo: string }).fifo);
+      return { ok: true, value: null };
+    },
     onChanged: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -559,6 +582,8 @@ export function installBridge(): BridgeLog {
     listed,
     hidden,
     openSubscriptions,
+    pickerConfirms,
+    pickerCancels,
     emitOpenPath: (path: string) => {
       for (const listener of openListeners) listener({ path });
     },
