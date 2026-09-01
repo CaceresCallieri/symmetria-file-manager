@@ -1,93 +1,127 @@
 ---
 name: project-electron-single-window
-description: "2026-09-01 — the resident single-window design for the Electron FM: named Hyprland workspace, the picker as a dialog not a window, and the packages split that the Mesura Code embedding needs"
+description: "2026-09-01 — the Electron FM is now a RESIDENT single-window daemon on the named Hyprland workspace `files`; what was decided, what shipped, and what is still open"
 metadata: 
   node_type: memory
   type: project
   originSessionId: 93ba8dd0-4f8f-4159-b85f-f81992fa0bf0
-  modified: 2026-09-01T04:04:00.325Z
+  modified: 2026-09-01T14:55:28.119Z
 ---
 
-Design settled with the operator on 2026-09-01, for the run after
-[[project-electron-v2-backlog]]. Nothing is built yet. This completes the half
-of **D3** (`docs/electron-transition/15-decisions.md`) that was never
-implemented: "one window" shipped, "resident" did not — `index.ts` quits on
-`window-all-closed` while its own comment cites D3.
+**Built and running.** Designed with the operator on 2026-09-01 and delivered the
+same day on branch `t3code/map-electron-file-manager`. The daemon is enabled and
+starts at login. This note is the record of *why*, because none of it is
+derivable from the code.
+
+⚠ **Everything cited below — `docs/electron-transition/`, `packages/fm-main`,
+`packages/fm-ui`, the unit, the desktop entry — exists ONLY on that branch.**
+`main` has no Electron tree at all. Reading these paths from `main` will find
+nothing, and that is not evidence the note is stale.
+
+## What shipped
+
+| Commit | What |
+|---|---|
+| `a9a703a` | Closing hides the window instead of destroying it; a Unix socket decides who is the daemon; a plain-Node CLI opens a path as a tab |
+| `9d96404` | The desktop entry, the systemd unit, an install script, the Hyprland fragment |
+| `7a18815` | `packages/fm-main` and `packages/fm-ui`, each with an invariant test |
+| `f4f5bc3` | The picker-window spike |
+| `4fb5b2f`, `e65e4bc` | Two unit defects found by running it for real |
+
+In `~/.dotfiles`: `0d17e03` and `98ced0c` add the `files` workspace, the routing
+rule and the binds.
+
+This **completed the half of D3** (`docs/electron-transition/15-decisions.md`)
+that had never been implemented: "one window" shipped in the first Electron run,
+"resident" did not — `index.ts` quit on `window-all-closed` under a comment
+citing the very decision it was contradicting. `a9a703a` fixed that.
 
 ## The framing that settled the attach question
 
 The operator worried that attaching a file to WhatsApp opens a second window and
 breaks the one-window rule. **It does not, because the picker is not a window of
-the file manager.** Three surfaces with three lifetimes:
-
-| | Browse window | Picker | Panel in Mesura Code |
-|---|---|---|---|
-| How many | one, forever | one at a time, per request | one per editor window |
-| Returns a value | no | yes — a path list or a cancel | no |
-| Own process | the daemon | the same daemon | no, Mesura Code's |
-
-The picker's defining property is that **a caller is blocked waiting** — the
-portal holds a D-Bus call open and a reader is blocked on the FIFO. It cannot
+the file manager.** Its defining property is that *a caller is blocked waiting* —
+the portal holds a D-Bus call open and a reader is blocked on a FIFO. It cannot
 accumulate. The one-window discipline is about not accumulating *browse* windows.
 
-## Decisions
+## The four decisions
 
-1. **Close keeps everything** — tabs, cursor, scroll. The window is never hidden
-   and never destroyed.
-2. **A named Hyprland workspace `files`**, NOT a special workspace. The operator
-   rejected special workspaces already: `~/.dotfiles/.config/hypr/workspaces.conf`
-   says the app-owned workspaces "used to be special workspaces … and became
-   normal workspaces so their windows stay visible and countable in the bar."
-   Follow the Zen / Mesura Code pattern: `workspace = name:files`, a `silent`
-   routing rule on class `^(symmetria-fm-electron)$`, and
-   `bind = Super, E, exec, $hyprScripts/switch_workspace.sh name:files`.
-3. **The picker window: spike before choosing.** Operator prefers a fresh window
-   per request if it is not slow. Bar is the research target — p50 under 60 ms,
-   p95 under 120 ms, measured warm under `xvfb-run`. This would REVERSE report 10
-   §3.4, which recommended a warm hidden singleton — that advice assumed a
-   warm-window pool that D3 removed, leaving the picker carrying all of the
-   between-uses reset correctness alone.
-4. **Order: resident window → packages split → picker.** The split precedes the
-   picker because the picker adds the most host code.
+1. **Close keeps everything** — tabs, cursor, scroll. The window is hidden, never
+   destroyed. *Rejected: resetting to home*, which the operator turned down; they
+   want a place they return to.
+2. **A named Hyprland workspace `files`, NOT a scratchpad.** The operator had
+   already rejected special workspaces: `~/.dotfiles/.config/hypr/workspaces.conf`
+   records that the app-owned workspaces "used to be special workspaces … and
+   became normal workspaces so their windows stay visible and countable in the
+   bar." **Reading the destination before designing for it was worth more than
+   reasoning from the application side.**
+3. **The picker: measured, not assumed.** See *the spike* below.
+4. **Order: resident → packages split → picker.** The split preceded the picker
+   because the picker adds the most host code.
 
-## Two consequences that are easy to miss
+## The spike answered, and it is close
 
-**The raise problem is gone, not solved.** Report 10 §5.4 calls Wayland
-activation the hardest problem in the design. With a named workspace nothing
-raises the window — the user switches to where it lives, via their own keybind
-and their own `switch_workspace.sh`. The app never calls `show()` or `focus()`.
+`docs/electron-transition/23-spike-picker-window.md`. Measured in FRAMES, because
+the instrument is `requestAnimationFrame` and cannot resolve below one frame —
+**warm takes 2 frames every run; fresh takes 4 to 7.** The recommendation is
+**fresh, on architecture alone**: a window never used has no state to reset, so
+that defect class cannot be written. The speed evidence favours warm and grew
+stronger at every correction. **Not settled** — build the picker fresh, measure
+the whole path (socket, validation, FIFO, window), and switch to warm if the
+total approaches where a person notices.
 
-**The window TITLE becomes a contract.** Chromium sets the Wayland app id once
-per process from the desktop name, so the picker cannot have its own app id. It
-must therefore be excluded from the `name:files` routing rule **by title**, or
-every save dialog is dragged off to the file manager's workspace instead of
-appearing over the app that asked. Precedent already in the operator's config:
-the Zen rule carries `match:title negative:^(Picture-in-Picture)$` for exactly
-this reason.
+The document was wrong twice before it was right, both times by reading the
+instrument's resolution as signal. If a measurement here ever looks bimodal,
+divide by 16.7 ms before theorising.
 
-## The Mesura Code embedding is a packaging problem, not a rewrite
+## Three things a future agent must not re-derive
+
+**The raise problem is gone, not solved.** Nothing calls `show()` or `focus()`.
+The operator switches to where the window lives, so Wayland's activation-token
+problem — which the research calls the hardest problem in the design — never
+arises.
+
+**The picker's window TITLE is a contract.** Chromium sets the Wayland app id
+once per process from the desktop name, so a dialog cannot have its own. The
+routing rule therefore excludes the picker by title
+(`match:title negative:^(Choose a file.*)$`). When the picker is built its title
+must start with "Choose a file" or it lands on the wrong workspace.
+
+**Two exit codes are load-bearing.** `69` means another daemon holds the socket;
+`78` means the application directory is gone. The unit exempts exactly those from
+`Restart=always`. It said `1` first, which also matched Node's uncaught-exception
+exit and the launcher's failed build — telling systemd to give up after a real
+crash. Do not simplify these back to 1.
+
+## Still open
+
+- **The picker itself** — window, socket commands, FIFO, portal wiring, dialog
+  chrome. Its keyboard half is already built and unreachable (`PickerState`, the
+  suppression pre-pass, `isSuppressedInPicker`); `useKeyActions.ts` hardcodes
+  `active: false`.
+- **Publishing the packages** to Mesura Code. They exist and are proved
+  importable; how they travel between repositories is open question 3 in the
+  decision log.
+- **An icon.** `symmetria-fm-electron.desktop` names one that does not exist, so
+  launchers fall back to a generic. Deliberate and stated in the file.
+
+## The embedding is a packaging problem, not a rewrite
 
 Inside Mesura Code there is **no second process and no second window** — it is
 itself Electron, so the FM is a React component in its renderer whose privileged
-half registers handlers in Mesura Code's own main process. The seam already
-holds: `createRegistry(electronIpcSurface(ipcMain), {send})` takes an injected
-surface, and `electronSurface.ts` is the only file in the main process that names
-`ipcMain`. The renderer never names the `symmetria-fm://` scheme either —
-`previewUrlFor` builds the URL in the main process and it crosses the bridge as
-an opaque string, so the UI is already origin-blind. **Lock both properties down
-with a test before they drift.**
+half registers handlers in its main process. Two properties make that possible
+and both are now pinned by tests rather than holding by accident:
 
-The split line: **anything naming `BrowserWindow`, `app`, or the scheme is host
-code; everything else is a package.** By that test only `index.ts`, `window.ts`,
-`protocol.ts` and `main.tsx` stay in `app/`.
+- **`packages/fm-main` names no `BrowserWindow` and no `app` object.** It does
+  import `shell`, `clipboard` and `nativeImage` — process-wide APIs any Electron
+  main process supplies, declared as a peer dependency.
+- **`packages/fm-ui` names no URL scheme.** Preview URLs are built in the main
+  process and cross the bridge as opaque strings.
 
-## Gaps found while designing this
+The split also forced a real decoupling: `createRegistry` used to *import* the
+host's preview-URL builder, so the privileged half could only ever have run in
+this one application. It is injected now, and required rather than defaulted.
 
-- `package.json` declares `desktopName: "symmetria-fm-electron.desktop"` and
-  **that file does not exist in the repository.** The app-id contract has a
-  dangling corner, and it is what the window rule matches.
-- The picker's KEYBOARD half is already built and unreachable, like the tree
-  view: `PickerState`, the suppression pre-pass in `dispatch.ts`, and
-  `isSuppressedInPicker` feeding the help sheet all exist;
-  `useKeyActions.ts:224` hardcodes `active: false`. Missing is the window, the
-  socket and the dialog chrome (filename field, filter, Accept/Cancel).
+See [[project-electron-transition]] for the direction and the research dossier,
+and [[project-electron-v2-backlog]] for what the operator wanted before this run.
+Both of those notes are **untracked in git** — they exist on disk only.
