@@ -33,5 +33,32 @@ UnsetEnvironment=HL_INITIAL_WORKSPACE_TOKEN
 Restart=always
 RestartSec=2
 
+# Exit 1 means "another daemon already holds the socket" — a DELIBERATE refusal,
+# not a crash, and retrying it can never succeed.
+#
+# Observed, the first time this unit was started for real: an Electron process
+# from a previous start survived outside the service's cgroup and kept the
+# socket, so every restart correctly refused, exited 1, and was restarted again.
+# Six times in twenty seconds, each one paying a full Electron boot, with the
+# journal filling up with a message that was telling the truth. `Restart=always`
+# plus a correct liveness check is an infinite loop, and the check is the half
+# that is right.
+RestartPreventExitStatus=1
+
+# Kill the process systemd cannot see, because Chromium moved it out of reach.
+#
+# Observed on the first real start: `systemctl --user stop` left the daemon
+# running and holding the socket, so the next start refused (correctly) and the
+# unit restart-looped. The cause is Chromium's own behaviour — on a systemd user
+# session it relocates its BROWSER process into a transient scope of its own,
+# `app-symmetria-fm-electron-<pid>.scope`, so it survives cleanup of whatever
+# launched it. That is right for a desktop launch and wrong for a service: the
+# service cgroup then holds only the Node wrapper and the zygotes, and stopping
+# it reaches everything except the part that matters.
+#
+# The `-` prefix ignores failure, which is the normal case: on a clean stop the
+# scope is already gone and there is nothing to match.
+ExecStopPost=-/usr/bin/systemctl --user stop app-symmetria-fm-electron-*.scope
+
 [Install]
 WantedBy=graphical-session.target

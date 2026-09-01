@@ -2,8 +2,8 @@
 
 What the resident daemon needs from the desktop, and the exact lines to add. The
 entry, the unit and the install script live in this repository; the Hyprland
-fragment below belongs in the operator's dotfiles and **is not applied by
-anything in this repository**.
+fragment lives in the operator's dotfiles and is reproduced below so this
+document remains readable on its own.
 
 ## The identifier contract
 
@@ -27,8 +27,9 @@ side until parity and the operator uses the Qt one daily.
 
 ## The Hyprland fragment
 
-Three files in `~/.dotfiles/.config/hypr/`, following the pattern the browser and
-the editor already use. **Add these by hand and reload the compositor yourself.**
+**Already applied**, in `~/.dotfiles/.config/hypr/`, following the pattern the
+browser and the editor use. Reproduced here as the record of what was added and
+why; Hyprland picks up config changes on its own, so no reload was needed.
 
 ```conf
 # ── workspaces.conf, beside name:browser and name:agents ──
@@ -55,15 +56,11 @@ windowrule = workspace name:files silent, match:class ^(symmetria-fm-electron)$,
 
 # ── keybindings.conf, beside the Super+B and Super+A group ──
 #
-# ⚠ REPLACE, DO NOT ADD. `keybindings.conf` line 45 already binds Super+Shift+E:
-#
-#     bind = Super+Shift, E, exec, $HOME/.local/bin/symmetria-fm-electron
-#
-# DELETE that line. Hyprland fires EVERY bind matching a chord, so leaving it in
-# place means one press both switches workspace and tries to launch the
-# application again — which is the opposite of the design here, where nothing
-# ever launches or raises anything and the operator simply goes to where the
-# window lives. Review caught this against the live config.
+# The previous bind on this chord — which LAUNCHED the application directly —
+# was REPLACED, not added beside. Hyprland fires every bind matching a chord, so
+# leaving both would have meant one press switching workspace AND trying to
+# launch a second copy, which the socket would then refuse. Review caught it
+# against the live config before it was applied.
 #
 # Super+E stays with the Qt build, which is still the daily driver. The Electron
 # one keeps the secondary binding until the operator moves it deliberately.
@@ -93,11 +90,29 @@ stay visible and countable in the bar."
 ./install-desktop-integration.sh    # links the entry, the unit and the CLI; enables the unit
 ```
 
-The script starts nothing and touches no compositor. Then, in either order:
+The script starts nothing and touches no compositor. The compositor fragment is
+already in the dotfiles, so all that remains is to start the daemon — which
+happens by itself at the next login, or immediately with
+`systemctl --user start symmetria-fm-electron.service`.
 
-1. add the fragment above and reload Hyprland;
-2. log out and back in, or `systemctl --user start symmetria-fm-electron.service`
-   once the compositor knows where to put the window.
+## Two things the unit learned the hard way
+
+Both were found the first time it was started for real, and both are in the unit
+file with their reasoning.
+
+**Chromium moves its browser process out of the service cgroup.** On a systemd
+user session it relocates into a transient scope of its own,
+`app-symmetria-fm-electron-<pid>.scope`, so it survives cleanup of whatever
+launched it. Right for a desktop launch, wrong for a service: the service cgroup
+then holds only the Node wrapper and the zygotes, so `systemctl --user stop`
+reaches everything except the process that owns the socket. `ExecStopPost` stops
+that scope by glob.
+
+**`Restart=always` plus a correct liveness check is an infinite loop.** With an
+orphan holding the socket, every start refused — correctly, exit 1 — and was
+restarted two seconds later, six times in twenty seconds, each one paying a full
+Electron boot. `RestartPreventExitStatus=1` says a deliberate refusal is not a
+crash. The check was never the broken half.
 
 ## Verifying
 
