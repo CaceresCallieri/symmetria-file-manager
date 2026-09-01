@@ -42,6 +42,31 @@ export interface OpenCommand {
  */
 export const PICKER_FIFO_PREFIX = "/tmp/symmetria-picker-";
 
+/**
+ * What a cancellation looks like on the wire.
+ *
+ * A protocol constant shared with the Qt build and the portal backend:
+ * `_cancelledSentinel` in `host/standalone/main.qml` and `CANCELLED_SENTINEL` in
+ * `portal/symmetria_portal.py`. A backend reading a different word would treat a
+ * cancel as a chosen file literally named `__PICKER_CANCELLED__`.
+ *
+ * It lives here rather than beside the writer because it is part of the protocol
+ * rather than part of the writing — and this package compiles against no
+ * environment, so the decision layer can read it without dragging `node:fs` in.
+ */
+export const CANCELLED_SENTINEL = "__PICKER_CANCELLED__";
+
+/**
+ * The chosen paths, as the portal parses them.
+ *
+ * Newline-separated with no trailing newline, matching what the Qt daemon
+ * writes. The reader strips and drops empty lines either way, but matching it
+ * exactly means one backend can serve both applications unchanged.
+ */
+export function selectionPayload(paths: readonly string[]): string {
+  return paths.join("\n");
+}
+
 /** What kind of dialog the portal asked for. Defaults are the Qt build's. */
 export interface PickerOptions {
   readonly title: string;

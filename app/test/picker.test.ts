@@ -1,7 +1,8 @@
+import { CANCELLED_SENTINEL, selectionPayload } from "@symmetria/fm-core/command";
 import { describe, expect, it } from "vitest";
-
 import {
   createPickerHost,
+  DEFAULT_PICKER_LIFETIME_MS,
   type OpenPickerWindow,
   PICKER_TITLE_PREFIX,
   type PickerWindow,
@@ -77,6 +78,16 @@ function fakeWindow() {
   };
 }
 
+/**
+ * A writer for the cases that are not about writing.
+ *
+ * The tests above the answer suite assert which windows open and which slot is
+ * held; they need a writer only because a picker host without one could not
+ * answer its caller, which is not optional. `writerSpy` is what the answer
+ * suite uses when the payload is the point.
+ */
+const silentWriter = () => Promise.resolve({ ok: true as const, value: null });
+
 /** A factory that hands out fresh fake windows and remembers every call. */
 function factory() {
   const opened: { title: string; window: ReturnType<typeof fakeWindow> }[] = [];
@@ -113,7 +124,7 @@ describe("the picker window's title is a compositor contract", () => {
 describe("one picker at a time", () => {
   it("opens exactly one window for a create", () => {
     const f = factory();
-    const host = createPickerHost(f.open);
+    const host = createPickerHost(f.open, silentWriter);
 
     const outcome = host.create(request(FIFO_A));
 
@@ -127,7 +138,7 @@ describe("one picker at a time", () => {
     // so it has to be in the constructor options; and Electron lets the page's
     // own `<title>` replace it later, which would break the rule after the fact.
     const f = factory();
-    const host = createPickerHost(f.open);
+    const host = createPickerHost(f.open, silentWriter);
 
     host.create(request(FIFO_A));
 
@@ -140,7 +151,7 @@ describe("one picker at a time", () => {
 
   it("refuses a second create while one is open, and opens no window for it", () => {
     const f = factory();
-    const host = createPickerHost(f.open);
+    const host = createPickerHost(f.open, silentWriter);
     host.create(request(FIFO_A));
 
     const outcome = host.create(request(FIFO_B));
@@ -158,7 +169,7 @@ describe("one picker at a time", () => {
     // The rejection must not disturb the request that is legitimately in
     // progress — a user is looking at that window.
     const f = factory();
-    const host = createPickerHost(f.open);
+    const host = createPickerHost(f.open, silentWriter);
     host.create(request(FIFO_A));
 
     host.create(request(FIFO_B));
@@ -169,7 +180,7 @@ describe("one picker at a time", () => {
 
   it("accepts a new create once the open one has gone", () => {
     const f = factory();
-    const host = createPickerHost(f.open);
+    const host = createPickerHost(f.open, silentWriter);
     host.create(request(FIFO_A));
 
     f.opened[0]?.window.fireClosed();
@@ -181,7 +192,7 @@ describe("one picker at a time", () => {
   });
 
   it("reports no open picker before the first create", () => {
-    expect(createPickerHost(factory().open).openFifo()).toBe(null);
+    expect(createPickerHost(factory().open, silentWriter).openFifo()).toBe(null);
   });
 });
 
@@ -198,7 +209,7 @@ describe("a picker window that is gone before its close event arrives", () => {
    */
   it("does not hold the slot forever", () => {
     const f = factory();
-    const host = createPickerHost(f.open);
+    const host = createPickerHost(f.open, silentWriter);
     host.create(request(FIFO_A));
 
     f.opened[0]?.window.dieSilently();
@@ -215,7 +226,7 @@ describe("a picker window that is gone before its close event arrives", () => {
     // without releasing trades one permanent leak for another. Review found
     // that the first version of this fix would have done exactly that.
     const f = factory();
-    const host = createPickerHost(f.open);
+    const host = createPickerHost(f.open, silentWriter);
     host.create(request(FIFO_A));
 
     f.opened[0]?.window.dieSilently();
@@ -226,7 +237,7 @@ describe("a picker window that is gone before its close event arrives", () => {
 
   it("reports the slot as empty rather than naming a window nobody can see", () => {
     const f = factory();
-    const host = createPickerHost(f.open);
+    const host = createPickerHost(f.open, silentWriter);
     host.create(request(FIFO_A));
 
     f.opened[0]?.window.dieSilently();
@@ -236,7 +247,7 @@ describe("a picker window that is gone before its close event arrives", () => {
 
   it("stops a close from reaching a window that has already gone", () => {
     const f = factory();
-    const host = createPickerHost(f.open);
+    const host = createPickerHost(f.open, silentWriter);
     host.create(request(FIFO_A));
 
     f.opened[0]?.window.dieSilently();
@@ -249,7 +260,7 @@ describe("a picker window that is gone before its close event arrives", () => {
 describe("closing a picker", () => {
   it("closes the window when the fifo names the open picker", () => {
     const f = factory();
-    const host = createPickerHost(f.open);
+    const host = createPickerHost(f.open, silentWriter);
     host.create(request(FIFO_A));
 
     const outcome = host.close({ cmd: "closePicker", fifo: FIFO_A });
@@ -264,7 +275,7 @@ describe("closing a picker", () => {
     // Honouring it blindly would close a dialog a different application is
     // waiting on. The Qt daemon compares the fifo for exactly this reason.
     const f = factory();
-    const host = createPickerHost(f.open);
+    const host = createPickerHost(f.open, silentWriter);
     host.create(request(FIFO_A));
 
     const outcome = host.close({ cmd: "closePicker", fifo: FIFO_B });
@@ -275,8 +286,383 @@ describe("closing a picker", () => {
   });
 
   it("is harmless when no picker is open", () => {
-    const host = createPickerHost(factory().open);
+    const host = createPickerHost(factory().open, silentWriter);
 
     expect(host.close({ cmd: "closePicker", fifo: FIFO_A }).ok).toBe(true);
+  });
+});
+
+/**
+ * Answering the caller, and the guarantee that SOMETHING always does.
+ *
+ * A picker exists because an application is blocked on a named pipe. Every way
+ * out of the dialog therefore has to write to it: the user choosing, the user
+ * cancelling, the window closing, a `closePicker` arriving, and a request being
+ * turned away because another dialog is already up. A path that returns without
+ * writing leaves the calling application frozen until the portal's five-minute
+ * timeout.
+ *
+ * The writer is injected for the same reason the window is: what belongs here is
+ * WHICH payload goes to WHICH pipe and whether it goes exactly once. Whether the
+ * bytes reach a real FIFO is `fifo.test.ts`'s question.
+ */
+function writerSpy() {
+  const writes: { fifo: string; payload: string }[] = [];
+  return {
+    writes,
+    write: (fifo: string, payload: string) => {
+      writes.push({ fifo, payload });
+      return Promise.resolve({ ok: true as const, value: null });
+    },
+    /** Only what was written to this pipe. */
+    to: (fifo: string) => writes.filter((each) => each.fifo === fifo).map((each) => each.payload),
+  };
+}
+
+describe("every way out of a picker answers its caller", () => {
+  it("writes the chosen paths and dismisses the dialog", async () => {
+    const f = factory();
+    const w = writerSpy();
+    const host = createPickerHost(f.open, w.write);
+    host.create(request(FIFO_A));
+
+    const outcome = await host.answer(FIFO_A, ["/home/jc/one.txt", "/home/jc/two.txt"]);
+
+    expect(outcome.ok).toBe(true);
+    expect(w.to(FIFO_A)).toEqual(["/home/jc/one.txt\n/home/jc/two.txt"]);
+    expect(f.opened[0]?.window.closeCalls()).toBe(1);
+  });
+
+  it("writes the sentinel when the user cancels", async () => {
+    const f = factory();
+    const w = writerSpy();
+    const host = createPickerHost(f.open, w.write);
+    host.create(request(FIFO_A));
+
+    await host.cancel(FIFO_A);
+
+    expect(w.to(FIFO_A)).toEqual([CANCELLED_SENTINEL]);
+    expect(f.opened[0]?.window.closeCalls()).toBe(1);
+  });
+
+  it("writes the sentinel when the window closes with nothing chosen", async () => {
+    // The compositor's close button, or the user pressing Escape. Nothing has
+    // been chosen and the caller is still waiting, so silence here is the worst
+    // outcome available.
+    const f = factory();
+    const w = writerSpy();
+    const host = createPickerHost(f.open, w.write);
+    host.create(request(FIFO_A));
+
+    f.opened[0]?.window.fireClosed();
+    await Promise.resolve();
+
+    expect(w.to(FIFO_A)).toEqual([CANCELLED_SENTINEL]);
+  });
+
+  it("does not answer twice when the window closes after an answer", async () => {
+    // Answering dismisses the dialog, so the close arrives immediately behind
+    // the write. The reader takes the FIRST thing it gets, so a sentinel
+    // chasing a real answer would turn a chosen file into a cancellation.
+    const f = factory();
+    const w = writerSpy();
+    const host = createPickerHost(f.open, w.write);
+    host.create(request(FIFO_A));
+
+    await host.answer(FIFO_A, ["/home/jc/one.txt"]);
+    f.opened[0]?.window.fireClosed();
+    await Promise.resolve();
+
+    expect(w.to(FIFO_A)).toEqual(["/home/jc/one.txt"]);
+  });
+
+  it("answers a request it turns away, on that request's own pipe", async () => {
+    // The busy rejection. Without it the second caller waits five minutes for a
+    // dialog that was never going to open — and the refusal reply on the socket
+    // does not reach it, because it is blocked on the pipe rather than reading
+    // an exit code.
+    const f = factory();
+    const w = writerSpy();
+    const host = createPickerHost(f.open, w.write);
+    host.create(request(FIFO_A));
+
+    const outcome = host.create(request(FIFO_B));
+    await Promise.resolve();
+
+    expect(outcome.ok).toBe(false);
+    expect(w.to(FIFO_B)).toEqual([CANCELLED_SENTINEL]);
+  });
+
+  it("leaves the open dialog untouched when it turns a request away", async () => {
+    // The Qt build needed a SEPARATE writer for this, because its cancel writer
+    // closed the active window when it finished — which is exactly what a busy
+    // rejection must not do. A user is looking at that window.
+    const f = factory();
+    const w = writerSpy();
+    const host = createPickerHost(f.open, w.write);
+    host.create(request(FIFO_A));
+
+    host.create(request(FIFO_B));
+    await Promise.resolve();
+
+    expect(w.to(FIFO_A)).toEqual([]);
+    expect(f.opened[0]?.window.closeCalls()).toBe(0);
+    expect(host.openFifo()).toBe(FIFO_A);
+  });
+
+  it("answers the caller when a closePicker dismisses the dialog", async () => {
+    // The portal sends this when the calling application dies. It is still
+    // waiting on the pipe until something writes, and unlinking the FIFO is the
+    // portal's job rather than ours.
+    const f = factory();
+    const w = writerSpy();
+    const host = createPickerHost(f.open, w.write);
+    host.create(request(FIFO_A));
+
+    host.close({ cmd: "closePicker", fifo: FIFO_A });
+    await Promise.resolve();
+
+    expect(w.to(FIFO_A)).toEqual([CANCELLED_SENTINEL]);
+  });
+
+  it("dismisses the dialog even when the write fails", async () => {
+    // A pipe nobody is reading, or one that has gone. The answer cannot be
+    // delivered, and leaving the dialog on screen would strand a window with no
+    // caller behind it — on a resident daemon, for good.
+    const f = factory();
+    const host = createPickerHost(f.open, () =>
+      Promise.resolve({
+        ok: false as const,
+        error: { code: "write_failed" as const, message: "gone" },
+      }),
+    );
+    host.create(request(FIFO_A));
+
+    const outcome = await host.answer(FIFO_A, ["/home/jc/one.txt"]);
+
+    expect(outcome.ok).toBe(false);
+    expect(f.opened[0]?.window.closeCalls()).toBe(1);
+  });
+
+  it("ignores an answer naming a pipe that is not the open one", async () => {
+    const f = factory();
+    const w = writerSpy();
+    const host = createPickerHost(f.open, w.write);
+    host.create(request(FIFO_A));
+
+    const outcome = await host.answer(FIFO_B, ["/home/jc/one.txt"]);
+
+    expect(outcome.ok).toBe(false);
+    expect(w.writes).toEqual([]);
+    expect(f.opened[0]?.window.closeCalls()).toBe(0);
+  });
+});
+
+/**
+ * The guarantee, for the routes nothing else can see.
+ *
+ * Verification found that a window whose X surface is destroyed from outside
+ * the process raises NOTHING that Electron can observe — `isDestroyed()` stays
+ * false — so the caller was never answered and the daemon refused every later
+ * dialog for the rest of its life. The comment in the source claimed the FIFO
+ * write timeout bounded that; it did not, because on that path no write is ever
+ * attempted. This timer is what makes the claim true.
+ *
+ * The bound is the PORTAL's own patience, not an opinion about how long a user
+ * may take: once the caller has given up reading, the dialog on screen can no
+ * longer deliver anything to anyone, so dismissing it costs nothing.
+ */
+describe("a picker that outlives the caller waiting for it", () => {
+  /** A schedule that fires nothing until the test says so. */
+  function manualSchedule() {
+    const armed: { run: () => void; afterMs: number; cancelled: boolean }[] = [];
+    const schedule = (run: () => void, afterMs: number) => {
+      const entry = { run, afterMs, cancelled: false };
+      armed.push(entry);
+      return () => {
+        entry.cancelled = true;
+      };
+    };
+    return {
+      schedule,
+      armed,
+      fireAll: () => {
+        for (const entry of armed) if (!entry.cancelled) entry.run();
+      },
+    };
+  }
+
+  it("arms an expiry longer than the portal's own timeout", () => {
+    // The portal gives up at 300 s (`FIFO_TIMEOUT_SECONDS`). Expiring sooner
+    // would dismiss a dialog whose answer the caller would still have accepted.
+    const f = factory();
+    const s = manualSchedule();
+    createPickerHost(f.open, silentWriter, { schedule: s.schedule }).create(request(FIFO_A));
+
+    expect(s.armed).toHaveLength(1);
+    expect(s.armed[0]?.afterMs).toBeGreaterThan(300_000);
+  });
+
+  it("answers the caller and frees the slot when it expires", () => {
+    const f = factory();
+    const w = writerSpy();
+    const s = manualSchedule();
+    const host = createPickerHost(f.open, w.write, { schedule: s.schedule });
+    host.create(request(FIFO_A));
+
+    s.fireAll();
+
+    expect(w.to(FIFO_A)).toEqual([CANCELLED_SENTINEL]);
+    expect(f.opened[0]?.window.closeCalls()).toBe(1);
+    expect(f.opened[0]?.window.releases()).toBe(1);
+    expect(host.openFifo()).toBe(null);
+  });
+
+  it("lets the next request through afterwards", () => {
+    // The whole point. Before this, a window that vanished silently left the
+    // daemon unable to open any dialog until the next login.
+    const f = factory();
+    const s = manualSchedule();
+    const host = createPickerHost(f.open, silentWriter, { schedule: s.schedule });
+    host.create(request(FIFO_A));
+
+    s.fireAll();
+
+    expect(host.create(request(FIFO_B)).ok).toBe(true);
+  });
+
+  it("calls the expiry off once the caller has been answered", () => {
+    // Otherwise the timer fires minutes later against a slot a newer request
+    // owns, and closes a dialog somebody is looking at.
+    const f = factory();
+    const s = manualSchedule();
+    const host = createPickerHost(f.open, silentWriter, { schedule: s.schedule });
+    host.create(request(FIFO_A));
+
+    host.close({ cmd: "closePicker", fifo: FIFO_A });
+
+    expect(s.armed[0]?.cancelled).toBe(true);
+  });
+
+  it("does not answer twice when it expires after an answer", async () => {
+    const f = factory();
+    const w = writerSpy();
+    const s = manualSchedule();
+    const host = createPickerHost(f.open, w.write, { schedule: s.schedule });
+    host.create(request(FIFO_A));
+
+    await host.answer(FIFO_A, ["/home/jc/one.txt"]);
+    s.fireAll();
+
+    // The reader takes the first thing it gets, so a sentinel arriving behind a
+    // real answer would turn a chosen file into a cancellation.
+    expect(w.to(FIFO_A)).toEqual(["/home/jc/one.txt"]);
+  });
+});
+
+describe("a window that goes without saying so still answers its caller", () => {
+  it("writes the sentinel when the slot is dropped as stale", async () => {
+    // The half the first fix missed: clearing the slot solved the daemon's
+    // problem and left the other application blocked on a pipe nobody would
+    // ever write to.
+    const f = factory();
+    const w = writerSpy();
+    const host = createPickerHost(f.open, w.write);
+    host.create(request(FIFO_A));
+
+    f.opened[0]?.window.dieSilently();
+    host.create(request(FIFO_B));
+    await Promise.resolve();
+
+    expect(w.to(FIFO_A)).toEqual([CANCELLED_SENTINEL]);
+  });
+});
+
+describe("a request that names the open picker's own pipe", () => {
+  it("is refused without writing anything to it", async () => {
+    // The injection review found. `/tmp` is world-writable and any local
+    // process may send a `createPicker` for any path under the picker prefix,
+    // so a request naming the LIVE dialog's FIFO would have had the busy
+    // rejection write a cancellation into the very pipe the user was about to
+    // answer — racing the real answer on the same stream, and cancelling
+    // somebody's save dialog from outside the application.
+    const f = factory();
+    const w = writerSpy();
+    const host = createPickerHost(f.open, w.write);
+    host.create(request(FIFO_A));
+
+    const outcome = host.create(request(FIFO_A));
+    await Promise.resolve();
+
+    expect(outcome.ok).toBe(false);
+    expect(w.to(FIFO_A)).toEqual([]);
+    expect(host.openFifo()).toBe(FIFO_A);
+    expect(f.opened).toHaveLength(1);
+  });
+
+  it("still answers a request naming a different pipe", async () => {
+    // The narrowing must not cost the busy rejection its whole reason for
+    // existing: an unrelated second caller is blocked and still needs telling.
+    const f = factory();
+    const w = writerSpy();
+    const host = createPickerHost(f.open, w.write);
+    host.create(request(FIFO_A));
+
+    host.create(request(FIFO_B));
+    await Promise.resolve();
+
+    expect(w.to(FIFO_B)).toEqual([CANCELLED_SENTINEL]);
+  });
+});
+
+describe("a path the wire format cannot carry", () => {
+  it("is refused rather than silently split in two", async () => {
+    // A Linux filename may contain a newline, and the payload is
+    // newline-delimited — the same format the Qt build writes and the same one
+    // the portal parses, so it cannot change. Such a path would arrive as two
+    // bogus paths: a silent corruption of the one thing this phase delivers.
+    const f = factory();
+    const w = writerSpy();
+    const host = createPickerHost(f.open, w.write);
+    host.create(request(FIFO_A));
+
+    const outcome = await host.answer(FIFO_A, ["/home/jc/two\nlines.txt"]);
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.code).toBe("invalid_request");
+    expect(w.writes).toEqual([]);
+  });
+
+  it("lets an ordinary path through unchanged", () => {
+    expect(selectionPayload(["/home/jc/one.txt", "/home/jc/two.txt"])).toBe(
+      "/home/jc/one.txt\n/home/jc/two.txt",
+    );
+  });
+});
+
+describe("the default picker lifetime", () => {
+  it("is the one used when the host is built with no options", () => {
+    // Every other expiry test supplies its own lifetime, so nothing pinned the
+    // real constant — a change of magnitude or of unit, seconds for
+    // milliseconds, would have gone unnoticed. It is the sole guarantee against
+    // a permanently stuck slot on a daemon that runs for days.
+    const f = factory();
+    const armed: number[] = [];
+    createPickerHost(f.open, silentWriter, {
+      // Observed rather than fired: substituting the schedule is the only way
+      // to read the default, and firing it would test the expiry rather than
+      // the number.
+      schedule: (_run, afterMs) => {
+        armed.push(afterMs);
+        return () => undefined;
+      },
+    }).create(request(FIFO_A));
+
+    expect(armed).toEqual([DEFAULT_PICKER_LIFETIME_MS]);
+    // Past the portal's own 300 s, which is the whole justification for the
+    // value: expiring sooner would dismiss a dialog whose answer the caller
+    // would still have taken.
+    expect(DEFAULT_PICKER_LIFETIME_MS).toBeGreaterThan(300_000);
   });
 });

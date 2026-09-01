@@ -4,14 +4,22 @@ import { PICKER_FIFO_PREFIX } from "@symmetria/fm-core/command";
 import { failure } from "@symmetria/fm-core/contract";
 import { homeQuery } from "@symmetria/fm-core/windowUrl";
 import { PUSH_CHANNELS, REQUEST_CHANNELS } from "@symmetria/fm-main/ipc/channels";
+import type { ElectronTransport } from "@symmetria/fm-main/ipc/electronSurface";
 import { electronIpcSurface } from "@symmetria/fm-main/ipc/electronSurface";
-import { createRegistry } from "@symmetria/fm-main/ipc/register";
+import { createRegistry, type Registry } from "@symmetria/fm-main/ipc/register";
 import { app, BrowserWindow, ipcMain } from "electron";
+import { writeToFifo } from "./fifo.ts";
 import { createResidency } from "./lifecycle.ts";
-import { createPickerHost, type OpenPickerWindow, pickerWindowOptions } from "./picker.ts";
+import {
+  createPickerHost,
+  type OpenPickerWindow,
+  type PickerHost,
+  type PickerHostOptions,
+  pickerWindowOptions,
+} from "./picker.ts";
 
 import { APP_ENTRY_URL, handleAppScheme, previewUrlFor, registerAppScheme } from "./protocol.ts";
-import { claimSocket, daemonSocketPath, sendCommand } from "./socket.ts";
+import { type CommandHandler, claimSocket, daemonSocketPath, sendCommand } from "./socket.ts";
 import { buildWindowOptions } from "./window.ts";
 
 // Must happen before the app is ready. See `protocol.ts` for why the renderer
@@ -588,58 +596,20 @@ async function reportAndQuit(window: BrowserWindow, socketPath: string): Promise
   app.exit(0);
 }
 
-app.whenReady().then(async () => {
-  handleAppScheme();
-  const { window, painted } = createWindow();
-
-  // The renderer has no filesystem of its own, so this registry is the only
-  // way it reaches one.
-  //
-  // The transport supplies BOTH halves now, and that replaced a real defect:
-  // the sender used to be built here around this one window, so every push —
-  // a listing batch, a directory change, transfer progress — went to it
-  // whatever window had asked. With one window that was invisible. The picker
-  // is the second window, and it would have watched its rows arrive on another
-  // workspace.
-  const transport = electronIpcSurface(ipcMain);
-  const registry = createRegistry(
-    transport.surface,
-    // The host owns its own origin, so it is the host that turns a preview
-    // token into a URL. The registry used to import this and that import was
-    // the last line tying the privileged half to one particular application.
-    { previewUrlFor },
-  );
-
-  // `dispose` was written and never called, which meant every filesystem watch
-  // a session opened lived until the process exited. For an application whose
-  // whole point is to stay resident, an uninvoked cleanup path is a leak with a
-  // delay on it.
-  //
-  // Hung off `will-quit` alone. It used to also hang off the window's `closed`
-  // event, which now never fires — the window is hidden rather than destroyed —
-  // so leaving it there would have looked like cleanup that no longer ran.
-  app.on("will-quit", () => registry.dispose());
-  app.on("before-quit", () => residency.beginQuit());
-
-  // The socket is the authority on who is the daemon, and taking it is what
-  // makes a second launch exit instead of opening a rival window.
-  // Hiding the window is a HOST concern, so its handler is registered here
-  // rather than in the IPC registry. The registry is the privileged filesystem
-  // half and becomes an importable package; a window method in it would be the
-  // one thing an embedding host could not satisfy.
-  ipcMain.handle(REQUEST_CHANNELS.hideWindow, () => {
-    if (!window.isDestroyed()) window.hide();
-    return { ok: true, value: null };
-  });
-
-  /**
-   * A real `BrowserWindow`, presented as the three things the picker host uses.
-   *
-   * The adapter lives here rather than in `picker.ts` for the reason `window.ts`
-   * gives: that module must stay free of a runtime Electron import so its
-   * decisions are testable without a display.
-   */
-  const openPickerWindow: OpenPickerWindow = (command, title) => {
+/**
+ * A real `BrowserWindow`, presented as the five things the picker host uses.
+ *
+ * Lifted out of `whenReady` because the complexity gate scored that function at
+ * a CRAP of 42 against a bound of 30 once the adapter had grown — the same
+ * thing that happened to `measureResidency` and `measurePicker`, and the same
+ * seam: adapting one object to one interface is its own step.
+ *
+ * The adapter lives here rather than in `picker.ts` for the reason `window.ts`
+ * gives: that module must stay free of a runtime Electron import so its
+ * decisions are testable without a display.
+ */
+function pickerWindowFactory(transport: ElectronTransport, registry: Registry): OpenPickerWindow {
+  return (command, title) => {
     const dialog = new BrowserWindow(pickerWindowOptions(title));
 
     // Minted NOW, while the window is alive, and not inside the `closed`
@@ -741,27 +711,105 @@ app.whenReady().then(async () => {
       release,
     };
   };
+}
 
-  const pickers = createPickerHost(openPickerWindow);
+/**
+ * How long a picker may hold the slot, honouring the test override.
+ *
+ * Its own function because `whenReady` is measured by the complexity gate as
+ * one unit, and four branches spent parsing an environment variable are four
+ * branches the parts that matter cannot use.
+ *
+ * The override exists so the expiry can be exercised from outside without
+ * waiting out the portal's five minutes — the same reason `SYMMETRIA_FM_SOCKET`
+ * exists. That expiry IS the guarantee that a picker whose window vanished
+ * undetectably still answers its caller, and a guarantee nobody can observe is
+ * one nobody can check. Unset in normal use.
+ */
+function pickerLifetimeOptions(): PickerHostOptions {
+  const overrideMs = Number.parseInt(process.env.SYMMETRIA_FM_PICKER_LIFETIME_MS ?? "", 10);
+  return Number.isFinite(overrideMs) && overrideMs > 0 ? { lifetimeMs: overrideMs } : {};
+}
 
-  const socketPath = daemonSocketPath();
-  const claimed = await claimSocket(socketPath, async (command) => {
+/**
+ * What the daemon does with a line that arrived on its socket.
+ *
+ * Three verbs, named rather than defaulted. The `open` arm reports the TRUTH
+ * about delivery, which the first version did not: it answered `{ok:true}`
+ * unconditionally and only sent the message when a window existed, so a caller
+ * branching on the exit code — the portal backend does exactly this — was told
+ * the path had opened when nothing had. Verification caught it.
+ */
+function socketCommandHandler(window: BrowserWindow, pickers: PickerHost): CommandHandler {
+  return async (command) => {
     if (command.cmd === "createPicker") return pickers.create(command);
     if (command.cmd === "closePicker") return pickers.close(command);
 
-    // Reporting the truth, which the first version did not.
-    //
-    // It answered `{ok:true}` unconditionally and only sent the message when a
-    // window existed, so a caller branching on the exit code — the portal
-    // backend does exactly this — was told the path had opened when nothing
-    // had. Verification caught it. A command that could not be delivered is a
-    // failure, and saying so is the whole value of having a reply channel.
     if (window.isDestroyed()) {
       return failure("write_failed", "the file manager has no window to open it in");
     }
     window.webContents.send(PUSH_CHANNELS.openPath, { path: command.path });
     return { ok: true, value: null };
+  };
+}
+
+app.whenReady().then(async () => {
+  handleAppScheme();
+  const { window, painted } = createWindow();
+
+  // The renderer has no filesystem of its own, so this registry is the only
+  // way it reaches one.
+  //
+  // The transport supplies BOTH halves now, and that replaced a real defect:
+  // the sender used to be built here around this one window, so every push —
+  // a listing batch, a directory change, transfer progress — went to it
+  // whatever window had asked. With one window that was invisible. The picker
+  // is the second window, and it would have watched its rows arrive on another
+  // workspace.
+  const transport = electronIpcSurface(ipcMain);
+  const registry = createRegistry(
+    transport.surface,
+    // The host owns its own origin, so it is the host that turns a preview
+    // token into a URL. The registry used to import this and that import was
+    // the last line tying the privileged half to one particular application.
+    { previewUrlFor },
+  );
+
+  // `dispose` was written and never called, which meant every filesystem watch
+  // a session opened lived until the process exited. For an application whose
+  // whole point is to stay resident, an uninvoked cleanup path is a leak with a
+  // delay on it.
+  //
+  // Hung off `will-quit` alone. It used to also hang off the window's `closed`
+  // event, which now never fires — the window is hidden rather than destroyed —
+  // so leaving it there would have looked like cleanup that no longer ran.
+  app.on("will-quit", () => registry.dispose());
+  app.on("before-quit", () => residency.beginQuit());
+
+  // The socket is the authority on who is the daemon, and taking it is what
+  // makes a second launch exit instead of opening a rival window.
+  // Hiding the window is a HOST concern, so its handler is registered here
+  // rather than in the IPC registry. The registry is the privileged filesystem
+  // half and becomes an importable package; a window method in it would be the
+  // one thing an embedding host could not satisfy.
+  ipcMain.handle(REQUEST_CHANNELS.hideWindow, () => {
+    if (!window.isDestroyed()) window.hide();
+    return { ok: true, value: null };
   });
+
+  const openPickerWindow = pickerWindowFactory(transport, registry);
+
+  // The real writer. Every way out of a dialog ends in this call, because the
+  // application that asked for a file is blocked reading that pipe.
+  const pickers = createPickerHost(
+    openPickerWindow,
+    (fifo, payload) => writeToFifo(fifo, payload),
+    pickerLifetimeOptions(),
+  );
+
+  const socketPath = daemonSocketPath();
+  const claimed = await claimSocket(socketPath, socketCommandHandler(window, pickers));
+
   if (!claimed.ok) {
     // Another daemon already owns the path, so this process has nothing to do.
     // Exiting is the whole point of the check: two daemons would answer the
