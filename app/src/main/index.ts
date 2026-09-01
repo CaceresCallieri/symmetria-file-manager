@@ -1,5 +1,6 @@
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BRIDGE_KEY } from "@symmetria/fm-core/bridge";
+import { PICKER_FIFO_PREFIX } from "@symmetria/fm-core/command";
 import { failure } from "@symmetria/fm-core/contract";
 import { homeQuery } from "@symmetria/fm-core/windowUrl";
 import { PUSH_CHANNELS, REQUEST_CHANNELS } from "@symmetria/fm-main/ipc/channels";
@@ -7,6 +8,7 @@ import { electronIpcSurface } from "@symmetria/fm-main/ipc/electronSurface";
 import { createRegistry } from "@symmetria/fm-main/ipc/register";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { createResidency } from "./lifecycle.ts";
+import { createPickerHost, type OpenPickerWindow, pickerWindowOptions } from "./picker.ts";
 
 import { APP_ENTRY_URL, handleAppScheme, previewUrlFor, registerAppScheme } from "./protocol.ts";
 import { claimSocket, daemonSocketPath, sendCommand } from "./socket.ts";
@@ -307,6 +309,105 @@ async function measureResidency(
 }
 
 /**
+ * What a picker does when it is really driven over the socket.
+ *
+ * The one-at-a-time logic and the title rule are unit-tested against an
+ * injected window factory. What only a launched process can show is the part
+ * the desktop cares about: that a real second window appears, that it carries
+ * the routing title when it maps AND after the page has had its chance to
+ * replace it, and that closing it leaves the resident daemon serving.
+ */
+/** Whichever window is not the resident one, or none. */
+function dialogBeside(browse: BrowserWindow): BrowserWindow | null {
+  return BrowserWindow.getAllWindows().find((each) => each !== browse) ?? null;
+}
+
+/**
+ * The title the window ends up with once its page has had its chance.
+ *
+ * Split out of `measurePicker`, which the complexity gate scored at a CRAP of
+ * 42 against a bound of 30 — the same thing that happened to `measureResidency`
+ * and the same seam: waiting for a page and reading one value off it is its own
+ * step.
+ *
+ * The wait is raced against a timer deliberately. A load that never finished
+ * would park the probe forever and arrive as the harness's own 45-second
+ * timeout — a probe bug wearing the disguise of a hang, which is the hardest
+ * shape of failure to read. This one did exactly that once already.
+ */
+async function titleAfterLoading(dialog: BrowserWindow | null): Promise<string> {
+  if (dialog === null) return "";
+
+  await Promise.race([
+    new Promise<void>((resolve) => {
+      if (!dialog.webContents.isLoading()) return resolve();
+      dialog.webContents.once("did-finish-load", () => resolve());
+    }),
+    delay(5_000),
+  ]);
+  await delay(200);
+
+  return dialog.isDestroyed() ? "" : dialog.getTitle();
+}
+
+async function measurePicker(
+  browse: BrowserWindow,
+  socketPath: string,
+): Promise<Record<string, unknown>> {
+  const fifo = `${PICKER_FIFO_PREFIX}smoke.fifo`;
+  const windowsBefore = BrowserWindow.getAllWindows().length;
+
+  const created = await sendCommand(socketPath, {
+    cmd: "createPicker",
+    fifo,
+    title: "Save your download",
+    saveMode: true,
+  });
+
+  const dialog = dialogBeside(browse);
+  // Sampled BEFORE the page has loaded, which is the only moment that answers
+  // the question the compositor asks: the rule is evaluated when the window
+  // maps, not when the document finishes.
+  const titleAtMap = dialog === null ? "" : dialog.getTitle();
+  const windowsAfterCreate = BrowserWindow.getAllWindows().length;
+  const titleAfterLoad = await titleAfterLoading(dialog);
+
+  const second = await sendCommand(socketPath, {
+    cmd: "createPicker",
+    fifo: `${PICKER_FIFO_PREFIX}second.fifo`,
+  });
+  const windowsAfterSecondCreate = BrowserWindow.getAllWindows().length;
+
+  // A close naming a DIFFERENT request must not touch this one — the failing
+  // path, and the one a blind implementation gets wrong.
+  await sendCommand(socketPath, { cmd: "closePicker", fifo: `${PICKER_FIFO_PREFIX}other.fifo` });
+  await delay(200);
+  const windowsAfterForeignClose = BrowserWindow.getAllWindows().length;
+
+  await sendCommand(socketPath, { cmd: "closePicker", fifo });
+  await delay(400);
+
+  // Not "did this line run" — that would be true whatever happened. The daemon
+  // is asked to do something after the picker has gone, so a process that had
+  // quit, or a socket that had stopped being served, shows up as a refusal.
+  const afterClose = await sendCommand(socketPath, { cmd: "open", path: "/usr" });
+
+  return {
+    windowsBefore,
+    createAccepted: created.ok,
+    windowsAfterCreate,
+    titleAtMap,
+    titleAfterLoad,
+    secondCreateRejected: second.ok === false,
+    windowsAfterSecondCreate,
+    windowsAfterForeignClose,
+    windowsAfterClose: BrowserWindow.getAllWindows().length,
+    browseWindowAliveAfterClose: !browse.isDestroyed(),
+    daemonStillAnswersAfterClose: afterClose.ok,
+  };
+}
+
+/**
  * Does a deliberate quit still get through the close interception?
  *
  * `will-quit` is prevented so the report can still be written; what matters is
@@ -464,6 +565,11 @@ async function reportAndQuit(window: BrowserWindow, socketPath: string): Promise
   const windowCount = BrowserWindow.getAllWindows().length;
   const title = window.getTitle();
 
+  // Before the residency probe and after the window count, and both matter:
+  // it opens a second window, so a count taken afterwards would be 2, and the
+  // residency probe ends by quitting.
+  const pickerReport = await measurePicker(window, socketPath);
+
   // Last, because it closes the window and then quits. Everything above needs a
   // live page.
   const residencyReport = await measureResidency(window, socketPath);
@@ -471,6 +577,7 @@ async function reportAndQuit(window: BrowserWindow, socketPath: string): Promise
   process.stdout.write(
     `SMOKE_REPORT ${JSON.stringify({
       ...probe,
+      picker: pickerReport,
       residency: residencyReport,
       windowCount,
       title,
@@ -525,8 +632,123 @@ app.whenReady().then(async () => {
     return { ok: true, value: null };
   });
 
+  /**
+   * A real `BrowserWindow`, presented as the three things the picker host uses.
+   *
+   * The adapter lives here rather than in `picker.ts` for the reason `window.ts`
+   * gives: that module must stay free of a runtime Electron import so its
+   * decisions are testable without a display.
+   */
+  const openPickerWindow: OpenPickerWindow = (command, title) => {
+    const dialog = new BrowserWindow(pickerWindowOptions(title));
+
+    // Minted NOW, while the window is alive, and not inside the `closed`
+    // handler where it is needed. Reading `dialog.webContents` after Electron
+    // has destroyed the window THROWS, and a throw inside an event listener in
+    // the main process takes the whole application down — which is exactly what
+    // it did: the smoke launch hung and died with `Failed to shutdown`, having
+    // written no report at all.
+    const handle = transport.handleFor(dialog.webContents);
+
+    // Registered before the load, so a page that sets its own `<title>` while
+    // loading cannot win the race.
+    //
+    // It reads a MUTABLE `wanted` rather than closing over the constructor's
+    // `title`. `enforceTitle` promises to keep the window called whatever it was
+    // last told, and with the constructor value baked in here a later call would
+    // be silently reverted by the next page title change — an interface
+    // promising more than its implementation delivered. Review found it.
+    let wanted = title;
+    dialog.on("page-title-updated", (event) => {
+      event.preventDefault();
+      dialog.setTitle(wanted);
+    });
+
+    // Destroyed, not hidden. The residency interception in `createWindow`
+    // deliberately does NOT apply here: a dialog that hid itself would keep a
+    // caller blocked on a FIFO forever with nothing on screen to answer it.
+    dialog.once("ready-to-show", () => dialog.show());
+
+    // A renderer that dies takes its window with it, and Electron will not
+    // close the window on its own — it raises this and leaves a live
+    // `BrowserWindow` wrapped around a dead process. Destroying it here is what
+    // turns a crash into an ordinary `closed`, which clears the picker slot and
+    // returns the window's streams and watches.
+    //
+    // This is the realistic half of the "window dies without saying so" class.
+    // The other half — the X window destroyed from outside — is NOT detectable:
+    // measured, `isDestroyed()` stays false, because it reports Electron's own
+    // state and Electron has not been told. No compositor does that (a close
+    // button sends `xdg_toplevel.close` or `WM_DELETE_WINDOW`, both of which
+    // raise `close` here), and the real bound on a picker nobody answers is the
+    // FIFO write timeout in the next phase, not this listener.
+    dialog.webContents.on("render-process-gone", () => {
+      if (!dialog.isDestroyed()) dialog.destroy();
+    });
+
+    // The picker gets its own window URL, carrying the request. Phase 4 reads
+    // it; today the page opens as an ordinary browse view at the requested
+    // folder, which is what makes the window observable at all.
+    const home = app.getPath("home");
+    const opensAt = command.options.currentFolder === "" ? home : command.options.currentFolder;
+    void dialog.loadURL(`${APP_ENTRY_URL}${homeQuery(home)}#${encodeURIComponent(opensAt)}`);
+
+    /**
+     * Give back what this window was holding, at most once.
+     *
+     * The registry is shared between windows now, so a window that has gone must
+     * return its streams and its file watches. The browse window never reaches
+     * this — it hides rather than closing — so the picker is the first thing
+     * that ever needed it.
+     *
+     * **Called from two places on purpose**, and that is the fix for a confirmed
+     * defect: it used to run only from the `closed` event, and when a window
+     * dies WITHOUT that event — instrumented and observed: neither `close`, nor
+     * `webContents` `destroyed`, nor `closed` fires after an `XDestroyWindow`,
+     * and a renderer crash is the same class — the entry stayed in the
+     * registry's strongly-keyed map with live watches in it, for the rest of the
+     * daemon's life. The other caller is the stale-slot path in
+     * `createPickerHost`.
+     */
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      registry.disposeSender(handle);
+    };
+
+    return {
+      enforceTitle: (next) => {
+        wanted = next;
+        dialog.setTitle(next);
+      },
+      onClosed: (listener) => {
+        dialog.once("closed", () => {
+          release();
+          listener();
+        });
+      },
+      // `destroy` and NOT `close`, because this is the host deciding rather than
+      // asking. `close` runs the page's own unload lifecycle first, so a
+      // `beforeunload` handler could delay or veto dismissing a dialog that a
+      // calling application has already withdrawn — and it takes the same
+      // `close` → `closed` route that is proven not to fire in every case.
+      // `destroy` skips both and still raises `closed`. Review found it.
+      close: () => {
+        if (!dialog.isDestroyed()) dialog.destroy();
+      },
+      isGone: () => dialog.isDestroyed(),
+      release,
+    };
+  };
+
+  const pickers = createPickerHost(openPickerWindow);
+
   const socketPath = daemonSocketPath();
   const claimed = await claimSocket(socketPath, async (command) => {
+    if (command.cmd === "createPicker") return pickers.create(command);
+    if (command.cmd === "closePicker") return pickers.close(command);
+
     // Reporting the truth, which the first version did not.
     //
     // It answered `{ok:true}` unconditionally and only sent the message when a

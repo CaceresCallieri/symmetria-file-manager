@@ -54,7 +54,7 @@ describe("the command-line tool", () => {
     const socket = join(dir, "d.sock");
     const seen: string[] = [];
     const claim = await claimSocket(socket, async (command) => {
-      seen.push(command.path);
+      if (command.cmd === "open") seen.push(command.path);
       return { ok: true, value: null };
     });
     expect(claim.ok).toBe(true);
@@ -100,6 +100,85 @@ describe("the command-line tool", () => {
     const out = await cli(["destroy", "/tmp"], socket);
 
     expect(out.code).toBe(1);
+    await claim.value.close();
+  });
+
+  it("delivers a createPicker with its options and exits 0", async () => {
+    // The portal backend's whole job is this one call, so the tool has to be
+    // able to make it without a build step and without Electron.
+    const socket = join(dir, "d.sock");
+    const seen: unknown[] = [];
+    const claim = await claimSocket(socket, async (command) => {
+      seen.push(command);
+      return { ok: true, value: null };
+    });
+    expect(claim.ok).toBe(true);
+    if (!claim.ok) return;
+
+    const out = await cli(
+      [
+        "createPicker",
+        JSON.stringify({
+          fifo: "/tmp/symmetria-picker-abc.fifo",
+          title: "Save your download",
+          saveMode: true,
+          suggestedName: "report.pdf",
+        }),
+      ],
+      socket,
+    );
+
+    expect(out.code).toBe(0);
+    expect(seen).toEqual([
+      {
+        cmd: "createPicker",
+        fifo: "/tmp/symmetria-picker-abc.fifo",
+        options: {
+          title: "Save your download",
+          acceptLabel: "",
+          multiple: false,
+          directory: false,
+          saveMode: true,
+          suggestedName: "report.pdf",
+          currentFolder: "",
+        },
+      },
+    ]);
+    await claim.value.close();
+  });
+
+  it("delivers a closePicker and exits 0", async () => {
+    const socket = join(dir, "d.sock");
+    const seen: unknown[] = [];
+    const claim = await claimSocket(socket, async (command) => {
+      seen.push(command);
+      return { ok: true, value: null };
+    });
+    expect(claim.ok).toBe(true);
+    if (!claim.ok) return;
+
+    const out = await cli(
+      ["closePicker", JSON.stringify({ fifo: "/tmp/symmetria-picker-abc.fifo" })],
+      socket,
+    );
+
+    expect(out.code).toBe(0);
+    expect(seen).toEqual([{ cmd: "closePicker", fifo: "/tmp/symmetria-picker-abc.fifo" }]);
+    await claim.value.close();
+  });
+
+  it("exits 1 when a picker command's JSON argument is missing or malformed", async () => {
+    // The portal builds this argument with `json.dumps`, so a malformed one
+    // means the caller is broken — and reporting it as a usage error is what
+    // stops the daemon being blamed for it.
+    const socket = join(dir, "d.sock");
+    const claim = await claimSocket(socket, async () => ({ ok: true, value: null }));
+    expect(claim.ok).toBe(true);
+    if (!claim.ok) return;
+
+    expect((await cli(["createPicker"], socket)).code).toBe(1);
+    expect((await cli(["createPicker", "{not json"], socket)).code).toBe(1);
+    expect((await cli(["closePicker"], socket)).code).toBe(1);
     await claim.value.close();
   });
 

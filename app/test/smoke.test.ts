@@ -308,3 +308,71 @@ describe("the window closes without ending the program", () => {
     expect(residency.quitRanAfterRequest).toBe(true);
   });
 });
+
+/**
+ * The picker window, in a real Electron process.
+ *
+ * The one-at-a-time logic and the title rule are unit-tested in `picker.test.ts`
+ * against an injected window factory. What only a real launch can show is the
+ * part that matters to the desktop: that a second window really opens, that it
+ * really carries the routing title when it maps, that closing it leaves the
+ * resident browse window alone, and that the daemon does not quit when the
+ * second window goes away — which `window-all-closed` would do if anything ever
+ * reinstated `app.quit()` there.
+ */
+describe("a picker opens as a second window and goes away again", () => {
+  const picker = report.picker as Record<string, unknown>;
+
+  it("opens one more window for a createPicker on the socket", () => {
+    expect(picker.createAccepted).toBe(true);
+    expect(picker.windowsBefore).toBe(1);
+    expect(picker.windowsAfterCreate).toBe(2);
+  });
+
+  it("titles it so the compositor leaves it where the caller is", () => {
+    // `~/.dotfiles/.config/hypr/windowrules.conf` excludes this window from the
+    // file manager's own workspace BY TITLE, because every window of this
+    // process carries the same Wayland app id. A title that misses the prefix
+    // sends every save dialog to the wrong workspace.
+    expect(picker.titleAtMap).toBeTypeOf("string");
+    expect(picker.titleAtMap as string).toMatch(/^Choose a file/);
+  });
+
+  it("keeps that title after the page has loaded and set its own", () => {
+    // Electron lets a page's `<title>` replace the window title. The compositor
+    // reads it at map time, but a rule re-evaluated on a title change would see
+    // the page's version — and a human reading the window list always would.
+    expect(picker.titleAfterLoad as string).toMatch(/^Choose a file/);
+  });
+
+  it("refuses a second createPicker instead of opening a third window", () => {
+    expect(picker.secondCreateRejected).toBe(true);
+    expect(picker.windowsAfterSecondCreate).toBe(2);
+  });
+
+  it("ignores a closePicker naming a different request", () => {
+    // The failing path, and the one a blind implementation gets wrong. The
+    // portal sends this when the CALLING application withdraws or dies, and by
+    // then the picker it meant may already have been answered and replaced —
+    // so honouring it blindly closes a dialog somebody else is waiting on.
+    expect(picker.windowsAfterForeignClose).toBe(2);
+  });
+
+  it("closes on a closePicker naming its own fifo, and leaves the browse window", () => {
+    expect(picker.windowsAfterClose).toBe(1);
+    expect(picker.browseWindowAliveAfterClose).toBe(true);
+  });
+
+  it("keeps serving the socket after the picker window has gone", () => {
+    // Asked rather than assumed: the probe sends a real command AFTER the
+    // picker closed and reads the reply. "Did this line run" would have been
+    // true whatever happened; a daemon that had quit, or one whose socket had
+    // stopped being served, shows up here as a refusal.
+    //
+    // `window-all-closed` is a deliberate no-op, and a picker closing is the
+    // first time this daemon has ever seen a window really go away — the browse
+    // window hides. This is what would catch that no-op being turned back into
+    // `app.quit()`.
+    expect(picker.daemonStillAnswersAfterClose).toBe(true);
+  });
+});

@@ -36,7 +36,13 @@ function socketPath() {
 
 const USAGE = `symmetria-fm-electron-cli — talk to the running file manager
 
-  open <absolute-path>   open that directory as a tab, and go to it
+  open <absolute-path>    open that directory as a tab, and go to it
+  createPicker '<json>'   open a file dialog answering the given fifo
+  closePicker '<json>'    dismiss the dialog answering that fifo
+
+The picker commands take one JSON object. createPicker needs a "fifo" inside
+/tmp/symmetria-picker- and accepts title, acceptLabel, multiple, directory,
+saveMode, suggestedName and currentFolder. closePicker needs only "fifo".
 
 The daemon must be running. It is started by symmetria-fm-electron.service.`;
 
@@ -84,16 +90,54 @@ if (subcommand === undefined || subcommand === "--help" || subcommand === "-h") 
   process.exit(1);
 }
 
-if (subcommand !== "open") {
-  fail(`unknown command: ${subcommand}\n\n${USAGE}`);
+/**
+ * Build the line for a picker command out of the caller's JSON object.
+ *
+ * The daemon validates every field — this tool deliberately does not, because a
+ * second copy of the rules here would drift from the decoder's and the looser
+ * copy is the one that matters. What it does check is that the argument is a
+ * JSON object at all, so a caller that built it wrongly is told so instead of
+ * having the daemon blamed for refusing nonsense.
+ *
+ * `cmd` is written LAST so a `cmd` inside the caller's own JSON cannot displace
+ * the subcommand that was actually asked for.
+ */
+function pickerPayload(cmd, json) {
+  if (json === undefined || json === "") {
+    fail(`${cmd} needs a JSON argument\n\n${USAGE}`);
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    fail(`${cmd}'s argument is not valid JSON\n\n${USAGE}`);
+  }
+
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    fail(`${cmd}'s argument must be a JSON object\n\n${USAGE}`);
+  }
+
+  return { ...parsed, cmd };
 }
 
-const path = rest[0];
-if (path === undefined || path === "") {
-  fail(`open needs a path\n\n${USAGE}`);
+function payloadFor(cmd, args) {
+  if (cmd === "open") {
+    const path = args[0];
+    if (path === undefined || path === "") {
+      fail(`open needs a path\n\n${USAGE}`);
+    }
+    return { cmd: "open", path };
+  }
+
+  if (cmd === "createPicker" || cmd === "closePicker") {
+    return pickerPayload(cmd, args[0]);
+  }
+
+  return fail(`unknown command: ${cmd}\n\n${USAGE}`);
 }
 
-const reply = await send(socketPath(), { cmd: "open", path });
+const reply = await send(socketPath(), payloadFor(subcommand, rest));
 if (reply.ok !== true) {
   fail(reply.message ?? reply.error ?? "the file manager refused the command");
 }

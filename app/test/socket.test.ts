@@ -148,7 +148,9 @@ describe("carrying a command", () => {
     const path = join(dir, "d.sock");
     const seen: string[] = [];
     const claim = await claimSocket(path, async (command) => {
-      seen.push(command.path);
+      // Narrowed rather than assumed. The command is a union of three verbs
+      // now, and only one of them carries a path.
+      if (command.cmd === "open") seen.push(command.path);
       return { ok: true, value: null };
     });
     expect(claim.ok).toBe(true);
