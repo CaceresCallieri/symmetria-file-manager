@@ -1,14 +1,14 @@
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { BRIDGE_KEY } from "@symmetria/fm-core/bridge";
 import { failure } from "@symmetria/fm-core/contract";
 import { homeQuery } from "@symmetria/fm-core/windowUrl";
+import { PUSH_CHANNELS, REQUEST_CHANNELS } from "@symmetria/fm-main/ipc/channels";
+import { electronIpcSurface } from "@symmetria/fm-main/ipc/electronSurface";
+import { createRegistry } from "@symmetria/fm-main/ipc/register";
 import { app, BrowserWindow, ipcMain } from "electron";
-import { BRIDGE_KEY } from "../preload/bridge.ts";
-import { PUSH_CHANNELS, REQUEST_CHANNELS } from "./ipc/channels.ts";
-import { electronIpcSurface } from "./ipc/electronSurface.ts";
-import { createRegistry } from "./ipc/register.ts";
 import { createResidency } from "./lifecycle.ts";
 
-import { APP_ENTRY_URL, handleAppScheme, registerAppScheme } from "./protocol.ts";
+import { APP_ENTRY_URL, handleAppScheme, previewUrlFor, registerAppScheme } from "./protocol.ts";
 import { claimSocket, daemonSocketPath, sendCommand } from "./socket.ts";
 import { buildWindowOptions } from "./window.ts";
 
@@ -472,11 +472,18 @@ app.whenReady().then(async () => {
   // The renderer has no filesystem of its own, so this registry is the only
   // way it reaches one. Bound to this window's sender: a push goes to the
   // window that asked, never broadcast to whatever else might be listening.
-  const registry = createRegistry(electronIpcSurface(ipcMain), {
-    send: (channel, payload) => {
-      if (!window.isDestroyed()) window.webContents.send(channel, payload);
+  const registry = createRegistry(
+    electronIpcSurface(ipcMain),
+    {
+      send: (channel, payload) => {
+        if (!window.isDestroyed()) window.webContents.send(channel, payload);
+      },
     },
-  });
+    // The host owns its own origin, so it is the host that turns a preview
+    // token into a URL. The registry used to import this and that import was
+    // the last line tying the privileged half to one particular application.
+    { previewUrlFor },
+  );
 
   // `dispose` was written and never called, which meant every filesystem watch
   // a session opened lived until the process exited. For an application whose

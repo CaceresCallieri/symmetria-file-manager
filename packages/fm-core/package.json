@@ -31,6 +31,7 @@
     "./keys/cascade": "./src/keys/cascade.ts",
     "./keys/keyEvent": "./src/keys/keyEvent.ts",
     "./preview/route": "./src/preview/route.ts",
-    "./icons/resolve": "./src/icons/resolve.ts"
+    "./icons/resolve": "./src/icons/resolve.ts",
+    "./bridge": "./src/bridge.ts"
   }
 }

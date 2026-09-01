@@ -1,9 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-
+import { BRIDGE_KEY } from "@symmetria/fm-core/bridge";
 import { describe, expect, it } from "vitest";
-
-import { BRIDGE_KEY } from "../src/preload/bridge.ts";
 
 const preloadSource = readFileSync(
   fileURLToPath(new URL("../src/preload/index.ts", import.meta.url)),

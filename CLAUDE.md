@@ -154,9 +154,12 @@ Run these change-scoped checks during `/seal`, `/code-review`, and ad-hoc review
 ```bash
 { git diff --name-only --diff-filter=ACMR <base>; git ls-files --others --exclude-standard; } | sort -u | xargs -r pnpm exec biome check --reporter=summary --no-errors-on-unmatched  # lint + format + a11y
 git diff -z --name-only --diff-filter=ACMR <base> -- '*.js' '*.jsx' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.mts' '*.cts' | xargs -0 -r pnpm exec oxlint --config anti-slop.config.mjs --disable-nested-config --format agent --  # command-id: typescript.anti-slop.changed.v1; type-evidence policy; errors gate, pilot warnings advise
-pnpm exec tsc -p packages/fm-core --noEmit --pretty false  # types — whole package, never diff-scoped
-pnpm exec tsc -p app/tsconfig.main.json --noEmit --pretty false  # types — main process: Node, no DOM
-pnpm exec tsc -p app/tsconfig.renderer.json --noEmit --pretty false  # types — renderer: DOM, no Node
+pnpm exec tsc -p packages/fm-core --noEmit --pretty false  # types — shared core: no environment at all
+pnpm exec tsc -p packages/fm-main --noEmit --pretty false  # types — privileged half: Node, no DOM
+pnpm exec tsc -p packages/fm-ui --noEmit --pretty false  # types — panel SOURCE: DOM, no Node
+pnpm exec tsc -p packages/fm-ui/tsconfig.test.json --noEmit --pretty false  # types — panel TESTS: Node, they read the source tree
+pnpm exec tsc -p app/tsconfig.main.json --noEmit --pretty false  # types — host main process: Node, no DOM
+pnpm exec tsc -p app/tsconfig.renderer.json --noEmit --pretty false  # types — host renderer entry: DOM, no Node
 pnpm exec fallow audit --changed-since <base> --format compact  # dead code, complexity, duplication; new findings gate
 git diff -z --name-only --diff-filter=ACMR <base> -- '*.qml' | xargs -0 -r tools/quality/check-qml.sh  # QML gate, scoped to changed files; exits 0 when none changed
 ```
@@ -167,7 +170,9 @@ git diff -z --name-only --diff-filter=ACMR <base> -- '*.qml' | xargs -0 -r tools
 
 Biome, `tsc` and the QML gate exit non-zero on findings. Anti-slop exits non-zero for its eight error rules; its seven pilot warnings print and exit zero. Fallow uses the gating `audit` command. The QML line exits 0 when the change touches no `.qml` file, which is the normal case for the Electron tree.
 
-**One `tsc` line per context, not one for the tree.** The three contexts must not share a `lib`: `packages/fm-core` is imported by both processes and gets no DOM; the main process gets Node and no DOM; the sandboxed renderer gets DOM and no Node. A shared `lib` would let a `window` reference type-check inside the main process and a `node:fs` import type-check inside the renderer. All three lines are in the fence above. The rule earns its keep in practice, not only in principle: `packages/fm-core/src/windowUrl.ts` reaches for `URLSearchParams` and cannot have it, because that package compiles against no environment at all — which is what forced a hand-rolled parse, and the hand-rolled one turned out to be more correct anyway (`URLSearchParams` decodes `+` as a space, so a directory named `c++` would come back wrong).
+**One `tsc` line per context, not one for the tree.** There are SIX and they must not share a `lib`. `packages/fm-core` is imported by everything and gets no environment at all; `packages/fm-main` — the privileged half — gets Node and no DOM; `packages/fm-ui` — the panel — gets DOM and no Node; the host's two halves get the same treatment as the packages they load. A shared `lib` would let a `window` reference type-check inside a main process and a `node:fs` import type-check inside a sandboxed renderer.
+
+**`packages/fm-ui` has TWO configs and both are in the fence.** Its `tsconfig.json` covers `src` alone with `types: []`, which is the real contract: the panel is sandboxed and must not reach Node. Its tests DO need Node, because the invariant test reads every source file to prove that contract holds — so they live in `tsconfig.test.json`. One shared config would hand the source whatever the tests need, which is the whole thing this package exists to prevent. The rule earns its keep in practice, not only in principle: `packages/fm-core/src/windowUrl.ts` reaches for `URLSearchParams` and cannot have it, because that package compiles against no environment at all — which is what forced a hand-rolled parse, and the hand-rolled one turned out to be more correct anyway (`URLSearchParams` decodes `+` as a space, so a directory named `c++` would come back wrong).
 
 **`--with-callers` is yours to add, and the fence will not do it for you.** When a change alters a QML component's public API, the Quality Gate above requires `tools/quality/check-qml.sh --with-callers <component.qml>`. The scoped line in this fence never runs that form, so a reviewer who runs the fence and stops has skipped the one check that catches an API break at its call site.
 
@@ -184,9 +189,12 @@ Run every command during `/tech-debt`, a full codebase audit, and CI. Run all li
 ```bash
 pnpm exec biome check . --reporter=summary  # lint + format + a11y — complete project
 pnpm exec oxlint --config anti-slop.config.mjs --disable-nested-config --format stylish -- .  # command-id: typescript.anti-slop.full.v1; type-evidence policy; errors gate, pilot warnings feed tech debt
-pnpm exec tsc -p packages/fm-core --noEmit --pretty false  # types — complete package
-pnpm exec tsc -p app/tsconfig.main.json --noEmit --pretty false  # types — main process: Node, no DOM
-pnpm exec tsc -p app/tsconfig.renderer.json --noEmit --pretty false  # types — renderer: DOM, no Node
+pnpm exec tsc -p packages/fm-core --noEmit --pretty false  # types — shared core: no environment at all
+pnpm exec tsc -p packages/fm-main --noEmit --pretty false  # types — privileged half: Node, no DOM
+pnpm exec tsc -p packages/fm-ui --noEmit --pretty false  # types — panel SOURCE: DOM, no Node
+pnpm exec tsc -p packages/fm-ui/tsconfig.test.json --noEmit --pretty false  # types — panel TESTS: Node, they read the source tree
+pnpm exec tsc -p app/tsconfig.main.json --noEmit --pretty false  # types — host main process: Node, no DOM
+pnpm exec tsc -p app/tsconfig.renderer.json --noEmit --pretty false  # types — host renderer entry: DOM, no Node
 pnpm -r test  # the whole suite, per package. NEVER `vitest` from the root — see below
 pnpm exec knip --reporter json  # files, exports, dependencies, and the workspace package graph
 pnpm exec fallow dead-code --fail-on-issues  # whole-project dead code; any issue gates

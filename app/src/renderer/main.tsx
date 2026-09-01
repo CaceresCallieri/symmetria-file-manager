@@ -1,10 +1,9 @@
+import { App } from "@symmetria/fm-ui/App";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-
-import { App } from "./App.tsx";
-import "./theme/tokens.css";
-import "./styles.css";
-import "./syntax-wine.css";
+import "@symmetria/fm-ui/theme/tokens.css";
+import "@symmetria/fm-ui/styles.css";
+import "@symmetria/fm-ui/syntax-wine.css";
 
 const host = document.getElementById("root");
 if (!host) throw new Error("index.html is missing its #root element");

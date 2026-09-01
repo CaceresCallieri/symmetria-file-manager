@@ -1,9 +1,7 @@
 import { fileURLToPath, pathToFileURL } from "node:url";
-
+import { containedRealPath } from "@symmetria/fm-main/appPath";
+import { resolveToken, TOKEN_PREFIX } from "@symmetria/fm-main/previewTokens";
 import { net, protocol } from "electron";
-
-import { containedRealPath } from "./appPath.ts";
-import { resolveToken, TOKEN_PREFIX } from "./previewTokens.ts";
 
 /**
  * The scheme the renderer is served from.
@@ -48,35 +46,56 @@ function rendererRoot(): string {
   return fileURLToPath(new URL("../renderer/", import.meta.url));
 }
 
+const notFound = () => new Response("not found", { status: 404 });
+
+/**
+ * A previewed file, addressed by a token the main process issued.
+ *
+ * Served from this scheme rather than as a blob URL because Chromium's PDF
+ * viewer refuses a blob whose origin is a custom scheme — the embed resolves to
+ * an error page, invisibly. It also saves copying the file across the process
+ * boundary.
+ */
+// The union rather than `async`, because only one of the two branches is
+// asynchronous: `net.fetch` returns a promise and the not-found answer is
+// immediate. Marking the whole function `async` would wrap a value that needs
+// no wrapping, and `protocol.handle` accepts either.
+function servePreview(pathname: string): Response | Promise<Response> {
+  const previewed = resolveToken(pathname.slice(TOKEN_PREFIX.length));
+  // A token that was never issued, or was evicted. Not found is the honest
+  // answer: this route reaches exactly what the main process handed out.
+  if (previewed === null) return notFound();
+
+  return net.fetch(pathToFileURL(previewed).toString());
+}
+
+/**
+ * One of the page's own assets.
+ *
+ * One gate, not two. An `access()` check before the read would add a syscall
+ * and a window between the check and the use; letting the fetch itself fail is
+ * both simpler and race-free.
+ */
+async function serveAsset(root: string, pathname: string): Promise<Response> {
+  const file = await containedRealPath(root, pathname);
+  if (file === null) return notFound();
+
+  return net.fetch(pathToFileURL(file).toString());
+}
+
 export function handleAppScheme(): void {
   const root = rendererRoot();
 
+  // Three branches and nothing else: wrong host, a preview token, or an asset.
+  // The two routes are functions rather than blocks because they answer
+  // different questions with different failure modes — and because as one body
+  // this handler sat exactly on the project's change-risk bound.
   protocol.handle(APP_SCHEME, async (request) => {
     const url = new URL(request.url);
-    if (url.hostname !== APP_HOST) return new Response("not found", { status: 404 });
+    if (url.hostname !== APP_HOST) return notFound();
+    if (url.pathname.startsWith(TOKEN_PREFIX)) return servePreview(url.pathname);
 
-    // A previewed file, addressed by a token the main process issued.
-    //
-    // Served from this scheme rather than as a blob URL because Chromium's PDF
-    // viewer refuses a blob whose origin is a custom scheme — the embed
-    // resolves to an error page, invisibly. It also saves copying the file
-    // across the process boundary.
-    if (url.pathname.startsWith(TOKEN_PREFIX)) {
-      const previewed = resolveToken(url.pathname.slice(TOKEN_PREFIX.length));
-      // A token that was never issued, or was evicted. Not found is the honest
-      // answer: this route reaches exactly what the main process handed out.
-      if (previewed === null) return new Response("not found", { status: 404 });
-
-      return net.fetch(pathToFileURL(previewed).toString());
-    }
-
-    // One gate, not two. An `access()` check before the read would add a
-    // syscall and a window between the check and the use; letting the fetch
-    // itself fail is both simpler and race-free.
-    const file = await containedRealPath(root, url.pathname);
-    if (file === null) return new Response("not found", { status: 404 });
-
-    return net.fetch(pathToFileURL(file).toString());
+    return serveAsset(root, url.pathname);
   });
 }
 

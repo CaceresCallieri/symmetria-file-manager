@@ -1,7 +1,7 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { BRIDGE_KEY, type Bridge, type Unsubscribe } from "@symmetria/fm-core/bridge";
 
-import { PUSH_CHANNELS, REQUEST_CHANNELS } from "../main/ipc/channels.ts";
-import { BRIDGE_KEY, type Bridge, type Unsubscribe } from "./bridge.ts";
+import { PUSH_CHANNELS, REQUEST_CHANNELS } from "@symmetria/fm-main/ipc/channels";
+import { contextBridge, ipcRenderer } from "electron";
 
 /**
  * The preload runs with Node available, inside the renderer process. Anything
