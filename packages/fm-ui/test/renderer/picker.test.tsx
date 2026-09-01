@@ -216,3 +216,62 @@ describe("the keys a dialog takes away", () => {
     expect(screen.getByTestId("picker-accept").textContent).toBe("Select (1)");
   });
 });
+
+describe("Enter inside a dialog", () => {
+  /**
+   * The defect verification found, and the one with consequences outside this
+   * process.
+   *
+   * Enter fell through to the ordinary "activate" action, which hands a file to
+   * the desktop's default application. Driven for real under a virtual display,
+   * it launched a terminal running an editor on `/etc/xattr.conf` — on the
+   * operator's own session that window would have appeared on their desktop.
+   *
+   * The Qt build routes Enter through `confirmPickerSelection`, the same
+   * function its Accept button uses, for exactly this reason.
+   */
+  it("confirms rather than handing the file to another application", async () => {
+    await openPicker();
+    await moveToFirstFile();
+
+    fireEvent.keyDown(window, { key: "Enter" });
+    await act(async () => undefined);
+
+    expect(log.pickerConfirms).toHaveLength(1);
+    expect(log.ops.filter((each) => each.startsWith("open "))).toEqual([]);
+  });
+
+  it("still enters a directory, because that is how you reach a file", async () => {
+    // Browsing has to keep working: a dialog that confirmed the directory under
+    // the cursor could never be navigated at all.
+    await openPicker();
+    fireEvent.keyDown(window, { key: "Enter" });
+    await act(async () => undefined);
+
+    expect(log.pickerConfirms).toEqual([]);
+    expect(log.ops.filter((each) => each.startsWith("open "))).toEqual([]);
+  });
+
+  it("does nothing on a file the dialog will not accept", async () => {
+    await openPicker({ directory: true });
+    await moveToFirstFile();
+
+    fireEvent.keyDown(window, { key: "Enter" });
+    await act(async () => undefined);
+
+    expect(log.pickerConfirms).toEqual([]);
+    expect(log.ops.filter((each) => each.startsWith("open "))).toEqual([]);
+  });
+
+  it("still opens a file in the browse window", async () => {
+    // The other half. Suppressing the external open everywhere would break the
+    // file manager the operator uses all day.
+    await openBrowser();
+    await moveToFirstFile();
+
+    fireEvent.keyDown(window, { key: "Enter" });
+    await act(async () => undefined);
+
+    expect(log.ops.filter((each) => each.startsWith("open "))).toHaveLength(1);
+  });
+});

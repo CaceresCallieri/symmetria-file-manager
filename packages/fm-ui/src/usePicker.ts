@@ -48,6 +48,15 @@ export interface Picker {
   focusSaveName(): void;
   /** Cancel, if this is a dialog. What Escape reaches once nothing else wants it. */
   cancelIfActive(): void;
+  /**
+   * Confirm, if this is a dialog and the selection is one it accepts.
+   *
+   * What Enter must reach on a FILE. It used to fall through to the ordinary
+   * activate, which hands the file to the desktop's default application —
+   * verification watched that launch a terminal running an editor, and on the
+   * operator's own session that window would have appeared on their desktop.
+   */
+  confirmIfActive(): void;
 }
 
 /** Every flag off. The browse window's answer, and the shape the registry expects. */
@@ -145,5 +154,5 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs): Pick
   // arrow each render would rebuild that table on every keystroke.
   const focusSaveName = useCallback(() => saveNameRef.current?.focus(), []);
 
-  return { state, chrome, focusSaveName, cancelIfActive: cancel };
+  return { state, chrome, focusSaveName, cancelIfActive: cancel, confirmIfActive: confirm };
 }

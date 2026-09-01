@@ -52,6 +52,36 @@ function isDirectoryUnderCursor(tabs: Tabs): boolean {
 }
 
 /**
+ * What Enter does to whatever the cursor is on.
+ *
+ * A directory is always ENTERED, in a dialog as much as in the file manager:
+ * browsing is how you reach the file you came for, and a dialog that confirmed
+ * the directory under the cursor could never be navigated.
+ *
+ * **A file in a dialog is CONFIRMED, and never handed to the desktop.** That
+ * fall-through was a real defect: driven for real, Enter in a file dialog
+ * launched a terminal running an editor on the highlighted file, and only the
+ * virtual display kept that window off the operator's session. The Qt build
+ * routes Enter through the same `confirmPickerSelection` its Accept button
+ * uses, for exactly this reason.
+ *
+ * Confirming is itself refused when the dialog will not take what is under the
+ * cursor — a file in a folder picker — so nothing happens at all rather than
+ * something happening in another application.
+ */
+function activateUnderCursor(tabs: Tabs, ops: FileOps, picker: Picker): void {
+  if (isDirectoryUnderCursor(tabs)) {
+    tabs.enter();
+    return;
+  }
+  if (picker.state.active) {
+    picker.confirmIfActive();
+    return;
+  }
+  ops.open();
+}
+
+/**
  * Roughly half a screen of rows.
  *
  * The Qt original asked the view for its own metric. Nothing reports one yet,
@@ -106,10 +136,9 @@ export function useKeyActions(
       jumpToBottom: () => tabs.moveTo(tabs.pane.entries.length - 1),
       halfPageDown: () => tabs.moveBy(halfPageRows()),
       halfPageUp: () => tabs.moveBy(-halfPageRows()),
-      // A directory is entered; anything else is handed to the desktop.
-      activate: () => (isDirectoryUnderCursor(tabs) ? tabs.enter() : ops.open()),
+      activate: () => activateUnderCursor(tabs, ops, picker),
       goUp: () => tabs.leave(),
-      enterDirectory: () => (isDirectoryUnderCursor(tabs) ? tabs.enter() : ops.open()),
+      enterDirectory: () => activateUnderCursor(tabs, ops, picker),
       goHome: () => tabs.navigate(home),
       jumpDirectoryFileBoundary: () => {
         // -1 means the listing holds one kind, or none. Leaving the cursor put
@@ -208,7 +237,7 @@ export function useKeyActions(
       treeToggleGitignore: soon("The tree view"),
       treeRefresh: soon("The tree view"),
     };
-  }, [tabs, ops, search, bookmarks, home, picker.cancelIfActive, picker.focusSaveName]);
+  }, [tabs, ops, search, bookmarks, home, picker]);
 
   const state = useMemo<KeyState>(() => {
     const entry = tabs.pane.entries[tabs.pane.cursorIndex];
