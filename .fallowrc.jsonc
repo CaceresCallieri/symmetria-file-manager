@@ -52,7 +52,19 @@
     "app/src/preload/index.ts",
     "app/src/renderer/main.tsx",
     "app/scripts/build.mjs",
-    "app/test/**/*.ts"
+    "app/test/**/*.ts",
+    // Two more entry points a person or a unit runs directly, so nothing in
+    // the module graph imports either.
+    //
+    // Observed for the BENCHMARK: `fallow audit` reported it as an unused file
+    // the moment it was added — true of the graph, false of the program.
+    //
+    // The command-line tool has the identical problem and is a PRE-EXISTING
+    // gap being closed here rather than a finding from this phase: it was added
+    // in an earlier commit and never listed, so the check had been quietly
+    // incomplete since then. Review noticed the comment conflated the two.
+    "app/bin/symmetria-fm-electron-cli.mjs",
+    "app/bench/pickerWindow.mjs"
   ],
 
   // Two paths inside `new URL(...)` point at build OUTPUT, not at modules:
