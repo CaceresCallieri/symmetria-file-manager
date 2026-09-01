@@ -40,9 +40,11 @@ const bridge: Bridge = {
   frecent: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.frecent, request),
   bookmarksRead: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.bookmarksRead, request),
   bookmarksWrite: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.bookmarksWrite, request),
+  hideWindow: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.hideWindow, request),
   onListBatch: (listener) => listen(PUSH_CHANNELS.listBatch, listener),
   onChanged: (listener) => listen(PUSH_CHANNELS.changed, listener),
   onTransferProgress: (listener) => listen(PUSH_CHANNELS.transferProgress, listener),
+  onOpenPath: (listener) => listen(PUSH_CHANNELS.openPath, listener),
 };
 
 contextBridge.exposeInMainWorld(BRIDGE_KEY, bridge);

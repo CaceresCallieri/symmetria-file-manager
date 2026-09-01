@@ -10,7 +10,6 @@ import {
 } from "@symmetria/fm-core/pane";
 import { homeFromSearch } from "@symmetria/fm-core/windowUrl";
 import { useMemo } from "react";
-
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { MillerColumns } from "./components/MillerColumns.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
@@ -23,6 +22,7 @@ import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
 import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
 import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { useBookmarks } from "./useBookmarks.ts";
+import { useExternalOpen } from "./useExternalOpen.ts";
 import { useFileOps } from "./useFileOps.ts";
 import { useKeyActions } from "./useKeyActions.ts";
 import { type Preview, usePreview } from "./usePreview.ts";
@@ -92,6 +92,11 @@ export function App(props: AppProps = {}) {
     moveTo: tabs.moveTo,
   });
   const bookmarks = useBookmarks();
+
+  // Wired here rather than inside `useTabs`, and the placement is the point:
+  // `useTabs` owns the tab collection, while composing an external event source
+  // onto it is this component's job.
+  useExternalOpen(tabs.openAt);
 
   // The preview is resolved BEFORE the key actions, not after, because one of
   // those actions needs its answer: the copy chord's image row asks whether the

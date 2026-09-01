@@ -317,7 +317,7 @@ function isSortMode(value: string): value is SortMode {
  */
 const MAX_READ_BYTES = 64 * 1024 * 1024;
 
-function isRecord(raw: unknown): raw is Record<string, unknown> {
+export function isRecord(raw: unknown): raw is Record<string, unknown> {
   return typeof raw === "object" && raw !== null && !Array.isArray(raw);
 }
 
@@ -338,8 +338,12 @@ const MAX_PATH_LENGTH = 4096;
  * a relative path can only be a mistake or an attempt to reach somewhere it was
  * not given. A NUL is refused because it terminates the path at the syscall
  * boundary — a string check can approve one thing and the kernel open another.
+ *
+ * Exported because the daemon socket needs exactly these rules and must not
+ * grow a second copy of them. Two validators for one concept is how one of them
+ * silently stops matching the other, and the looser one becomes the hole.
  */
-function decodePath(raw: unknown): Result<string> {
+export function decodePath(raw: unknown): Result<string> {
   if (typeof raw !== "string") return failure("invalid_request", "path must be a string");
   if (raw === "") return failure("invalid_request", "path must not be empty");
   if (raw.length > MAX_PATH_LENGTH) {

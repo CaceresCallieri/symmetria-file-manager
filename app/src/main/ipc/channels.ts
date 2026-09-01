@@ -46,6 +46,15 @@ export const REQUEST_CHANNELS = {
   bookmarksRead: "symmetria-fm:bookmarks-read",
   /** Replace the bookmark store. */
   bookmarksWrite: "symmetria-fm:bookmarks-write",
+  /**
+   * Put the window away without ending the program.
+   *
+   * The renderer cannot do this for itself, and must not try. Page code calling
+   * `window.close()` DESTROYS the window without ever raising the window's own
+   * `close` event — measured on Electron 41 — so the main process cannot
+   * intercept it and every tab, cursor and scroll position goes with it.
+   */
+  hideWindow: "symmetria-fm:hide-window",
 } as const;
 
 /** Main process pushes, renderer listens. These are never handled. */
@@ -56,6 +65,14 @@ export const PUSH_CHANNELS = {
   changed: "symmetria-fm:changed",
   /** How far a transfer has got. */
   transferProgress: "symmetria-fm:transfer-progress",
+  /**
+   * Somebody asked the daemon to open a path.
+   *
+   * A push and not a request, because the origin is outside both processes: the
+   * command arrives on the socket from another program entirely, and the
+   * renderer is being told rather than answering.
+   */
+  openPath: "symmetria-fm:open-path",
 } as const;
 
 export const CHANNELS = { ...REQUEST_CHANNELS, ...PUSH_CHANNELS } as const;

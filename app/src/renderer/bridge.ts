@@ -16,6 +16,7 @@ import {
   type FrecentReply,
   failure,
   isFailure,
+  isRecord,
   type ListReply,
   type ReadTextReply,
   type RenameReply,
@@ -277,6 +278,47 @@ export async function openPath(path: string): Promise<Result<null>> {
 
   const reply = await bridge.open({ path });
   return isFailure(reply) ? reply : { ok: true, value: null };
+}
+
+/**
+ * Put the window away, keeping the program and everything in it alive.
+ *
+ * **The renderer must never call `window.close()`, and this exists so it does
+ * not have to.** Verification found that page code closing the window DESTROYS
+ * it, and — measured directly on Electron 41 — without ever raising the
+ * window's own `close` event, so the main process cannot intercept it. The tab
+ * set, the cursor and the scroll position all went with it, which is exactly
+ * what this run exists to prevent. Asking the main process is the only route
+ * that hides rather than destroys.
+ */
+export async function hideWindow(): Promise<void> {
+  const bridge = getBridge();
+  // Nothing to hide without a host, and no useful failure to report to a user:
+  // this is only reachable in a test harness with no bridge installed.
+  if (bridge === null) return;
+
+  await bridge.hideWindow({});
+}
+
+/**
+ * A path the daemon was asked, from outside, to open.
+ *
+ * The origin is another program entirely — the command-line tool, and later a
+ * portal request — so this arrives as a push rather than as an answer to
+ * anything the interface asked. The payload is re-checked here even though the
+ * main process decoded it already: this edge is where every other reply is
+ * validated, and a channel exempt from that is the one nobody thinks about.
+ */
+export function onOpenPath(onPath: (path: string) => void): Unsubscribe {
+  const bridge = getBridge();
+  if (bridge === null) return () => undefined;
+
+  return bridge.onOpenPath((raw) => {
+    if (!isRecord(raw)) return;
+    const path = raw.path;
+    if (typeof path !== "string" || path === "") return;
+    onPath(path);
+  });
 }
 
 /**

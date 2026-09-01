@@ -7,6 +7,7 @@ import {
   createTabs,
   navigateActivePane,
   nextTab,
+  openOrActivateTab,
   openTab,
   previousTab,
   revertPaneById,
@@ -243,5 +244,62 @@ describe("the trail belongs to one tab", () => {
     const stepped = stepActiveHistory(state, "back");
 
     expect(at(stepped)).toBe("/b");
+  });
+});
+
+/**
+ * Acceptance criteria 5 and 6 of phase 1.
+ *
+ * A resident daemon is asked to open a path many times over a session, and the
+ * one-window rule means every one of those lands in this collection. Opening a
+ * fresh tab each time would turn a tool built to hold few things open into a
+ * tool that accumulates duplicates faster than the old many-windows design did.
+ */
+describe("opening a path the daemon was asked for", () => {
+  it("opens a new tab when nothing is showing that path", () => {
+    const state = createTabs("/a");
+
+    const opened = openOrActivateTab(state, "/b");
+
+    expect(paths(opened)).toEqual(["/a", "/b"]);
+    expect(at(opened)).toBe("/b");
+  });
+
+  it("activates the tab already showing that path instead of making a second", () => {
+    let state = createTabs("/a");
+    state = openTab(state, "/b");
+    state = openTab(state, "/c");
+
+    const opened = openOrActivateTab(state, "/b");
+
+    expect(paths(opened)).toEqual(["/a", "/b", "/c"]);
+    expect(at(opened)).toBe("/b");
+  });
+
+  it("stays put when the active tab is already the one asked for", () => {
+    // No new tab, and no reordering either: asking for where you already are
+    // should be the cheapest thing the daemon ever does.
+    let state = createTabs("/a");
+    state = openTab(state, "/b");
+
+    const opened = openOrActivateTab(state, "/b");
+
+    expect(paths(opened)).toEqual(["/a", "/b"]);
+    expect(at(opened)).toBe("/b");
+  });
+
+  it("matches the first tab on that path when two of them are", () => {
+    // Two tabs can hold one path — the user can open one by hand. Picking the
+    // first is arbitrary but it must be deterministic, or the same command
+    // lands somewhere different depending on which tab was active.
+    let state = createTabs("/a");
+    state = openTab(state, "/b");
+    state = openTab(state, "/b");
+    state = activateTab(state, 0);
+
+    const opened = openOrActivateTab(state, "/b");
+
+    expect(opened.activeIndex).toBe(1);
+    expect(paths(opened)).toEqual(["/a", "/b", "/b"]);
   });
 });

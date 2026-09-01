@@ -1,11 +1,15 @@
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { failure } from "@symmetria/fm-core/contract";
 import { homeQuery } from "@symmetria/fm-core/windowUrl";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { BRIDGE_KEY } from "../preload/bridge.ts";
+import { PUSH_CHANNELS, REQUEST_CHANNELS } from "./ipc/channels.ts";
 import { electronIpcSurface } from "./ipc/electronSurface.ts";
 import { createRegistry } from "./ipc/register.ts";
+import { createResidency } from "./lifecycle.ts";
 
 import { APP_ENTRY_URL, handleAppScheme, registerAppScheme } from "./protocol.ts";
+import { claimSocket, daemonSocketPath, sendCommand } from "./socket.ts";
 import { buildWindowOptions } from "./window.ts";
 
 // Must happen before the app is ready. See `protocol.ts` for why the renderer
@@ -30,17 +34,62 @@ const SMOKE = process.env.SYMMETRIA_FM_SMOKE === "1";
  */
 app.setName("Symmetria File Manager");
 
+/**
+ * Whether a close destroys the window, and it never does until a real quit.
+ *
+ * This is the residency half of decision D3, which shipped without it: the
+ * previous version quit the process when the last window closed, under a
+ * comment citing the very decision that says one window should stay resident.
+ */
+const residency = createResidency();
+
 let shownOnReadyToShow = false;
 
-function createWindow(): BrowserWindow {
+/**
+ * The window, and a promise that it has painted.
+ *
+ * Named rather than returned as an anonymous object type: the two are handed
+ * around together and a caller reading `{ window, painted }` has to guess what
+ * the second one means.
+ */
+interface StartedWindow {
+  readonly window: BrowserWindow;
+  /** Resolves once `ready-to-show` has fired, never before. */
+  readonly painted: Promise<void>;
+}
+
+function createWindow(): StartedWindow {
   const window = new BrowserWindow(buildWindowOptions());
 
   // Show only once the renderer has something to paint. Paired with the
   // background colour in `buildWindowOptions`, this is what removes the white
   // flash on open.
-  window.once("ready-to-show", () => {
-    shownOnReadyToShow = true;
-    window.show();
+  //
+  // The promise is what the smoke report waits on. `did-finish-load` and
+  // `ready-to-show` are independent events with no guaranteed order, and a
+  // report written on the first one sampled this flag before the second had
+  // fired — which made the assertion about it fail intermittently, in the
+  // harness rather than in the product.
+  const painted = new Promise<void>((resolve) => {
+    window.once("ready-to-show", () => {
+      shownOnReadyToShow = true;
+      window.show();
+      resolve();
+    });
+  });
+
+  // Hide, never destroy. The tab set, the cursor and the scroll position live
+  // in the renderer, so a destroyed window loses all three and coming back is a
+  // fresh start — which is the opposite of the "one place I return to" this
+  // application is for.
+  //
+  // The guard is not defensive habit. Without it the process is unkillable by
+  // the ordinary route: `systemctl --user stop` would hang and only a SIGKILL
+  // would end it, which is a worse defect than the one being fixed.
+  window.on("close", (event) => {
+    if (!residency.shouldHideOnClose()) return;
+    event.preventDefault();
+    window.hide();
   });
 
   // Two facts, carried separately on purpose: the fragment is where this window
@@ -50,7 +99,7 @@ function createWindow(): BrowserWindow {
   // `windowUrl.ts` for why they must not be conflated.
   const home = app.getPath("home");
   void window.loadURL(`${APP_ENTRY_URL}${homeQuery(home)}#${encodeURIComponent(home)}`);
-  return window;
+  return { window, painted };
 }
 
 /** The built page's own `file://` URL, used as the probe target. */
@@ -58,6 +107,207 @@ function ownPageFileUrl(): string {
   return pathToFileURL(
     fileURLToPath(new URL("../renderer/index.html", import.meta.url)),
   ).toString();
+}
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * What the smoke report says about the window surviving a close.
+ *
+ * Declared here rather than inferred, because the smoke test declares the same
+ * shape on its side and the two have to be readable against each other. A field
+ * added here without one there is a field nothing asserts.
+ */
+interface ResidencyReport {
+  readonly windowsBeforeClose: number;
+  readonly destroyedAfterClose: boolean;
+  readonly visibleAfterClose: boolean;
+  readonly windowsAfterClose: number;
+  readonly tabPathsBeforeClose: readonly string[];
+  readonly tabPathsAfterShow: readonly string[];
+  readonly cursorBeforeClose: number;
+  readonly cursorAfterShow: number;
+  /**
+   * The listing's scroll offset, which the acceptance criterion names and the
+   * first version of this probe did not measure.
+   *
+   * Verification said so plainly: tabs and cursor were measured, scroll was
+   * not, and nothing in the phase demonstrated it survived. A criterion nobody
+   * measured is a criterion nobody met.
+   */
+  readonly scrollBeforeClose: number;
+  readonly scrollAfterShow: number;
+  /** Proof the offset was not simply zero at both ends, which would prove nothing. */
+  readonly scrollWasNonZero: boolean;
+  readonly quitRanAfterRequest: boolean;
+  /** True when a close driven from PAGE code also hid rather than destroyed. */
+  readonly survivedRendererClose: boolean;
+}
+
+/**
+ * Give the window a second tab, through the real socket.
+ *
+ * `/usr/bin` rather than `/usr`, and the difference is load-bearing: a column
+ * only scrolls when its content overflows, and `/usr` holds about ten entries on
+ * this system. The first version used it and could not move the scroll offset
+ * off zero, which would have made "the scroll position survived" true and empty.
+ *
+ * Driven over the socket rather than by calling the handler directly, so what is
+ * exercised is the path a user's command actually takes: it arrives from
+ * outside, is decoded, reaches the renderer and becomes a tab.
+ */
+async function openSecondTab(window: BrowserWindow, socketPath: string): Promise<void> {
+  await sendCommand(socketPath, { cmd: "open", path: "/usr/bin" });
+
+  for (let i = 0; i < 100; i++) {
+    // SAFETY: `NodeList.length` is a number by the DOM specification, and the
+    // expression is a literal here rather than anything a caller supplies.
+    const count = (await window.webContents.executeJavaScript(
+      `document.querySelectorAll('[data-testid="tab"]').length`,
+    )) as number;
+    if (count >= 2) return;
+    await delay(50);
+  }
+}
+
+/**
+ * Put the listing somewhere other than the top.
+ *
+ * Retried rather than set once: the listing arrives asynchronously and the
+ * virtualiser sizes the scroll area only after the rows exist, so an offset
+ * written too early is silently clamped straight back to zero.
+ */
+async function scrollTheListing(window: BrowserWindow): Promise<void> {
+  for (let i = 0; i < 40; i++) {
+    // SAFETY: the literal below returns a number on every path.
+    const offset = (await window.webContents.executeJavaScript(`(() => {
+      const column = document.querySelector('[data-testid="column-current"]');
+      if (column === null) return -1;
+      column.scrollTop = 120;
+      return column.scrollTop;
+    })()`)) as number;
+    if (offset > 0) {
+      // Settle before anything reads it back: the virtualiser re-renders rows
+      // on scroll and the offset is only stable once that has run.
+      await delay(150);
+      return;
+    }
+    await delay(100);
+  }
+}
+
+/**
+ * What the window and its state do across a close.
+ *
+ * Split into three because the whole thing scored a CRAP of 72 against a bound
+ * of 30 — cyclomatic 8 with no coverage data, which is what an uncovered probe
+ * in the main process looks like to the gate. The split is along the seam it
+ * already had: set the state up, put it somewhere non-default, then measure.
+ */
+async function measureResidency(
+  window: BrowserWindow,
+  socketPath: string,
+): Promise<ResidencyReport> {
+  const read = () =>
+    // SAFETY: the expression evaluated below is a literal in this file and
+    // returns exactly this shape on every path — there is no branch that omits
+    // a field. `executeJavaScript` is typed `Promise<any>` because it cannot
+    // know that, so the assertion states what the literal above guarantees.
+    window.webContents.executeJavaScript(`(() => {
+      const column = document.querySelector('[data-testid="column-current"]');
+      return {
+        tabPaths: Array.from(document.querySelectorAll('[data-testid="tab"]')).map((t) => t.textContent),
+        cursor: (() => {
+          const rows = Array.from(document.querySelectorAll('[data-testid="column-current"] [data-testid="row"]'));
+          return rows.findIndex((r) => r.getAttribute("data-cursor") === "true");
+        })(),
+        scroll: column === null ? -1 : column.scrollTop,
+      };
+    })()`) as Promise<{ tabPaths: string[]; cursor: number; scroll: number }>;
+
+  await openSecondTab(window, socketPath);
+  await scrollTheListing(window);
+
+  const before = await read();
+  const windowsBeforeClose = BrowserWindow.getAllWindows().length;
+
+  // The route page code takes, exercised FIRST because it is the one that was
+  // broken: the renderer used to call `window.close()` here, which destroys the
+  // window without raising its `close` event at all.
+  await window.webContents.executeJavaScript(
+    `window[${JSON.stringify(BRIDGE_KEY)}].hideWindow({})`,
+  );
+  await delay(300);
+  const survivedRendererClose = !window.isDestroyed() && !window.isVisible();
+  if (!window.isDestroyed()) window.show();
+  await delay(200);
+
+  window.close();
+  await delay(300);
+
+  const destroyedAfterClose = window.isDestroyed();
+  const windowsAfterClose = BrowserWindow.getAllWindows().length;
+  if (destroyedAfterClose) {
+    // Reading anything else would throw on a destroyed window. Reporting the
+    // fields that were reachable is what lets the failing assertion name the
+    // real defect instead of an exception inside the probe.
+    return {
+      windowsBeforeClose,
+      destroyedAfterClose,
+      visibleAfterClose: true,
+      windowsAfterClose,
+      tabPathsBeforeClose: before.tabPaths,
+      tabPathsAfterShow: [],
+      cursorBeforeClose: before.cursor,
+      cursorAfterShow: -1,
+      scrollBeforeClose: before.scroll,
+      scrollAfterShow: -1,
+      scrollWasNonZero: before.scroll > 0,
+      quitRanAfterRequest: false,
+      survivedRendererClose,
+    };
+  }
+
+  const visibleAfterClose = window.isVisible();
+  window.show();
+  await delay(300);
+  const after = await read();
+
+  return {
+    windowsBeforeClose,
+    destroyedAfterClose,
+    visibleAfterClose,
+    windowsAfterClose,
+    tabPathsBeforeClose: before.tabPaths,
+    tabPathsAfterShow: after.tabPaths,
+    cursorBeforeClose: before.cursor,
+    cursorAfterShow: after.cursor,
+    scrollBeforeClose: before.scroll,
+    scrollAfterShow: after.scroll,
+    scrollWasNonZero: before.scroll > 0,
+    quitRanAfterRequest: await canStillQuit(),
+    survivedRendererClose,
+  };
+}
+
+/**
+ * Does a deliberate quit still get through the close interception?
+ *
+ * `will-quit` is prevented so the report can still be written; what matters is
+ * that it fired at all. A blocked quit resolves false on the timer instead of
+ * hanging the launch until the harness's own timeout, which would arrive as a
+ * mysterious 45-second failure rather than as a named one.
+ */
+function canStillQuit(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), 3_000);
+    app.once("will-quit", (event) => {
+      event.preventDefault();
+      clearTimeout(timer);
+      resolve(true);
+    });
+    app.quit();
+  });
 }
 
 /**
@@ -68,7 +318,7 @@ function ownPageFileUrl(): string {
  * The probes run in the renderer's main world, which is the world page code
  * sees, so a pass here means page code genuinely has no way through.
  */
-async function reportAndQuit(window: BrowserWindow): Promise<void> {
+async function reportAndQuit(window: BrowserWindow, socketPath: string): Promise<void> {
   const probe = await window.webContents.executeJavaScript(`(async () => ({
     rendererCanRequireFs: (() => {
       try { return typeof require === "function" && !!require("node:fs"); }
@@ -188,11 +438,26 @@ async function reportAndQuit(window: BrowserWindow): Promise<void> {
     })(),
   }))()`);
 
+  // Sampled BEFORE the residency probe, and that ordering is load-bearing.
+  //
+  // `measureResidency` ends by proving a deliberate quit still gets through the
+  // close interception, and a quit destroys the window. Reading these two
+  // afterwards reported zero windows and an empty title — a real regression in
+  // the report, from a probe rather than from the product. Sampling at boot is
+  // also what these two assertions are actually about.
+  const windowCount = BrowserWindow.getAllWindows().length;
+  const title = window.getTitle();
+
+  // Last, because it closes the window and then quits. Everything above needs a
+  // live page.
+  const residencyReport = await measureResidency(window, socketPath);
+
   process.stdout.write(
     `SMOKE_REPORT ${JSON.stringify({
       ...probe,
-      windowCount: BrowserWindow.getAllWindows().length,
-      title: window.getTitle(),
+      residency: residencyReport,
+      windowCount,
+      title,
       shownOnReadyToShow,
     })}\n`,
   );
@@ -200,9 +465,9 @@ async function reportAndQuit(window: BrowserWindow): Promise<void> {
   app.exit(0);
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   handleAppScheme();
-  const window = createWindow();
+  const { window, painted } = createWindow();
 
   // The renderer has no filesystem of its own, so this registry is the only
   // way it reaches one. Bound to this window's sender: a push goes to the
@@ -217,18 +482,63 @@ app.whenReady().then(() => {
   // a session opened lived until the process exited. For an application whose
   // whole point is to stay resident, an uninvoked cleanup path is a leak with a
   // delay on it.
-  window.on("closed", () => registry.dispose());
+  //
+  // Hung off `will-quit` alone. It used to also hang off the window's `closed`
+  // event, which now never fires — the window is hidden rather than destroyed —
+  // so leaving it there would have looked like cleanup that no longer ran.
   app.on("will-quit", () => registry.dispose());
+  app.on("before-quit", () => residency.beginQuit());
+
+  // The socket is the authority on who is the daemon, and taking it is what
+  // makes a second launch exit instead of opening a rival window.
+  // Hiding the window is a HOST concern, so its handler is registered here
+  // rather than in the IPC registry. The registry is the privileged filesystem
+  // half and becomes an importable package; a window method in it would be the
+  // one thing an embedding host could not satisfy.
+  ipcMain.handle(REQUEST_CHANNELS.hideWindow, () => {
+    if (!window.isDestroyed()) window.hide();
+    return { ok: true, value: null };
+  });
+
+  const socketPath = daemonSocketPath();
+  const claimed = await claimSocket(socketPath, async (command) => {
+    // Reporting the truth, which the first version did not.
+    //
+    // It answered `{ok:true}` unconditionally and only sent the message when a
+    // window existed, so a caller branching on the exit code — the portal
+    // backend does exactly this — was told the path had opened when nothing
+    // had. Verification caught it. A command that could not be delivered is a
+    // failure, and saying so is the whole value of having a reply channel.
+    if (window.isDestroyed()) {
+      return failure("write_failed", "the file manager has no window to open it in");
+    }
+    window.webContents.send(PUSH_CHANNELS.openPath, { path: command.path });
+    return { ok: true, value: null };
+  });
+  if (!claimed.ok) {
+    // Another daemon already owns the path, so this process has nothing to do.
+    // Exiting is the whole point of the check: two daemons would answer the
+    // same socket and the user would get whichever won the race.
+    process.stderr.write(`${claimed.error.message}\n`);
+    app.exit(1);
+    return;
+  }
+  app.on("will-quit", () => void claimed.value.close());
 
   if (SMOKE) {
     window.webContents.once("did-finish-load", () => {
-      void reportAndQuit(window);
+      // Both events, not just the one that happens to fire first. See the
+      // comment on `painted` in `createWindow`.
+      void painted.then(() => reportAndQuit(window, socketPath));
     });
   }
 });
 
-// One window, by decision D3: tabs carry the navigation instead. There is no
-// re-open-on-activate handler because there is no second window to re-open.
-app.on("window-all-closed", () => {
-  app.quit();
-});
+// Deliberately empty, and NOT `app.quit()`.
+//
+// This is the residency half of D3. It is also nearly unreachable now: the
+// window hides rather than closing, so nothing gets here except during a real
+// quit, by which point `before-quit` has already run. Kept as a stated no-op so
+// a future reader does not reinstate the quit on the grounds that nothing uses
+// it — that line is exactly what made the daemon non-resident for three runs.
+app.on("window-all-closed", () => {});

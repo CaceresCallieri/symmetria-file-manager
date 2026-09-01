@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -20,18 +22,32 @@ const appDir = fileURLToPath(new URL("..", import.meta.url));
  *    `bad option`, which reads as a broken app rather than a broken harness.
  */
 function launchAndReport(): Record<string, unknown> {
-  const env: NodeJS.ProcessEnv = { ...process.env, SYMMETRIA_FM_SMOKE: "1" };
+  // A socket of its own, under a temporary directory.
+  //
+  // THIS IS NOT OPTIONAL. Without it the launch would bind a socket in the real
+  // `$XDG_RUNTIME_DIR`, which is where the operator's daily file manager lives.
+  // A test is not allowed to reach into a running desktop session.
+  const scratch = mkdtempSync(join(tmpdir(), "fm-smoke-"));
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    SYMMETRIA_FM_SMOKE: "1",
+    SYMMETRIA_FM_SOCKET: join(scratch, "d.sock"),
+  };
   delete env.ELECTRON_RUN_AS_NODE;
 
-  const stdout = execFileSync(
-    "xvfb-run",
-    ["-a", "--", electronBinary(), ".", "--no-sandbox", "--ozone-platform=x11"],
-    { cwd: appDir, env, encoding: "utf8", timeout: 45_000 },
-  );
+  try {
+    const stdout = execFileSync(
+      "xvfb-run",
+      ["-a", "--", electronBinary(), ".", "--no-sandbox", "--ozone-platform=x11"],
+      { cwd: appDir, env, encoding: "utf8", timeout: 45_000 },
+    );
 
-  const line = stdout.split("\n").find((l) => l.startsWith("SMOKE_REPORT "));
-  expect(line, `no SMOKE_REPORT in output:\n${stdout}`).toBeTypeOf("string");
-  return JSON.parse((line as string).slice("SMOKE_REPORT ".length));
+    const line = stdout.split("\n").find((l) => l.startsWith("SMOKE_REPORT "));
+    expect(line, `no SMOKE_REPORT in output:\n${stdout}`).toBeTypeOf("string");
+    return JSON.parse((line as string).slice("SMOKE_REPORT ".length));
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 }
 
 function electronBinary(): string {
@@ -62,6 +78,13 @@ describe("the application boots", () => {
   });
 
   it("shows the window only after it is ready to paint", () => {
+    // This assertion used to fail intermittently, and the flake was in the
+    // harness rather than in the product. The report is written at
+    // `did-finish-load` and the flag is set at `ready-to-show`; those are
+    // independent events with no guaranteed order, so occasionally the report
+    // sampled the flag before the window event had fired. The main process now
+    // awaits `ready-to-show` before reporting, which is what makes reading the
+    // flag meaningful at all.
     expect(report.shownOnReadyToShow).toBe(true);
   });
 
@@ -107,7 +130,7 @@ describe("the application boots", () => {
     // run, and this assertion then reads a stale build and passes against code
     // that is no longer there. It did exactly that for three phases.
     expect(report.bridgeKeys).toBe(
-      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,clipboard,create,describe,frecent,list,onChanged,onListBatch,onTransferProgress,open,previewUrl,readText,rename,transfer,trash,unwatch,version,watch",
+      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,clipboard,create,describe,frecent,hideWindow,list,onChanged,onListBatch,onOpenPath,onTransferProgress,open,previewUrl,readText,rename,transfer,trash,unwatch,version,watch",
     );
   });
 
@@ -189,5 +212,99 @@ describe("a row whose name is too wide for its column", () => {
     // until the harness's 45-second timeout — a probe bug arriving disguised as
     // a timeout, which is the hardest kind of failure to read.
     expect(layout.rowRestored).toBe(true);
+  });
+});
+
+/**
+ * Acceptance criteria 1 and 2 of phase 1 of run 4 — the daemon outlives its
+ * window.
+ *
+ * These cannot be asserted anywhere but here. A window that hides rather than
+ * being destroyed, and a process that survives the last window closing, are
+ * facts about a running Electron application: there is no window object under
+ * happy-dom and no process lifetime to observe in a unit test.
+ *
+ * The report drives a real close request rather than calling `hide()`, because
+ * calling `hide()` would prove only that hiding hides. What has to be true is
+ * that the path a user takes — the compositor's close button, or the window's
+ * own close action — ends with the window hidden and the process alive.
+ */
+interface Residency {
+  readonly windowsBeforeClose: number;
+  readonly destroyedAfterClose: boolean;
+  readonly visibleAfterClose: boolean;
+  readonly windowsAfterClose: number;
+  readonly tabPathsBeforeClose: readonly string[];
+  readonly tabPathsAfterShow: readonly string[];
+  readonly cursorBeforeClose: number;
+  readonly cursorAfterShow: number;
+  readonly scrollBeforeClose: number;
+  readonly scrollAfterShow: number;
+  readonly scrollWasNonZero: boolean;
+  readonly quitRanAfterRequest: boolean;
+  readonly survivedRendererClose: boolean;
+}
+
+describe("the window closes without ending the program", () => {
+  // SAFETY: the probe returns either this shape or the string sentinel
+  // "no-residency". The first assertion rejects the sentinel before any other
+  // test reads a field.
+  const residency = report.residency as Residency;
+
+  it("was measured at all", () => {
+    expect(report.residency, `probe said: ${JSON.stringify(report.residency)}`).toBeTypeOf(
+      "object",
+    );
+  });
+
+  it("does not destroy the window on a close request", () => {
+    expect(residency.destroyedAfterClose).toBe(false);
+  });
+
+  it("hides it instead", () => {
+    expect(residency.visibleAfterClose).toBe(false);
+  });
+
+  it("keeps the window in existence, so nothing has to be rebuilt", () => {
+    expect(residency.windowsBeforeClose).toBe(1);
+    expect(residency.windowsAfterClose).toBe(1);
+  });
+
+  it("still has the same tabs when the window is shown again", () => {
+    // The operator's decision: the window is a place they return to, not a
+    // fresh start. A window that was never destroyed cannot lose this, which
+    // is exactly why the close is intercepted rather than the aftermath caught.
+    expect(residency.tabPathsAfterShow).toEqual(residency.tabPathsBeforeClose);
+    expect(residency.tabPathsBeforeClose.length).toBeGreaterThan(0);
+  });
+
+  it("still has the cursor where it was", () => {
+    expect(residency.cursorAfterShow).toBe(residency.cursorBeforeClose);
+  });
+
+  it("still has the listing scrolled where it was", () => {
+    // Verification found that the first version of this phase measured tabs and
+    // cursor and simply never measured scroll, while the criterion names all
+    // three. The non-zero check is the other half: an offset of 0 before and 0
+    // after would satisfy the equality without proving anything at all.
+    expect(residency.scrollWasNonZero).toBe(true);
+    expect(residency.scrollAfterShow).toBe(residency.scrollBeforeClose);
+  });
+
+  it("survives a close driven from page code, not only from the window", () => {
+    // The defect verification caught. Page code calling `window.close()`
+    // DESTROYS the window and — measured directly on Electron 41 — never
+    // raises the window's own `close` event, so the main process cannot
+    // intercept it. Closing the last tab took that route, so a user could lose
+    // every tab and be left with a daemon reporting success to commands it had
+    // nowhere to run. The renderer now asks the main process to hide instead.
+    expect(residency.survivedRendererClose).toBe(true);
+  });
+
+  it("can still be quit deliberately", () => {
+    // Intercepting close makes the process unkillable by the ordinary route
+    // unless the interception yields to a real quit. Without this the systemd
+    // unit could never stop the service and only a SIGKILL would end it.
+    expect(residency.quitRanAfterRequest).toBe(true);
   });
 });

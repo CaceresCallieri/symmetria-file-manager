@@ -49,10 +49,14 @@ export interface Bridge {
   bookmarksRead(request: unknown): Promise<Result<unknown>>;
   /** Replace the bookmark store. */
   bookmarksWrite(request: unknown): Promise<Result<unknown>>;
+  /** Put the window away, keeping the program and its state alive. */
+  hideWindow(request: unknown): Promise<Result<unknown>>;
   /** Follow a running transfer. */
   onTransferProgress(listener: (event: unknown) => void): Unsubscribe;
   /** Receive one batch of a streamed listing. */
   onListBatch(listener: (batch: unknown) => void): Unsubscribe;
   /** Receive a directory-changed notification. */
   onChanged(listener: (event: unknown) => void): Unsubscribe;
+  /** Receive a path the daemon was asked, from outside, to open. */
+  onOpenPath(listener: (event: unknown) => void): Unsubscribe;
 }

@@ -19,6 +19,7 @@
     "./glob": "./src/glob.ts",
     "./contract": "./src/contract.ts",
     "./clipboard": "./src/clipboard.ts",
+    "./command": "./src/command.ts",
     "./history": "./src/history.ts",
     "./pane": "./src/pane.ts",
     "./windowUrl": "./src/windowUrl.ts",

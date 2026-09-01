@@ -126,6 +126,25 @@ export function openTab(state: TabsState, path: string): TabsState {
 }
 
 /**
+ * Go to a path, reusing a tab already showing it.
+ *
+ * What the daemon calls when the command-line tool asks for a directory. With
+ * one resident window every such request lands in this collection, so opening a
+ * fresh tab each time would turn a tool built to keep few things open into one
+ * that accumulates duplicates faster than the many-windows design it replaced.
+ *
+ * The FIRST matching tab wins, and that is a decision rather than an accident of
+ * `findIndex`. Two tabs can genuinely hold one path — the user can open one by
+ * hand — and without a stated rule the same command would land somewhere
+ * different depending on which tab happened to be active.
+ */
+export function openOrActivateTab(state: TabsState, path: string): TabsState {
+  const existing = state.tabs.findIndex((tab) => tab.pane.path === path);
+  if (existing !== -1) return activateTab(state, existing);
+  return openTab(state, path);
+}
+
+/**
  * Close a tab, or report that the window should close.
  *
  * `null` means the last tab is gone. The window closing is the caller's to do —

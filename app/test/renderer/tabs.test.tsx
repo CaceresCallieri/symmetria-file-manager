@@ -135,16 +135,25 @@ describe("cycling and activating", () => {
 });
 
 describe("closing", () => {
-  it("closes the window rather than leaving an empty shell", async () => {
-    // There is no such thing as a window with no tabs. Closing the last one is
-    // closing the window.
-    const close = vi.spyOn(window, "close").mockImplementation(() => undefined);
+  it("puts the window away rather than leaving an empty shell", async () => {
+    // There is no such thing as a window with no tabs, so closing the last one
+    // dismisses the file manager.
+    //
+    // It used to call `window.close()`, and this test used to assert exactly
+    // that. Verification found what it cost: page code closing an Electron
+    // window DESTROYS it, and — measured on Electron 41 — never raises the
+    // window's own `close` event, so the main process cannot intercept it. The
+    // tab set, the cursor and the scroll position went with it, and the daemon
+    // then answered every `open` with success having nowhere to open anything.
+    //
+    // So the assertion is now on the bridge call, which is the route that
+    // hides. Asserting `window.close()` again would be re-asserting the defect.
+    const log = installBridge();
     await opened();
 
     fireEvent.keyDown(window, { key: "q", ctrlKey: true });
 
-    await waitFor(() => expect(close).toHaveBeenCalled());
-    close.mockRestore();
+    await waitFor(() => expect(log.hidden).toHaveLength(1));
   });
 
   it("keeps the window when another tab remains", async () => {

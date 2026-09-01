@@ -22,7 +22,7 @@ import {
 } from "react";
 
 import type { Unsubscribe } from "../preload/bridge.ts";
-import { type ListOptions, listDirectory, watchDirectory } from "./bridge.ts";
+import { hideWindow, type ListOptions, listDirectory, watchDirectory } from "./bridge.ts";
 import {
   activateTab,
   activePane,
@@ -30,6 +30,7 @@ import {
   createTabs,
   navigateActivePane,
   nextTab,
+  openOrActivateTab,
   openTab,
   previousTab,
   revertPaneById,
@@ -97,6 +98,14 @@ export interface Tabs {
   clearMarks(): void;
 
   open(): void;
+  /**
+   * Show a path, reusing a tab already on it.
+   *
+   * Distinct from `open`, which duplicates wherever the cursor is. This one
+   * takes a destination, because its caller is the daemon relaying a request
+   * from another program rather than the user pressing a key.
+   */
+  openAt(path: string): void;
   close(index?: number): void;
   goNext(): void;
   goPrevious(): void;
@@ -464,9 +473,20 @@ export function useTabs(initialPath: string): Tabs {
         const next = closeTab(previous, index ?? previous.activeIndex);
         if (next !== null) return next;
 
-        // The last tab is gone, so there is nothing left to be a window for. The
-        // watches go with it through the unmount cleanup above.
-        window.close();
+        // The last tab is gone, so the window is put away — NOT closed.
+        //
+        // This used to call `window.close()`, and verification found what that
+        // costs. Page code closing the window DESTROYS it, and does so without
+        // ever raising the window's own `close` event (measured on Electron
+        // 41), so the main process cannot intercept it: every tab, cursor and
+        // scroll position went, and the daemon then answered every `open` with
+        // success while having no window to open anything in.
+        //
+        // The collection is deliberately left untouched. "Close the last tab"
+        // in a resident one-window application means "put the file manager
+        // away", and coming back to an empty window would be a worse answer
+        // than coming back to where you were.
+        void hideWindow();
         return previous;
       });
     },
@@ -506,6 +526,11 @@ export function useTabs(initialPath: string): Tabs {
     clearMarks: () => changeActive(clearSelection),
 
     open: () => setState((previous) => openTab(previous, activePath)),
+    // A fresh arrow, like every other action here except `close` — which is a
+    // callback only because effects in this file depend on it. Its ONE
+    // subscriber holds it through a ref instead, so the identity never
+    // matters; see the note in App.
+    openAt: (path) => setState((previous) => openOrActivateTab(previous, path)),
     close,
     goNext: () => setState(nextTab),
     goPrevious: () => setState(previousTab),

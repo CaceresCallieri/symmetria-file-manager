@@ -155,6 +155,8 @@ export function inertBridge(): Bridge {
     onListBatch: () => () => undefined,
     onChanged: () => () => undefined,
     onTransferProgress: () => () => undefined,
+    onOpenPath: () => () => undefined,
+    hideWindow: async () => ({ ok: true, value: null }),
   };
 }
 
@@ -168,6 +170,27 @@ export interface ListAsk {
 
 export interface BridgeLog {
   readonly listed: string[];
+  /**
+   * Every request to put the window away.
+   *
+   * Observable because it is the ONLY thing that proves the last-tab close
+   * hides rather than destroys. The renderer used to call `window.close()`
+   * there, which destroys the Electron window without raising its `close`
+   * event at all — so the tabs, cursor and scroll all went, and nothing at
+   * this level could see it happen.
+   */
+  readonly hidden: string[];
+  /**
+   * Every subscription to the daemon's open-path channel.
+   *
+   * Counted because the preload removes and re-adds a NATIVE IPC listener on
+   * each subscribe, so an unstable handler identity turns one subscription
+   * into one per render on the hot path. Review traced that; this is what
+   * stops it coming back.
+   */
+  readonly openSubscriptions: string[];
+  /** Deliver a path on that channel, as the daemon would. */
+  emitOpenPath(path: string): void;
   /**
    * Every listing request in full, not only its path.
    *
@@ -250,6 +273,9 @@ export interface BridgeLog {
  */
 export function installBridge(): BridgeLog {
   const listed: string[] = [];
+  const hidden: string[] = [];
+  const openSubscriptions: string[] = [];
+  const openListeners = new Set<(payload: unknown) => void>();
   const listAsks: ListAsk[] = [];
   const unwatched: string[] = [];
   const watched: string[] = [];
@@ -513,6 +539,15 @@ export function installBridge(): BridgeLog {
       return () => progressListeners.delete(listener);
     },
     onListBatch: () => () => undefined,
+    onOpenPath: (listener) => {
+      openSubscriptions.push("subscribe");
+      openListeners.add(listener);
+      return () => openListeners.delete(listener);
+    },
+    hideWindow: async () => {
+      hidden.push("hide");
+      return { ok: true, value: null };
+    },
     onChanged: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -523,6 +558,11 @@ export function installBridge(): BridgeLog {
 
   return {
     listed,
+    hidden,
+    openSubscriptions,
+    emitOpenPath: (path: string) => {
+      for (const listener of openListeners) listener({ path });
+    },
     listAsks,
     unwatched,
     watched,

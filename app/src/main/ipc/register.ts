@@ -462,6 +462,12 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
 
   return {
     dispose() {
+      // Every request channel, including any this registry never handled.
+      // `hideWindow` is registered by the HOST rather than here, and
+      // `removeHandler` on an unregistered channel is a no-op — so this loop
+      // is correct as written. Do NOT narrow it to the channels this file
+      // handles: the loop is the safety net, and the set it iterates is the
+      // contract rather than a list to keep in step by hand.
       for (const channel of Object.values(REQUEST_CHANNELS)) ipc.removeHandler(channel);
       for (const controller of streams.values()) controller.abort();
       for (const stop of watches.values()) void stop();
