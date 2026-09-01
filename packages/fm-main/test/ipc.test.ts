@@ -10,16 +10,16 @@ import type {
 } from "@symmetria/fm-core/contract";
 
 import type { FsEntry } from "@symmetria/fm-core/entry";
-import type { IpcMainInvokeEvent } from "electron";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CHANNELS, REQUEST_CHANNELS } from "../src/ipc/channels.ts";
-import { electronIpcSurface } from "../src/ipc/electronSurface.ts";
+import { electronIpcSurface, type InvokeEvent } from "../src/ipc/electronSurface.ts";
 import {
   createRegistry,
   type IpcHandler,
   type IpcSurface,
   MAX_DIRECTORY_PREVIEW_ENTRIES,
+  type SenderHandle,
 } from "../src/ipc/register.ts";
 
 /**
@@ -42,11 +42,31 @@ const previewUrlFor = (token: string) => `test-host://preview/${token}`;
  */
 interface FakeIpc extends IpcSurface {
   invoke(channel: string, payload: unknown): Promise<IpcReply>;
+  /** Everything the registry pushed back to the one window below. */
+  readonly pushed: { channel: string; payload: unknown }[];
 }
 
 function fakeIpc(): FakeIpc {
   const handlers = new Map<string, IpcHandler>();
+  const pushed: { channel: string; payload: unknown }[] = [];
+
+  /**
+   * The one window every test in this file drives.
+   *
+   * The registry routes by sender, and a window IS the thing you push to — so
+   * this single handle is both the identity and the recorder. Every assertion
+   * in this file is about one window, which is why one serves them all; the
+   * two-window assertions live in `ipc-routing.test.ts`, where telling them
+   * apart is the whole subject.
+   */
+  const onlyWindow: SenderHandle = {
+    send: (channel, payload) => {
+      pushed.push({ channel, payload });
+    },
+  };
+
   return {
+    pushed,
     handle(channel, handler) {
       if (handlers.has(channel)) throw new Error(`duplicate handler for ${channel}`);
       handlers.set(channel, handler);
@@ -57,7 +77,7 @@ function fakeIpc(): FakeIpc {
     invoke(channel, payload) {
       const handler = handlers.get(channel);
       if (!handler) return Promise.reject(new Error(`no handler for ${channel}`));
-      return handler(payload);
+      return handler(payload, onlyWindow);
     },
   };
 }
@@ -123,7 +143,7 @@ afterAll(async () => {
 describe("the bridge returns what the main process produced", () => {
   it("lists a directory", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.list, { path: root });
 
@@ -134,7 +154,7 @@ describe("the bridge returns what the main process produced", () => {
 
   it("reports a failure as a value, never as a thrown error", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.list, { path: "/does/not/exist" });
 
@@ -161,7 +181,7 @@ function listing(value: unknown): string[] {
 describe("the listing comes back in the order that was asked for", () => {
   it("puts the smallest file first when asked for the size order", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.list, { path: ordered, sort: "size" });
 
@@ -172,7 +192,7 @@ describe("the listing comes back in the order that was asked for", () => {
 
   it("puts the largest first when the order is reversed", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.list, {
       path: ordered,
@@ -190,7 +210,7 @@ describe("the listing comes back in the order that was asked for", () => {
 
   it("keeps directories above files in every order, reversed or not", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     for (const sort of ["alphabetical", "modified", "size", "extension", "natural"]) {
       for (const reverse of [false, true]) {
@@ -208,7 +228,7 @@ describe("the listing comes back in the order that was asked for", () => {
 
   it("treats a missing reverse field as not reversed", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const withOut = await ipc.invoke(CHANNELS.list, { path: ordered, sort: "size" });
     const withFalse = await ipc.invoke(CHANNELS.list, {
@@ -227,7 +247,7 @@ describe("the boundary rejects before the handler runs", () => {
   it("never enters the handler on a malformed payload", async () => {
     const scan = vi.fn();
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor, scanDirectory: scan });
+    createRegistry(ipc, { previewUrlFor, scanDirectory: scan });
 
     const reply = await ipc.invoke(CHANNELS.list, { path: 7 });
 
@@ -242,7 +262,7 @@ describe("the boundary rejects before the handler runs", () => {
   it("rejects a relative path without touching the filesystem", async () => {
     const scan = vi.fn();
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor, scanDirectory: scan });
+    createRegistry(ipc, { previewUrlFor, scanDirectory: scan });
 
     await ipc.invoke(CHANNELS.list, { path: "../../etc" });
 
@@ -260,7 +280,7 @@ describe("the channel surface is closed", () => {
       removeHandler() {},
     };
 
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     // Request channels only. A push channel is sent to and never handled, and
     // conflating the two made this assertion fail for a correct registry.
@@ -285,9 +305,9 @@ describe("the channel surface is closed", () => {
 
   it("refuses to register the same channel twice", () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
-    expect(() => createRegistry(ipc, { send: () => {} }, { previewUrlFor })).toThrow();
+    expect(() => createRegistry(ipc, { previewUrlFor })).toThrow();
   });
 });
 
@@ -309,13 +329,8 @@ describe("a large listing arrives in batches", () => {
     // Transfer lists are NOT zero-copy in Electron: transfer and clone cost the
     // same, about 400 MB/s, so the entire cost of a large reply is copying. One
     // giant message blocks; batches let the first rows paint.
-    const sent: { channel: string; payload: unknown }[] = [];
     const ipc = fakeIpc();
-    createRegistry(
-      ipc,
-      { send: (channel, payload) => sent.push({ channel, payload }) },
-      { previewUrlFor },
-    );
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.list, { path: big, stream: true });
 
@@ -323,7 +338,7 @@ describe("a large listing arrives in batches", () => {
     if (!reply.ok) return;
     expect((reply.value as ListReply).total).toBe(10_000);
 
-    const batches = sent.filter((m) => m.channel === CHANNELS.listBatch);
+    const batches = ipc.pushed.filter((m) => m.channel === CHANNELS.listBatch);
     expect(batches.length).toBeGreaterThan(1);
 
     const streamed = batches.flatMap((m) => (m.payload as ListBatch).entries);
@@ -334,7 +349,7 @@ describe("a large listing arrives in batches", () => {
 describe("cancellation reaches the work", () => {
   it("stops a scan that is still running", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const started = performance.now();
     const pending = ipc.invoke(CHANNELS.list, { path: "/usr/lib", stream: true });
@@ -360,9 +375,9 @@ describe("cancellation reaches the work", () => {
  * assumption rather than the API.
  */
 describe("the Electron adapter", () => {
-  it("drops the event argument, so the handler sees the request", async () => {
+  it("passes the payload as the request and the event's sender as the window", async () => {
     // Electron's own shape: the invoke event first, then the payload.
-    type ElectronHandler = (event: IpcMainInvokeEvent, payload: unknown) => Promise<IpcReply>;
+    type ElectronHandler = (event: InvokeEvent, payload: unknown) => Promise<IpcReply>;
     const handlers = new Map<string, ElectronHandler>();
     const fakeIpcMain = {
       handle(channel: string, handler: ElectronHandler) {
@@ -373,25 +388,72 @@ describe("the Electron adapter", () => {
       },
     };
 
-    // No cast. `electronIpcSurface` asks for exactly the two members it uses,
-    // so this double satisfies it structurally — which is the point of the
-    // narrow parameter type.
-    const surface = electronIpcSurface(fakeIpcMain);
-    createRegistry(surface, { send: () => {} }, { previewUrlFor });
+    // No cast anywhere in this test, and that is the point of both narrow
+    // types. `electronIpcSurface` asks for the two members of `ipcMain` it
+    // uses and the two members of a renderer it uses, so the doubles satisfy
+    // them structurally. The previous version needed `{} as IpcMainInvokeEvent`
+    // and would have needed an assertion CHAIN once the event grew a sender —
+    // which the anti-slop gate rejects outright, and rightly: a chain throws
+    // away the evidence the double already has.
+    const transport = electronIpcSurface(fakeIpcMain);
+    const pushed: string[] = [];
+    createRegistry(transport.surface, {
+      previewUrlFor,
+      watchDirectory: (_path, onChange) => {
+        onChange([]);
+        return Promise.resolve(async () => undefined);
+      },
+    });
 
     // Called the way Electron calls it: event first, payload second.
-    const handler = handlers.get(CHANNELS.list);
-    expect(handler).toBeDefined();
-    if (!handler) return;
+    const list = handlers.get(CHANNELS.list);
+    expect(list).toBeDefined();
+    if (!list) return;
 
-    // SAFETY: the adapter drops the event without reading it, which is the one
-    // behaviour under test, so an empty stand-in is enough.
-    const event = {} as IpcMainInvokeEvent;
-    const reply = await handler(event, { path: root });
+    const event: InvokeEvent = {
+      sender: {
+        isDestroyed: () => false,
+        send: (channel: string) => {
+          pushed.push(channel);
+        },
+      },
+    };
+
+    const reply = await list(event, { path: root });
 
     expect(reply.ok).toBe(true);
     if (!reply.ok) return;
     expect(names(reply.value)).toContain("alpha.txt");
+
+    // The other half of the adapter: a push raised by this event's request
+    // finds its way back to this event's own sender.
+    const watch = handlers.get(CHANNELS.watch);
+    expect(watch).toBeDefined();
+    if (!watch) return;
+    await watch(event, { path: root, subscriptionId: "s1" });
+
+    expect(pushed).toContain(CHANNELS.changed);
+  });
+
+  it("mints one handle per renderer and returns that same handle every time", () => {
+    // The registry uses the handle as a MAP KEY, so a fresh object per request
+    // would file every request from one window under a new window and never
+    // find any of them again — the streams map would grow without bound and
+    // `cancel` would never match anything.
+    //
+    // Nothing else pins this: a per-call handle still pushes to the right
+    // renderer, because it closes over that renderer. Only the identity breaks,
+    // and only the registry can see it.
+    const transport = electronIpcSurface({
+      handle: () => undefined,
+      removeHandler: () => undefined,
+    });
+
+    const rendererA = { isDestroyed: () => false, send: () => undefined };
+    const rendererB = { isDestroyed: () => false, send: () => undefined };
+
+    expect(transport.handleFor(rendererA)).toBe(transport.handleFor(rendererA));
+    expect(transport.handleFor(rendererA)).not.toBe(transport.handleFor(rendererB));
   });
 });
 
@@ -405,14 +467,10 @@ describe("watching", () => {
     // error and a watch error arrived under a code that named neither. A
     // failure that is a value but lies about itself is no better than a throw.
     const ipc = fakeIpc();
-    createRegistry(
-      ipc,
-      { send: () => {} },
-      {
-        previewUrlFor,
-        watchDirectory: () => Promise.reject(new Error("no such directory")),
-      },
-    );
+    createRegistry(ipc, {
+      previewUrlFor,
+      watchDirectory: () => Promise.reject(new Error("no such directory")),
+    });
 
     const reply = await ipc.invoke(CHANNELS.watch, { path: "/nope", subscriptionId: "s" });
 
@@ -423,7 +481,7 @@ describe("watching", () => {
 
   it("reports a read failure as read_failed", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.readText, { path: "/does/not/exist" });
 
@@ -440,20 +498,16 @@ describe("watching", () => {
     const stops: string[] = [];
     let opened = 0;
     const ipc = fakeIpc();
-    createRegistry(
-      ipc,
-      { send: () => {} },
-      {
-        previewUrlFor,
-        watchDirectory: async (path) => {
-          const mine = `${path}#${opened++}`;
-          await new Promise((r) => setTimeout(r, 10));
-          return async () => {
-            stops.push(mine);
-          };
-        },
+    createRegistry(ipc, {
+      previewUrlFor,
+      watchDirectory: async (path) => {
+        const mine = `${path}#${opened++}`;
+        await new Promise((r) => setTimeout(r, 10));
+        return async () => {
+          stops.push(mine);
+        };
       },
-    );
+    });
 
     await Promise.all([
       ipc.invoke(CHANNELS.watch, { path: "/tmp", subscriptionId: "same" }),
@@ -468,16 +522,12 @@ describe("watching", () => {
   it("releases the watch on unwatch, without needing a path", async () => {
     let stopped = false;
     const ipc = fakeIpc();
-    createRegistry(
-      ipc,
-      { send: () => {} },
-      {
-        previewUrlFor,
-        watchDirectory: async () => async () => {
-          stopped = true;
-        },
+    createRegistry(ipc, {
+      previewUrlFor,
+      watchDirectory: async () => async () => {
+        stopped = true;
       },
-    );
+    });
 
     await ipc.invoke(CHANNELS.watch, { path: "/tmp", subscriptionId: "s1" });
     // No `path` — `unwatch` used to reuse the watch decoder and demand one.
@@ -494,16 +544,12 @@ describe("dispose", () => {
     // a session opened lived until the process exited.
     let stopped = 0;
     const ipc = fakeIpc();
-    const registry = createRegistry(
-      ipc,
-      { send: () => {} },
-      {
-        previewUrlFor,
-        watchDirectory: async () => async () => {
-          stopped++;
-        },
+    const registry = createRegistry(ipc, {
+      previewUrlFor,
+      watchDirectory: async () => async () => {
+        stopped++;
       },
-    );
+    });
 
     await ipc.invoke(CHANNELS.watch, { path: "/tmp", subscriptionId: "a" });
     await ipc.invoke(CHANNELS.watch, { path: "/var", subscriptionId: "b" });
@@ -521,7 +567,7 @@ describe("a caller-named stream can be cancelled while it runs", () => {
     // specific running scan was structurally impossible and `"all"` was the
     // only lever that ever worked.
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const pending = ipc.invoke(CHANNELS.list, {
       path: "/usr/lib",
@@ -538,7 +584,7 @@ describe("a caller-named stream can be cancelled while it runs", () => {
 describe("describing a directory", () => {
   it("carries the entries, not only how many there are", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.describe, { path: root });
 
@@ -551,7 +597,7 @@ describe("describing a directory", () => {
 
   it("reports each entry's kind, so the listing can draw the right icon", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.describe, { path: kinds });
 
@@ -571,7 +617,7 @@ describe("describing a directory", () => {
     // correctly two columns to the left, which is where a listing that
     // disagrees with the scan becomes visible.
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.describe, { path: kinds });
 
@@ -592,7 +638,7 @@ describe("describing a directory", () => {
     // thousand strings across the bridge every time the cursor settled on it,
     // 150 ms apart. The cap bounds the payload; the count stays honest.
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.describe, { path: capped });
 
@@ -605,7 +651,7 @@ describe("describing a directory", () => {
 
   it("sends an empty listing for a file", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.describe, { path: join(root, "alpha.txt") });
 
@@ -647,7 +693,7 @@ describe("the bookmark channels", () => {
 
   it("answers the read with a seeded store on a first run", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.bookmarksRead, {});
 
@@ -661,7 +707,7 @@ describe("the bookmark channels", () => {
     // `g` is jump-to-top, so a bookmark on it could never fire. Persisting it
     // would look like a save that worked and be gone after a restart.
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     await ipc.invoke(CHANNELS.bookmarksWrite, {
       bookmarks: [
@@ -676,7 +722,7 @@ describe("the bookmark channels", () => {
 
   it("refuses a relative path", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     await ipc.invoke(CHANNELS.bookmarksWrite, {
       bookmarks: [{ letter: "w", bookmark: { path: "relative/here", label: "here" } }],
@@ -688,7 +734,7 @@ describe("the bookmark channels", () => {
 
   it("never enters the handler on a malformed payload", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.bookmarksWrite, { bookmarks: "not a list" });
 
@@ -699,7 +745,7 @@ describe("the bookmark channels", () => {
 
   it("reads back what it wrote", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     await ipc.invoke(CHANNELS.bookmarksWrite, {
       bookmarks: [{ letter: "w", bookmark: { path: "/tmp/work", label: "work" } }],
@@ -735,7 +781,7 @@ describe("the preview URL comes from the host", () => {
     const file = join(root, "previewable.txt");
     await writeFile(file, "content");
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = (await ipc.invoke(CHANNELS.previewUrl, { path: file })) as {
       ok: boolean;
@@ -754,7 +800,7 @@ describe("the preview URL comes from the host", () => {
     const file = join(root, "secret-name.txt");
     await writeFile(file, "content");
     const ipc = fakeIpc();
-    createRegistry(ipc, { send: () => {} }, { previewUrlFor });
+    createRegistry(ipc, { previewUrlFor });
 
     const reply = (await ipc.invoke(CHANNELS.previewUrl, { path: file })) as {
       ok: boolean;

@@ -486,15 +486,17 @@ app.whenReady().then(async () => {
   const { window, painted } = createWindow();
 
   // The renderer has no filesystem of its own, so this registry is the only
-  // way it reaches one. Bound to this window's sender: a push goes to the
-  // window that asked, never broadcast to whatever else might be listening.
+  // way it reaches one.
+  //
+  // The transport supplies BOTH halves now, and that replaced a real defect:
+  // the sender used to be built here around this one window, so every push —
+  // a listing batch, a directory change, transfer progress — went to it
+  // whatever window had asked. With one window that was invisible. The picker
+  // is the second window, and it would have watched its rows arrive on another
+  // workspace.
+  const transport = electronIpcSurface(ipcMain);
   const registry = createRegistry(
-    electronIpcSurface(ipcMain),
-    {
-      send: (channel, payload) => {
-        if (!window.isDestroyed()) window.webContents.send(channel, payload);
-      },
-    },
+    transport.surface,
     // The host owns its own origin, so it is the host that turns a preview
     // token into a URL. The registry used to import this and that import was
     // the last line tying the privileged half to one particular application.

@@ -107,16 +107,34 @@ async function readHead(path: string, bytes: number): Promise<Uint8Array> {
  * are testable in plain Node. Same reasoning as `buildWindowOptions` and
  * `resolveWithinRoot`: the parts worth testing must not drag Electron with them.
  */
+
 /**
- * A handler takes the untrusted payload and answers with a named reply.
+ * One window, as the only two things this package may know about one: it can be
+ * pushed to, and it is not any other window.
  *
- * `unknown` going IN is the honest description of a boundary: the payload has
- * not been parsed yet, and pretending otherwise is how unvalidated input gets
- * treated as a domain type. `unknown` coming OUT is a different matter — it
- * hands the caller the parsing problem this function exists to solve — so the
- * reply is `IpcReply`, the closed union of everything a channel may answer.
+ * **The identity and the transport are deliberately the same object.** An
+ * earlier version separated them — an opaque `object` token plus a registry-wide
+ * sender that resolved it — and that shape was worse twice over. It gave callers
+ * no contract at all (`object` says nothing), and it left two things that had to
+ * be kept in step by whoever wired the host. Here a window is a thing you can
+ * send to, map keys are its identity, and there is nothing to keep in step.
+ *
+ * Nothing about Electron appears in it: `send` takes a channel and a payload,
+ * which is as true of a test double as of a `WebContents`.
  */
-export type IpcHandler = (payload: unknown) => Promise<IpcReply>;
+export interface SenderHandle {
+  send(channel: string, payload: unknown): void;
+}
+
+/**
+ * A handler takes the payload and the window it came from.
+ *
+ * The second parameter is what makes more than one window possible. It used to
+ * be absent, and every push therefore went to whichever window the host had
+ * captured when it built the registry — see the note on `createRegistry`, which
+ * predicted this and named routing by sender as the fix.
+ */
+export type IpcHandler = (payload: unknown, from: SenderHandle) => Promise<IpcReply>;
 
 export interface IpcSurface {
   handle(channel: string, handler: IpcHandler): void;
@@ -127,11 +145,26 @@ export interface IpcSurface {
 export interface Registry {
   /** Unregister every handler, abort every stream, release every watch. */
   dispose(): void;
-}
-
-/** How the main process pushes to the renderer. */
-export interface Sender {
-  send(channel: string, payload: unknown): void;
+  /**
+   * Release one window's resources and forget it.
+   *
+   * The host calls this when a window is destroyed. `dispose` is the whole-process
+   * lever and still means everything; this one must not touch any other window,
+   * which is exactly what a picker opening and closing repeatedly depends on.
+   */
+  disposeSender(from: SenderHandle): void;
+  /**
+   * How many windows this registry is currently holding resources for.
+   *
+   * Production surface for one reason: on a daemon that runs for days and opens
+   * a window per file dialog, "does the registry forget a window that has gone"
+   * is a real operational question, and without this it has no answer that is
+   * not a heap dump. It is also the only way to assert the leak review found —
+   * a handler that created a record for a window with nothing in flight left an
+   * empty entry behind, and every other observable behaved identically either
+   * way, so a test written without this would have passed on the bug.
+   */
+  trackedWindows(): number;
 }
 
 /**
@@ -175,20 +208,66 @@ const BATCH = 500;
  *
  * **One registry per process.** Electron's `ipcMain.handle` throws when a
  * channel already has a handler, so a second call on the same transport is a
- * crash rather than a second registry. That is fine while there is one window —
- * decision D3 chose tabs over multiple windows — but multi-window work must
- * either share this registry or route by sender first. `cancel: "all"` is the
- * other half of that constraint: it abandons every stream the registry knows,
- * which is correct for one window and wrong for two.
+ * crash rather than a second registry. That constraint has not moved — what has
+ * moved is the consequence. This registry is now SHARED between windows and
+ * routes by sender, which is the second of the two options the previous version
+ * of this note named. `cancel: "all"` was the other half of it and now means
+ * "everything THIS window started".
+ *
+ * The picker is what forced it: a second window that requested a listing and
+ * watched its rows arrive somewhere else.
  */
-export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependencies): Registry {
+export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
   const previewUrlFor = deps.previewUrlFor;
   const scan = deps.scanDirectory ?? scanDirectory;
   const watch = deps.watchDirectory ?? watchDirectory;
 
-  const streams = new Map<string, AbortController>();
-  const watches = new Map<string, StopWatching>();
+  /**
+   * One window's resources.
+   *
+   * Every map here used to be a single registry-wide map keyed by an identifier
+   * the RENDERER chooses — and two renderers choose independently, so a picker
+   * window opening subscription `s1` would have released the browse window's
+   * `s1`. Keying by the pair is what makes the renderer's choice private to it.
+   */
+  interface WindowResources {
+    readonly streams: Map<string, AbortController>;
+    readonly watches: Map<string, StopWatching>;
+    readonly watchQueue: Map<string, Promise<unknown>>;
+  }
+
+  const windows = new Map<SenderHandle, WindowResources>();
   let nextStream = 0;
+
+  /** This window's tables, created on first use. */
+  function resourcesFor(from: SenderHandle): WindowResources {
+    const existing = windows.get(from);
+    if (existing !== undefined) return existing;
+
+    const fresh: WindowResources = {
+      streams: new Map(),
+      watches: new Map(),
+      watchQueue: new Map(),
+    };
+    windows.set(from, fresh);
+    return fresh;
+  }
+
+  /**
+   * Forget a window that is holding nothing.
+   *
+   * `windows` holds its keys strongly, so without this a resident daemon that
+   * opens and closes a picker all day accumulates one dead entry per dialog.
+   * The host is expected to call `disposeSender` on close and this is the safety
+   * net for when it does not — it runs only when all three tables are empty, so
+   * it can never drop a record something still needs.
+   */
+  function pruneIfIdle(from: SenderHandle): void {
+    const held = windows.get(from);
+    if (held === undefined) return;
+    if (held.streams.size > 0 || held.watches.size > 0 || held.watchQueue.size > 0) return;
+    windows.delete(from);
+  }
 
   /**
    * Decode, then run. The handler never sees a payload that failed to decode —
@@ -197,13 +276,13 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
   function guard<T>(
     decode: Decoder<T>,
     onError: FailureCode,
-    run: (request: T) => Promise<IpcReply>,
+    run: (request: T, from: SenderHandle) => Promise<IpcReply>,
   ): IpcHandler {
-    return async (payload) => {
+    return async (payload, from) => {
       const decoded = decode(payload);
       if (isFailure(decoded)) return decoded;
       try {
-        return await run(decoded.value);
+        return await run(decoded.value, from);
       } catch (cause) {
         // Nothing throws across the boundary. A thrown error arrives as an
         // opaque string with no code, and the renderer cannot branch on it.
@@ -223,25 +302,35 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
    * either writes, so both opened a real filesystem watch and the later one
    * silently overwrote the earlier — leaking a watcher that nothing could ever
    * stop, and delivering duplicate events under one id.
+   *
+   * The queue is PER WINDOW, like the tables it protects. Serialising two
+   * different windows against each other would make one window's slow watch
+   * delay another's, for two calls that never touch the same entry.
    */
-  const watchQueue = new Map<string, Promise<unknown>>();
-
-  function serialise<T>(id: string, work: () => Promise<T>): Promise<T> {
-    const next = (watchQueue.get(id) ?? Promise.resolve()).then(work, work);
-    watchQueue.set(
-      id,
-      next.catch(() => undefined),
-    );
+  function serialise<T>(from: SenderHandle, id: string, work: () => Promise<T>): Promise<T> {
+    const held = resourcesFor(from);
+    const next = (held.watchQueue.get(id) ?? Promise.resolve()).then(work, work);
+    const settled = next.catch(() => undefined);
+    held.watchQueue.set(id, settled);
+    // Drop the entry once this link is done, so an idle window really is idle
+    // and `pruneIfIdle` can forget it. Only when nothing has queued behind it —
+    // otherwise a second call waiting on this one loses its place in the chain.
+    void settled.then(() => {
+      if (held.watchQueue.get(id) !== settled) return;
+      held.watchQueue.delete(id);
+      pruneIfIdle(from);
+    });
     return next;
   }
 
   ipc.handle(
     CHANNELS.list,
-    guard(decodeListRequest, "scan_failed", async (request): Promise<Result<ListReply>> => {
+    guard(decodeListRequest, "scan_failed", async (request, from): Promise<Result<ListReply>> => {
+      const held = resourcesFor(from);
       const controller = new AbortController();
       // The caller names the stream when it wants to be able to cancel it.
       const streamId = request.streamId ?? `s${nextStream++}`;
-      streams.set(streamId, controller);
+      held.streams.set(streamId, controller);
 
       try {
         const raw = await scan(request.path, { signal: controller.signal });
@@ -255,23 +344,40 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
           return success({ entries: shown, total: shown.length, streamId: null });
         }
 
-        await pushBatches(sender, streamId, shown);
+        await pushBatches(from, streamId, shown);
         return success({ entries: [], total: shown.length, streamId });
       } catch (cause) {
         if (controller.signal.aborted) return failure("cancelled", "the scan was cancelled");
         return failure("scan_failed", cause instanceof Error ? cause.message : String(cause));
       } finally {
-        streams.delete(streamId);
+        held.streams.delete(streamId);
+        pruneIfIdle(from);
       }
     }),
   );
 
   ipc.handle(
     CHANNELS.cancel,
-    guard(decodeCancelRequest, "cancelled", async (request) => {
-      // `all` is the tab-closed case: abandon everything this window started.
+    guard(decodeCancelRequest, "cancelled", async (request, from) => {
+      // `all` is the tab-closed case: abandon everything THIS window started.
+      // It used to abandon everything the registry knew, which was correct while
+      // there was one window and would have let a picker closing a tab kill the
+      // browse window's in-flight scans.
+      //
+      // **`windows.get` and NOT `resourcesFor`, which is the one difference
+      // from every other handler here.** Cancelling is the only operation that
+      // stores nothing, and a window may cancel with nothing in flight — a
+      // renderer clearing up on unmount does exactly that. Creating a record
+      // for it would leave an empty entry in a strongly-keyed map for a window
+      // that never came back, which for a daemon opening a picker per file
+      // dialog is a leak with one entry per dialog. Review found it.
+      const held = windows.get(from);
+      if (held === undefined) return success(null);
+
       const targets =
-        request.streamId === "all" ? [...streams.values()] : [streams.get(request.streamId)];
+        request.streamId === "all"
+          ? [...held.streams.values()]
+          : [held.streams.get(request.streamId)];
       for (const controller of targets) controller?.abort();
       return success(null);
     }),
@@ -279,27 +385,32 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
 
   ipc.handle(
     CHANNELS.watch,
-    guard(decodeWatchRequest, "watch_failed", async (request) =>
-      serialise(request.subscriptionId, async () => {
-        await watches.get(request.subscriptionId)?.();
+    guard(decodeWatchRequest, "watch_failed", async (request, from) => {
+      const held = resourcesFor(from);
+      return serialise(from, request.subscriptionId, async () => {
+        await held.watches.get(request.subscriptionId)?.();
         const stop = await watch(request.path, (changed: ChangedEntry[]) => {
-          sender.send(CHANNELS.changed, { subscriptionId: request.subscriptionId, changed });
+          from.send(CHANNELS.changed, {
+            subscriptionId: request.subscriptionId,
+            changed,
+          });
         });
-        watches.set(request.subscriptionId, stop);
+        held.watches.set(request.subscriptionId, stop);
         return success(null);
-      }),
-    ),
+      });
+    }),
   );
 
   ipc.handle(
     CHANNELS.unwatch,
-    guard(decodeUnwatchRequest, "watch_failed", async (request) =>
-      serialise(request.subscriptionId, async () => {
-        await watches.get(request.subscriptionId)?.();
-        watches.delete(request.subscriptionId);
+    guard(decodeUnwatchRequest, "watch_failed", async (request, from) => {
+      const held = resourcesFor(from);
+      return serialise(from, request.subscriptionId, async () => {
+        await held.watches.get(request.subscriptionId)?.();
+        held.watches.delete(request.subscriptionId);
         return success(null);
-      }),
-    ),
+      });
+    }),
   );
 
   ipc.handle(
@@ -385,9 +496,13 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
 
   ipc.handle(
     CHANNELS.transfer,
-    guard(decodeTransferRequest, "write_failed", async (request) => {
+    guard(decodeTransferRequest, "write_failed", async (request, from) => {
       const outcome = await operations.transfer(request, (done, total) => {
-        sender.send(CHANNELS.transferProgress, { transferId: request.transferId, done, total });
+        from.send(CHANNELS.transferProgress, {
+          transferId: request.transferId,
+          done,
+          total,
+        });
       });
       return success(outcome);
     }),
@@ -480,6 +595,15 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
     }),
   );
 
+  /** Abandon one window's work without touching the handler registrations. */
+  function releaseWindow(held: WindowResources): void {
+    for (const controller of held.streams.values()) controller.abort();
+    for (const stop of held.watches.values()) void stop();
+    held.streams.clear();
+    held.watches.clear();
+    held.watchQueue.clear();
+  }
+
   return {
     dispose() {
       // Every request channel, including any this registry never handled.
@@ -489,11 +613,20 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
       // handles: the loop is the safety net, and the set it iterates is the
       // contract rather than a list to keep in step by hand.
       for (const channel of Object.values(REQUEST_CHANNELS)) ipc.removeHandler(channel);
-      for (const controller of streams.values()) controller.abort();
-      for (const stop of watches.values()) void stop();
-      streams.clear();
-      watches.clear();
+      // Still EVERY window. This runs at quit, and narrowing it to one would
+      // leak whatever the last window did not happen to own.
+      for (const held of windows.values()) releaseWindow(held);
+      windows.clear();
     },
+
+    disposeSender(from) {
+      const held = windows.get(from);
+      if (held === undefined) return;
+      releaseWindow(held);
+      windows.delete(from);
+    },
+
+    trackedWindows: () => windows.size,
   };
 }
 
@@ -506,7 +639,7 @@ export function createRegistry(ipc: IpcSurface, sender: Sender, deps: Dependenci
  * while the main process is still building batch two.
  */
 async function pushBatches(
-  sender: Sender,
+  to: SenderHandle,
   streamId: string,
   entries: readonly FsEntry[],
 ): Promise<void> {
@@ -517,7 +650,7 @@ async function pushBatches(
       entries: slice,
       done: offset + BATCH >= entries.length,
     };
-    sender.send(CHANNELS.listBatch, batch);
+    to.send(CHANNELS.listBatch, batch);
     await new Promise((resolve) => setImmediate(resolve));
   }
 }
