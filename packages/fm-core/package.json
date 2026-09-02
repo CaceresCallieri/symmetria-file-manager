@@ -34,6 +34,7 @@
     "./preview/route": "./src/preview/route.ts",
     "./preview/duration": "./src/preview/duration.ts",
     "./preview/waveform": "./src/preview/waveform.ts",
+    "./preview/sheet": "./src/preview/sheet.ts",
     "./icons/resolve": "./src/icons/resolve.ts",
     "./bridge": "./src/bridge.ts"
   }

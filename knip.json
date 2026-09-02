@@ -22,7 +22,8 @@
         "src/App.tsx",
         "src/highlight.worker.ts",
         "src/tags.worker.ts",
-        "src/waveform.worker.ts"
+        "src/waveform.worker.ts",
+        "src/spreadsheet.worker.ts"
       ],
       "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"]
     }
