@@ -25,12 +25,34 @@ export const PREVIEW_DEBOUNCE_MS = 150;
  * row database into the renderer, the router is handed the small subset the
  * branch tests actually consult.
  *
- * The consequence, stated plainly: a type whose image-ness or text-ness is only
- * derivable through a subclass chain NOT listed here falls through to the
- * content sniff, which is the same answer the Qt build gave for an unregistered
- * type. It is a smaller table, not a wrong one.
+ * The consequence, stated plainly: a type whose kind is only derivable through a
+ * subclass chain NOT listed here falls through to the content sniff or to the
+ * generic fallback.
+ *
+ * ── "A smaller table, not a wrong one" was FALSE, and it cost a release ─────
+ * That is what this comment used to claim. It was wrong twice over.
+ *
+ * First, an edge here can be wrong rather than merely absent, and one was:
+ * `application/x-compressed-tar` was listed as inheriting from
+ * `application/x-tar`. The real database says `application/gzip` — a `.tar.gz`
+ * is a gzip as far as the system is concerned. So every tarball routed as an
+ * UNCOMPRESSED tar, the reader was handed gzip bytes, and the pane said "could
+ * not read this archive". Every unit test passed, because they all build their
+ * own tables. **Verify every edge here against `/usr/share/mime/subclasses`;
+ * `mimeTables.test.ts` in this package now does exactly that.**
+ *
+ * Second, a missing edge is not always harmless. `application/java-archive`,
+ * `.docx`, `.odt` and `.epub` are all subclasses of `application/zip` and would
+ * list their contents if that were known here. They do not, and they show the
+ * generic fallback instead. `route.ts` is right about them; this table is what
+ * never tells it.
+ *
+ * The real fix is to stop keeping a second copy at all: the main process
+ * resolves each entry's type from the real database already and could send its
+ * resolved ancestry alongside. That is a change to the describe contract and it
+ * is not this file's to make alone.
  */
-const RENDERER_TABLES: MimeTables = {
+export const RENDERER_TABLES: MimeTables = {
   globs: [],
   subclasses: new Map([
     ["image/svg+xml", ["application/xml"]],
@@ -40,7 +62,12 @@ const RENDERER_TABLES: MimeTables = {
     ["application/javascript", ["text/plain"]],
     ["application/x-shellscript", ["text/plain"]],
     ["text/x-shellscript", ["text/plain"]],
-    ["application/x-compressed-tar", ["application/x-tar"]],
+    // Each compressed tar inherits from its COMPRESSOR, not from `x-tar`.
+    // Verified against /usr/share/mime/subclasses, and pinned by a test.
+    ["application/x-compressed-tar", ["application/gzip"]],
+    ["application/x-xz-compressed-tar", ["application/x-xz"]],
+    ["application/x-bzip2-compressed-tar", ["application/x-bzip2"]],
+    ["application/x-zstd-compressed-tar", ["application/zstd"]],
     ["application/x-gtar", ["application/x-tar"]],
   ]),
   aliases: new Map([

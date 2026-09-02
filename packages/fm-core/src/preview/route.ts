@@ -215,11 +215,16 @@ function isSpreadsheet(mime: string): boolean {
  * a tarball, and the tar branch catches only a bare `.tar`.
  *
  * Zip goes first because a great many things inherit from it. `.docx`, `.odt`,
- * `.epub` and `.jar` are all subclasses of `application/zip`, so they list as
- * archives here. That is not an accident of the rules: they are zips, and
- * showing what is inside one beats a notice saying nothing can be shown.
- * A `.xlsx` is a subclass too and never reaches this branch, because the
- * spreadsheet test runs first — see the branch-order note above.
+ * `.epub` and `.jar` are all subclasses of `application/zip`, so THIS FUNCTION
+ * lists them as archives — they are zips, and showing what is inside one beats
+ * a notice saying nothing can be shown. A `.xlsx` is a subclass too and never
+ * reaches this branch, because the spreadsheet test runs first.
+ *
+ * **The running panel does not see those edges yet**, and this comment used to
+ * imply it did. `packages/fm-ui/src/usePreview.ts` hands this router a small
+ * hand-written table rather than the system database, and no zip subclass is in
+ * it — so a `.jar` shows the generic fallback in the application while passing
+ * every test here. Read that file's header before trusting this paragraph.
  */
 const READABLE_ARCHIVES: readonly {
   readonly root: string;

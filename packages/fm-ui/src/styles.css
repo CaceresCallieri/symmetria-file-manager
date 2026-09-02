@@ -868,3 +868,67 @@ kbd {
   flex: 0 0 auto;
   color: var(--muted-foreground);
 }
+
+/*
+ * An archive's contents.
+ *
+ * The listing scrolls on its own so the counts and the truncation notice below
+ * it stay put — the same arrangement `.preview__listing` uses for a directory,
+ * and for the same reason: a line pushed off the end of a long list is a line
+ * nobody reads.
+ *
+ * Rows are `.row` as well, so an archive's members look like the entries in the
+ * two navigable columns. They are deliberately NOT `FileRow`: that takes a
+ * cursor and a mark, and this column has neither.
+ */
+.preview--archive {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.preview__archive-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.preview__archive-body {
+  position: relative;
+  width: 100%;
+}
+
+/*
+ * Absolutely positioned by the virtualiser, so the indent has to be padding
+ * rather than a margin: `transform: translateY` moves the row and a left margin
+ * would fight the width it was given.
+ */
+.preview__archive-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.preview__archive-size {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+
+.preview__archive-counts {
+  flex: 0 0 auto;
+  margin: 4px 0 0;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+
+/* The depth indent, as a spacer rather than as padding on the row itself: the
+   row's own horizontal inset comes from `.row`, and an inline padding of zero
+   at depth 0 would override it. */
+.preview__archive-indent {
+  flex: 0 0 auto;
+}

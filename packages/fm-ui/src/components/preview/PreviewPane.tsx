@@ -2,9 +2,11 @@ import type { EntrySummary } from "@symmetria/fm-core/entry";
 import type { PreviewRoute } from "@symmetria/fm-core/preview/route";
 
 import { FileIcon } from "../FileIcon.tsx";
+import { ArchivePreview } from "./ArchivePreview.tsx";
 import { AudioPreview } from "./AudioPreview.tsx";
 import { CodePreview } from "./CodePreview.tsx";
 import { DocumentPreview } from "./DocumentPreview.tsx";
+import { humanSize } from "./humanSize.ts";
 import { ImagePreview } from "./ImagePreview.tsx";
 import { SpreadsheetPreview } from "./SpreadsheetPreview.tsx";
 import { TextPreview } from "./TextPreview.tsx";
@@ -25,18 +27,6 @@ export interface PreviewPaneProps {
    * path rather than as a flag.
    */
   readonly audioPlaying?: boolean;
-}
-
-/** A size a person can read. */
-function humanSize(bytes: number): string {
-  const units = ["B", "kB", "MB", "GB", "TB"];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${unit === 0 ? value : value.toFixed(1)} ${units[unit]}`;
 }
 
 /**
@@ -63,11 +53,17 @@ export function PreviewPane({ route, path, size, error, audioPlaying }: PreviewP
 
 function body(route: PreviewRoute, path: string | null, size: number, audioPlaying: boolean) {
   if (path === null || route.kind === "none") return null;
-  return contents(route, path, audioPlaying) ?? notice(route, size);
+  return contents(route, path, size, audioPlaying) ?? notice(route, size);
 }
 
-/** The branches that render the file itself. */
-function contents(route: PreviewRoute, path: string, audioPlaying: boolean) {
+/**
+ * The branches that render the file itself.
+ *
+ * `size` is passed through for the archive branch alone: a zip's index is at
+ * the END of the file, so reading one starts from its length — and the scan
+ * already knows it, which saves the pane a round trip to ask.
+ */
+function contents(route: PreviewRoute, path: string, size: number, audioPlaying: boolean) {
   switch (route.kind) {
     case "image":
       return <ImagePreview path={path} mime={route.mime} />;
@@ -79,6 +75,15 @@ function contents(route: PreviewRoute, path: string, audioPlaying: boolean) {
       return <AudioPreview path={path} mime={route.mime} playing={audioPlaying} />;
     case "spreadsheet":
       return <SpreadsheetPreview path={path} mime={route.mime} />;
+    case "archive":
+      return (
+        <ArchivePreview
+          path={path}
+          format={route.format}
+          compression={route.compression}
+          size={size}
+        />
+      );
     case "code":
       return <CodePreview path={path} language={route.language} />;
     case "text":
