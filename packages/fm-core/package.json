@@ -33,6 +33,7 @@
     "./keys/keyEvent": "./src/keys/keyEvent.ts",
     "./preview/route": "./src/preview/route.ts",
     "./preview/duration": "./src/preview/duration.ts",
+    "./preview/waveform": "./src/preview/waveform.ts",
     "./icons/resolve": "./src/icons/resolve.ts",
     "./bridge": "./src/bridge.ts"
   }

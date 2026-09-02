@@ -1,9 +1,11 @@
 import { formatDuration } from "@symmetria/fm-core/preview/duration";
 import { useEffect, useRef, useState } from "react";
 
+import { lazyWorker } from "../../lazyWorker.ts";
 import type { TagsRequest, TagsResponse } from "../../tags.worker.ts";
 import { usePreviewUrl } from "./previewUrl.ts";
 import { useMediaProgress } from "./useMediaProgress.ts";
+import { Waveform } from "./Waveform.tsx";
 
 export interface AudioPreviewProps {
   readonly path: string;
@@ -12,34 +14,13 @@ export interface AudioPreviewProps {
   readonly playing: boolean;
 }
 
-/**
- * One worker for the whole application.
- *
- * Started on first use and never torn down, exactly as the highlighter is: this
- * pane reads tags for nearly every audio file the cursor rests on, and spawning
- * a worker per file would cost more than the parsing. Created lazily so a
- * session that previews no audio never pays for it, and so a host without
- * workers — or a test environment — is not required to have one.
- */
-let worker: Worker | null = null;
+const reader = lazyWorker(
+  () => new Worker(new URL("../../tags.worker.ts", import.meta.url), { type: "module" }),
+);
 
-function tagReader(): Worker | null {
-  if (worker !== null) return worker;
-  if (typeof Worker === "undefined") return null;
-
-  worker = new Worker(new URL("../../tags.worker.ts", import.meta.url), { type: "module" });
-  return worker;
-}
-
-/**
- * Drop the shared worker.
- *
- * For tests, which must not inherit another test's worker — the same reason
- * `forgetPreviewTokens` exists in the main process.
- */
+/** Drop the shared worker. For tests, which must not inherit another's. */
 export function forgetTagsWorker(): void {
-  worker?.terminate();
-  worker = null;
+  reader.forget();
 }
 
 interface Tags {
@@ -68,7 +49,7 @@ function useAudioTags(url: string | null): Tags {
     setTags(NO_TAGS);
     if (url === null) return;
 
-    const instance = tagReader();
+    const instance = reader.get();
     if (instance === null) return;
 
     const id = ++nextId.current;
@@ -182,6 +163,8 @@ export function AudioPreview({ path, mime, playing }: AudioPreviewProps) {
       <p className="preview__duration" data-testid="preview-audio-duration">
         {length === "" ? mime : length}
       </p>
+
+      <Waveform url={url} position={progress.position} duration={duration} />
 
       <input
         className="preview__seek"

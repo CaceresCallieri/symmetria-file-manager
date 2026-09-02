@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { HighlightRequest, HighlightResponse } from "../../highlight.worker.ts";
+import { lazyWorker } from "../../lazyWorker.ts";
 import { TruncationMarker, useFileText } from "./TextPreview.tsx";
 
 export interface CodePreviewProps {
@@ -8,24 +9,9 @@ export interface CodePreviewProps {
   readonly language: string;
 }
 
-/**
- * One worker for the whole application.
- *
- * Started on first use, never torn down: a preview pane highlights on nearly
- * every cursor settle, and spawning a worker per file would cost more than the
- * highlighting. Created lazily so a session that previews no code never pays
- * for it — and so a test environment with no `Worker` is not required to have
- * one.
- */
-let worker: Worker | null = null;
-
-function highlighter(): Worker | null {
-  if (worker !== null) return worker;
-  if (typeof Worker === "undefined") return null;
-
-  worker = new Worker(new URL("../../highlight.worker.ts", import.meta.url), { type: "module" });
-  return worker;
-}
+const highlighter = lazyWorker(
+  () => new Worker(new URL("../../highlight.worker.ts", import.meta.url), { type: "module" }),
+);
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -47,7 +33,7 @@ export function CodePreview({ path, language }: CodePreviewProps) {
   useEffect(() => {
     if (loaded === null) return;
 
-    const instance = highlighter();
+    const instance = highlighter.get();
     if (instance === null) {
       setHtml(escapeHtml(loaded.text));
       return;
