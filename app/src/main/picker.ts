@@ -114,8 +114,14 @@ export type OpenPickerWindow = (command: CreatePickerCommand, title: string) => 
  */
 export type WriteAnswer = (fifo: string, payload: string) => Promise<Result<null>>;
 
-/** Run something later, and hand back a way to call it off. */
-export type Schedule = (run: () => void, afterMs: number) => () => void;
+/**
+ * Run something later, and hand back a way to call it off.
+ *
+ * Not exported: a caller supplying a `schedule` writes an inline function and
+ * TypeScript infers this from `PickerHostOptions`. Exporting it made it dead
+ * public surface, which `knip` reported.
+ */
+type Schedule = (run: () => void, afterMs: number) => () => void;
 
 /**
  * How long a picker may hold the slot before it is answered and dismissed.
