@@ -1,4 +1,4 @@
-import { formatDuration } from "@symmetria/fm-core/preview/duration";
+import { formatDuration, playedFraction } from "@symmetria/fm-core/preview/duration";
 import { useEffect, useRef, useState } from "react";
 
 import { lazyWorker } from "../../lazyWorker.ts";
@@ -166,22 +166,39 @@ export function AudioPreview({ path, mime, playing }: AudioPreviewProps) {
 
       <Waveform url={url} position={progress.position} duration={duration} />
 
-      <input
-        className="preview__seek"
-        data-testid="preview-audio-seek"
-        type="range"
-        min={0}
-        max={duration ?? 0}
-        step="any"
-        value={progress.position}
-        aria-label="Seek"
-        disabled={duration === null}
-        onChange={(event) => {
-          const seconds = Number(event.target.value);
-          progress.reportPosition(seconds);
-          if (element.current !== null) element.current.currentTime = seconds;
-        }}
-      />
+      {/* Three elements where a bare input would do, and the reason is that
+          Chromium gives a range input a track and a thumb and NOTHING between
+          them: there is no pseudo-element for the played portion, the way
+          Firefox's `::-moz-range-progress` is. So the groove is drawn by the
+          wrapper, the fill is a real element sized in percent, and the input
+          rides on top contributing only its thumb.
+
+          The alternative was a custom property set inline and read by
+          `::-webkit-slider-runnable-track` as a gradient stop. It needs a cast
+          to get past `CSSProperties`, which does not admit custom properties;
+          a plain `width` needs none. */}
+      <div className="preview__seek">
+        <div
+          className="preview__seek-played"
+          style={{ width: `${playedFraction(progress.position, duration) * 100}%` }}
+        />
+        <input
+          className="preview__seek-input"
+          data-testid="preview-audio-seek"
+          type="range"
+          min={0}
+          max={duration ?? 0}
+          step="any"
+          value={progress.position}
+          aria-label="Seek"
+          disabled={duration === null}
+          onChange={(event) => {
+            const seconds = Number(event.target.value);
+            progress.reportPosition(seconds);
+            if (element.current !== null) element.current.currentTime = seconds;
+          }}
+        />
+      </div>
 
       {/* biome-ignore lint/a11y/useMediaCaption: a preview of a sound file the
           user is pointing at has no caption track to offer, and an empty one

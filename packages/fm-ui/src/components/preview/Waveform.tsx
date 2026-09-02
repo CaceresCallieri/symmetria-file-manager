@@ -1,3 +1,4 @@
+import { playedFraction } from "@symmetria/fm-core/preview/duration";
 import { useEffect, useRef, useState } from "react";
 import { lazyWorker } from "../../lazyWorker.ts";
 import type { WaveformRequest, WaveformResponse } from "../../waveform.worker.ts";
@@ -183,7 +184,7 @@ export function Waveform({ url, position, duration }: WaveformProps) {
   const bars = useWaveform(url, duration);
   const canvas = useRef<HTMLCanvasElement | null>(null);
 
-  const played = duration === null || duration <= 0 ? 0 : position / duration;
+  const played = playedFraction(position, duration);
 
   useEffect(() => {
     if (canvas.current === null || bars === null) return;

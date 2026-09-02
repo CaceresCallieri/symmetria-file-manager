@@ -37,3 +37,20 @@ export function formatDuration(seconds: number): string {
   // `1:05:00`, not `1:5:00`; and `3:35`, not `03:35`.
   return `${hours}:${String(minutes).padStart(2, "0")}:${paddedSeconds}`;
 }
+
+/**
+ * How much of a file has been played, from 0 to 1.
+ *
+ * One line, and it exists because BOTH the waveform and the seek groove need
+ * it and they must never disagree: they are drawn six pixels apart, so a
+ * playhead computed one way beside a fill computed another is visible as a
+ * misalignment. The two guards are the reason it is worth a name — an unknown
+ * length is `null` and a zero length divides — and duplicating them is how one
+ * copy ends up with `Infinity` for a width.
+ */
+export function playedFraction(position: number, duration: number | null): number {
+  if (duration === null || duration <= 0) return 0;
+  // Clamped, because a media element can report a `currentTime` a hair past
+  // its own `duration` at the very end of a file.
+  return Math.min(position / duration, 1);
+}

@@ -521,9 +521,130 @@ kbd {
   height: 36px;
 }
 
+/*
+ * The transport, as a hairline groove rather than as a widget.
+ *
+ * `accent-color: var(--primary)` was the whole of this rule before, and it is
+ * worth recording why that is not styling: it re-tints Chromium's NATIVE range
+ * control and changes nothing else about it. The stock control keeps its own
+ * geometry — a full-width opaque track and a 16px thumb, both proportioned for
+ * a settings dialog — so beside a 36px waveform drawn from tokens at 6% white
+ * it was the heaviest and brightest thing in the pane while carrying the least
+ * information. `appearance: none` is what actually hands the drawing over.
+ *
+ * The colours are the waveform's own, deliberately: `--primary` means PLAYED
+ * six pixels above this, so it means played here too. A grey fill would have
+ * matched the pane better and contradicted the picture directly above it,
+ * where grey is what has NOT been played yet.
+ */
 .preview__seek {
+  position: relative;
+  display: flex;
+  align-items: center;
   width: 100%;
-  accent-color: var(--primary);
+  /* The pointer target. The groove inside it is 3px; a 3px hit area is not one. */
+  height: 12px;
+}
+
+/* The unplayed groove, and the same 8% white as a scrollbar thumb: both are a
+   channel that something else moves along, and they should read as one idea. */
+.preview__seek::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+}
+
+.preview__seek-played {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  /*
+   * Subordinate to the waveform, not equal to it.
+   *
+   * The two are drawn six pixels apart and they carry the SAME fact, so at full
+   * strength this line reads as a second statement competing with the picture
+   * rather than as its echo — most of all near the end of a file, where it
+   * becomes the longest saturated element in the pane. Rendered and compared at
+   * full, 65% and 50%: full competes, 50% goes muddy against the groove
+   * beneath it.
+   *
+   * Opacity rather than a softened palette token, deliberately: the intent is
+   * "this element ranks below that one", which is a compositing decision. A
+   * `--primary-soft` token would state it as a colour role the palette does not
+   * otherwise have, and it would have exactly one user.
+   */
+  opacity: 0.65;
+}
+
+/*
+ * `position: relative` is load-bearing and not cosmetic. The groove and the
+ * fill are absolutely positioned siblings, so they paint above any in-flow box
+ * regardless of source order — an unpositioned input would have its thumb
+ * buried under the fill at every position it had already passed.
+ */
+.preview__seek-input {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Transparent, because the groove above already drew it. The height is still
+   declared: Chromium centres the thumb on the TRACK box, so a track of a
+   different height would put the playhead off the line it belongs on. */
+.preview__seek-input::-webkit-slider-runnable-track {
+  height: 3px;
+  background: transparent;
+}
+
+.preview__seek-input::-webkit-slider-thumb {
+  width: 9px;
+  height: 9px;
+  /* (track − thumb) ÷ 2. Chromium aligns the thumb's top edge with the track's,
+     so this is what centres it rather than hanging it below the line. */
+  margin-top: -3px;
+  appearance: none;
+  border-radius: 50%;
+  background: var(--foreground);
+}
+
+/* Before the length is known there is nothing to seek across. Grey rather than
+   hidden: a playhead that appears from nowhere once metadata lands reads as a
+   glitch, where a dim one reads as a control that is not ready. */
+.preview__seek-input:disabled {
+  cursor: default;
+}
+
+.preview__seek-input:disabled::-webkit-slider-thumb {
+  background: var(--muted-foreground);
+}
+
+/*
+ * The focus ring moves onto the thumb.
+ *
+ * Suppressing the outline without replacing it would leave a keyboard user
+ * with no way to see where focus is. An outline around the input itself is a
+ * 100%-wide rectangle around a 3px line, which is why the ring goes on the
+ * thumb — the part that actually moves.
+ */
+.preview__seek-input:focus-visible {
+  outline: none;
+}
+
+.preview__seek-input:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--accent);
 }
 
 /* `contain`, not `cover`, for both: a preview that crops is lying about what
