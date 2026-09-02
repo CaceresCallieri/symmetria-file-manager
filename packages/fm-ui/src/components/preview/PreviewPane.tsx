@@ -6,6 +6,7 @@ import { CodePreview } from "./CodePreview.tsx";
 import { DocumentPreview } from "./DocumentPreview.tsx";
 import { ImagePreview } from "./ImagePreview.tsx";
 import { TextPreview } from "./TextPreview.tsx";
+import { VideoPreview } from "./VideoPreview.tsx";
 
 export interface PreviewPaneProps {
   readonly route: PreviewRoute;
@@ -61,6 +62,8 @@ function contents(route: PreviewRoute, path: string) {
       return <ImagePreview path={path} mime={route.mime} />;
     case "document":
       return <DocumentPreview path={path} mime={route.mime} />;
+    case "video":
+      return <VideoPreview path={path} mime={route.mime} />;
     case "code":
       return <CodePreview path={path} language={route.language} />;
     case "text":

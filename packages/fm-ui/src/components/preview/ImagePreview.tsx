@@ -1,40 +1,10 @@
-import { isFailure } from "@symmetria/fm-core/contract";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import { previewUrl } from "../../bridge.ts";
+import { usePreviewUrl } from "./previewUrl.ts";
 
 export interface ImagePreviewProps {
   readonly path: string;
   readonly mime: string;
-}
-
-/**
- * A URL the browser may load this file from.
- *
- * A same-origin URL under the application's own scheme, NOT a `file://` one and
- * NOT a blob built from bytes sent over the bridge. The renderer has no
- * filesystem by design; the main process authorises each previewed path and
- * hands back an address for it, so nothing here touches the disk and nothing
- * copies a file across the process boundary.
- */
-export function usePreviewUrl(path: string): string | null {
-  const [url, setUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let current = true;
-    setUrl(null);
-
-    void previewUrl(path).then((reply) => {
-      if (!current || isFailure(reply)) return;
-      setUrl(reply.value);
-    });
-
-    return () => {
-      current = false;
-    };
-  }, [path]);
-
-  return url;
 }
 
 /** An image, at its natural aspect ratio. */

@@ -10,8 +10,8 @@ import { classify, inheritsFrom, isImageMime, type MimeTables } from "../mime.ts
  * same rule holds here.
  *
  * ── The branch order is a contract ──────────────────────────────────────────
- * none → directory → remote directory → image → video → audio → archive →
- * spreadsheet → markup → code → text → fallback.
+ * none → directory → image → document → video → audio → archive →
+ * spreadsheet → code → text → fallback.
  *
  * Image before text is the one that bites. `image/svg+xml` inherits from
  * `application/xml`, which inherits from `text/plain`, so an SVG *is* text
@@ -35,7 +35,7 @@ export interface PreviewTarget {
 }
 
 /** A branch the shape keeps but this cycle does not build. */
-export type UnbuiltKind = "video" | "audio" | "archive" | "spreadsheet";
+export type UnbuiltKind = "audio" | "archive" | "spreadsheet";
 
 export type PreviewRoute =
   /** Nothing under the cursor. */
@@ -53,6 +53,8 @@ export type PreviewRoute =
     }
   | { readonly kind: "image"; readonly mime: string }
   | { readonly kind: "document"; readonly mime: string }
+  /** Played by the browser itself: silent, looping, at its own aspect ratio. */
+  | { readonly kind: "video"; readonly mime: string }
   | { readonly kind: "code"; readonly language: string }
   | { readonly kind: "text" }
   /** The branch exists and says so, rather than falling through to garbage. */
@@ -160,7 +162,6 @@ function isDocument(tables: MimeTables, mime: string): boolean {
 }
 
 function unbuiltKind(tables: MimeTables, mime: string): UnbuiltKind | null {
-  if (mime.startsWith("video/")) return "video";
   if (mime.startsWith("audio/")) return "audio";
   if (isSpreadsheet(mime)) return "spreadsheet";
   if (isArchive(tables, mime)) return "archive";
@@ -210,6 +211,14 @@ export function routePreview(tables: MimeTables, target: PreviewTarget | null): 
   // Before text, always. See the branch-order note above.
   if (mime !== null && isImageMime(tables, mime)) return { kind: "image", mime };
   if (mime !== null && isDocument(tables, mime)) return { kind: "document", mime };
+  // Routing is by type; whether these particular bytes decode is decided at the
+  // element, which is the only place that can know.
+  //
+  // The optional chain reads inconsistently beside the two branches above, and
+  // it is not a choice: those call a function with `mime`, while this one
+  // dereferences it, so biome's `useOptionalChain` rejects the `mime !== null &&`
+  // form HERE and only here. Reverting it for consistency fails the gate.
+  if (mime?.startsWith("video/") === true) return { kind: "video", mime };
 
   if (mime !== null) {
     const unbuilt = unbuiltKind(tables, mime);

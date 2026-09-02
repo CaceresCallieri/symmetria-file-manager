@@ -1,7 +1,13 @@
+import { stat } from "node:fs/promises";
+import { basename } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { resolveMimeType } from "@symmetria/fm-core/mime";
 import { containedRealPath } from "@symmetria/fm-main/appPath";
+import { mimeTables } from "@symmetria/fm-main/fs/mimeTables";
 import { resolveToken, TOKEN_PREFIX } from "@symmetria/fm-main/previewTokens";
 import { net, protocol } from "electron";
+
+import { fileResponse } from "./fileResponse.ts";
 
 /**
  * The scheme the renderer is served from.
@@ -56,17 +62,48 @@ const notFound = () => new Response("not found", { status: 404 });
  * an error page, invisibly. It also saves copying the file across the process
  * boundary.
  */
-// The union rather than `async`, because only one of the two branches is
-// asynchronous: `net.fetch` returns a promise and the not-found answer is
-// immediate. Marking the whole function `async` would wrap a value that needs
-// no wrapping, and `protocol.handle` accepts either.
-function servePreview(pathname: string): Response | Promise<Response> {
+/**
+ * The type to declare for a previewed file.
+ *
+ * From the SAME database every other part of this application resolves a type
+ * with, rather than from a second guess of our own. `net.fetch` used to supply
+ * this by sniffing the extension itself, and letting two different resolvers
+ * answer the same question about the same file is how they come to disagree.
+ */
+async function contentTypeOf(path: string): Promise<string> {
+  return resolveMimeType(await mimeTables(), basename(path)) ?? "application/octet-stream";
+}
+
+/**
+ * A previewed file, addressed by a token the main process issued.
+ *
+ * Served from this scheme rather than as a blob URL because Chromium's PDF
+ * viewer refuses a blob whose origin is a custom scheme — the embed resolves to
+ * an error page, invisibly. It also saves copying the file across the process
+ * boundary.
+ *
+ * **It answers byte ranges, and that is not an optimisation.** `net.fetch` on a
+ * `file://` URL returns a body with no `content-length` and no `accept-ranges`,
+ * which every previous consumer ignored and a media element will not: measured,
+ * a valid H.264 file served that way raises `MEDIA_ELEMENT_ERROR: Format
+ * error`, indistinguishable from a corrupt one. See `fileRange.ts`.
+ */
+async function servePreview(request: Request, pathname: string): Promise<Response> {
   const previewed = resolveToken(pathname.slice(TOKEN_PREFIX.length));
   // A token that was never issued, or was evicted. Not found is the honest
   // answer: this route reaches exactly what the main process handed out.
   if (previewed === null) return notFound();
 
-  return net.fetch(pathToFileURL(previewed).toString());
+  // A token can outlive the file it names — the user deletes it, or a download
+  // finishes into a different name — and a `stat` that throws inside a protocol
+  // handler surfaces as a dead page rather than as a status.
+  const size = await stat(previewed)
+    .then((stats) => stats.size)
+    .catch(() => null);
+  if (size === null) return notFound();
+
+  const contentType = await contentTypeOf(previewed);
+  return fileResponse(previewed, size, contentType, request.headers.get("range"));
 }
 
 /**
@@ -93,7 +130,7 @@ export function handleAppScheme(): void {
   protocol.handle(APP_SCHEME, async (request) => {
     const url = new URL(request.url);
     if (url.hostname !== APP_HOST) return notFound();
-    if (url.pathname.startsWith(TOKEN_PREFIX)) return servePreview(url.pathname);
+    if (url.pathname.startsWith(TOKEN_PREFIX)) return servePreview(request, url.pathname);
 
     return serveAsset(root, url.pathname);
   });

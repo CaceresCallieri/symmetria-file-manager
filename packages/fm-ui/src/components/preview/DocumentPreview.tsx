@@ -1,4 +1,4 @@
-import { usePreviewUrl } from "./ImagePreview.tsx";
+import { usePreviewUrl } from "./previewUrl.ts";
 
 export interface DocumentPreviewProps {
   readonly path: string;

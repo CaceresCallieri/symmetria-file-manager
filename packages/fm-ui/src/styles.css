@@ -387,9 +387,10 @@ kbd {
   color: var(--muted-foreground);
 }
 
-/* `contain`, not `cover`: an image preview that crops is lying about the
-   picture. The natural aspect ratio is the point. */
-.preview--image img {
+/* `contain`, not `cover`, for both: a preview that crops is lying about what
+   it is showing. The natural aspect ratio is the point. */
+.preview--image img,
+.preview--video video {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;

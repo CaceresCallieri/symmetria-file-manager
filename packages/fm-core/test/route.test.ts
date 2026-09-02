@@ -97,9 +97,29 @@ describe("images and documents", () => {
   });
 });
 
+describe("video", () => {
+  it.each(["video/mp4", "video/webm", "video/x-matroska", "video/quicktime"])(
+    "routes %s to the video branch",
+    (mime) => {
+      // Every video type, not only the ones this browser can decode. Routing is
+      // decided by the name; whether the bytes play is decided at the element,
+      // which is the only place that can know.
+      expect(routePreview(tables, target({ name: "clip", mime }))).toEqual({ kind: "video", mime });
+    },
+  );
+
+  it("no longer reports video as a branch that is not built", () => {
+    // The union `UnbuiltKind` is what makes a missing preview name itself, and
+    // a member left in it after the branch exists lets the pane apologise for
+    // something it can now do.
+    const route = routePreview(tables, target({ name: "clip.mp4", mime: "video/mp4" }));
+
+    expect(route.kind).not.toBe("unbuilt");
+  });
+});
+
 describe("branches this cycle keeps but does not build", () => {
   it.each([
-    ["video/mp4", "video"],
     ["audio/flac", "audio"],
     ["application/zip", "archive"],
     ["application/x-compressed-tar", "archive"],
