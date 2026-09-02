@@ -36,6 +36,8 @@
     "./preview/waveform": "./src/preview/waveform.ts",
     "./preview/sheet": "./src/preview/sheet.ts",
     "./icons/resolve": "./src/icons/resolve.ts",
-    "./bridge": "./src/bridge.ts"
+    "./bridge": "./src/bridge.ts",
+    "./preview/archive/types": "./src/preview/archive/types.ts",
+    "./preview/archive/zip": "./src/preview/archive/zip.ts"
   }
 }
