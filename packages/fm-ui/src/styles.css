@@ -1,0 +1,562 @@
+/*
+ * Structure, not appearance.
+ *
+ * The palette and the icon set are phase 10. What is here is load-bearing for
+ * correctness rather than for looks: the columns must have a REAL height, or
+ * `getBoundingClientRect` reports zero, the virtualiser falls back to its
+ * assumed viewport and renders the same number of rows whatever the window
+ * size. A layout that only looks right is not the same as one that measures
+ * right.
+ */
+
+/*
+ * Every colour here is a token from `theme/tokens.css`. A literal in this file
+ * or in a component cannot be re-themed and cannot be found — `theme.test.ts`
+ * fails the build for one.
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 13px;
+
+  /* The window is the viewport. A scrolling body would scroll the chrome along
+   * with the columns, and the columns do their own scrolling. */
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 6px;
+  padding: 6px;
+}
+
+.columns {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+
+  /* Without this a flex child refuses to shrink below its content height, so
+   * the columns grow past the window instead of scrolling inside it — and the
+   * measured height stops matching what is on screen. */
+  min-height: 0;
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+}
+
+.list--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+}
+
+/*
+ * A plain fill. No gradient and no transition: the Qt version measured visible
+ * stutter during fast cursor movement when a per-row rectangle carried an
+ * animation, and the zebra striping was removed because over a near-black base
+ * the alternation read as banding. The cursor highlight is the only row fill.
+ */
+.row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: var(--row-height);
+  padding: 0 6px;
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+}
+
+.row--cursor {
+  background: var(--accent);
+}
+
+/* The mark colour is hardcoded rather than taken from the palette, for the same
+   reason the Qt build hardcodes its indicators: a wallpaper-derived scheme can
+   land anywhere, and an indicator that stops being legible is worse than one
+   that does not match. */
+/*
+ * The mark colour goes on the ROW, so everything in it inherits.
+ *
+ * It was on `.row__name`, and the icon is that element's SIBLING rather than
+ * its child — so `currentColor` on the icon resolved against `.row` and the
+ * icon stayed foreground-white beside a coloured name. Visible at a glance in
+ * a screenshot, invisible to a component test: a headless DOM has no cascade
+ * to compute, so nothing but a real browser could have caught it.
+ */
+.row--marked {
+  color: var(--marked);
+}
+
+/*
+ * ── Why every box in a row states its flex behaviour ────────────────────────
+ *
+ * A row is a flex container and `white-space: nowrap` is inherited from it, so
+ * a name wider than the column overflows. Flexbox answers an overflow by
+ * shrinking whatever can shrink — and it measured the row's boxes like this:
+ * the name could not shrink (nowrap text has a min-content width equal to the
+ * whole string, and `min-width: auto` holds it there), the icon could not
+ * (`.file-icon` already declares `flex: 0 0 auto`), and the arrow could not
+ * (its glyph is its min-content width). That left the mark, an EMPTY span with
+ * an explicit width, whose min-content width is zero.
+ *
+ * So it collapsed to nothing and dragged the icon and the name eight pixels
+ * left, on exactly the rows too long to read — measured in a real Chromium at
+ * 246.328125 for a row that fits and 238.328125 for one that does not.
+ *
+ * The rules below fix it and then over-state it: the icon and the arrow are
+ * pinned too, though neither shrinks today. A row is where a box gets added,
+ * and the next empty one would reproduce this exactly.
+ */
+.row__mark {
+  flex: 0 0 8px;
+}
+
+.row__link {
+  flex: 0 0 auto;
+}
+
+/*
+ * `min-width: 0` is not optional and is the part that looks removable.
+ * `text-overflow` needs `overflow: hidden`, and `overflow: hidden` can do
+ * nothing while `min-width: auto` holds the item at the width of its whole
+ * string — the box never gets smaller than its text, so there is no overflow
+ * to clip and no ellipsis to draw.
+ *
+ * A search match is elided like any other row. Qt draws a match unelided
+ * (`FileListItem.qml:201`) so the whole name can be read; carrying that over
+ * would put the matching row back outside its column, which is the defect this
+ * rule exists to fix. The deviation is deliberate — see the plan's decisions.
+ */
+.row__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-bar {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.tab {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  background: var(--border);
+}
+
+.tab--active {
+  background: var(--accent);
+  font-weight: 600;
+}
+
+.tab__name,
+.tab__close {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.row[data-kind="directory"] .row__name {
+  font-weight: 600;
+}
+
+.path-bar,
+.status-bar {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 0 8px;
+  color: var(--muted-foreground);
+}
+
+.crumb--current {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.pane-error {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 8px;
+  color: var(--destructive);
+}
+
+/* Overlays. Structure only; the palette arrives in phase 10. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay-scrim);
+}
+
+.overlay__panel {
+  max-height: 80vh;
+  min-width: 420px;
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+}
+
+.overlay__head {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.help-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 2px 0;
+}
+
+.which-key {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.which-key__row {
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+}
+
+/*
+ * The frecent-directory list.
+ *
+ * It borrows `.overlay` and `.overlay__panel` from the help sheet rather than
+ * positioning itself: two ways to centre a dialog are two things to keep in
+ * step with the tokens.
+ */
+.zoxide__query {
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  outline: none;
+}
+
+.zoxide__problem {
+  margin: 12px 0 0;
+  color: var(--muted-foreground);
+}
+
+.zoxide__list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* No transition and no gradient, for the reason every row fill in this file
+   has none: a per-row animation stutters during fast movement. */
+.zoxide__row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.zoxide__row--active {
+  background: var(--accent);
+}
+
+.zoxide__score {
+  flex: 0 0 auto;
+  min-width: 48px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+/* The same three properties a row's name needs. A long path is the normal case
+   here — these are whole absolute paths — so eliding is not the exception. */
+.zoxide__path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+kbd {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  font-family: monospace;
+}
+
+.pane-message {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 8px;
+  color: var(--muted-foreground);
+}
+
+/* Previews. Layout only; the syntax colours come from the generated theme. */
+
+.preview-pane {
+  display: flex;
+  flex-direction: column;
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.preview__body {
+  margin: 0;
+  overflow: auto;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+  tab-size: 4;
+
+  /* Selectable, because reading a preview and copying a line out of it is the
+     same activity. */
+  user-select: text;
+}
+
+.preview__truncated {
+  flex: 0 0 auto;
+  margin: 4px 0 0;
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+/* A directory's listing scrolls on its own, so the "and N more" line below it
+   stays visible instead of being pushed off the end of a long list. */
+.preview__listing {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.preview__empty {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+/* `contain`, not `cover`: an image preview that crops is lying about the
+   picture. The natural aspect ratio is the point. */
+.preview--image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.preview--document embed {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+}
+
+.preview__failed {
+  margin: 0;
+  padding: 4px 0;
+  color: var(--destructive);
+}
+
+.dialog__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.dialog__actions button,
+.overlay__panel input {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--border);
+  color: inherit;
+  font: inherit;
+}
+
+.overlay__panel input {
+  width: 100%;
+}
+
+.dialog__hint {
+  margin: 8px 0 0;
+  color: var(--muted-foreground);
+}
+
+/*
+ * Icons inherit the row's colour.
+ *
+ * Both sources paint `currentColor`, so a cursor row's icon brightens with its
+ * text and a marked row's takes the mark colour — with no per-icon colour to
+ * keep in step with the palette.
+ */
+.file-icon {
+  flex: 0 0 auto;
+  color: currentcolor;
+}
+
+/*
+ * A pointer cursor only where a click does something.
+ *
+ * The preview column's rows carry `.row` for their layout and NOT this class:
+ * they are a preview, and a hand cursor over them would promise navigation the
+ * column does not offer.
+ */
+.row--clickable,
+.crumb--clickable {
+  cursor: pointer;
+}
+
+.crumb--clickable:hover {
+  color: var(--foreground);
+}
+
+/*
+ * Scrollbars.
+ *
+ * Chromium's default is wide, white and carries an arrow button at each end,
+ * which over a near-black window is the loudest thing on screen. This replaces
+ * it with a thin lane the same colour family as the borders.
+ *
+ * ── Global on purpose ──────────────────────────────────────────────────────
+ * Not scoped to `.list`. Six surfaces scroll today — the three columns, a
+ * preview body, a directory listing and the modal panel — and the search field
+ * and the tree view will add more. A rule per class means remembering to add
+ * the seventh.
+ *
+ * ── Why the WebKit pseudo-elements and not `scrollbar-color` ────────────────
+ * Chromium is the only engine this ships on, and the standard properties cannot
+ * express a transparent track with a rounded thumb and no buttons. There is no
+ * portability being given up here: there is no second engine.
+ *
+ * `::-webkit-scrollbar-button` is the one people forget. Without it the thumb
+ * and the track are restyled and the two little arrows stay, which reads as a
+ * half-finished theme rather than as a deliberate one.
+ */
+
+::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
+
+::-webkit-scrollbar-track {
+  /* Transparent, so the column surface runs under the lane rather than being
+     interrupted by a stripe of its own. */
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: var(--radius-sm);
+  background: var(--scrollbar-thumb);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/*
+ * A search match.
+ *
+ * A background tint rather than a text colour, because the file-operation mark
+ * already owns the text colour and a row can be both at once. Kept below the
+ * cursor fill in specificity order for the same reason: where the cursor sits
+ * on a match, "where you are" is the more urgent fact.
+ *
+ * No transition, for the reason every row fill in this file has none — the Qt
+ * build measured visible stutter during fast cursor movement when a per-row
+ * rectangle carried an animation.
+ */
+.row--match {
+  background: var(--search-match);
+}
+
+.row--match.row--cursor {
+  background: var(--accent);
+}
+
+.search {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  flex: 0 0 auto;
+  padding: 2px 8px;
+}
+
+.search__sigil {
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+
+.search__field {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  outline: none;
+}
+
+.search__count {
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+}

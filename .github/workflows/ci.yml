@@ -58,6 +58,7 @@ jobs:
             libarchive-dev \
             libfreexl-dev \
             libheif-dev \
+            libheif-plugin-libde265 \
             pkg-config \
             ninja-build \
             locales

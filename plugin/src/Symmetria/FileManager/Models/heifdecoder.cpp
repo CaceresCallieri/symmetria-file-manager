@@ -1,5 +1,6 @@
 #include "heifdecoder.hpp"
 
+#include <qdebug.h>
 #include <qdir.h>
 #include <qfile.h>
 #include <qfileinfo.h>
@@ -60,6 +61,16 @@ QString decodeToPng(const QString& sourcePath, const QString& cachePath) {
     err = heif_decode_image(handle, &img, heif_colorspace_RGB,
                             heif_chroma_interleaved_RGBA, nullptr);
     if (err.code != heif_error_Ok || !img) {
+        // libheif's own explanation, which this used to discard.
+        //
+        // Not noise: the usual cause is a libheif built with NO decoder plugin
+        // for HEVC, which reports "Unsupported codec" and produces an empty
+        // result indistinguishable from a corrupt file. That cost a CI
+        // investigation — the test failed with a bare string mismatch and the
+        // one message that would have named the cause had been thrown away.
+        // Debian and Ubuntu split the decoders out: libheif-plugin-libde265.
+        qWarning("HeifDecoder: libheif could not decode %s: %s",
+                 qUtf8Printable(sourcePath), err.message ? err.message : "(no message)");
         heif_image_handle_release(handle);
         return freeCtx();
     }

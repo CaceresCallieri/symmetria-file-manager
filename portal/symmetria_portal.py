@@ -39,7 +39,22 @@ FIFO_PREFIX = "/tmp/symmetria-picker-"
 FIFO_TIMEOUT_SECONDS = 300  # 5 minutes max wait for user interaction
 CANCELLED_SENTINEL = "__PICKER_CANCELLED__"
 
-FM_CLI = "symmetria-fm-cli"
+# ── Which file manager this backend drives, and what it calls itself ─────────
+#
+# TWO backends, ONE script. The Qt build and the Electron build differ in
+# exactly two values, so those two come from the environment rather than from a
+# second copy of this file. A copy would drift, and the looser of two copies is
+# the one that matters — this script validates nothing about the FIFO path it
+# creates beyond its own prefix, so a stale copy is a real hazard rather than a
+# tidiness argument.
+#
+# The DEFAULTS are the Qt build's, so its registration behaves exactly as it did
+# before this was parameterised. The Electron registration sets both in its
+# systemd unit; see `xdg-desktop-portal-symmetria-electron.service`.
+FM_CLI = os.environ.get("SYMMETRIA_PORTAL_FM_CLI", "symmetria-fm-cli")
+BUS_NAME = os.environ.get(
+    "SYMMETRIA_PORTAL_BUS_NAME", "org.freedesktop.impl.portal.desktop.symmetria"
+)
 
 
 def decode_byte_array_path(variant_value) -> str:
@@ -375,7 +390,7 @@ async def main():
     backend = FileChooserBackend(bus)
     bus.export("/org/freedesktop/portal/desktop", backend)
 
-    bus_name = "org.freedesktop.impl.portal.desktop.symmetria"
+    bus_name = BUS_NAME
     await bus.request_name(bus_name)
     log.info("Portal backend running as %s", bus_name)
 
