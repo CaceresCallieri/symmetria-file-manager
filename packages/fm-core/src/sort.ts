@@ -19,25 +19,32 @@ export function compareEntries(a: FsEntry, b: FsEntry, mode: SortMode): number {
   if (aDir !== bDir) return aDir ? -1 : 1;
 
   const primary = comparePrimary(a, b, mode);
-  return primary !== 0 ? primary : byName(a.name, b.name);
+  return primary !== 0 ? primary : compareNames(a.name, b.name);
 }
 
 function comparePrimary(a: FsEntry, b: FsEntry, mode: SortMode): number {
   switch (mode) {
     case "alphabetical":
-      return byName(a.name, b.name);
+      return compareNames(a.name, b.name);
     case "modified":
       return a.modifiedMs - b.modifiedMs;
     case "size":
       return a.size - b.size;
     case "extension":
-      return byName(extensionOf(a.name), extensionOf(b.name));
+      return compareNames(extensionOf(a.name), extensionOf(b.name));
     case "natural":
       return naturalCompare(a.name, b.name);
   }
 }
 
-function byName(a: string, b: string): number {
+/**
+ * Two names, case-insensitively, with a stable tiebreak.
+ *
+ * Exported because the archive listing sorts by exactly this and a second copy
+ * would drift: an archive whose folders ordered differently from the columns
+ * beside them would look like a bug in one of the two.
+ */
+export function compareNames(a: string, b: string): number {
   const lowered = a.toLowerCase().localeCompare(b.toLowerCase());
   // Fall through to the cased form so `A` and `a` still have a stable order.
   return lowered !== 0 ? lowered : a.localeCompare(b);

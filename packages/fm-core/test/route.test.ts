@@ -19,7 +19,21 @@ const tables: MimeTables = {
     ["text/markdown", ["text/plain"]],
     ["application/json", ["application/javascript"]],
     ["application/javascript", ["text/plain"]],
-    ["application/x-compressed-tar", ["application/x-tar"]],
+    // These four are the REAL chains from /usr/share/mime/subclasses. An
+    // earlier fixture had `x-compressed-tar` inheriting from `x-tar`, which it
+    // does not — a `.tar.gz` is a gzip as far as the database is concerned,
+    // and the archive routing branches on precisely that.
+    ["application/x-compressed-tar", ["application/gzip"]],
+    ["application/x-xz-compressed-tar", ["application/x-xz"]],
+    ["application/x-bzip2-compressed-tar", ["application/x-bzip2"]],
+    ["application/x-zstd-compressed-tar", ["application/zstd"]],
+    // A .docx and a .jar really are subclasses of zip. Included because that
+    // makes them list as archives now, which is a visible consequence.
+    [
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ["application/zip"],
+    ],
+    ["application/java-archive", ["application/zip"]],
   ]),
   aliases: new Map(),
 };
@@ -118,13 +132,47 @@ describe("video", () => {
   });
 });
 
+describe("archives", () => {
+  it.each([
+    ["application/zip", "zip", "none"],
+    ["application/java-archive", "zip", "none"],
+    ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "zip", "none"],
+    ["application/x-tar", "tar", "none"],
+    ["application/x-compressed-tar", "tar", "gzip"],
+  ])("routes %s as a %s archive, compression %s", (mime, format, compression) => {
+    const route = routePreview(tables, target({ name: "thing", mime }));
+
+    expect(route).toEqual({ kind: "archive", mime, format, compression });
+  });
+
+  it("routes a bare gzip as a compressed tar and lets the READER disagree", () => {
+    // `notes.txt.gz` is a legitimate file to land on and it is not a tarball.
+    // The router cannot tell — nothing but the bytes can — so it routes by
+    // type and the reader answers `notAnArchive`. Sniffing here would mean
+    // reading the file to decide what to show, which is the router's whole
+    // point avoided.
+    const route = routePreview(tables, target({ name: "notes.txt.gz", mime: "application/gzip" }));
+
+    expect(route).toEqual({
+      kind: "archive",
+      mime: "application/gzip",
+      format: "tar",
+      compression: "gzip",
+    });
+  });
+});
+
 describe("branches this cycle keeps but does not build", () => {
   it.each([
-    ["application/zip", "archive"],
-    ["application/x-compressed-tar", "archive"],
+    ["application/x-7z-compressed", "archive"],
+    ["application/vnd.rar", "archive"],
+    ["application/x-xz-compressed-tar", "archive"],
+    ["application/x-bzip2-compressed-tar", "archive"],
+    ["application/x-zstd-compressed-tar", "archive"],
   ])("names %s as %s rather than falling through", (mime, what) => {
-    // Saying "no video preview yet" is a different statement from showing a
-    // file's size and hoping. Keeping the branch keeps the shape.
+    // The formats with no reader. Saying "no archive preview yet" is a
+    // different statement from showing a size and hoping, and it stays TRUE
+    // for these — which is the whole reason the union keeps a member.
     const route = routePreview(tables, target({ name: "thing", mime }));
 
     expect(route).toEqual({ kind: "unbuilt", what, mime });
@@ -179,13 +227,18 @@ describe("spreadsheets", () => {
     expect(route).toEqual({ kind: "spreadsheet", mime: "text/csv" });
   });
 
-  it("leaves archive as the only branch that is still not built", () => {
-    // The union earns its place with one member: the notice it drives is still
-    // correct for an archive, and it still names the gap rather than letting a
-    // zip fall through to a size and a type.
+  it("no longer reports a zip as a branch that is not built", () => {
+    // It was the last member of `UnbuiltKind` that a zip could reach. The
+    // union keeps that member — 7z and rar still need it — but a zip has a
+    // reader now and must stop apologising for something it can do.
+    //
+    // Deliberately a negative, matching "no longer reports video as a branch
+    // that is not built" above. What a zip DOES route to is pinned in the
+    // `archives` block; asserting the shape here as well would be one fact in
+    // two places.
     const route = routePreview(tables, target({ name: "backup.zip", mime: "application/zip" }));
 
-    expect(route).toEqual({ kind: "unbuilt", what: "archive", mime: "application/zip" });
+    expect(route.kind).not.toBe("unbuilt");
   });
 });
 
