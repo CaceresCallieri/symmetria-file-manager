@@ -2,6 +2,7 @@ import type { EntrySummary } from "@symmetria/fm-core/entry";
 import type { PreviewRoute } from "@symmetria/fm-core/preview/route";
 
 import { FileIcon } from "../FileIcon.tsx";
+import { AudioPreview } from "./AudioPreview.tsx";
 import { CodePreview } from "./CodePreview.tsx";
 import { DocumentPreview } from "./DocumentPreview.tsx";
 import { ImagePreview } from "./ImagePreview.tsx";
@@ -14,6 +15,15 @@ export interface PreviewPaneProps {
   readonly size: number;
   /** Why there is nothing to show, when there is a reason. */
   readonly error?: string | null;
+  /**
+   * Whether the user has asked the audio under the cursor to play.
+   *
+   * Owned by `App` rather than by the pane, because clearing it needs to know
+   * where the cursor is and the pane does not. It must survive a re-render and
+   * must NOT survive a move to another file, which is why `App` stores it as a
+   * path rather than as a flag.
+   */
+  readonly audioPlaying?: boolean;
 }
 
 /** A size a person can read. */
@@ -36,11 +46,11 @@ function humanSize(bytes: number): string {
  * previews without re-deriving which one applies. In the Qt build that
  * separation is why a preview type added once appeared in both panes.
  */
-export function PreviewPane({ route, path, size, error }: PreviewPaneProps) {
+export function PreviewPane({ route, path, size, error, audioPlaying }: PreviewPaneProps) {
   return (
     <div className="list preview-pane" data-testid="column-preview" data-kind={route.kind}>
       {error == null ? (
-        body(route, path, size)
+        body(route, path, size, audioPlaying === true)
       ) : (
         <p className="preview__failed" data-testid="preview-error">
           {error}
@@ -50,13 +60,13 @@ export function PreviewPane({ route, path, size, error }: PreviewPaneProps) {
   );
 }
 
-function body(route: PreviewRoute, path: string | null, size: number) {
+function body(route: PreviewRoute, path: string | null, size: number, audioPlaying: boolean) {
   if (path === null || route.kind === "none") return null;
-  return contents(route, path) ?? notice(route, size);
+  return contents(route, path, audioPlaying) ?? notice(route, size);
 }
 
 /** The branches that render the file itself. */
-function contents(route: PreviewRoute, path: string) {
+function contents(route: PreviewRoute, path: string, audioPlaying: boolean) {
   switch (route.kind) {
     case "image":
       return <ImagePreview path={path} mime={route.mime} />;
@@ -64,6 +74,8 @@ function contents(route: PreviewRoute, path: string) {
       return <DocumentPreview path={path} mime={route.mime} />;
     case "video":
       return <VideoPreview path={path} mime={route.mime} />;
+    case "audio":
+      return <AudioPreview path={path} mime={route.mime} playing={audioPlaying} />;
     case "code":
       return <CodePreview path={path} language={route.language} />;
     case "text":

@@ -1,9 +1,10 @@
 import { isFailure } from "@symmetria/fm-core/contract";
 import type { MimeTables } from "@symmetria/fm-core/mime";
 import { type PreviewRoute, routePreview } from "@symmetria/fm-core/preview/route";
-import { useEffect, useState } from "react";
-
+import { useEffect, useMemo, useState } from "react";
 import { describeEntry } from "./bridge.ts";
+import type { PreviewPaneProps } from "./components/preview/PreviewPane.tsx";
+import { useAudioPlayback } from "./useAudioPlayback.ts";
 
 /**
  * What to show for the entry under the cursor, after it stops moving.
@@ -66,8 +67,14 @@ export interface Preview {
 
 const NOTHING: Preview = { route: { kind: "none" }, path: null, size: 0, error: null };
 
-/** Decide what to preview for `path`, once the cursor has settled on it. */
-export function usePreview(path: string | null): Preview {
+/**
+ * Decide what to preview for `path`, once the cursor has settled on it.
+ *
+ * Not exported: `usePreviewPane` below is the whole of what a caller needs, and
+ * a second entry point that returns half of it invites an assembly step to be
+ * written twice.
+ */
+function usePreview(path: string | null): Preview {
   const [preview, setPreview] = useState<Preview>(NOTHING);
 
   useEffect(() => {
@@ -103,4 +110,44 @@ export function usePreview(path: string | null): Preview {
   }, [path]);
 
   return preview;
+}
+
+/** Everything the preview column needs, and the one action it can be sent. */
+export interface PreviewWiring {
+  /** The routed preview itself, for callers that ask questions about it. */
+  readonly preview: Preview;
+  /** Straight through to the pane. Assembled here rather than in the caller. */
+  readonly pane: PreviewPaneProps;
+  /** What `Ctrl+P` calls. */
+  readonly toggleAudio: () => void;
+}
+
+/**
+ * The preview column, wired.
+ *
+ * Two hooks that were called side by side in `App` and whose results were then
+ * hand-assembled into one prop object there. Composing them here says what was
+ * already true — the playback request is part of what the preview column is —
+ * and it keeps the application's root a list of regions rather than a list of
+ * regions plus the plumbing between two of them.
+ */
+export function usePreviewPane(cursorPath: string | null): PreviewWiring {
+  const preview = usePreview(cursorPath);
+  const audio = useAudioPlayback(cursorPath, preview.path);
+
+  const pane = useMemo<PreviewPaneProps>(
+    () => ({
+      route: preview.route,
+      path: preview.path,
+      size: preview.size,
+      error: preview.error,
+      audioPlaying: audio.playing,
+    }),
+    [preview, audio.playing],
+  );
+
+  return useMemo(
+    () => ({ preview, pane, toggleAudio: audio.toggle }),
+    [preview, pane, audio.toggle],
+  );
 }

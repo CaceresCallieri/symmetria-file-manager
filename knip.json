@@ -18,7 +18,7 @@
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/fm-ui": {
-      "entry": ["src/App.tsx", "src/highlight.worker.ts"],
+      "entry": ["src/App.tsx", "src/highlight.worker.ts", "src/tags.worker.ts"],
       "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"]
     }
   },

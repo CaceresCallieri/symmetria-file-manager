@@ -31,7 +31,7 @@ import { useExternalOpen } from "./useExternalOpen.ts";
 import { type FileOps, useFileOps } from "./useFileOps.ts";
 import { type KeyWiring, useKeyActions } from "./useKeyActions.ts";
 import { usePicker } from "./usePicker.ts";
-import { type Preview, usePreview } from "./usePreview.ts";
+import { type Preview, usePreviewPane } from "./usePreview.ts";
 import { useSearch } from "./useSearch.ts";
 import { type Tabs, useTabs } from "./useTabs.ts";
 
@@ -219,7 +219,7 @@ export function App(props: AppProps = {}) {
   // path, which comes straight from the pane — so there is no cycle, only an
   // order.
   const cursorPath = cursorPathOf(tabs.pane);
-  const preview = usePreview(cursorPath);
+  const previewing = usePreviewPane(cursorPath);
 
   const { actions, modes, state } = useKeyActions(
     tabs,
@@ -227,8 +227,9 @@ export function App(props: AppProps = {}) {
     search,
     bookmarks,
     home,
-    cursorImageMimeOf(preview, cursorPath),
+    cursorImageMimeOf(previewing.preview, cursorPath),
     picker,
+    previewing.toggleAudio,
   );
 
   const context = useMemo<KeyContext>(
@@ -285,12 +286,7 @@ export function App(props: AppProps = {}) {
         onSelect={tabs.moveTo}
         onActivate={(index) => activateAt(tabs, ops, index)}
         onLeaveTo={leaveTo}
-        preview={{
-          route: preview.route,
-          path: preview.path,
-          size: preview.size,
-          error: preview.error,
-        }}
+        preview={previewing.pane}
       />
       <WhichKeyOverlay
         prefix={modes.chordPrefix}

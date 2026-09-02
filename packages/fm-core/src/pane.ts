@@ -274,6 +274,22 @@ export function joinPath(base: string, name: string): string {
   return base === "/" ? `/${name}` : `${base}/${name}`;
 }
 
+/**
+ * The last segment of a path.
+ *
+ * Here rather than beside any one caller, because three slightly different
+ * copies of `slice(lastIndexOf("/") + 1)` had accumulated across the tree and
+ * review found the third being added. It lives with `joinPath` and `parentOf`
+ * so every path question has one answer in one file.
+ *
+ * Trailing slashes are NOT stripped: these are entry paths, and a caller that
+ * wants a human LABEL for a directory path wants `labelFor` in `bookmarks.ts`,
+ * which is a different question with a different answer for `/`.
+ */
+export function basename(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
 export function parentOf(path: string): string {
   const segments = segmentsOf(path);
   segments.pop();

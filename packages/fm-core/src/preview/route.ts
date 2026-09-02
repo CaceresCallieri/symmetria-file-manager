@@ -13,6 +13,10 @@ import { classify, inheritsFrom, isImageMime, type MimeTables } from "../mime.ts
  * none → directory → image → document → video → audio → archive →
  * spreadsheet → code → text → fallback.
  *
+ * Video before audio matters for the same reason: a Matroska carrying only an
+ * audio track resolves to `video/x-matroska`, and routing it as audio would
+ * hide a file the video element handles perfectly well.
+ *
  * Image before text is the one that bites. `image/svg+xml` inherits from
  * `application/xml`, which inherits from `text/plain`, so an SVG *is* text
  * under the inheritance rules — test text first and every SVG previews as
@@ -35,7 +39,7 @@ export interface PreviewTarget {
 }
 
 /** A branch the shape keeps but this cycle does not build. */
-export type UnbuiltKind = "audio" | "archive" | "spreadsheet";
+export type UnbuiltKind = "archive" | "spreadsheet";
 
 export type PreviewRoute =
   /** Nothing under the cursor. */
@@ -55,6 +59,8 @@ export type PreviewRoute =
   | { readonly kind: "document"; readonly mime: string }
   /** Played by the browser itself: silent, looping, at its own aspect ratio. */
   | { readonly kind: "video"; readonly mime: string }
+  /** Cover art, tags and a transport. Never plays on its own. */
+  | { readonly kind: "audio"; readonly mime: string }
   | { readonly kind: "code"; readonly language: string }
   | { readonly kind: "text" }
   /** The branch exists and says so, rather than falling through to garbage. */
@@ -162,7 +168,6 @@ function isDocument(tables: MimeTables, mime: string): boolean {
 }
 
 function unbuiltKind(tables: MimeTables, mime: string): UnbuiltKind | null {
-  if (mime.startsWith("audio/")) return "audio";
   if (isSpreadsheet(mime)) return "spreadsheet";
   if (isArchive(tables, mime)) return "archive";
   return null;
@@ -219,6 +224,9 @@ export function routePreview(tables: MimeTables, target: PreviewTarget | null): 
   // dereferences it, so biome's `useOptionalChain` rejects the `mime !== null &&`
   // form HERE and only here. Reverting it for consistency fails the gate.
   if (mime?.startsWith("video/") === true) return { kind: "video", mime };
+  // After video, deliberately: a Matroska carrying only an audio track is still
+  // a `video/` type to the database, and the element decides what it can do.
+  if (mime?.startsWith("audio/") === true) return { kind: "audio", mime };
 
   if (mime !== null) {
     const unbuilt = unbuiltKind(tables, mime);

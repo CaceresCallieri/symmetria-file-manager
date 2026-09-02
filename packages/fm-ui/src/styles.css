@@ -387,6 +387,63 @@ kbd {
   color: var(--muted-foreground);
 }
 
+.preview--audio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  text-align: center;
+}
+
+/* A fixed square so the pane does not resize as covers of different shapes go
+   past under the cursor. */
+.preview__art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 7rem;
+  height: 7rem;
+}
+
+.preview__art img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+
+.preview__art-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.preview__title {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.preview__artist,
+.preview__duration {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.preview__seek {
+  width: 100%;
+  accent-color: var(--primary);
+}
+
 /* `contain`, not `cover`, for both: a preview that crops is lying about what
    it is showing. The natural aspect ratio is the point. */
 .preview--image img,

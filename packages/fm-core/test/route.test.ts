@@ -120,7 +120,6 @@ describe("video", () => {
 
 describe("branches this cycle keeps but does not build", () => {
   it.each([
-    ["audio/flac", "audio"],
     ["application/zip", "archive"],
     ["application/x-compressed-tar", "archive"],
     ["text/csv", "spreadsheet"],
@@ -131,6 +130,30 @@ describe("branches this cycle keeps but does not build", () => {
     const route = routePreview(tables, target({ name: "thing", mime }));
 
     expect(route).toEqual({ kind: "unbuilt", what, mime });
+  });
+});
+
+describe("audio", () => {
+  it.each(["audio/flac", "audio/mpeg", "audio/ogg", "audio/x-wav"])(
+    "routes %s to the audio branch",
+    (mime) => {
+      expect(routePreview(tables, target({ name: "song", mime }))).toEqual({ kind: "audio", mime });
+    },
+  );
+
+  it("no longer reports audio as a branch that is not built", () => {
+    expect(routePreview(tables, target({ name: "song.flac", mime: "audio/flac" })).kind).not.toBe(
+      "unbuilt",
+    );
+  });
+
+  it("still routes a video before an audio-only container is considered", () => {
+    // `video/` is tested first, and an .mkv carrying only audio is still a
+    // video type as far as the database is concerned. Routing by type is the
+    // contract; the element decides what it can do with the bytes.
+    expect(routePreview(tables, target({ name: "a.mkv", mime: "video/x-matroska" })).kind).toBe(
+      "video",
+    );
   });
 });
 

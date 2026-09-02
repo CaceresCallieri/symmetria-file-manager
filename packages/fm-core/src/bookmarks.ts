@@ -19,6 +19,8 @@
  * memory and the file is left alone for them to repair.
  */
 
+import { basename } from "./pane.ts";
+
 export interface Bookmark {
   readonly path: string;
   /** What the overlays show beside the letter. The directory's own name. */
@@ -66,10 +68,16 @@ const SEED: readonly (readonly [string, string])[] = [
   ["r", "projects"],
 ];
 
-/** The last segment of a path, or the whole path when there is no segment. */
+/**
+ * A human label for a path: its last segment, or the path itself for the root.
+ *
+ * `basename` with two differences that are the whole reason this exists
+ * separately: trailing slashes are stripped first, so `/home/jc/` labels as
+ * `jc`; and a path with no last segment labels as ITSELF, so `/` stays `/`
+ * rather than becoming an empty bookmark.
+ */
 export function labelFor(path: string): string {
-  const trimmed = path.replace(/\/+$/, "");
-  const last = trimmed.slice(trimmed.lastIndexOf("/") + 1);
+  const last = basename(path.replace(/\/+$/, ""));
   return last === "" ? path : last;
 }
 
@@ -94,13 +102,13 @@ function decodeOne(letter: string, raw: unknown): Bookmark | null {
   if (!/^[a-z]$/.test(letter) || isReservedLetter(letter)) return null;
   if (!isRecord(raw)) return null;
 
-  const path = raw["path"];
+  const path = raw.path;
   // Absolute only. Every other path in this application is, and one that
   // resolves against a working directory the renderer never learns would land
   // somewhere different on each run.
   if (typeof path !== "string" || !path.startsWith("/")) return null;
 
-  const label = raw["label"];
+  const label = raw.label;
   return { path, label: typeof label === "string" && label !== "" ? label : labelFor(path) };
 }
 

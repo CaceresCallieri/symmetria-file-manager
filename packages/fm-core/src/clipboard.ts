@@ -1,4 +1,5 @@
 import type { CopyTarget } from "./keys/types.ts";
+import { basename } from "./pane.ts";
 import { extensionOf } from "./sort.ts";
 
 /**
@@ -44,10 +45,4 @@ function segmentFor(target: Exclude<TextCopyTarget, "directory">, path: string):
   // not an extension — and two copies would eventually disagree about it.
   const extension = extensionOf(name);
   return extension === "" ? name : name.slice(0, -(extension.length + 1));
-}
-
-/** The last segment, with no trailing-slash handling: these are entry paths. */
-function basename(path: string): string {
-  const slash = path.lastIndexOf("/");
-  return slash < 0 ? path : path.slice(slash + 1);
 }
