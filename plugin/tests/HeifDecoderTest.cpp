@@ -57,6 +57,15 @@ private slots:
         const QString result =
             HeifDecoder::decodeToPng(fixture(QStringLiteral("sample.heic")), out);
 
+        // Named before the comparison, because an empty result has one common
+        // cause and a bare string mismatch does not say so: a libheif with no
+        // HEVC decoder plugin. It reports "Unsupported codec" and returns
+        // nothing, exactly as a corrupt file would.
+        QVERIFY2(!result.isEmpty(),
+                 "decodeToPng returned empty for a VALID HEIC. The usual cause is a "
+                 "libheif with no HEVC decoder plugin — on Debian/Ubuntu install "
+                 "libheif-plugin-libde265. The qWarning from heifdecoder.cpp carries "
+                 "libheif's own message.");
         QCOMPARE(result, out);
         QVERIFY(QFileInfo::exists(out));
 
