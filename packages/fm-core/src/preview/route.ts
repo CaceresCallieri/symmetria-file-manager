@@ -10,8 +10,8 @@ import { classify, inheritsFrom, isImageMime, type MimeTables } from "../mime.ts
  * same rule holds here.
  *
  * ── The branch order is a contract ──────────────────────────────────────────
- * none → directory → image → document → video → audio → archive →
- * spreadsheet → code → text → fallback.
+ * none → directory → image → document → video → audio → spreadsheet →
+ * archive → code → text → fallback.
  *
  * Video before audio matters for the same reason: a Matroska carrying only an
  * audio track resolves to `video/x-matroska`, and routing it as audio would
@@ -39,7 +39,7 @@ export interface PreviewTarget {
 }
 
 /** A branch the shape keeps but this cycle does not build. */
-export type UnbuiltKind = "archive" | "spreadsheet";
+export type UnbuiltKind = "archive";
 
 export type PreviewRoute =
   /** Nothing under the cursor. */
@@ -61,6 +61,8 @@ export type PreviewRoute =
   | { readonly kind: "video"; readonly mime: string }
   /** Cover art, tags and a transport. Never plays on its own. */
   | { readonly kind: "audio"; readonly mime: string }
+  /** A grid, with a tab per sheet. Also where a csv goes. */
+  | { readonly kind: "spreadsheet"; readonly mime: string }
   | { readonly kind: "code"; readonly language: string }
   | { readonly kind: "text" }
   /** The branch exists and says so, rather than falling through to garbage. */
@@ -168,9 +170,7 @@ function isDocument(tables: MimeTables, mime: string): boolean {
 }
 
 function unbuiltKind(tables: MimeTables, mime: string): UnbuiltKind | null {
-  if (isSpreadsheet(mime)) return "spreadsheet";
-  if (isArchive(tables, mime)) return "archive";
-  return null;
+  return isArchive(tables, mime) ? "archive" : null;
 }
 
 const SPREADSHEETS: readonly string[] = [
@@ -227,6 +227,10 @@ export function routePreview(tables: MimeTables, target: PreviewTarget | null): 
   // After video, deliberately: a Matroska carrying only an audio track is still
   // a `video/` type to the database, and the element decides what it can do.
   if (mime?.startsWith("audio/") === true) return { kind: "audio", mime };
+  // Before the text classification, deliberately: a csv IS text, and routing it
+  // as such would trade a grid for a wall of commas. It has resolved to this
+  // branch since before there was a grid to resolve it to.
+  if (mime !== null && isSpreadsheet(mime)) return { kind: "spreadsheet", mime };
 
   if (mime !== null) {
     const unbuilt = unbuiltKind(tables, mime);

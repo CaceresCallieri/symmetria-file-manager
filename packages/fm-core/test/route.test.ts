@@ -122,8 +122,6 @@ describe("branches this cycle keeps but does not build", () => {
   it.each([
     ["application/zip", "archive"],
     ["application/x-compressed-tar", "archive"],
-    ["text/csv", "spreadsheet"],
-    ["application/vnd.ms-excel", "spreadsheet"],
   ])("names %s as %s rather than falling through", (mime, what) => {
     // Saying "no video preview yet" is a different statement from showing a
     // file's size and hoping. Keeping the branch keeps the shape.
@@ -154,6 +152,40 @@ describe("audio", () => {
     expect(routePreview(tables, target({ name: "a.mkv", mime: "video/x-matroska" })).kind).toBe(
       "video",
     );
+  });
+});
+
+describe("spreadsheets", () => {
+  it.each([
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+    "application/vnd.oasis.opendocument.spreadsheet",
+  ])("routes %s to the spreadsheet branch", (mime) => {
+    expect(routePreview(tables, target({ name: "precios", mime }))).toEqual({
+      kind: "spreadsheet",
+      mime,
+    });
+  });
+
+  it("routes a csv to the spreadsheet branch and NOT to the text one", () => {
+    // A csv IS text, so the order is what decides this: the spreadsheet test
+    // runs before the content classification. It has routed here since before
+    // there was a grid to route it to — do not "fix" it back to plain text.
+    const route = routePreview(
+      tables,
+      target({ name: "lista.csv", mime: "text/csv", head: TEXT_HEAD }),
+    );
+
+    expect(route).toEqual({ kind: "spreadsheet", mime: "text/csv" });
+  });
+
+  it("leaves archive as the only branch that is still not built", () => {
+    // The union earns its place with one member: the notice it drives is still
+    // correct for an archive, and it still names the gap rather than letting a
+    // zip fall through to a size and a type.
+    const route = routePreview(tables, target({ name: "backup.zip", mime: "application/zip" }));
+
+    expect(route).toEqual({ kind: "unbuilt", what: "archive", mime: "application/zip" });
   });
 });
 

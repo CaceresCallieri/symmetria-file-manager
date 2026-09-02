@@ -387,6 +387,80 @@ kbd {
   color: var(--muted-foreground);
 }
 
+.preview--spreadsheet {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+/* One row that scrolls sideways rather than wrapping. A workbook here has 76
+   sheets, and a strip that wrapped would take the grid's height with it. */
+.preview__sheet-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  overflow-x: auto;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.preview__sheet-tab {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.preview__sheet-tab[data-active="true"] {
+  color: var(--foreground);
+  box-shadow: inset 0 -2px 0 var(--primary);
+}
+
+.preview__sheet-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.preview__sheet-body {
+  position: relative;
+  width: max-content;
+  min-width: 100%;
+}
+
+.preview__sheet-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  width: 100%;
+}
+
+/* A fixed width and no wrapping: a wrapped cell makes rows differ in height,
+   and a virtualiser told every row is the same height would then measure every
+   one of them. Ellipsis over truncation, with the whole value on hover. */
+.preview__sheet-cell {
+  flex: 0 0 auto;
+  width: 9ch;
+  padding: 0 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  border-right: 1px solid var(--border);
+}
+
+/* Numbers line up on their digits; text does not. The one formatting
+   affordance in scope — fonts, fills and borders are deliberately not. */
+.preview__sheet-cell[data-numeric="true"] {
+  text-align: right;
+}
+
 .preview--audio {
   display: flex;
   flex-direction: column;

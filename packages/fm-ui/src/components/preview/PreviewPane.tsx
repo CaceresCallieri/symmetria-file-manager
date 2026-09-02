@@ -6,6 +6,7 @@ import { AudioPreview } from "./AudioPreview.tsx";
 import { CodePreview } from "./CodePreview.tsx";
 import { DocumentPreview } from "./DocumentPreview.tsx";
 import { ImagePreview } from "./ImagePreview.tsx";
+import { SpreadsheetPreview } from "./SpreadsheetPreview.tsx";
 import { TextPreview } from "./TextPreview.tsx";
 import { VideoPreview } from "./VideoPreview.tsx";
 
@@ -76,6 +77,8 @@ function contents(route: PreviewRoute, path: string, audioPlaying: boolean) {
       return <VideoPreview path={path} mime={route.mime} />;
     case "audio":
       return <AudioPreview path={path} mime={route.mime} playing={audioPlaying} />;
+    case "spreadsheet":
+      return <SpreadsheetPreview path={path} mime={route.mime} />;
     case "code":
       return <CodePreview path={path} language={route.language} />;
     case "text":

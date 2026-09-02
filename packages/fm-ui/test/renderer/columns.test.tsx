@@ -13,11 +13,10 @@
 import type { FsEntry } from "@symmetria/fm-core/entry";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-
-import { INITIAL_RECT, observeWithFallback } from "../../src/components/FileList.tsx";
 import { MillerColumns } from "../../src/components/MillerColumns.tsx";
 import { PathBar } from "../../src/components/PathBar.tsx";
 import { StatusBar } from "../../src/components/StatusBar.tsx";
+import { INITIAL_RECT, observeWithFallback } from "../../src/components/virtualize.ts";
 
 afterEach(cleanup);
 
