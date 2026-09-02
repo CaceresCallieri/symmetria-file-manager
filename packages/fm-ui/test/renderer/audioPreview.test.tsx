@@ -213,6 +213,49 @@ describe("the transport", () => {
     fireEvent.change(seek, { target: { value: "100" } });
     await waitFor(() => expect(seek.value).toBe("100"));
   });
+
+  it("sizes the played fill from the position, not from the element", async () => {
+    // The fill is a real element rather than a pseudo-element because Chromium
+    // gives a range input a track and a thumb and nothing between them. Being a
+    // real element, it can be wrong independently of the control — stuck at 0%,
+    // or wired to the wrong number — and nothing else in this file would see it.
+    answer = { title: "", artist: "", durationSeconds: 215, picture: null };
+
+    render(<AudioPreview path="/home/jc/Music/track.flac" mime="audio/flac" playing={false} />);
+
+    // SAFETY: this test id is on the range input in `AudioPreview` and on
+    // nothing else, so the node found here is that input.
+    const seek = (await screen.findByTestId("preview-audio-seek")) as HTMLInputElement;
+    await waitFor(() => expect(seek.max).toBe("215"));
+
+    fireEvent.change(seek, { target: { value: "43" } });
+
+    const fill = await screen.findByTestId("preview-audio-seek-played");
+    await waitFor(() => expect(fill.style.width).toBe("20%"));
+  });
+
+  it("stops the fill and the control at the end when the element runs past it", async () => {
+    // A media element reports a `currentTime` a hair past its own `duration` at
+    // the very end of a file. Unclamped, the fill spans wider than its groove
+    // and the input's controlled value sits above its own `max`, which leaves
+    // React's record and the DOM's disagreeing until the next `timeupdate`.
+    answer = { title: "", artist: "", durationSeconds: 215, picture: null };
+
+    render(<AudioPreview path="/home/jc/Music/track.flac" mime="audio/flac" playing={false} />);
+
+    // SAFETY: this test id is on the range input in `AudioPreview` and on
+    // nothing else, so the node found here is that input.
+    const seek = (await screen.findByTestId("preview-audio-seek")) as HTMLInputElement;
+    await waitFor(() => expect(seek.max).toBe("215"));
+
+    const audio = screen.getByTestId("preview-audio-element");
+    Object.defineProperty(audio, "currentTime", { value: 300, configurable: true });
+    fireEvent.timeUpdate(audio);
+
+    const fill = await screen.findByTestId("preview-audio-seek-played");
+    await waitFor(() => expect(fill.style.width).toBe("100%"));
+    expect(seek.value).toBe("215");
+  });
 });
 
 describe("when the tags cannot be read", () => {

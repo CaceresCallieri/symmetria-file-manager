@@ -142,6 +142,22 @@ export function AudioPreview({ path, mime, playing }: AudioPreviewProps) {
   const duration = progress.duration;
   const length = duration === null ? "" : formatDuration(duration);
 
+  // The single derivation of how far into the file we are. The waveform below
+  // takes `position` and `duration` and reaches the same number by calling the
+  // same function, so the fill and the drawing cannot disagree.
+  const played = playedFraction(progress.position, duration);
+  // The input addresses SECONDS, not a fraction, and must not exceed its own
+  // `max`: a controlled value above it leaves React's record and the DOM's
+  // disagreeing until the next `timeupdate` overwrites both — and a position
+  // past the end is exactly the case `playedFraction`'s clamp exists for.
+  // Derived from the raw inputs rather than back out of `played`, because that
+  // round trip reintroduces float error into a value read back as a string.
+  const seekPosition = Number.isFinite(progress.position)
+    ? Math.min(progress.position, duration ?? 0)
+    : 0;
+  const spokenPosition =
+    length === "" ? formatDuration(seekPosition) : `${formatDuration(seekPosition)} of ${length}`;
+
   return (
     <div className="preview preview--audio" data-testid="preview-audio">
       <div className="preview__art">
@@ -180,7 +196,8 @@ export function AudioPreview({ path, mime, playing }: AudioPreviewProps) {
       <div className="preview__seek">
         <div
           className="preview__seek-played"
-          style={{ width: `${playedFraction(progress.position, duration) * 100}%` }}
+          data-testid="preview-audio-seek-played"
+          style={{ width: `${played * 100}%` }}
         />
         <input
           className="preview__seek-input"
@@ -189,8 +206,11 @@ export function AudioPreview({ path, mime, playing }: AudioPreviewProps) {
           min={0}
           max={duration ?? 0}
           step="any"
-          value={progress.position}
+          value={seekPosition}
           aria-label="Seek"
+          // Without this a screen reader announces the raw seconds — "one
+          // hundred" for a position the pane itself renders as `1:40`.
+          aria-valuetext={spokenPosition}
           disabled={duration === null}
           onChange={(event) => {
             const seconds = Number(event.target.value);

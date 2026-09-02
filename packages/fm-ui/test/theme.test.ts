@@ -175,3 +175,80 @@ describe("the scrollbar", () => {
     expect(selectors.every((prefix) => prefix === "" || prefix === "*")).toBe(true);
   });
 });
+
+/**
+ * The audio seek control.
+ *
+ * Its whole rule was once `accent-color: var(--primary)`, which does not style
+ * a range input — it re-tints Chromium's NATIVE widget, keeping a full-width
+ * opaque track and a 16px thumb beside a 36px waveform drawn at 6% white.
+ * Reverting to that would pass every other test in this suite, which is why
+ * these exist. As with the scrollbar above, whether the result LOOKS right is a
+ * screenshot's job and was verified with one; these pin the mechanics that make
+ * the drawing ours rather than the browser's.
+ */
+describe("the seek control", () => {
+  async function sheet(): Promise<string> {
+    return readFile(join(RENDERER, "styles.css"), "utf8");
+  }
+
+  function rule(text: string, selector: string): string {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`${escaped}\\s*\\{[^}]*\\}`).exec(text)?.[0] ?? "";
+  }
+
+  it("takes the drawing away from the browser", async () => {
+    // Without this the rest of the rules below are decoration on a native
+    // widget that ignores them.
+    expect(rule(await sheet(), ".preview__seek-input")).toContain("appearance: none");
+  });
+
+  it("keeps its geometry in one place", async () => {
+    // The track height is read by three rules and the thumb's offset is
+    // computed from both lengths, so a literal repeated per rule un-centres the
+    // playhead the first time one of them is edited alone.
+    //
+    // In the token file and not local to `.preview__seek`, because "declares
+    // every token the stylesheet reads" above resolves declarations ONLY from
+    // there — a locally declared property fails that test. Found by it.
+    const tokens = await readFile(TOKENS, "utf8");
+
+    expect(tokens).toMatch(/^\s*--seek-track:/m);
+    expect(tokens).toMatch(/^\s*--seek-thumb:/m);
+    expect(rule(await sheet(), ".preview__seek::before")).toContain("var(--seek-track)");
+  });
+
+  it("centres the thumb from that geometry rather than from a typed-in offset", async () => {
+    const thumb = rule(await sheet(), ".preview__seek-input::-webkit-slider-thumb");
+
+    expect(thumb).toContain("var(--seek-thumb)");
+    expect(thumb).toMatch(/margin-top:\s*calc\(/);
+  });
+
+  it("never leaves the suppressed outline unreplaced", async () => {
+    // `outline: none` with nothing in its place is the failure mode this pins.
+    // It matters more here than on an ordinary control: `useKeyDispatch` treats
+    // any focused input as a text field and suppresses the entire file-manager
+    // key cascade, so this ring is the only sign that j/k have stopped working.
+    const text = await sheet();
+
+    expect(rule(text, ".preview__seek-input:focus-visible")).toContain("outline: none");
+    expect(rule(text, ".preview__seek-input:focus-visible::-webkit-slider-thumb")).toContain(
+      "box-shadow",
+    );
+  });
+
+  it("draws the ring in something a reader can see", async () => {
+    // `--accent` is 8% white, picked to be nearly invisible as a row highlight.
+    // A ring drawn in it around an already-white thumb says nothing at all.
+    const ring = rule(await sheet(), ".preview__seek-input:focus-visible::-webkit-slider-thumb");
+
+    expect(ring).not.toContain("var(--accent)");
+  });
+
+  it("still shows focus where box-shadow is discarded", async () => {
+    // Forced colours drops `box-shadow` and keeps `outline: none`, which would
+    // remove the only indicator this control has.
+    expect(await sheet()).toMatch(/@media \(forced-colors: active\)/);
+  });
+});
