@@ -26,6 +26,22 @@
     // Research prose and a generated page. No source to analyse.
     "docs/**",
 
+    // ── The measurement harnesses ──
+    // Observed, two findings on `app/bench/pickerPath.mjs`:
+    //   unused-file      — nothing imports a bench. They are run by hand,
+    //                      against a daemon started by hand, and each names its
+    //                      own invocation in its header.
+    //   code-duplication — its socket client duplicates the one in
+    //                      `app/bin/symmetria-fm-electron-cli.mjs`, and that
+    //                      duplication is deliberate in BOTH files for the same
+    //                      stated reason: neither may have a build step or a
+    //                      dependency, so neither can import the TypeScript
+    //                      `sendCommand`. A bench that needed `pnpm build` to
+    //                      run would measure whatever was built last.
+    // Scoped to the directory rather than the file, because the next bench will
+    // have both properties for both of the same reasons.
+    "app/bench/**",
+
     // ── Vendored policy source ──
     // Observed, three separate findings: `fallow dupes` reported 42 duplicated
     // lines in `shared/dictionary-types.ts`; `dead-code` reported two unused
