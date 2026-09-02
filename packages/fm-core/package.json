@@ -38,6 +38,7 @@
     "./icons/resolve": "./src/icons/resolve.ts",
     "./bridge": "./src/bridge.ts",
     "./preview/archive/types": "./src/preview/archive/types.ts",
-    "./preview/archive/zip": "./src/preview/archive/zip.ts"
+    "./preview/archive/zip": "./src/preview/archive/zip.ts",
+    "./preview/archive/tar": "./src/preview/archive/tar.ts"
   }
 }

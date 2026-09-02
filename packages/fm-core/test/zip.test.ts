@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ByteSource } from "../src/preview/archive/types.ts";
 import { readZipIndex } from "../src/preview/archive/zip.ts";
+import { ascii, decodeAscii, u16, u32, u64 } from "./support/bytes.ts";
 
 /**
  * The zip index reader.
@@ -20,35 +21,6 @@ const CENTRAL_SIGNATURE = 0x02014b50;
 const EOCD_SIGNATURE = 0x06054b50;
 const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
 const ZIP64_EOCD_SIGNATURE = 0x06064b50;
-
-function u16(value: number): number[] {
-  return [value & 0xff, (value >>> 8) & 0xff];
-}
-
-function u32(value: number): number[] {
-  return [value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff];
-}
-
-/** Eight little-endian bytes from a safe integer. No `BigInt` literal needed. */
-function u64(value: number): number[] {
-  const low = value % 0x100000000;
-  const high = Math.floor(value / 0x100000000);
-  return [...u32(low), ...u32(high)];
-}
-
-/** ASCII to bytes. There is no `TextEncoder` in this package. */
-function ascii(text: string): number[] {
-  const bytes: number[] = [];
-  for (let i = 0; i < text.length; i++) bytes.push(text.charCodeAt(i) & 0xff);
-  return bytes;
-}
-
-/** ASCII from bytes, which is what a `ByteSource` in this file decodes with. */
-function decodeAscii(bytes: Uint8Array): string {
-  let text = "";
-  for (const byte of bytes) text += String.fromCharCode(byte);
-  return text;
-}
 
 interface FixtureEntry {
   readonly name: string;

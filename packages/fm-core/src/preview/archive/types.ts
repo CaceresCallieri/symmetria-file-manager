@@ -48,3 +48,21 @@ export interface ArchiveEntry {
   readonly size: number;
   readonly isDirectory: boolean;
 }
+
+/**
+ * The most rows an archive preview will show.
+ *
+ * 5000, matching `MaxEntries` in the Qt build's
+ * `plugin/src/Symmetria/FileManager/Models/archivepreviewmodel.hpp`, so the two
+ * builds truncate the same archive at the same place while both are installed.
+ *
+ * **The two readers treat it differently, and that asymmetry is deliberate.**
+ * The tar walker stops AT this number, because walking is unbounded work and
+ * every entry past the cap costs a read nobody will look at. The zip reader
+ * does not cap at all: its index is already in hand by the time the first entry
+ * is parsed, so stopping early would save nothing and would throw away the
+ * total counts the pane needs in order to say how much it is not showing.
+ * An earlier version of this comment claimed both readers shared the cap. They
+ * do not, and `zip.ts` has never imported this constant.
+ */
+export const MAX_ARCHIVE_ENTRIES = 5000;
