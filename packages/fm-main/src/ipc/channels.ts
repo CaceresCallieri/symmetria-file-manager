@@ -26,6 +26,15 @@ export const REQUEST_CHANNELS = {
   describe: "symmetria-fm:describe",
   /** Make one file loadable by the renderer, and name the URL. */
   previewUrl: "symmetria-fm:preview-url",
+  /**
+   * Make a previewed file's own directory loadable, and name the URL it roots.
+   *
+   * For a rendered document reaching its own images and stylesheet. Separate
+   * from `previewUrl` because the grant it issues is a different, stronger
+   * thing: that one names one file and narrows nothing, this one names a root
+   * and refuses everything outside it.
+   */
+  previewDirectoryUrl: "symmetria-fm:preview-directory-url",
   /** Copy or move entries into a directory. */
   transfer: "symmetria-fm:transfer",
   /** Abandon a running transfer. */

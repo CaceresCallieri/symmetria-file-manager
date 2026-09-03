@@ -124,7 +124,8 @@ describe("the application boots", () => {
     // `clipboard` when the copy chord did, and `frecent` when the zoxide jump
     // did; `pickerConfirm` and `pickerCancel` when the file dialog gained its
     // Accept and Cancel; `listingRead` and `listingWrite` when the sort order
-    // gained a file to live in. This assertion caught that addition before
+    // gained a file to live in; `previewDirectoryUrl` when a rendered document
+    // needed to reach the images beside it. This assertion caught that addition before
     // anything else did — the whole suite compiled and every package's own
     // tests passed — which is the whole reason it is an exact string.
     //
@@ -134,7 +135,7 @@ describe("the application boots", () => {
     // run, and this assertion then reads a stale build and passes against code
     // that is no longer there. It did exactly that for three phases.
     expect(report.bridgeKeys).toBe(
-      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,clipboard,create,describe,frecent,hideWindow,list,listingRead,listingWrite,onChanged,onListBatch,onOpenPath,onTransferProgress,open,pickerCancel,pickerConfirm,previewUrl,readText,rename,transfer,trash,unwatch,version,watch",
+      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,clipboard,create,describe,frecent,hideWindow,list,listingRead,listingWrite,onChanged,onListBatch,onOpenPath,onTransferProgress,open,pickerCancel,pickerConfirm,previewDirectoryUrl,previewUrl,readText,rename,transfer,trash,unwatch,version,watch",
     );
   });
 

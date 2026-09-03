@@ -169,6 +169,17 @@ export interface PreviewUrlRequest {
   readonly path: string;
 }
 
+/**
+ * Ask for the URL a file's OWN DIRECTORY is served under.
+ *
+ * The path names a file, never a directory, and the main process takes its
+ * parent. The renderer naming its own root is the one shape that would let a
+ * bug in the panel grant more than the document deserves.
+ */
+export interface PreviewDirectoryUrlRequest {
+  readonly path: string;
+}
+
 /** `unwatch` needs only the id; requiring a path was an accident of reuse. */
 export interface UnwatchRequest {
   readonly subscriptionId: string;
@@ -442,6 +453,8 @@ const decodePathOnly: Decoder<{ readonly path: string }> = (raw) => {
 export const decodeDescribeRequest: Decoder<DescribeRequest> = decodePathOnly;
 
 export const decodePreviewUrlRequest: Decoder<PreviewUrlRequest> = decodePathOnly;
+
+export const decodePreviewDirectoryUrlRequest: Decoder<PreviewDirectoryUrlRequest> = decodePathOnly;
 
 function decodePathList(raw: unknown): Result<string[]> {
   if (!Array.isArray(raw) || raw.length === 0) {

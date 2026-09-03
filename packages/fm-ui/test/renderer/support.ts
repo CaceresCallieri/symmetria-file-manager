@@ -142,6 +142,7 @@ export function inertBridge(): Bridge {
     cancel: ok,
     describe: ok,
     previewUrl: ok,
+    previewDirectoryUrl: ok,
     transfer: ok,
     create: ok,
     rename: ok,

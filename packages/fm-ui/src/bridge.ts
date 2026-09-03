@@ -158,6 +158,32 @@ export async function previewUrl(path: string): Promise<Result<string>> {
 }
 
 /**
+ * The URL a previewed file's own directory is served under.
+ *
+ * What comes back is a PREFIX: append a slash and a relative path to reach a
+ * neighbour. Every such path is checked for containment in the main process,
+ * against the real location on disk, so a symbolic link cannot climb out of
+ * the document's directory.
+ *
+ * Separate from `previewUrl` because the grant behind it is a different thing.
+ * That one makes one file loadable and narrows nothing; this one names a root
+ * and refuses everything outside it, which is what makes it safe to point at
+ * a stranger's document.
+ */
+export async function previewDirectoryUrl(path: string): Promise<Result<string>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("read_failed", MISSING_BRIDGE);
+
+  const reply = await bridge.previewDirectoryUrl({ path });
+  if (isFailure(reply)) return reply;
+
+  // The same reply shape as `previewUrl`, and deliberately the same decoder: a
+  // URL is a URL, and a second one would be a second thing to keep in step.
+  const decoded = decodePreviewUrlReply(reply.value);
+  return isFailure(decoded) ? decoded : { ok: true, value: decoded.value.url };
+}
+
+/**
  * Put text or an image on the system clipboard.
  *
  * The image travels as a PATH for the main process to read, not as bytes. The

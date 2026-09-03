@@ -30,6 +30,8 @@ const bridge: Bridge = {
   cancel: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.cancel, request),
   describe: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.describe, request),
   previewUrl: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.previewUrl, request),
+  previewDirectoryUrl: (request) =>
+    ipcRenderer.invoke(REQUEST_CHANNELS.previewDirectoryUrl, request),
   transfer: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.transfer, request),
   cancelTransfer: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.cancelTransfer, request),
   create: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.create, request),

@@ -786,6 +786,81 @@ describe("the bookmark channels", () => {
  * registry that ignored the injection and hardcoded a URL would have passed
  * every assertion in this file.
  */
+/**
+ * The directory grant is over the file's PARENT, and the handler decides that.
+ *
+ * The one safety property this channel exists to guarantee. The renderer sends
+ * a FILE path and the main process takes its parent; a handler that passed
+ * `request.path` straight through would grant a directory named after a file,
+ * which resolves to nothing — or, for a path the renderer chose freely, exactly
+ * as much as the renderer asked for. That is the shape the handler's own
+ * comment calls load-bearing, and until this block existed it was checked only
+ * by the token unit tests, which never call through the registry.
+ */
+describe("the directory preview URL comes from the host", () => {
+  it("builds the reply with the injected function, not with one of its own", async () => {
+    const file = join(root, "doc.md");
+    await writeFile(file, "# hello");
+    const ipc = fakeIpc();
+    createRegistry(ipc, { previewUrlFor });
+
+    const reply = (await ipc.invoke(CHANNELS.previewDirectoryUrl, { path: file })) as {
+      ok: boolean;
+      value: { url: string };
+    };
+
+    expect(reply.ok).toBe(true);
+    expect(reply.value.url.startsWith("test-host://preview/")).toBe(true);
+  });
+
+  it("grants the directory, so two files beside each other share one token", async () => {
+    // THE assertion of this block. Two different files, one parent — one token.
+    // A handler that granted `request.path` would hand back two, because the
+    // two paths differ.
+    const first = join(root, "one.md");
+    const second = join(root, "two.md");
+    await writeFile(first, "one");
+    await writeFile(second, "two");
+    const ipc = fakeIpc();
+    createRegistry(ipc, { previewUrlFor });
+
+    const a = (await ipc.invoke(CHANNELS.previewDirectoryUrl, { path: first })) as {
+      value: { url: string };
+    };
+    const b = (await ipc.invoke(CHANNELS.previewDirectoryUrl, { path: second })) as {
+      value: { url: string };
+    };
+
+    expect(a.value.url).toBe(b.value.url);
+  });
+
+  it("puts neither the file name nor the directory in the URL", async () => {
+    const file = join(root, "secret-document.md");
+    await writeFile(file, "content");
+    const ipc = fakeIpc();
+    createRegistry(ipc, { previewUrlFor });
+
+    const reply = (await ipc.invoke(CHANNELS.previewDirectoryUrl, { path: file })) as {
+      value: { url: string };
+    };
+
+    expect(reply.value.url).not.toContain("secret-document");
+    expect(reply.value.url).not.toContain(root);
+  });
+
+  it("refuses a path that is not there", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { previewUrlFor });
+
+    const reply = (await ipc.invoke(CHANNELS.previewDirectoryUrl, {
+      path: join(root, "no-such-document.md"),
+    })) as { ok: boolean; error: { code: string } };
+
+    expect(reply.ok).toBe(false);
+    expect(reply.error.code).toBe("read_failed");
+  });
+});
+
 describe("the preview URL comes from the host", () => {
   it("builds the reply with the injected function, not with one of its own", async () => {
     const file = join(root, "previewable.txt");

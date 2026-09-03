@@ -1,6 +1,6 @@
 import type { Dirent } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { decodeBookmarks } from "@symmetria/fm-core/bookmarks";
 import {
   type Decoder,
@@ -13,6 +13,7 @@ import {
   decodeListingOptionsWriteRequest,
   decodeListRequest,
   decodeOpenRequest,
+  decodePreviewDirectoryUrlRequest,
   decodePreviewUrlRequest,
   decodeReadTextRequest,
   decodeRenameRequest,
@@ -46,7 +47,7 @@ import {
 import { copyImage, copyText } from "../ops/clipboard.ts";
 import { operations } from "../ops/index.ts";
 import { frecentDirectories } from "../ops/zoxide.ts";
-import { authorisePreview } from "../previewTokens.ts";
+import { authorisePreview, authorisePreviewDirectory } from "../previewTokens.ts";
 import { CHANNELS, REQUEST_CHANNELS } from "./channels.ts";
 
 /**
@@ -533,6 +534,20 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
       // broken image the renderer has no way to explain.
       await stat(request.path);
       return success({ url: previewUrlFor(authorisePreview(request.path)) });
+    }),
+  );
+
+  ipc.handle(
+    CHANNELS.previewDirectoryUrl,
+    guard(decodePreviewDirectoryUrlRequest, "read_failed", async (request) => {
+      // Stat first, for the same reason `previewUrl` does: a path that cannot
+      // be read fails here rather than as a document whose images silently do
+      // not appear.
+      await stat(request.path);
+      // The PARENT, taken here and never accepted from the renderer. A caller
+      // naming its own root is the one shape that would let a bug in the panel
+      // grant more than the document it is showing.
+      return success({ url: previewUrlFor(authorisePreviewDirectory(dirname(request.path))) });
     }),
   );
 

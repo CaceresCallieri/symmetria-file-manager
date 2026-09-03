@@ -29,6 +29,8 @@ export interface Bridge {
   describe(request: unknown): Promise<Result<unknown>>;
   /** Make one file loadable by the renderer, and name the URL. */
   previewUrl(request: unknown): Promise<Result<unknown>>;
+  /** Make a file's own directory loadable, and name the URL it roots. */
+  previewDirectoryUrl(request: unknown): Promise<Result<unknown>>;
   /** Copy or move entries into a directory. */
   transfer(request: unknown): Promise<Result<unknown>>;
   /** Abandon a running transfer. */

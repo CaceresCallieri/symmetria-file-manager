@@ -110,3 +110,78 @@ describe("a refusal", () => {
     expect(await response.text()).toBe("");
   });
 });
+
+/**
+ * The content policy a served DOCUMENT carries.
+ *
+ * The Qt build reaches "it cannot phone home" by turning off remote URL access
+ * in its browser engine. There is no engine to configure here: the frame is an
+ * ordinary one, so the lock has to travel with the response. A page served
+ * without this header could fetch a tracker, a remote font or a remote script
+ * the moment it is framed.
+ *
+ * It is decided from the content type rather than passed in by the caller,
+ * because `protocol.ts` imports `electron` at module scope and cannot be
+ * reached from any test. A policy chosen there would be a security rule nobody
+ * could check.
+ */
+describe("the document content policy", () => {
+  const policyOf = (response: Response) => response.headers.get("content-security-policy");
+
+  it.each([["text/html"], ["application/xhtml+xml"]])(
+    "locks a %s response down to its own origin",
+    (contentType) => {
+      const policy = policyOf(fileResponse(path, CONTENT.length, contentType, null));
+
+      expect(policy).not.toBeNull();
+      // `default-src 'none'` is the whole of it: everything a page might reach
+      // for is denied unless a later directive opens it, and none of them
+      // names a remote origin.
+      expect(policy).toContain("default-src 'none'");
+      expect(policy).not.toMatch(/https?:/);
+      expect(policy).not.toContain("*");
+    },
+  );
+
+  it("permits a sibling stylesheet and a sibling image, and nothing further", () => {
+    const policy = policyOf(fileResponse(path, CONTENT.length, "text/html", null)) ?? "";
+
+    // A page whose own stylesheet is blocked renders unstyled, which is not a
+    // faithful render. `'self'` is the document's own grant and reaches no
+    // further than the directory it was issued for.
+    expect(policy).toContain("img-src 'self'");
+    expect(policy).toContain("style-src 'self'");
+    // Scripts are refused twice over: the frame withholds the permission AND
+    // the policy denies the source. Neither alone is stated anywhere a reader
+    // of the other would see it.
+    expect(policy).not.toContain("script-src");
+  });
+
+  it("names the two directives that do NOT fall back to default-src", () => {
+    // A GUARD on a real finding. `img-src`, `style-src`, `font-src`,
+    // `media-src`, `object-src` and `frame-src` all inherit from
+    // `default-src`; `form-action` and `base-uri` do not. Without them
+    // `default-src 'none'` still leaves a previewed page able to submit a form
+    // to a remote host on a plain click, with no script involved.
+    const policy = policyOf(fileResponse(path, CONTENT.length, "text/html", null)) ?? "";
+
+    expect(policy).toContain("form-action 'none'");
+    expect(policy).toContain("base-uri 'none'");
+  });
+
+  it.each([["image/png"], ["video/mp4"], ["application/pdf"], ["text/plain"]])(
+    "leaves a %s response exactly as it was",
+    (contentType) => {
+      expect(policyOf(fileResponse(path, CONTENT.length, contentType, null))).toBeNull();
+    },
+  );
+
+  it("carries the policy on a partial response too", () => {
+    // A framed document CAN be fetched by range. A policy applied only to the
+    // 200 would be a lock on the front door with the window left open.
+    const partial = fileResponse(path, CONTENT.length, "text/html", "bytes=0-4");
+
+    expect(partial.status).toBe(206);
+    expect(policyOf(partial)).toContain("default-src 'none'");
+  });
+});
