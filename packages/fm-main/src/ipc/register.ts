@@ -10,6 +10,7 @@ import {
   decodeClipboardRequest,
   decodeCreateRequest,
   decodeDescribeRequest,
+  decodeListingOptionsWriteRequest,
   decodeListRequest,
   decodeOpenRequest,
   decodePreviewUrlRequest,
@@ -30,12 +31,18 @@ import {
 } from "@symmetria/fm-core/contract";
 import type { EntrySummary, FsEntry } from "@symmetria/fm-core/entry";
 import { filterEntries } from "@symmetria/fm-core/filter";
+import { resolveListingOptions } from "@symmetria/fm-core/listingOptions";
 import { resolveMimeType } from "@symmetria/fm-core/mime";
 import { sortEntries } from "@symmetria/fm-core/sort";
 import { defaultBookmarksPath, readOrSeedBookmarks, saveBookmarks } from "../bookmarks.ts";
 import { mimeTables } from "../fs/mimeTables.ts";
 import { kindOf, scanDirectory } from "../fs/scan.ts";
 import { type ChangedEntry, type StopWatching, watchDirectory } from "../fs/watch.ts";
+import {
+  defaultListingOptionsPath,
+  loadListingOptions,
+  saveListingOptions,
+} from "../listingOptions.ts";
 import { copyImage, copyText } from "../ops/clipboard.ts";
 import { operations } from "../ops/index.ts";
 import { frecentDirectories } from "../ops/zoxide.ts";
@@ -480,6 +487,41 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
       for (const { letter, bookmark } of request.bookmarks) asObject[letter] = bookmark;
 
       await saveBookmarks(defaultBookmarksPath(), decodeBookmarks(asObject));
+      return success(null);
+    }),
+  );
+
+  /**
+   * The listing order, read once when a window opens.
+   *
+   * Answers the DEFAULT rather than a failure when there is no file and when
+   * there is one nobody can read. A missing preference is not an error, and a
+   * window that refused to list because of it would be worse than one that
+   * lists in an order the user has to set again.
+   */
+  ipc.handle(CHANNELS.listingRead, async () => {
+    const stored = await loadListingOptions(defaultListingOptionsPath());
+    return success({ options: resolveListingOptions(stored).options });
+  });
+
+  ipc.handle(
+    CHANNELS.listingWrite,
+    guard(decodeListingOptionsWriteRequest, "write_failed", async (request) => {
+      // Shape, then MEANING. The decoder proves the payload is an options
+      // object; `decodeListingOptions` inside it applies the rules the READ
+      // path applies, so a caller cannot persist a sort mode the next load
+      // would silently discard — a setting that appears to save and is gone
+      // after a restart. The bookmark write does the same two steps.
+      //
+      // A file nobody could parse is left alone: `mayWrite` is false for it,
+      // and saving over the user's data mid-edit destroys it.
+      const path = defaultListingOptionsPath();
+      const stored = await loadListingOptions(path);
+      if (!resolveListingOptions(stored).mayWrite) {
+        return failure("write_failed", "the stored listing order could not be read");
+      }
+
+      await saveListingOptions(path, request.options);
       return success(null);
     }),
   );

@@ -1,6 +1,7 @@
 import type { Bookmark } from "./bookmarks.ts";
 import type { EntrySummary, FsEntry } from "./entry.ts";
-import type { SortMode } from "./sort.ts";
+import { decodeListingOptions, type ListingOptions } from "./listingOptions.ts";
+import { isSortMode, SORT_MODES, type SortMode } from "./sort.ts";
 
 /**
  * The wire contract between the two processes.
@@ -235,6 +236,20 @@ export interface FrecentReply {
 }
 
 /**
+ * The listing order, as it crosses the boundary.
+ *
+ * Wrapped in an object with one field rather than sent bare, so a second thing
+ * about a listing can be added later without every caller changing shape.
+ */
+export interface ListingOptionsReply {
+  readonly options: ListingOptions;
+}
+
+export interface ListingOptionsWriteRequest {
+  readonly options: ListingOptions;
+}
+
+/**
  * The bookmark store, as it crosses the boundary.
  *
  * A list of pairs rather than a `Map`: structured clone carries a `Map`, but
@@ -292,23 +307,11 @@ export type IpcReply =
   | Result<TransferReply>
   | Result<RenameReply>
   | Result<BookmarksReply>
+  | Result<ListingOptionsReply>
   | Result<FrecentReply>
   | Result<null>;
 
 // ── decoding ──────────────────────────────────────────────────────────────
-
-const SORT_MODES = ["alphabetical", "modified", "size", "extension", "natural"] as const;
-
-/**
- * A real narrowing, not an assertion.
- *
- * The first draft wrote `SORT_MODES.includes(sort as SortMode)` and then
- * `sort as SortMode` again — two assertions telling the compiler something
- * neither had checked. A predicate proves it instead, and both casts disappear.
- */
-function isSortMode(value: string): value is SortMode {
-  return (SORT_MODES as readonly string[]).includes(value);
-}
 
 /**
  * The largest read the renderer may ask for.
@@ -361,7 +364,9 @@ export const decodeListRequest: Decoder<ListRequest> = (raw) => {
   if (isFailure(path)) return path;
 
   const sort = raw.sort ?? "alphabetical";
-  if (typeof sort !== "string" || !isSortMode(sort)) {
+  // No `typeof` test beside this one: `isSortMode` takes `unknown` and proves
+  // the whole thing, so the string check it used to need is now redundant.
+  if (!isSortMode(sort)) {
     return failure("invalid_request", `sort must be one of ${SORT_MODES.join(", ")}`);
   }
 
@@ -895,6 +900,27 @@ function decodeBookmarkList(
   }
   return success({ bookmarks });
 }
+
+/**
+ * A stored listing order, on the way IN.
+ *
+ * `decodeListingOptions` never fails — it repairs field by field and falls back
+ * to the default — so the only thing to reject here is a payload that is not an
+ * object at all. Shape is checked here; MEANING is `fm-core/listingOptions`'s,
+ * and the write handler runs both, so a caller cannot persist a sort mode the
+ * next load would silently discard.
+ *
+ * **There is deliberately no reply-direction decoder yet.** One existed and had
+ * no consumer, and it also inherited this function's `invalid_request` — which
+ * is wrong for a reply: `invalid_reply` exists precisely so a malformed answer
+ * is never reported to the renderer as its own bad input. Whoever adds the
+ * `fm-ui` wrapper adds the decoder with it, and gives it its own failure code.
+ */
+export const decodeListingOptionsWriteRequest: Decoder<ListingOptionsWriteRequest> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
+  if (!isRecord(raw["options"])) return failure("invalid_request", "options must be an object");
+  return success({ options: decodeListingOptions(raw["options"]) });
+};
 
 export const decodeBookmarksReply: Decoder<BookmarksReply> = (raw) =>
   decodeBookmarkList("invalid_reply", "reply", raw);

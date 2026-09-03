@@ -151,6 +151,8 @@ export function inertBridge(): Bridge {
     cancelTransfer: ok,
     bookmarksRead: ok,
     bookmarksWrite: ok,
+    listingRead: ok,
+    listingWrite: ok,
     onListBatch: () => () => undefined,
     onChanged: () => () => undefined,
     onTransferProgress: () => () => undefined,

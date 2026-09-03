@@ -46,6 +46,10 @@ export const REQUEST_CHANNELS = {
   bookmarksRead: "symmetria-fm:bookmarks-read",
   /** Replace the bookmark store. */
   bookmarksWrite: "symmetria-fm:bookmarks-write",
+  /** Read the stored listing order. Answers the default on a first run. */
+  listingRead: "symmetria-fm:listing-read",
+  /** Replace the stored listing order. */
+  listingWrite: "symmetria-fm:listing-write",
   /**
    * Put the window away without ending the program.
    *

@@ -40,6 +40,7 @@
     "./preview/archive/types": "./src/preview/archive/types.ts",
     "./preview/archive/zip": "./src/preview/archive/zip.ts",
     "./preview/archive/tar": "./src/preview/archive/tar.ts",
-    "./preview/archive/listing": "./src/preview/archive/listing.ts"
+    "./preview/archive/listing": "./src/preview/archive/listing.ts",
+    "./listingOptions": "./src/listingOptions.ts"
   }
 }

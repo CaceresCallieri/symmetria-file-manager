@@ -49,6 +49,10 @@ export interface Bridge {
   bookmarksRead(request: unknown): Promise<Result<unknown>>;
   /** Replace the bookmark store. */
   bookmarksWrite(request: unknown): Promise<Result<unknown>>;
+  /** Read the stored listing order. Answers the default on a first run. */
+  listingRead(request: unknown): Promise<Result<unknown>>;
+  /** Replace the stored listing order. */
+  listingWrite(request: unknown): Promise<Result<unknown>>;
   /** Put the window away, keeping the program and its state alive. */
   hideWindow(request: unknown): Promise<Result<unknown>>;
   /**

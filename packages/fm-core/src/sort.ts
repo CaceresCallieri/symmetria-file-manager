@@ -3,6 +3,32 @@ import type { FsEntry } from "./entry.ts";
 export type SortMode = "alphabetical" | "modified" | "size" | "extension" | "natural";
 
 /**
+ * Every mode, as values something can test an unknown string against.
+ *
+ * Beside the type rather than beside either of its readers: the wire contract
+ * and the stored preference each need to reject a mode that is not one, and
+ * they had grown a copy apiece. A sixth mode should be one edit.
+ */
+export const SORT_MODES: readonly SortMode[] = [
+  "alphabetical",
+  "modified",
+  "size",
+  "extension",
+  "natural",
+];
+
+/**
+ * A real narrowing, not an assertion.
+ *
+ * An early draft wrote `SORT_MODES.includes(sort as SortMode)` and then
+ * `sort as SortMode` again — two assertions telling the compiler something
+ * neither had checked. A predicate proves it instead, and both casts go.
+ */
+export function isSortMode(value: unknown): value is SortMode {
+  return SORT_MODES.some((mode) => mode === value);
+}
+
+/**
  * Compare two entries under `mode`.
  *
  * **Directories always come first, in every mode.** The Qt version's
