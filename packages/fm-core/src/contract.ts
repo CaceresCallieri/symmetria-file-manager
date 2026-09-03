@@ -910,15 +910,20 @@ function decodeBookmarkList(
  * and the write handler runs both, so a caller cannot persist a sort mode the
  * next load would silently discard.
  *
- * **There is deliberately no reply-direction decoder yet.** One existed and had
- * no consumer, and it also inherited this function's `invalid_request` — which
- * is wrong for a reply: `invalid_reply` exists precisely so a malformed answer
- * is never reported to the renderer as its own bad input. Whoever adds the
- * `fm-ui` wrapper adds the decoder with it, and gives it its own failure code.
+ * Its reply-direction twin is below, with `invalid_reply` rather than
+ * `invalid_request`: that code exists precisely so a malformed ANSWER is never
+ * reported to the renderer as if the renderer had sent bad input.
  */
 export const decodeListingOptionsWriteRequest: Decoder<ListingOptionsWriteRequest> = (raw) => {
   if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
   if (!isRecord(raw["options"])) return failure("invalid_request", "options must be an object");
+  return success({ options: decodeListingOptions(raw["options"]) });
+};
+
+/** The same shape coming back, and a failure code that says which way it went. */
+export const decodeListingOptionsReply: Decoder<ListingOptionsReply> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_reply", "reply must be an object");
+  if (!isRecord(raw["options"])) return failure("invalid_reply", "options must be an object");
   return success({ options: decodeListingOptions(raw["options"]) });
 };
 

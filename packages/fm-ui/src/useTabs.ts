@@ -1,6 +1,7 @@
 import type { Unsubscribe } from "@symmetria/fm-core/bridge";
 import { isFailure } from "@symmetria/fm-core/contract";
 import type { FsEntry } from "@symmetria/fm-core/entry";
+import type { ListingOptions } from "@symmetria/fm-core/listingOptions";
 import {
   clearSelection,
   enterDirectory,
@@ -21,7 +22,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { hideWindow, type ListOptions, listDirectory, watchDirectory } from "./bridge.ts";
+import { hideWindow, listDirectory, watchDirectory } from "./bridge.ts";
 import {
   activateTab,
   activePane,
@@ -39,6 +40,7 @@ import {
   updateActivePane,
   updatePaneById,
 } from "./state/tabs.ts";
+import { useListingOptions } from "./useListingOptions.ts";
 
 /**
  * How a listing is asked for. One of these per WINDOW, not per tab.
@@ -48,13 +50,13 @@ import {
  * is how you want to read, not where you are. So switching tabs never changes
  * the order, and changing the order applies to every tab.
  *
- * An alias and not a second interface. It is exactly what `listDirectory`
- * takes, and two structurally identical shapes one file apart would drift the
- * first time a field was added to one of them.
+ * **Imported, not aliased, and no longer redeclared anywhere.** This file used
+ * to alias `listDirectory`'s own `ListOptions`, with a comment warning that two
+ * structurally identical shapes would drift the moment a field was added to
+ * one. The stored preference then became a THIRD shape with the same fields,
+ * and the assignment between them compiled by structural coincidence alone —
+ * exactly what that comment predicted. `ListOptions` is now this same type.
  */
-type ListingOptions = ListOptions;
-
-const INITIAL_OPTIONS: ListingOptions = { sort: "natural", reverse: false, showHidden: false };
 
 /** Whether two option sets would produce the same listing. */
 function sameOptions(a: ListingOptions, b: ListingOptions): boolean {
@@ -364,7 +366,8 @@ export function useTabs(initialPath: string): Tabs {
   const [parentEntries, setParentEntries] = useState<readonly FsEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [options, setOptions] = useState<ListingOptions>(INITIAL_OPTIONS);
+  const stored = useListingOptions();
+  const options = stored.options;
 
   // Read by `loadTab`, which must not depend on the options.
   //
@@ -512,9 +515,12 @@ export function useTabs(initialPath: string): Tabs {
     historyBack: () => setState((previous) => stepActiveHistory(previous, "back")),
     historyForward: () => setState((previous) => stepActiveHistory(previous, "forward")),
 
-    setSort: (sort, reverse) => setOptions((previous) => ({ ...previous, sort, reverse })),
-    toggleHidden: () =>
-      setOptions((previous) => ({ ...previous, showHidden: !previous.showHidden })),
+    // The next value is computed here and not inside a state updater. React
+    // may call an updater more than once and at a time of its choosing, so a
+    // write started from inside one is a side effect with no guarantee about
+    // how often it runs — which is exactly what it must not be.
+    setSort: (sort, reverse) => stored.set({ ...options, sort, reverse }),
+    toggleHidden: () => stored.set({ ...options, showHidden: !options.showHidden }),
 
     moveBy: (delta) => changeActive((p) => moveCursor(p, delta)),
     moveTo: (index) => changeActive((p) => moveCursor(p, index - p.cursorIndex)),

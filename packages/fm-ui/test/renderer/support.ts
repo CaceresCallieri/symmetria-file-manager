@@ -1,6 +1,7 @@
 import { seedBookmarks } from "@symmetria/fm-core/bookmarks";
 import { BRIDGE_KEY, type Bridge } from "@symmetria/fm-core/bridge";
 import type { FsEntry } from "@symmetria/fm-core/entry";
+import { DEFAULT_LISTING_OPTIONS, type ListingOptions } from "@symmetria/fm-core/listingOptions";
 import { screen, within } from "@testing-library/react";
 
 /**
@@ -174,6 +175,16 @@ export interface ListAsk {
 export interface BridgeLog {
   readonly listed: string[];
   /**
+   * Every listing order written back to the store.
+   *
+   * Recorded rather than merely allowed, because "the window saves what you
+   * chose" is the whole of what this preference is for, and a write that never
+   * happens looks identical to one that did until the next restart.
+   */
+  readonly listingWrites: ListingOptions[];
+  /** What the store would answer with now, after every write has settled. */
+  storedListingNow(): ListingOptions | null;
+  /**
    * Every request to put the window away.
    *
    * Observable because it is the ONLY thing that proves the last-tab close
@@ -284,8 +295,30 @@ export interface BridgeLog {
  * renderer's own `bridge.ts` — its request shape, its reply decoding, its
  * missing-bridge handling — is exercised rather than replaced.
  */
-export function installBridge(): BridgeLog {
+export interface BridgeOptions {
+  /**
+   * What the store answers with. `null` is a first run — no file.
+   *
+   * Undefined means the same as `null`, so every existing caller keeps the
+   * behaviour it had before this preference existed.
+   */
+  readonly storedListing?: ListingOptions | null;
+  /** Make the read fail, which a missing preference must survive. */
+  readonly listingReadFails?: boolean;
+  /**
+   * Make the FIRST write settle after the second.
+   *
+   * A real disk does not answer in the order it was asked, and two writes in
+   * flight are decided by whichever finishes last.
+   */
+  readonly slowFirstListingWrite?: boolean;
+}
+
+export function installBridge(options: BridgeOptions = {}): BridgeLog {
   const listed: string[] = [];
+  const listingWrites: ListingOptions[] = [];
+  let storedListing: ListingOptions | null = options.storedListing ?? null;
+  const slowFirstWrite = options.slowFirstListingWrite === true;
   const hidden: string[] = [];
   const pickerConfirms: { fifo: string; paths: string[] }[] = [];
   const pickerCancels: string[] = [];
@@ -521,6 +554,36 @@ export function installBridge(): BridgeLog {
           })),
         },
       }),
+    listingRead: () => {
+      if (options.listingReadFails === true) {
+        return Promise.resolve({
+          ok: false as const,
+          error: { code: "read_failed" as const, message: "no store" },
+        });
+      }
+      // The main process answers the DEFAULT when there is no file, exactly as
+      // `register.ts` does — a missing preference is not a failure.
+      return Promise.resolve({
+        ok: true as const,
+        value: { options: storedListing ?? DEFAULT_LISTING_OPTIONS },
+      });
+    },
+    listingWrite: (request) => {
+      const written = (request as { options: ListingOptions }).options;
+      listingWrites.push(written);
+
+      // Settling out of ORDER is what a real disk does, and it is the whole
+      // reason the hook chains its writes. `slowFirstListingWrite` makes the
+      // first call finish after the second, so a hook that fired both at once
+      // would leave the EARLIER choice on disk.
+      const delay = listingWrites.length === 1 && slowFirstWrite ? 20 : 0;
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          storedListing = written;
+          resolve({ ok: true as const, value: null });
+        }, delay);
+      });
+    },
     bookmarksWrite: (request) => {
       const { bookmarks } = request as {
         bookmarks: { letter: string; bookmark: { path: string } }[];
@@ -582,6 +645,8 @@ export function installBridge(): BridgeLog {
 
   return {
     listed,
+    listingWrites,
+    storedListingNow: () => storedListing,
     hidden,
     openSubscriptions,
     pickerConfirms,
