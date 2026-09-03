@@ -858,7 +858,14 @@ describe("the listing order crosses the boundary", () => {
   it("round-trips a whole options object", async () => {
     const ipc = fakeIpc();
     createRegistry(ipc, { previewUrlFor });
-    const options = { sort: "extension", reverse: false, showHidden: true };
+    // WHOLE, as the name says: the decoder fills any field the payload omits,
+    // so a partial object cannot round-trip to itself and never could.
+    const options = {
+      sort: "extension",
+      reverse: false,
+      showHidden: true,
+      renderDocuments: false,
+    };
 
     const written = await ipc.invoke(CHANNELS.listingWrite, { options });
     expect(written.ok).toBe(true);

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { MimeTables } from "../src/mime.ts";
-import { languageFor, type PreviewTarget, routePreview } from "../src/preview/route.ts";
+import {
+  languageFor,
+  type PreviewTarget,
+  renderableAs,
+  routePreview,
+} from "../src/preview/route.ts";
 
 /**
  * The branch order, and what reaches each branch.
@@ -249,6 +254,20 @@ describe("text and code", () => {
     expect(route).toEqual({ kind: "code", language: "rust" });
   });
 
+  it.each([
+    ["a markdown file", "NOTES.md", "markdown"],
+    ["an HTML file", "index.html", "xml"],
+  ])("still routes %s to plain code, with no extra field", (_why, name, language) => {
+    // A GUARD on the shape, not on the language. `renderableAs` is deliberately
+    // NOT part of the route, and `toEqual` is exact — so folding it in later,
+    // which is the tempting simplification, fails here rather than silently
+    // changing what every consumer of the router receives.
+    expect(routePreview(tables, target({ name, mime: "text/plain" }))).toEqual({
+      kind: "code",
+      language,
+    });
+  });
+
   it("renders an unknown language as plain text rather than failing", () => {
     // A guess that is wrong is worse than no highlighting. Automatic detection
     // was measured at 35 times the explicit cost and misread JavaScript as a
@@ -355,4 +374,75 @@ describe("the directory branch", () => {
 
     expect(route.kind).toBe("directory");
   });
+});
+
+/**
+ * Which files have a second presentation, and which do not.
+ *
+ * Deliberately NOT a member of `PreviewRoute`. The route union is a decision
+ * tree over what KIND of thing a file is; whether that kind can also be shown
+ * rendered is a different question, and two callers need the answer without
+ * needing a route at all — the preview hook, which holds the name and the
+ * resolved type, and the keybinding table, whose cursor entry holds both too.
+ *
+ * One function, because the alternative is a list of MIME strings in the panel
+ * and another in the registry. The previous cycle lost a release to exactly
+ * that shape.
+ */
+describe("renderableAs", () => {
+  it.each([
+    ["a .md file", "NOTES.md"],
+    ["a .markdown file", "notes.markdown"],
+    ["an upper-case extension", "README.MD"],
+  ])("calls %s markdown from its name alone", (_why, name) => {
+    // The name decides first, so a markdown file the database has no opinion
+    // about still renders.
+    expect(renderableAs(name, null)).toBe("markdown");
+  });
+
+  it("calls a file markdown from its type when the name says nothing", () => {
+    // A README with no extension at all. The database knows; the name cannot.
+    expect(renderableAs("README", "text/markdown")).toBe("markdown");
+  });
+
+  it.each([
+    ["a .html file", "index.html", null],
+    ["a .xhtml file", "page.xhtml", null],
+    ["the html type", "page", "text/html"],
+    ["the xhtml type", "page", "application/xhtml+xml"],
+  ])("calls %s html", (_why, name, mime) => {
+    expect(renderableAs(name, mime)).toBe("html");
+  });
+
+  it.each([
+    ["a TypeScript file", "route.ts", "text/x-typescript"],
+    ["a plain text file", "notes.txt", "text/plain"],
+    ["a name with no extension and no type", "LICENCE", null],
+    ["an image", "photo.png", "image/png"],
+  ])("says %s has no rendered form", (_why, name, mime) => {
+    expect(renderableAs(name, mime)).toBe(null);
+  });
+
+  it("prefers the name over a type that disagrees", () => {
+    // A `.md` served as `text/plain` is still markdown. The name is the
+    // stronger signal because the user chose it and the database guessed.
+    expect(renderableAs("notes.md", "text/plain")).toBe("markdown");
+  });
+});
+
+describe("a renderable file always has a source view worth showing", () => {
+  // Rendering can be switched off, and what the user then sees is the
+  // HIGHLIGHTED source. An extension that `renderableAs` claims but
+  // `languageFor` does not know would make that fallback a downgrade to
+  // uncoloured plain text — which is the one thing the toggle must not do.
+  //
+  // A new renderable format adds a row here. That is the point: it forces the
+  // two tables to be extended together.
+  it.each([["file.md"], ["file.markdown"], ["file.html"], ["file.xhtml"]])(
+    "%s is renderable AND has a highlighting language",
+    (name) => {
+      expect(renderableAs(name, null)).not.toBe(null);
+      expect(languageFor(name)).not.toBe(null);
+    },
+  );
 });
