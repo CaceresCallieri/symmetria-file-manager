@@ -96,6 +96,62 @@ const FILES = new Map<string, { readonly mime: string | null; readonly text: str
   ["/home/jc/notes.txt", { mime: "text/plain", text: "plain notes\nsecond line\n" }],
   ["/home/jc/todo.txt", { mime: "text/plain", text: "todo\n" }],
   ["/home/jc/projects/beta.md", { mime: "text/markdown", text: "# beta\n\ntext\n" }],
+  // A markdown file exercising every branch the rendered preview has: a
+  // heading, a list, a table, a fenced block with a language, raw HTML that
+  // must stay text, three images that must resolve differently, and a link.
+  //
+  // Deliberately NOT added to the TREE above. Every fixture directory's entry
+  // order is counted in `j` presses by other suites, so a new row there shifts
+  // assertions in files that have nothing to do with this one. The rendered
+  // preview takes a path, so it never needs a listing to reach this.
+  // Longer than the preview's read cap, so the truncation marker is reached by
+  // the ordinary path rather than by a flag a test sets.
+  [
+    "/home/jc/projects/capped.md",
+    { mime: "text/markdown", text: `# capped\n\n${"word ".repeat(200_000)}` },
+  ],
+  [
+    "/home/jc/projects/rich.md",
+    {
+      mime: "text/markdown",
+      text: [
+        "# Title",
+        "",
+        "A paragraph with <b>raw html</b> in it.",
+        "",
+        "- first",
+        "- second",
+        "",
+        "| column | other |",
+        "| ------ | ----- |",
+        "| a      | b     |",
+        "",
+        "```ts",
+        "const x: number = 1;",
+        "```",
+        "",
+        // A SECOND fenced block, in a different language. Not decoration: the
+        // highlighter is one worker shared by every block on the page, and
+        // with a single block a request id can only ever collide with itself.
+        "```python",
+        "def second(): return 2",
+        "```",
+        "",
+        "![diagram](./assets/flow.png)",
+        "![escaping](../../../etc/shadow)",
+        "![remote](https://example.com/tracker.png)",
+        // The three that verification found getting through. The markdown
+        // pipeline percent-encodes a backslash before the component sees it,
+        // and a leading space slips past every anchored check.
+        String.raw`![back](..\..\etc\hostname)`,
+        String.raw`![unc](\\host\share\x.png)`,
+        "![lead](  http://example.com/a.png)",
+        "",
+        "[a link](https://example.com/page)",
+        "",
+      ].join("\n"),
+    },
+  ],
   // An image, for the copy chord's image row. Its bytes are irrelevant here:
   // what routes an entry to the image preview — and therefore what makes the
   // `i` row appear — is the MIME type the main process reports.
@@ -185,6 +241,14 @@ export interface BridgeLog {
   readonly listingWrites: ListingOptions[];
   /** What the store would answer with now, after every write has settled. */
   storedListingNow(): ListingOptions | null;
+  /**
+   * Every directory a rendered document was granted.
+   *
+   * Recorded because "the grant is over the file's PARENT" is the safety
+   * property of that channel, and a panel asking for the wrong root would
+   * still render perfectly well until somebody looked here.
+   */
+  readonly directoryGrants: string[];
   /**
    * Every request to put the window away.
    *
@@ -329,6 +393,7 @@ export function installBridge(options: BridgeOptions = {}): BridgeLog {
   const unwatched: string[] = [];
   const watched: string[] = [];
   const described: string[] = [];
+  const directoryGrants: string[] = [];
   const ops: string[] = [];
   let conflictOnce: readonly string[] = [];
   let holdOnce = false;
@@ -439,6 +504,17 @@ export function installBridge(options: BridgeOptions = {}): BridgeLog {
       return Promise.resolve({ ok: true as const, value: null });
     },
     cancel: () => Promise.resolve({ ok: true as const, value: null }),
+    previewDirectoryUrl: (request) => {
+      const path = (request as { path: string }).path;
+      const directory = path.slice(0, path.lastIndexOf("/"));
+      directoryGrants.push(directory);
+      // An unreal scheme on purpose: a URL built any other way cannot pass a
+      // test that asserts this prefix.
+      return Promise.resolve({
+        ok: true as const,
+        value: { url: `test-grant://dir${directory}` },
+      });
+    },
     describe: (request) => {
       const path = (request as { path: string }).path;
       described.push(path);
@@ -646,6 +722,7 @@ export function installBridge(options: BridgeOptions = {}): BridgeLog {
 
   return {
     listed,
+    directoryGrants,
     listingWrites,
     storedListingNow: () => storedListing,
     hidden,

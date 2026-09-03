@@ -1,5 +1,5 @@
 import type { EntrySummary } from "@symmetria/fm-core/entry";
-import type { PreviewRoute } from "@symmetria/fm-core/preview/route";
+import type { PreviewRoute, RenderableAs } from "@symmetria/fm-core/preview/route";
 
 import { FileIcon } from "../FileIcon.tsx";
 import { ArchivePreview } from "./ArchivePreview.tsx";
@@ -8,6 +8,7 @@ import { CodePreview } from "./CodePreview.tsx";
 import { DocumentPreview } from "./DocumentPreview.tsx";
 import { humanSize } from "./humanSize.ts";
 import { ImagePreview } from "./ImagePreview.tsx";
+import { MarkdownPreview } from "./MarkdownPreview.tsx";
 import { SpreadsheetPreview } from "./SpreadsheetPreview.tsx";
 import { TextPreview } from "./TextPreview.tsx";
 import { VideoPreview } from "./VideoPreview.tsx";
@@ -18,6 +19,14 @@ export interface PreviewPaneProps {
   readonly size: number;
   /** Why there is nothing to show, when there is a reason. */
   readonly error?: string | null;
+  /**
+   * Whether this file has a rendered form, and which.
+   *
+   * Beside the route rather than inside it: the route says what KIND of thing
+   * the file is, and this says whether that kind has a second presentation.
+   * See `renderableAs` in the shared router.
+   */
+  readonly renderAs?: RenderableAs | null;
   /**
    * Whether the user has asked the audio under the cursor to play.
    *
@@ -37,11 +46,23 @@ export interface PreviewPaneProps {
  * previews without re-deriving which one applies. In the Qt build that
  * separation is why a preview type added once appeared in both panes.
  */
-export function PreviewPane({ route, path, size, error, audioPlaying }: PreviewPaneProps) {
+export function PreviewPane({
+  route,
+  path,
+  size,
+  error,
+  renderAs,
+  audioPlaying,
+}: PreviewPaneProps) {
   return (
-    <div className="list preview-pane" data-testid="column-preview" data-kind={route.kind}>
+    <div
+      className="list preview-pane"
+      data-testid="column-preview"
+      data-kind={route.kind}
+      data-rendered={renderAs ?? undefined}
+    >
       {error == null ? (
-        body(route, path, size, audioPlaying === true)
+        body(route, path, size, audioPlaying === true, renderAs ?? null)
       ) : (
         <p className="preview__failed" data-testid="preview-error">
           {error}
@@ -51,9 +72,32 @@ export function PreviewPane({ route, path, size, error, audioPlaying }: PreviewP
   );
 }
 
-function body(route: PreviewRoute, path: string | null, size: number, audioPlaying: boolean) {
+function body(
+  route: PreviewRoute,
+  path: string | null,
+  size: number,
+  audioPlaying: boolean,
+  renderAs: RenderableAs | null,
+) {
   if (path === null || route.kind === "none") return null;
-  return contents(route, path, size, audioPlaying) ?? notice(route, size);
+  return contents(route, path, size, audioPlaying, renderAs) ?? notice(route, size);
+}
+
+/**
+ * A text file: its rendered form where it has one, its source otherwise.
+ *
+ * Split out of the switch below rather than nested inside its `code` case. The
+ * pane is measured as one function by the complexity gate, and the gate was
+ * right to push here — "which of three ways to show text" is a decision worth
+ * reading on its own.
+ */
+function textual(path: string, language: string | null, renderAs: RenderableAs | null) {
+  if (renderAs === "markdown") return <MarkdownPreview path={path} />;
+  return language === null ? (
+    <TextPreview path={path} />
+  ) : (
+    <CodePreview path={path} language={language} />
+  );
 }
 
 /**
@@ -63,7 +107,13 @@ function body(route: PreviewRoute, path: string | null, size: number, audioPlayi
  * the END of the file, so reading one starts from its length — and the scan
  * already knows it, which saves the pane a round trip to ask.
  */
-function contents(route: PreviewRoute, path: string, size: number, audioPlaying: boolean) {
+function contents(
+  route: PreviewRoute,
+  path: string,
+  size: number,
+  audioPlaying: boolean,
+  renderAs: RenderableAs | null,
+) {
   switch (route.kind) {
     case "image":
       return <ImagePreview path={path} mime={route.mime} />;
@@ -85,9 +135,9 @@ function contents(route: PreviewRoute, path: string, size: number, audioPlaying:
         />
       );
     case "code":
-      return <CodePreview path={path} language={route.language} />;
+      return textual(path, route.language, renderAs);
     case "text":
-      return <TextPreview path={path} />;
+      return textual(path, null, renderAs);
     default:
       return null;
   }

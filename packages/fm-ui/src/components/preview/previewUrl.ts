@@ -1,7 +1,8 @@
+import type { Result } from "@symmetria/fm-core/contract";
 import { isFailure } from "@symmetria/fm-core/contract";
 import { useEffect, useState } from "react";
 
-import { previewUrl } from "../../bridge.ts";
+import { previewDirectoryUrl, previewUrl } from "../../bridge.ts";
 
 /**
  * A URL the browser may load a previewed file from.
@@ -22,13 +23,44 @@ import { previewUrl } from "../../bridge.ts";
  * circular import as soon as the second one grows.
  */
 export function usePreviewUrl(path: string): string | null {
+  return useResolvedUrl(path, previewUrl);
+}
+
+/**
+ * The URL a previewed file's own DIRECTORY is served under, as a prefix.
+ *
+ * Append a slash and a relative path to reach a neighbour. What makes it safe
+ * to hand a stranger's document is on the other side of the bridge: every such
+ * path is checked for containment against the real location on disk, so a
+ * symbolic link cannot climb out of the directory.
+ *
+ * Two rendered previews need it — a markdown file's images and a page's own
+ * stylesheet — which is why it sits beside `usePreviewUrl` rather than inside
+ * either one.
+ */
+export function usePreviewDirectoryUrl(path: string): string | null {
+  return useResolvedUrl(path, previewDirectoryUrl);
+}
+
+/**
+ * Ask the main process for a URL, and forget it the moment the path changes.
+ *
+ * Shared by the two hooks above, which differ only in WHICH question they ask.
+ * Written twice first; the second copy is what showed they were one function
+ * with a parameter — and a stale URL surviving a cursor move is exactly the
+ * bug both copies would have had to avoid independently.
+ */
+function useResolvedUrl(
+  path: string,
+  ask: (path: string) => Promise<Result<string>>,
+): string | null {
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let current = true;
     setUrl(null);
 
-    void previewUrl(path).then((reply) => {
+    void ask(path).then((reply) => {
       if (!current || isFailure(reply)) return;
       setUrl(reply.value);
     });
@@ -36,7 +68,7 @@ export function usePreviewUrl(path: string): string | null {
     return () => {
       current = false;
     };
-  }, [path]);
+  }, [path, ask]);
 
   return url;
 }

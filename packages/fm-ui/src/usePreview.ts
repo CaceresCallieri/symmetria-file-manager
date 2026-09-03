@@ -1,6 +1,11 @@
 import { isFailure } from "@symmetria/fm-core/contract";
 import type { MimeTables } from "@symmetria/fm-core/mime";
-import { type PreviewRoute, routePreview } from "@symmetria/fm-core/preview/route";
+import {
+  type PreviewRoute,
+  type RenderableAs,
+  renderableAs,
+  routePreview,
+} from "@symmetria/fm-core/preview/route";
 import { useEffect, useMemo, useState } from "react";
 import { describeEntry } from "./bridge.ts";
 import type { PreviewPaneProps } from "./components/preview/PreviewPane.tsx";
@@ -90,9 +95,24 @@ export interface Preview {
    * "I could not look".
    */
   readonly error: string | null;
+  /**
+   * Whether this file has a rendered form, and which.
+   *
+   * Beside the route rather than inside it. The route says what KIND of thing
+   * the file is; this says whether that kind has a second presentation, which
+   * is a different question and one the keybinding table asks too — from the
+   * same function, so the two can never disagree about which files qualify.
+   */
+  readonly renderAs: RenderableAs | null;
 }
 
-const NOTHING: Preview = { route: { kind: "none" }, path: null, size: 0, error: null };
+const NOTHING: Preview = {
+  route: { kind: "none" },
+  path: null,
+  size: 0,
+  error: null,
+  renderAs: null,
+};
 
 /**
  * Decide what to preview for `path`, once the cursor has settled on it.
@@ -118,7 +138,13 @@ function usePreview(path: string | null): Preview {
         if (!current) return;
 
         if (isFailure(reply)) {
-          setPreview({ route: { kind: "none" }, path, size: 0, error: reply.error.message });
+          setPreview({
+            route: { kind: "none" },
+            path,
+            size: 0,
+            error: reply.error.message,
+            renderAs: null,
+          });
           return;
         }
         setPreview({
@@ -126,6 +152,7 @@ function usePreview(path: string | null): Preview {
           path,
           size: reply.value.size,
           error: null,
+          renderAs: renderableAs(reply.value.name, reply.value.mime),
         });
       });
     }, PREVIEW_DEBOUNCE_MS);
@@ -168,6 +195,7 @@ export function usePreviewPane(cursorPath: string | null): PreviewWiring {
       path: preview.path,
       size: preview.size,
       error: preview.error,
+      renderAs: preview.renderAs,
       audioPlaying: audio.playing,
     }),
     [preview, audio.playing],

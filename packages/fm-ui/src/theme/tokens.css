@@ -55,6 +55,16 @@
      that does not match. */
   --marked: oklch(75% 0.09 25);
 
+  /*
+   * The rule down the side of a block quote, and the horizontal rule.
+   *
+   * Its own token rather than `--border`, which is the hairline used for
+   * separators and card edges. A quote bar at 6% white is invisible against
+   * the near-black base — it has to read as a deliberate mark rather than as
+   * an edge, and that is a different job from the one `--border` does.
+   */
+  --markdown-rule: rgb(255 255 255 / 14%);
+
   /* ── Scrollbars ───────────────────────────────────────────────────────── */
   /*
    * Mesura Code's own values, from its `@variant dark` block — the same source

@@ -981,3 +981,196 @@ kbd {
 .preview__archive-indent {
   flex: 0 0 auto;
 }
+
+/* ── A markdown file, rendered as a document ────────────────────────────────
+ *
+ * The one preview written in the SANS face. Every other text preview shows a
+ * file as a file, where a monospaced grid is the honest presentation; this one
+ * shows a document as a document, and prose set in a terminal face reads as an
+ * artefact rather than as writing.
+ *
+ * The rhythm is deliberately tighter than a web page's. This is a preview
+ * column a few hundred pixels wide beside two file lists, not an article: the
+ * question it answers is "what is in this file", and generous margins would
+ * mean one heading and two lines of text per screen. */
+.preview--markdown {
+  min-height: 0;
+  overflow: auto;
+}
+
+.preview__markdown-body {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--foreground);
+
+  /* Reading a preview and copying a line out of it is the same activity. */
+  user-select: text;
+
+  /* A long unbroken token — a URL in a table cell, a path in a heading — must
+     wrap rather than push the whole document sideways. The Miller columns have
+     a fixed width and a horizontal scrollbar under prose is a defect. */
+  overflow-wrap: anywhere;
+}
+
+.preview__markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.preview__markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.preview__markdown-body p {
+  margin: 0 0 0.7em;
+}
+
+/* One scale, four steps, and it stops climbing at h3. Below that a heading is
+   distinguished by weight alone: a preview column is too narrow for six
+   visually distinct sizes, and the deeper levels are rare in the documents
+   this pane actually shows. */
+.preview__markdown-body h1,
+.preview__markdown-body h2,
+.preview__markdown-body h3,
+.preview__markdown-body h4,
+.preview__markdown-body h5,
+.preview__markdown-body h6 {
+  margin: 1.2em 0 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.preview__markdown-body h1 {
+  font-size: 1.5em;
+}
+
+.preview__markdown-body h2 {
+  font-size: 1.25em;
+}
+
+.preview__markdown-body h3 {
+  font-size: 1.1em;
+}
+
+.preview__markdown-body h4,
+.preview__markdown-body h5,
+.preview__markdown-body h6 {
+  font-size: 1em;
+  color: var(--muted-foreground);
+}
+
+.preview__markdown-body ul,
+.preview__markdown-body ol {
+  margin: 0 0 0.7em;
+  padding-left: 1.3em;
+}
+
+.preview__markdown-body li {
+  margin: 0.15em 0;
+}
+
+/* A task list is a list whose markers are checkboxes, so its own bullet is
+   noise on top of them. */
+.preview__markdown-body li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.1em;
+}
+
+.preview__markdown-body input[type="checkbox"] {
+  margin-right: 0.4em;
+  accent-color: var(--primary);
+}
+
+.preview__markdown-body blockquote {
+  margin: 0 0 0.7em;
+  padding-left: 0.8em;
+  border-left: 2px solid var(--markdown-rule);
+  color: var(--muted-foreground);
+}
+
+.preview__markdown-body hr {
+  margin: 1.2em 0;
+  border: none;
+  border-top: 1px solid var(--markdown-rule);
+}
+
+/* Tables are why GitHub-flavoured markdown is on at all: a specification's
+   table is most of its content, and rendered as pipes it is unreadable. */
+.preview__markdown-body table {
+  margin: 0 0 0.7em;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.preview__markdown-body th,
+.preview__markdown-body td {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.preview__markdown-body th {
+  background: var(--muted);
+  font-weight: 600;
+}
+
+/* An inline span is set in the mono face at the same optical size as the prose
+   around it — 0.9em, because a monospaced face at the sans face's size reads
+   larger than it is. */
+.preview__markdown-body :not(pre) > code {
+  padding: 0.1em 0.3em;
+  border-radius: var(--radius-sm);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.preview__markdown-body pre {
+  margin: 0 0 0.7em;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--muted);
+  overflow-x: auto;
+}
+
+.preview__markdown-body pre code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+
+  /* The block scrolls; the code inside it does not wrap. A wrapped line in a
+     highlighted block loses the one thing indentation was carrying. */
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.preview__markdown-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+
+/* A reference the panel refused to load. It is TEXT and not a broken image on
+   purpose — see `markdownAssets.ts`: writing a `src` at all is what makes the
+   request, so a refused reference must never become an element that has one. */
+.preview__markdown-missing {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+/* A link, drawn as a link.
+ *
+ * It carries no `href`, so nothing can be followed and a stray click opens
+ * nothing. Two details keep that from being a lie rather than a convention:
+ * the underline is DOTTED, which is the long-standing signal for an annotated
+ * word rather than a navigable one, and the cursor stays an arrow instead of
+ * becoming a pointer — so the affordance is never offered in the first place.
+ * Hovering shows the destination, which is the question a reader skimming a
+ * document actually has about a link. */
+.preview__markdown-link {
+  color: var(--primary);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: default;
+}
