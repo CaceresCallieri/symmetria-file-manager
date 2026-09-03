@@ -80,6 +80,15 @@
   /* ── Geometry ─────────────────────────────────────────────────────────── */
   --row-height: 24px;
   /*
+   * The status bar's height, which is FIXED so the columns never move.
+   *
+   * Here rather than beside the rule, and that is not a preference:
+   * `theme.test.ts` requires every `var(--x)` any stylesheet reads to be
+   * DECLARED IN THIS FILE. Sized to fit a file dialog's Accept button and its
+   * save-name field, which are the tallest things the bar ever holds.
+   */
+  --status-bar-height: 26px;
+  /*
    * The audio seek control, in two numbers.
    *
    * Here rather than local to the control's own rule, and that is not a

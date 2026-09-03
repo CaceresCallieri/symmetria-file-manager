@@ -190,8 +190,17 @@ body {
   font-weight: 600;
 }
 
-.path-bar,
-.status-bar {
+/*
+ * The breadcrumb bar. It has NO fixed height, and that is deliberate.
+ *
+ * It used to share this rule with `.status-bar`, and giving the status bar a
+ * fixed height silently gave one to the path bar as well — a comment written
+ * between `.path-bar,` and `.status-bar {` reads as if it belongs to the
+ * second, but CSS treats it as whitespace and the selector list is still one
+ * rule. Review caught it. A long path would have clipped under the
+ * `overflow: hidden` that came with it, with nothing to show why.
+ */
+.path-bar {
   display: flex;
   gap: 8px;
   flex: 0 0 auto;
@@ -199,15 +208,47 @@ body {
   color: var(--muted-foreground);
 }
 
+/*
+ * The one line at the bottom, and the only thing in the window that changes.
+ *
+ * **The fixed height is the whole point.** The search field and the transient
+ * line used to be rows of their own in `.app`, so opening a search pushed the
+ * columns down and a copy starting pushed them up. They live in here now, and
+ * a bar that resized to its contents would put the shift straight back.
+ *
+ * It has to fit the tallest thing it ever holds — the save-name input and the
+ * Accept button of a file dialog — which is why those are sized to it below
+ * rather than left to size themselves.
+ */
+.status-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 0 0 auto;
+  height: var(--status-bar-height);
+  padding: 0 8px;
+  color: var(--muted-foreground);
+  overflow: hidden;
+}
+
+/* Both are taller than a line of text left to themselves, and either one
+   growing the bar reintroduces exactly the shift this phase removed. */
+.status-bar__accept,
+.status-bar__cancel,
+.status-bar__save-name {
+  height: calc(var(--status-bar-height) - 6px);
+}
+
 .crumb--current {
   font-weight: 600;
   color: var(--foreground);
 }
 
+/* Inside the status bar now, not a row of its own — so no padding of its own
+   either; the bar sets it once for everything it holds. */
 .pane-error {
   flex: 0 0 auto;
   margin: 0;
-  padding: 0 8px;
   color: var(--destructive);
 }
 
@@ -329,13 +370,13 @@ kbd {
   font-family: monospace;
 }
 
+/* Inside the status bar now. See `.pane-error`. */
 .pane-message {
   display: flex;
   gap: 8px;
   align-items: baseline;
   flex: 0 0 auto;
   margin: 0;
-  padding: 0 8px;
   color: var(--muted-foreground);
 }
 
@@ -841,12 +882,20 @@ kbd {
   background: var(--accent);
 }
 
+/*
+ * The search field, which lives INSIDE the status bar.
+ *
+ * It was a row of its own above the columns and had its own vertical padding
+ * for that reason; inside a fixed-height bar that padding would grow the bar
+ * and put the layout shift straight back.
+ */
 .search {
   display: flex;
   gap: 6px;
-  align-items: baseline;
-  flex: 0 0 auto;
-  padding: 2px 8px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
 }
 
 .search__sigil {

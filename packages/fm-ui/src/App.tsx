@@ -19,9 +19,7 @@ import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { MillerColumns } from "./components/MillerColumns.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
 import { PathBar } from "./components/PathBar.tsx";
-import { SearchField } from "./components/SearchField.tsx";
 import { StatusBar } from "./components/StatusBar.tsx";
-import { StatusStrip } from "./components/StatusStrip.tsx";
 import { TabBar } from "./components/TabBar.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
 import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
@@ -266,15 +264,6 @@ export function App(props: AppProps = {}) {
         />
       ) : null}
       <PathBar path={tabs.pane.path} onNavigate={tabs.navigate} />
-      {search.active ? (
-        <SearchField
-          query={search.query}
-          matchCount={search.matchCount}
-          onChange={search.setQuery}
-          onConfirm={search.confirm}
-          onCancel={search.cancel}
-        />
-      ) : null}
       <MillerColumns
         path={tabs.pane.path}
         parentEntries={tabs.parentEntries}
@@ -293,12 +282,10 @@ export function App(props: AppProps = {}) {
         cursorIsImage={state.cursorEntry?.isImage === true}
         bookmarks={bookmarks.byLetter}
       />
-      <StatusStrip
-        error={tabs.error}
-        message={ops.message ?? modes.message}
-        progress={ops.progress}
-        onCancelTransfer={ops.cancelRunningTransfer}
-      />
+      {/* One bar, and nothing above it that comes and goes. The search field
+          and the transient line were rows of their own here, so opening a
+          search pushed the columns down and a copy starting pushed them up.
+          Both now live inside the bar, which has a fixed height. */}
       <StatusBar
         picker={picker.chrome}
         entryCount={tabs.pane.entries.length}
@@ -306,6 +293,23 @@ export function App(props: AppProps = {}) {
         sort={tabs.sort}
         reverse={tabs.reverse}
         showHidden={tabs.showHidden}
+        search={
+          search.active
+            ? {
+                query: search.query,
+                matchCount: search.matchCount,
+                onChange: search.setQuery,
+                onConfirm: search.confirm,
+                onCancel: search.cancel,
+              }
+            : null
+        }
+        transient={{
+          error: tabs.error,
+          message: ops.message ?? modes.message,
+          progress: ops.progress,
+          onCancelTransfer: ops.cancelRunningTransfer,
+        }}
       />
       <Overlays
         modes={modes}

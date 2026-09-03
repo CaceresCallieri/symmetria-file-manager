@@ -252,3 +252,64 @@ describe("the seek control", () => {
     expect(await sheet()).toMatch(/@media \(forced-colors: active\)/);
   });
 });
+
+/**
+ * The status bar's fixed height belongs to the status bar alone.
+ *
+ * It did not. `.status-bar` shared its rule with `.path-bar`, and the height,
+ * the `overflow: hidden` and the cross-axis centring this phase added went to
+ * both — so the breadcrumb bar silently gained a 26-pixel ceiling it had never
+ * had. It looks fine only while one row of breadcrumbs is shorter than that.
+ *
+ * The comment inserted between the two selectors is what hid it: CSS treats a
+ * comment as whitespace, so `.path-bar, /* … *\/ .status-bar { }` is still one
+ * rule, while it READS as if the block below belongs to the second selector.
+ */
+describe("the status bar's height", () => {
+  /** The stylesheet, split into rules. A comment counts as whitespace to CSS. */
+  async function rulesOf(): Promise<string[]> {
+    const sheet = await readFile(join(RENDERER, "styles.css"), "utf8");
+    return sheet.split("}");
+  }
+
+  /** What a rule's selector list actually is, once any comment above it is cut. */
+  function selectorOf(rule: string): string {
+    return rule.slice(rule.lastIndexOf("*/") + 2).split("{")[0] ?? "";
+  }
+
+  /**
+   * The declarations alone.
+   *
+   * Not the whole chunk: these rules carry long comments, and the first version
+   * of the assertion below matched the words `overflow:` inside the prose
+   * EXPLAINING why the path bar must not have one. A test that fails on its own
+   * documentation is worse than no test.
+   */
+  function bodyOf(rule: string): string {
+    // The comment comes off FIRST. These comments quote CSS — one of them
+    // contains the literal `.status-bar {` — so taking everything after the
+    // first brace lands inside the prose rather than inside the rule.
+    const afterComment = rule.slice(rule.lastIndexOf("*/") + 2);
+    return afterComment.slice(afterComment.indexOf("{") + 1);
+  }
+
+  it("is set on a rule that names only the status bar", async () => {
+    const rules = await rulesOf();
+    const withHeight = rules.filter((rule) => rule.includes("--status-bar-height)"));
+
+    expect(withHeight.length).toBeGreaterThan(0);
+    for (const rule of withHeight) expect(selectorOf(rule)).not.toContain(".path-bar");
+  });
+
+  it("leaves the path bar free to be as tall as it needs", async () => {
+    // Whatever rule sets `.path-bar` must not fix its height, or a long
+    // breadcrumb trail clips with nothing on screen to say why.
+    const pathBarRule = (await rulesOf()).find((rule) =>
+      /(^|[\s,])\.path-bar(\s|,|$)/.test(selectorOf(rule)),
+    );
+
+    expect(pathBarRule).toBeDefined();
+    expect(bodyOf(pathBarRule ?? "")).not.toContain("height:");
+    expect(bodyOf(pathBarRule ?? "")).not.toContain("overflow:");
+  });
+});

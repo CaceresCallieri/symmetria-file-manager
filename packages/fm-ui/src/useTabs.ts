@@ -42,6 +42,50 @@ import {
 } from "./state/tabs.ts";
 import { useListingOptions } from "./useListingOptions.ts";
 
+interface TabErrors {
+  /** The message for one tab, or none. `undefined` for no active tab. */
+  errorFor(id: string | undefined): string | null;
+  reportError: ReportError;
+}
+
+/**
+ * Which tabs failed to list, and why. One entry per failing tab.
+ *
+ * A map rather than a single message: an error belongs to the directory that
+ * would not open, so the bar shows the ACTIVE tab's — switching away hides it
+ * and switching back shows it again, with nothing cleared and nothing re-read.
+ *
+ * Its own hook because `useTabs` is measured as one function and the complexity
+ * gate failed when this went inline, which is the same pressure that produced
+ * `useDirectoryLoader` below it.
+ */
+function useTabErrors(): TabErrors {
+  const [errors, setErrors] = useState<ReadonlyMap<string, string>>(new Map());
+
+  const reportError = useCallback<ReportError>((id, message) => {
+    setErrors((previous) => {
+      if (message === null) {
+        if (!previous.has(id)) return previous;
+        const next = new Map(previous);
+        next.delete(id);
+        return next;
+      }
+
+      // The same message again is not a change, and returning the map itself
+      // keeps a repeated failure from re-rendering the window.
+      if (previous.get(id) === message) return previous;
+      return new Map(previous).set(id, message);
+    });
+  }, []);
+
+  const errorFor = useCallback(
+    (id: string | undefined) => (id === undefined ? null : (errors.get(id) ?? null)),
+    [errors],
+  );
+
+  return { errorFor, reportError };
+}
+
 /**
  * How a listing is asked for. One of these per WINDOW, not per tab.
  *
@@ -176,10 +220,22 @@ interface DirectoryLoader {
  * of the tab collection, the watches or the keyboard actions that share that
  * hook. Each map's own reason is on its declaration.
  */
+/**
+ * Record a tab's failure, or clear it. `null` clears.
+ *
+ * Per TAB and not per window, and that distinction is the whole of it: an error
+ * describes one directory that would not open, so showing it over another tab
+ * is a claim about a directory that is fine. Window-level state also cannot be
+ * cleared safely on a switch — doing that made an unreadable directory read as
+ * "0 entries" the moment you came back to it, because returning to a tab that
+ * already has a recorded listing does not re-attempt the read.
+ */
+type ReportError = (id: string, message: string | null) => void;
+
 function useDirectoryLoader(
   optionsRef: RefObject<ListingOptions>,
   setState: Dispatch<SetStateAction<TabsState>>,
-  setError: Dispatch<SetStateAction<string | null>>,
+  reportError: ReportError,
 ): DirectoryLoader {
   // Which read is the current one, per tab.
   //
@@ -230,7 +286,7 @@ function useDirectoryLoader(
   /** What a failed listing puts in the pane, and whether it is a retreat. */
   const failed = useCallback(
     (id: string, attempted: string, message: string) => {
-      setError(message);
+      reportError(id, message);
       reverting.current.delete(id);
 
       // Go back to the last place that worked. Changing the path here feeds
@@ -248,7 +304,7 @@ function useDirectoryLoader(
       reverting.current.add(id);
       setState((previous) => revertPaneById(previous, id, previousPath));
     },
-    [setError, setState],
+    [reportError, setState],
   );
 
   const loadTab = useCallback(
@@ -270,14 +326,14 @@ function useDirectoryLoader(
         // A revert's own load must NOT clear the message that caused it. Any
         // other successful load may: it means the user went somewhere real.
         const recovering = reverting.current.delete(id);
-        if (!recovering) setError(null);
+        if (!recovering) reportError(id, null);
         lastGood.current.set(id, path);
         setState((previous) =>
           updatePaneById(previous, id, (p) => setEntries(p, reply.value.entries)),
         );
       });
     },
-    [failed, optionsRef, setError, setState],
+    [failed, optionsRef, reportError, setState],
   );
 
   // Four maps keyed by tab id, and none of them was pruned — so every tab a
@@ -364,7 +420,7 @@ function useWatchReconciler(topology: string, loadTab: (id: string, path: string
 export function useTabs(initialPath: string): Tabs {
   const [state, setState] = useState<TabsState>(() => createTabs(initialPath));
   const [parentEntries, setParentEntries] = useState<readonly FsEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const { errorFor, reportError } = useTabErrors();
   const [loading, setLoading] = useState(true);
   const stored = useListingOptions();
   const options = stored.options;
@@ -406,7 +462,11 @@ export function useTabs(initialPath: string): Tabs {
   // so what it depends on and what it uses are the same thing.
   const topology = state.tabs.map((tab) => `${tab.id}${FIELD}${tab.pane.path}`).join(RECORD);
 
-  const { loadTab, release, listedOptionsFor } = useDirectoryLoader(optionsRef, setState, setError);
+  const { loadTab, release, listedOptionsFor } = useDirectoryLoader(
+    optionsRef,
+    setState,
+    reportError,
+  );
 
   useWatchReconciler(topology, loadTab);
 
@@ -468,9 +528,14 @@ export function useTabs(initialPath: string): Tabs {
   const close = useCallback(
     (index?: number) => {
       setState((previous) => {
-        // Release the per-tab bookkeeping with the tab.
+        // Release the per-tab bookkeeping with the tab. The errors map is
+        // keyed by tab id too, so it goes the same way — otherwise a closed
+        // tab's failure outlives it for the life of the window.
         const closing = previous.tabs[index ?? previous.activeIndex]?.id;
-        if (closing !== undefined) release(closing);
+        if (closing !== undefined) {
+          release(closing);
+          reportError(closing, null);
+        }
 
         const next = closeTab(previous, index ?? previous.activeIndex);
         if (next !== null) return next;
@@ -492,7 +557,7 @@ export function useTabs(initialPath: string): Tabs {
         return previous;
       });
     },
-    [release],
+    [release, reportError],
   );
 
   return {
@@ -509,7 +574,7 @@ export function useTabs(initialPath: string): Tabs {
     sort: options.sort,
     reverse: options.reverse,
     showHidden: options.showHidden,
-    error,
+    error: errorFor(activeId),
     loading,
 
     historyBack: () => setState((previous) => stepActiveHistory(previous, "back")),
@@ -537,6 +602,12 @@ export function useTabs(initialPath: string): Tabs {
     // matters; see the note in App.
     openAt: (path) => setState((previous) => openOrActivateTab(previous, path)),
     close,
+    // None of these touches the errors, and that is the fix rather than an
+    // omission. Clearing on a switch was tried: it hid the stale message and
+    // ALSO wiped the live one, so coming back to an unreadable directory showed
+    // "0 entries" with nothing to say why — returning to a tab that already has
+    // a recorded listing does not re-attempt the read. The map is keyed by tab,
+    // so switching shows the right message with no clearing at all.
     goNext: () => setState(nextTab),
     goPrevious: () => setState(previousTab),
     activate: (index) => setState((previous) => activateTab(previous, index)),
