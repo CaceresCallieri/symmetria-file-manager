@@ -135,6 +135,23 @@ describe("the preview column", () => {
     expect(shown.textContent).not.toContain("# beta");
   });
 
+  it("routes a renderable HTML file to the framed page, not to its source", async () => {
+    // The pane's own switch, driven directly. The three ways to show text —
+    // rendered markdown, a framed page, highlighted source — are chosen in one
+    // place, and this pins that an `html` answer reaches the frame.
+    render(
+      <PreviewPane
+        route={{ kind: "code", language: "xml" }}
+        path="/home/jc/page.html"
+        size={0}
+        renderAs="html"
+      />,
+    );
+
+    expect(await screen.findByTestId("preview-html")).toBeDefined();
+    expect(screen.queryByTestId("preview-code")).toBeNull();
+  });
+
   it("still shows a file with no rendered form as highlighted source", async () => {
     // The other half of the amendment above. Driven through the pane rather
     // than through navigation, because adding a source file to the fixture

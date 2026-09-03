@@ -1174,3 +1174,24 @@ kbd {
   text-underline-offset: 2px;
   cursor: default;
 }
+
+/* ── An HTML file, rendered as a page ───────────────────────────────────────
+ *
+ * The whole component is a frame, so the whole stylesheet for it is making
+ * that frame fill its column and look like paper rather than like a widget. */
+.preview--html {
+  min-height: 0;
+  flex: 1;
+}
+
+.preview__html-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: var(--radius-sm);
+
+  /* A page with no background of its own is white by convention. Without this
+     the near-black panel shows through and the document looks like something
+     it is not. */
+  background: var(--rendered-page);
+}

@@ -65,6 +65,19 @@
    */
   --markdown-rule: rgb(255 255 255 / 14%);
 
+  /*
+   * The paper a rendered page sits on.
+   *
+   * White, because a page that declares no background of its own IS white by
+   * every browser's convention, and letting the near-black panel show through
+   * would misrepresent how the document actually looks. The Qt build sets its
+   * web view's background for exactly this reason.
+   *
+   * It is here rather than written into the rule because `theme.test.ts`
+   * refuses a colour literal anywhere else — and white is a colour.
+   */
+  --rendered-page: rgb(255 255 255);
+
   /* ── Scrollbars ───────────────────────────────────────────────────────── */
   /*
    * Mesura Code's own values, from its `@variant dark` block — the same source

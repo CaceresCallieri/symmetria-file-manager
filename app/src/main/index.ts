@@ -11,8 +11,9 @@ import { PUSH_CHANNELS, REQUEST_CHANNELS } from "@symmetria/fm-main/ipc/channels
 import type { ElectronTransport } from "@symmetria/fm-main/ipc/electronSurface";
 import { electronIpcSurface } from "@symmetria/fm-main/ipc/electronSurface";
 import { createRegistry, type Registry } from "@symmetria/fm-main/ipc/register";
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, session } from "electron";
 import { writeToFifo } from "./fifo.ts";
+import { refuseDocumentRequestsOffScheme, refuseNavigationAwayFromApp } from "./frameNavigation.ts";
 import { createResidency } from "./lifecycle.ts";
 import {
   createPickerHost,
@@ -21,7 +22,6 @@ import {
   type PickerHostOptions,
   pickerWindowOptions,
 } from "./picker.ts";
-
 import { APP_ENTRY_URL, handleAppScheme, previewUrlFor, registerAppScheme } from "./protocol.ts";
 import { type CommandHandler, claimSocket, daemonSocketPath, sendCommand } from "./socket.ts";
 import { buildWindowOptions } from "./window.ts";
@@ -90,6 +90,12 @@ interface StartedWindow {
 
 function createWindow(): StartedWindow {
   const window = new BrowserWindow(buildWindowOptions());
+
+  // A previewed page may be loaded and may not go anywhere afterwards. The
+  // preview frame's own permission list stops a form submit and a popup and
+  // does NOT stop the frame navigating itself — a link click inside a previewed
+  // page fetched a remote site. See `frameNavigation.ts`.
+  refuseNavigationAwayFromApp(window.webContents);
 
   // Show only once the renderer has something to paint. Paired with the
   // background colour in `buildWindowOptions`, this is what removes the white
@@ -615,6 +621,8 @@ async function reportAndQuit(window: BrowserWindow, socketPath: string): Promise
 function pickerWindowFactory(transport: ElectronTransport, registry: Registry): OpenPickerWindow {
   return (command, title) => {
     const dialog = new BrowserWindow(pickerWindowOptions(title));
+    // The same rule as the browse window: a dialog previews files too.
+    refuseNavigationAwayFromApp(dialog.webContents);
 
     // Minted NOW, while the window is alive, and not inside the `closed`
     // handler where it is needed. Reading `dialog.webContents` after Electron
@@ -767,6 +775,14 @@ function socketCommandHandler(window: BrowserWindow, pickers: PickerHost): Comma
 
 app.whenReady().then(async () => {
   handleAppScheme();
+
+  // Once per session, and it must stay once: Electron allows a single
+  // `onBeforeRequest` listener per session and a second call replaces the
+  // first, so a duplicate here would silently discard this rule. It is the
+  // load-bearing half of the navigation guard — the contents-level handler in
+  // `createWindow` may never fire on a sandboxed renderer. See
+  // `frameNavigation.ts`.
+  refuseDocumentRequestsOffScheme(session.defaultSession);
   const { window, painted } = createWindow();
 
   // The renderer has no filesystem of its own, so this registry is the only

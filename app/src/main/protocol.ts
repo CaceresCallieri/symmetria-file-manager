@@ -11,6 +11,8 @@ import {
 } from "@symmetria/fm-main/previewTokens";
 import { net, protocol } from "electron";
 
+import { APP_SCHEME } from "./appScheme.ts";
+
 import { fileResponse } from "./fileResponse.ts";
 
 /**
@@ -29,7 +31,8 @@ import { fileResponse } from "./fileResponse.ts";
  * privilege over `file://` resources, so the only route to the disk becomes the
  * bridge, which is what the architecture assumes everywhere else.
  */
-const APP_SCHEME = "symmetria-fm";
+// The value itself lives in `appScheme.ts`, which imports no Electron and so
+// can be read by `frameNavigation.ts`, which must stay testable.
 
 /** The authority segment. `symmetria-fm://app/index.html`. */
 const APP_HOST = "app";

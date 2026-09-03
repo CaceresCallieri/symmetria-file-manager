@@ -6,6 +6,7 @@ import { ArchivePreview } from "./ArchivePreview.tsx";
 import { AudioPreview } from "./AudioPreview.tsx";
 import { CodePreview } from "./CodePreview.tsx";
 import { DocumentPreview } from "./DocumentPreview.tsx";
+import { HtmlPreview } from "./HtmlPreview.tsx";
 import { humanSize } from "./humanSize.ts";
 import { ImagePreview } from "./ImagePreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
@@ -93,6 +94,7 @@ function body(
  */
 function textual(path: string, language: string | null, renderAs: RenderableAs | null) {
   if (renderAs === "markdown") return <MarkdownPreview path={path} />;
+  if (renderAs === "html") return <HtmlPreview path={path} />;
   return language === null ? (
     <TextPreview path={path} />
   ) : (
