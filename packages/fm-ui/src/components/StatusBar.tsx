@@ -1,8 +1,12 @@
 import type { SortMode } from "@symmetria/fm-core/sort";
 
 import type { PickerChrome } from "../usePicker.ts";
+
 import { SearchField, type SearchFieldProps } from "./SearchField.tsx";
 import { type TransientLineProps, transientLine } from "./transientLine.tsx";
+
+/** Which of a renderable file's two views the preview is currently drawing. */
+export type RenderMode = "rendered" | "source";
 
 export interface StatusBarProps {
   /**
@@ -18,6 +22,14 @@ export interface StatusBarProps {
   readonly sort: SortMode;
   readonly reverse: boolean;
   readonly showHidden: boolean;
+  /**
+   * Which view the preview is showing, or null when the file has no second one.
+   *
+   * Null for a spreadsheet, an image, a source file — most of what a cursor
+   * passes over. So the indicator is absent almost always, which is what makes
+   * it worth reading when it is there.
+   */
+  readonly renderMode?: RenderMode | null;
   /** The search field, when one is open. Null closes it. */
   readonly search: SearchFieldProps | null;
   /** A failure, a running transfer, or what just happened. */
@@ -56,6 +68,7 @@ export function StatusBar({
   sort,
   reverse,
   showHidden,
+  renderMode,
   search,
   transient,
 }: StatusBarProps) {
@@ -91,6 +104,7 @@ export function StatusBar({
             sort={sort}
             reverse={reverse}
             showHidden={showHidden}
+            renderMode={renderMode ?? null}
             transient={transient}
           />
           {picker === null ? null : (
@@ -127,6 +141,7 @@ function Body({
   sort,
   reverse,
   showHidden,
+  renderMode,
   transient,
 }: Omit<StatusBarProps, "picker" | "search">) {
   const transientContent = transientLine(transient);
@@ -142,6 +157,12 @@ function Body({
         sort: {sort} {reverse ? "↓" : "↑"}
       </span>
       {showHidden ? <span>hidden shown</span> : null}
+      {renderMode === null || renderMode === undefined ? null : (
+        <span className="status-bar__render" data-testid="status-render-mode">
+          <kbd>⌃r</kbd>
+          {renderMode}
+        </span>
+      )}
     </>
   );
 }

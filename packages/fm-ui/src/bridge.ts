@@ -59,13 +59,35 @@ function getBridge(): Bridge | null {
 }
 
 /**
- * What a listing request carries, which is exactly a stored listing order.
+ * What a listing request carries: the stored order, narrowed to what it uses.
  *
- * An alias rather than a third declaration of the same three fields. It was one,
- * and `useTabs` aliased it a fourth time — so a field added to the stored
- * preference would have compiled everywhere and been sent nowhere.
+ * DERIVED from `ListingOptions` rather than declared again. It was declared
+ * again once, and `useTabs` aliased it a fourth time — so a field added to the
+ * stored preference would have compiled everywhere and been sent nowhere.
+ *
+ * The narrowing arrived with `renderDocuments`, which lives in the same store
+ * and decides how a file is DRAWN rather than what a listing contains. Naming
+ * the three in the type is what lets a caller memoise exactly the fields a
+ * listing depends on — without that, an effect re-reading a directory when the
+ * order changes also re-reads it when the render mode does, and the parent
+ * column flickers for a key that has nothing to do with it.
+ *
+ * ── What this type does NOT guarantee ───────────────────────────────────────
+ * Review asked, and the honest answer is worth writing down: it documents which
+ * fields a listing consumes; it does not make the compiler enforce that they
+ * stay in step. `listDirectory` below builds its payload by naming each field
+ * rather than by spreading, so a fourth field that DID affect a listing would
+ * have to be added by hand in three places, none of which the type connects:
+ *
+ *   1. this type,
+ *   2. the payload literal in `listDirectory` below,
+ *   3. `listingIdentity` and the `forListing` memo in `useTabs.ts`.
+ *
+ * A field added to `ListingOptions` and nowhere else compiles everywhere and is
+ * sent nowhere — the hazard the original comment named, still present, now
+ * merely visible. Anyone adding one should start from this list.
  */
-export type ListOptions = ListingOptions;
+export type ListOptions = Pick<ListingOptions, "sort" | "reverse" | "showHidden">;
 
 const MISSING_BRIDGE = "the preload bridge is not present; this build is incomplete";
 

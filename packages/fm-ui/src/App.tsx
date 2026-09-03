@@ -19,7 +19,7 @@ import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { MillerColumns } from "./components/MillerColumns.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
 import { PathBar } from "./components/PathBar.tsx";
-import { StatusBar } from "./components/StatusBar.tsx";
+import { type RenderMode, StatusBar } from "./components/StatusBar.tsx";
 import { TabBar } from "./components/TabBar.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
 import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
@@ -76,6 +76,23 @@ function cursorPathOf(pane: PaneState): string | null {
 function cursorImageMimeOf(preview: Preview, cursorPath: string | null): string | null {
   if (preview.path !== cursorPath) return null;
   return preview.route.kind === "image" ? preview.route.mime : null;
+}
+
+/**
+ * Which view the preview is showing, or null when this file has no second one.
+ *
+ * Guarded on the described path for the same reason the image chord above is:
+ * the preview is debounced by 150 ms, so just after a cursor move the route
+ * still describes the previous entry — and an indicator that lags the cursor by
+ * a beat is worse than none, because it says something definite and wrong.
+ */
+function renderModeOf(
+  preview: Preview,
+  cursorPath: string | null,
+  renderDocuments: boolean,
+): RenderMode | null {
+  if (preview.path !== cursorPath || preview.renderAs === null) return null;
+  return renderDocuments ? "rendered" : "source";
 }
 
 export interface AppProps {
@@ -217,7 +234,7 @@ export function App(props: AppProps = {}) {
   // path, which comes straight from the pane — so there is no cycle, only an
   // order.
   const cursorPath = cursorPathOf(tabs.pane);
-  const previewing = usePreviewPane(cursorPath);
+  const previewing = usePreviewPane(cursorPath, tabs.renderDocuments);
 
   const { actions, modes, state } = useKeyActions(
     tabs,
@@ -293,6 +310,7 @@ export function App(props: AppProps = {}) {
         sort={tabs.sort}
         reverse={tabs.reverse}
         showHidden={tabs.showHidden}
+        renderMode={renderModeOf(previewing.preview, cursorPath, tabs.renderDocuments)}
         search={
           search.active
             ? {

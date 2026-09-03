@@ -29,6 +29,15 @@ export interface PreviewPaneProps {
    */
   readonly renderAs?: RenderableAs | null;
   /**
+   * Whether a file with a rendered form shows it, or shows its source.
+   *
+   * One flag for the whole panel, not one per file. Owned by the listing store
+   * beside the sort order and hidden-file visibility, and passed in rather than
+   * read here — a component that fetches its own configuration makes a test set
+   * up a store in order to render a preview.
+   */
+  readonly renderDocuments?: boolean;
+  /**
    * Whether the user has asked the audio under the cursor to play.
    *
    * Owned by `App` rather than by the pane, because clearing it needs to know
@@ -53,8 +62,21 @@ export function PreviewPane({
   size,
   error,
   renderAs,
+  renderDocuments,
   audioPlaying,
 }: PreviewPaneProps) {
+  // Rendering is the default, so an absent flag means rendered. The prop is
+  // optional because most callers — every existing preview test among them —
+  // have no opinion about a mode that only applies to two file types.
+  //
+  // Nothing here says WHICH mode is showing. That indicator lives in the status
+  // line beside the sort order and the hidden-file state — it was a badge over
+  // the preview first, and the operator moved it: an indicator drawn on top of
+  // the document either covers its first line or costs a strip of every preview
+  // to avoid doing so, and the bar already exists and already has a fixed
+  // height. See `StatusBar`.
+  const rendered = renderDocuments !== false;
+
   return (
     <div
       className="list preview-pane"
@@ -63,7 +85,7 @@ export function PreviewPane({
       data-rendered={renderAs ?? undefined}
     >
       {error == null ? (
-        body(route, path, size, audioPlaying === true, renderAs ?? null)
+        body(route, path, size, audioPlaying === true, rendered ? (renderAs ?? null) : null)
       ) : (
         <p className="preview__failed" data-testid="preview-error">
           {error}

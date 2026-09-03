@@ -172,7 +172,14 @@ export interface KeyActions {
   // View
   toggleViewMode(): void;
   toggleHidden(): void;
-  toggleHtmlRender(): void;
+  /**
+   * Swap the rendered view for the source, and back.
+   *
+   * Named for the whole set rather than for one format: markdown and HTML both
+   * have a rendered form, and the binding is gated by `renderableAs`, which is
+   * what decides which files those are.
+   */
+  toggleDocumentRender(): void;
   openContextMenu(): void;
   /** Open, and in a picker put the chosen path on the clipboard first. */
   openCopyingPath(): void;

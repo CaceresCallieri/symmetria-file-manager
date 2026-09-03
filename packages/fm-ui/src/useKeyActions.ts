@@ -225,7 +225,7 @@ export function useKeyActions(
 
       toggleViewMode: soon("The tree view"),
       toggleHidden: () => tabs.toggleHidden(),
-      toggleHtmlRender: soon("The HTML preview"),
+      toggleDocumentRender: () => tabs.toggleRenderDocuments(),
       openContextMenu: soon("The context menu"),
       openCopyingPath: () => {
         // **The same hole as plain Enter, one key over.** Review found it right

@@ -1195,3 +1195,26 @@ kbd {
      it is not. */
   background: var(--rendered-page);
 }
+
+/* ── Which of the two views the preview is showing ──────────────────────────
+ *
+ * In the status line, beside the sort order and the hidden-file state. It was a
+ * badge over the preview first, and the operator moved it here: an indicator
+ * drawn on the document either covers its first line or costs a strip of every
+ * preview to avoid doing so, and this bar already exists at a fixed height.
+ *
+ * Quieter than the words around it. The key is a keycap so it reads as
+ * something to press rather than as another status word, and the mode itself is
+ * dimmed — it answers a question you only ask occasionally. */
+.status-bar__render {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  opacity: 0.75;
+}
+
+.status-bar__render kbd {
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 1.5;
+}

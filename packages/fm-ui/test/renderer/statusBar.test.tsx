@@ -90,6 +90,38 @@ describe("the window's stack does not change", () => {
     expect(stack()).toEqual(before);
   });
 
+  it("is the same when the render-mode indicator appears", async () => {
+    // The indicator joins the STATUS BAR's contents, never the window's stack.
+    // It began as a badge drawn over the preview and moved here at the
+    // operator's request; a version that added a row of its own instead would
+    // push the columns down exactly as the search field used to.
+    await opened();
+    const before = stack();
+
+    press("l");
+    await waitFor(() => expect(namesIn("column-current")).toContain("beta.md"));
+    press("j");
+    await screen.findByTestId("status-render-mode");
+
+    expect(stack()).toEqual(before);
+  });
+
+  it("is the same again after Ctrl+R changes which mode it names", async () => {
+    await opened();
+    press("l");
+    await waitFor(() => expect(namesIn("column-current")).toContain("beta.md"));
+    press("j");
+    await screen.findByTestId("status-render-mode");
+    const before = stack();
+
+    press("r", { ctrlKey: true });
+    await waitFor(() =>
+      expect(screen.getByTestId("status-render-mode").textContent).toMatch(/source/i),
+    );
+
+    expect(stack()).toEqual(before);
+  });
+
   it("is the same while a message is showing", async () => {
     await opened();
     const before = stack();

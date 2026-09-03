@@ -185,7 +185,7 @@ export interface PreviewWiring {
  * and it keeps the application's root a list of regions rather than a list of
  * regions plus the plumbing between two of them.
  */
-export function usePreviewPane(cursorPath: string | null): PreviewWiring {
+export function usePreviewPane(cursorPath: string | null, renderDocuments: boolean): PreviewWiring {
   const preview = usePreview(cursorPath);
   const audio = useAudioPlayback(cursorPath, preview.path);
 
@@ -196,9 +196,13 @@ export function usePreviewPane(cursorPath: string | null): PreviewWiring {
       size: preview.size,
       error: preview.error,
       renderAs: preview.renderAs,
+      // Passed IN rather than read here. A component that fetches its own
+      // configuration is the shape that makes a test set up a store in order
+      // to render a preview — and this flag already has an owner.
+      renderDocuments,
       audioPlaying: audio.playing,
     }),
-    [preview, audio.playing],
+    [preview, renderDocuments, audio.playing],
   );
 
   return useMemo(

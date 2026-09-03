@@ -58,7 +58,7 @@ describe("registry collisions", () => {
   it.each(VIEWS)("has no two unconditional rows on the same key and mods in %s", (view) => {
     // Only UNCONDITIONAL rows collide. Two rows can share a key when at most one
     // of them can be true at a time — Ctrl+R is `op.pickerSaveEdit` inside a save
-    // picker and `miller.htmlRender` over an HTML file, and neither is
+    // picker and `miller.renderToggle` over an HTML file, and neither is
     // unconditional.
     const seen = new Map<string, string>();
 
@@ -129,5 +129,30 @@ describe("view scoping", () => {
     expect(CORE).toHaveLength(28);
     expect(MILLER_ONLY).toHaveLength(20);
     expect(TREE_ONLY).toHaveLength(6);
+  });
+});
+
+describe("the rendered-document toggle", () => {
+  const row = () => CORE.concat(MILLER_ONLY).find((b) => b.id === "miller.renderToggle");
+
+  it("exists under a name that does not claim one format", () => {
+    // It was `miller.renderToggle` while HTML was the only rendered view. The id
+    // and the label both reach a reader — the label verbatim, in the help
+    // sheet — so a name naming one of the two formats is now wrong twice.
+    expect(row()).toBeDefined();
+    expect(CORE.concat(MILLER_ONLY).find((b) => b.id === "miller.htmlRender")).toBeUndefined();
+  });
+
+  it("says what it does without naming HTML", () => {
+    const label = row()?.label ?? "";
+
+    expect(label).not.toMatch(/html/i);
+    expect(label.length).toBeGreaterThan(0);
+  });
+
+  it("keeps Ctrl+R and stays in the View group", () => {
+    expect(row()?.keys).toContain("r");
+    expect(row()?.mods).toBe("Ctrl");
+    expect(row()?.group).toBe("View");
   });
 });
