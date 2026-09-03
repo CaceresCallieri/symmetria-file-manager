@@ -23,7 +23,9 @@
     "./ops/mutate": "./src/ops/mutate.ts",
     "./ops/open": "./src/ops/open.ts",
     "./ops/clipboard": "./src/ops/clipboard.ts",
-    "./ops/zoxide": "./src/ops/zoxide.ts"
+    "./ops/zoxide": "./src/ops/zoxide.ts",
+    "./listingOptions": "./src/listingOptions.ts",
+    "./jsonStore": "./src/jsonStore.ts"
   },
   "dependencies": {
     "@symmetria/fm-core": "workspace:*"

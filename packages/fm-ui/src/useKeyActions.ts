@@ -118,6 +118,14 @@ export function useKeyActions(
    * hardcoded. Threading the real thing here is what makes it run.
    */
   picker: Picker,
+  /**
+   * Play or pause the audio under the cursor.
+   *
+   * Supplied by the caller for the same reason `cursorImageMime` is: the state
+   * belongs to `App`, which is the only place that knows where the cursor is
+   * and can therefore tell when the request stops applying.
+   */
+  toggleAudioPlayback: () => void,
 ): KeyWiring {
   const [chordPrefix, setChordPrefix] = useState("");
   const [bookmarkSubMode, setBookmarkSubMode] = useState<BookmarkSubMode | null>(null);
@@ -242,7 +250,7 @@ export function useKeyActions(
       tabNext: () => tabs.goNext(),
       tabPrevious: () => tabs.goPrevious(),
 
-      toggleAudioPlayback: soon("Audio playback"),
+      toggleAudioPlayback,
 
       openHelp: () => setHelpOpen(true),
 
@@ -253,7 +261,7 @@ export function useKeyActions(
       treeToggleGitignore: soon("The tree view"),
       treeRefresh: soon("The tree view"),
     };
-  }, [tabs, ops, search, bookmarks, home, picker]);
+  }, [tabs, ops, search, bookmarks, home, picker, toggleAudioPlayback]);
 
   const state = useMemo<KeyState>(() => {
     const entry = tabs.pane.entries[tabs.pane.cursorIndex];

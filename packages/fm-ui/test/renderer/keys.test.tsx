@@ -156,6 +156,35 @@ describe("operations that later phases build", () => {
   });
 });
 
+describe("Ctrl+P, the audio transport", () => {
+  it("no longer reports that audio playback is not built", async () => {
+    // The binding and its help metadata were ported in the registry phase and
+    // have answered "Audio playback is not built yet" ever since. Reaching the
+    // row was never in doubt; doing something was.
+    await openedAtHome();
+
+    fireEvent.keyDown(window, { key: "p", ctrlKey: true });
+
+    await waitFor(() => {
+      const message = screen.queryByTestId("pane-message");
+      expect(message?.textContent ?? "").not.toMatch(/not built/i);
+    });
+  });
+
+  it("leaves Space marking the entry, which is the key it must never become", async () => {
+    // Space is the mark key. A transport that took it would break the one
+    // binding a file manager uses more than any other, and "play/pause is
+    // Space" is the reflex that makes that an easy mistake.
+    await openedAtHome();
+
+    fireEvent.keyDown(window, { key: " " });
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId("row").some((row) => row.dataset.marked === "true")).toBe(true),
+    );
+  });
+});
+
 describe("the Latin-American layout, through the real listener", () => {
   it("reaches a symbol binding that arrives with Shift held", async () => {
     // On this operator's layout `/` is Shift+7, so the binding declares

@@ -190,8 +190,17 @@ body {
   font-weight: 600;
 }
 
-.path-bar,
-.status-bar {
+/*
+ * The breadcrumb bar. It has NO fixed height, and that is deliberate.
+ *
+ * It used to share this rule with `.status-bar`, and giving the status bar a
+ * fixed height silently gave one to the path bar as well — a comment written
+ * between `.path-bar,` and `.status-bar {` reads as if it belongs to the
+ * second, but CSS treats it as whitespace and the selector list is still one
+ * rule. Review caught it. A long path would have clipped under the
+ * `overflow: hidden` that came with it, with nothing to show why.
+ */
+.path-bar {
   display: flex;
   gap: 8px;
   flex: 0 0 auto;
@@ -199,15 +208,47 @@ body {
   color: var(--muted-foreground);
 }
 
+/*
+ * The one line at the bottom, and the only thing in the window that changes.
+ *
+ * **The fixed height is the whole point.** The search field and the transient
+ * line used to be rows of their own in `.app`, so opening a search pushed the
+ * columns down and a copy starting pushed them up. They live in here now, and
+ * a bar that resized to its contents would put the shift straight back.
+ *
+ * It has to fit the tallest thing it ever holds — the save-name input and the
+ * Accept button of a file dialog — which is why those are sized to it below
+ * rather than left to size themselves.
+ */
+.status-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 0 0 auto;
+  height: var(--status-bar-height);
+  padding: 0 8px;
+  color: var(--muted-foreground);
+  overflow: hidden;
+}
+
+/* Both are taller than a line of text left to themselves, and either one
+   growing the bar reintroduces exactly the shift this phase removed. */
+.status-bar__accept,
+.status-bar__cancel,
+.status-bar__save-name {
+  height: calc(var(--status-bar-height) - 6px);
+}
+
 .crumb--current {
   font-weight: 600;
   color: var(--foreground);
 }
 
+/* Inside the status bar now, not a row of its own — so no padding of its own
+   either; the bar sets it once for everything it holds. */
 .pane-error {
   flex: 0 0 auto;
   margin: 0;
-  padding: 0 8px;
   color: var(--destructive);
 }
 
@@ -329,13 +370,13 @@ kbd {
   font-family: monospace;
 }
 
+/* Inside the status bar now. See `.pane-error`. */
 .pane-message {
   display: flex;
   gap: 8px;
   align-items: baseline;
   flex: 0 0 auto;
   margin: 0;
-  padding: 0 8px;
   color: var(--muted-foreground);
 }
 
@@ -387,9 +428,317 @@ kbd {
   color: var(--muted-foreground);
 }
 
-/* `contain`, not `cover`: an image preview that crops is lying about the
-   picture. The natural aspect ratio is the point. */
-.preview--image img {
+.preview--spreadsheet {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+/* One row that scrolls sideways rather than wrapping. A workbook here has 76
+   sheets, and a strip that wrapped would take the grid's height with it. */
+.preview__sheet-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  overflow-x: auto;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.preview__sheet-tab {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.preview__sheet-tab[data-active="true"] {
+  color: var(--foreground);
+  box-shadow: inset 0 -2px 0 var(--primary);
+}
+
+.preview__sheet-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.preview__sheet-body {
+  position: relative;
+  width: max-content;
+  min-width: 100%;
+}
+
+.preview__sheet-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  width: 100%;
+}
+
+/* A fixed width and no wrapping: a wrapped cell makes rows differ in height,
+   and a virtualiser told every row is the same height would then measure every
+   one of them. Ellipsis over truncation, with the whole value on hover. */
+.preview__sheet-cell {
+  flex: 0 0 auto;
+  width: 9ch;
+  padding: 0 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  border-right: 1px solid var(--border);
+}
+
+/* Numbers line up on their digits; text does not. The one formatting
+   affordance in scope — fonts, fills and borders are deliberately not. */
+.preview__sheet-cell[data-numeric="true"] {
+  text-align: right;
+}
+
+.preview--audio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  text-align: center;
+}
+
+/* A fixed square so the pane does not resize as covers of different shapes go
+   past under the cursor. */
+.preview__art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 7rem;
+  height: 7rem;
+}
+
+.preview__art img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+
+.preview__art-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.preview__title {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.preview__artist,
+.preview__duration {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+/* Full width and a fixed height: the canvas paints at its own backing-store
+   size and is stretched to fit, because the drawing is a silhouette rather
+   than a diagram and nobody reads it at pixel accuracy. */
+.preview__waveform {
+  width: 100%;
+  height: 36px;
+}
+
+/*
+ * The transport, as a hairline groove rather than as a widget.
+ *
+ * `accent-color: var(--primary)` was the whole of this rule before, and it is
+ * worth recording why that is not styling: it re-tints Chromium's NATIVE range
+ * control and changes nothing else about it. The stock control keeps its own
+ * geometry — a full-width opaque track and a 16px thumb, both proportioned for
+ * a settings dialog — so beside a 36px waveform drawn from tokens at 6% white
+ * it was the heaviest and brightest thing in the pane while carrying the least
+ * information. `appearance: none` is what actually hands the drawing over.
+ *
+ * The colours are the waveform's own, deliberately: `--primary` means PLAYED
+ * six pixels above this, so it means played here too. A grey fill would have
+ * matched the pane better and contradicted the picture directly above it,
+ * where grey is what has NOT been played yet.
+ */
+/* Sized from `--seek-track` and `--seek-thumb` in `tokens.css`, which is where
+   they must live — see the note beside their declaration. */
+.preview__seek {
+  position: relative;
+  width: 100%;
+  /* The pointer target. The groove inside it is 3px; a 3px hit area is not one. */
+  height: 12px;
+}
+
+/*
+ * The unplayed groove.
+ *
+ * `--accent` is the ROW-HIGHLIGHT token. It happens to hold the same 8% white
+ * as `--scrollbar-thumb` today, and `tokens.css` declares those two separately
+ * on purpose so they may drift — so this is a borrowed value, not a coupling to
+ * the scrollbar. If the two ever need to move together, give the groove its own
+ * token rather than relying on the coincidence.
+ *
+ * Physical offsets here and on the fill, deliberately matched. Mixing
+ * `inset-inline` with `left` on two boxes that must line up reads as though a
+ * direction policy exists when none does. RTL is a real gap and it is NOT
+ * addressed by either form: Chromium also reverses a range input's thumb
+ * travel, so the thumb would run one way while the fill grew the other. The app
+ * ships no RTL; handling it means handling all three parts together.
+ */
+.preview__seek::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: var(--seek-track);
+  transform: translateY(-50%);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+}
+
+.preview__seek-played {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: var(--seek-track);
+  transform: translateY(-50%);
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  /*
+   * Subordinate to the waveform, not equal to it.
+   *
+   * The two are drawn six pixels apart and they carry the SAME fact, so at full
+   * strength this line reads as a second statement competing with the picture
+   * rather than as its echo — most of all near the end of a file, where it
+   * becomes the longest saturated element in the pane. Rendered and compared at
+   * full, 65% and 50%: full competes, 50% goes muddy against the groove
+   * beneath it.
+   *
+   * Opacity rather than a softened palette token, deliberately: the intent is
+   * "this element ranks below that one", which is a compositing decision. A
+   * `--primary-soft` token would state it as a colour role the palette does not
+   * otherwise have, and it would have exactly one user.
+   */
+  opacity: 0.65;
+}
+
+/*
+ * `position: relative` is load-bearing and not cosmetic. The groove and the
+ * fill are absolutely positioned siblings, so they paint above any in-flow box
+ * regardless of source order — an unpositioned input would have its thumb
+ * buried under the fill at every position it had already passed.
+ *
+ * `display: block` is also load-bearing, and less obviously. An input is
+ * inline-level by default, so as the sole in-flow child of this box it would
+ * sit in a line box and take a baseline descender under it. The wrapper's
+ * height is fixed, so that does not show as a gap — it shows as the input's
+ * hit area sitting a pixel or two below the groove it is meant to control.
+ *
+ * ── The fill and the thumb are allowed to disagree ──────────────────────────
+ * The fill spans 0→100% of the track. Chromium insets a thumb's travel by half
+ * its width, so the thumb CENTRE runs from 4.5px to `width − 4.5px` — at the
+ * start the thumb sits half a thumb right of a zero-width fill, and at the end
+ * the fill overshoots the thumb centre by the same amount. That is deliberate:
+ * the pair that must agree is the fill and the WAVEFORM, which are read
+ * together as one statement about the file, and matching the thumb instead
+ * would break that identity to fix a 4.5px offset nobody reads.
+ */
+.preview__seek-input {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Transparent, because the groove above already drew it. The height is still
+   declared because the thumb's offset below is computed against the TRACK box,
+   so a track of a different height moves the playhead off the groove. */
+.preview__seek-input::-webkit-slider-runnable-track {
+  height: var(--seek-track);
+  background: transparent;
+}
+
+.preview__seek-input::-webkit-slider-thumb {
+  width: var(--seek-thumb);
+  height: var(--seek-thumb);
+  /* (track − thumb) ÷ 2. Chromium aligns the thumb's TOP EDGE with the track's,
+     so this is what centres it rather than hanging it below the line. */
+  margin-top: calc((var(--seek-track) - var(--seek-thumb)) / 2);
+  appearance: none;
+  border-radius: 50%;
+  background: var(--foreground);
+}
+
+/* No length yet means nothing to seek across, so no pointer affordance. */
+.preview__seek-input:disabled {
+  cursor: default;
+}
+
+/* Grey rather than hidden: a playhead that appears from nowhere once metadata
+   lands reads as a glitch, where a dim one reads as a control not yet ready. */
+.preview__seek-input:disabled::-webkit-slider-thumb {
+  background: var(--muted-foreground);
+}
+
+/*
+ * The focus ring moves onto the thumb.
+ *
+ * Suppressing the outline without replacing it would leave a keyboard user
+ * with no way to see where focus is. An outline around the input itself is a
+ * 100%-wide rectangle around a 3px line, which is why the ring goes on the
+ * thumb — the part that actually moves.
+ *
+ * `--primary` and not `--accent`. This ring carries more weight than a normal
+ * one: `useKeyDispatch` treats ANY focused input as a text field and suppresses
+ * the entire file-manager key cascade, so while this control holds focus the
+ * ring is the only indication that j/k and every other binding have stopped
+ * working. `--accent` is 8% white — chosen to be almost invisible as a row
+ * highlight — and a ring drawn in it around an already-white thumb says nothing.
+ */
+.preview__seek-input:focus-visible {
+  outline: none;
+}
+
+.preview__seek-input:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
+/* Forced colours discards `box-shadow` and keeps `outline: none`, which would
+   leave the ring above as the only indicator and then remove it. `auto` is a
+   keyword, so no colour literal enters this file. */
+@media (forced-colors: active) {
+  .preview__seek-input:focus-visible {
+    outline: auto;
+  }
+}
+
+/* `contain`, not `cover`, for both: a preview that crops is lying about what
+   it is showing. The natural aspect ratio is the point. */
+.preview--image img,
+.preview--video video {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
@@ -533,12 +882,20 @@ kbd {
   background: var(--accent);
 }
 
+/*
+ * The search field, which lives INSIDE the status bar.
+ *
+ * It was a row of its own above the columns and had its own vertical padding
+ * for that reason; inside a fixed-height bar that padding would grow the bar
+ * and put the layout shift straight back.
+ */
 .search {
   display: flex;
   gap: 6px;
-  align-items: baseline;
-  flex: 0 0 auto;
-  padding: 2px 8px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
 }
 
 .search__sigil {
@@ -559,4 +916,68 @@ kbd {
 .search__count {
   flex: 0 0 auto;
   color: var(--muted-foreground);
+}
+
+/*
+ * An archive's contents.
+ *
+ * The listing scrolls on its own so the counts and the truncation notice below
+ * it stay put — the same arrangement `.preview__listing` uses for a directory,
+ * and for the same reason: a line pushed off the end of a long list is a line
+ * nobody reads.
+ *
+ * Rows are `.row` as well, so an archive's members look like the entries in the
+ * two navigable columns. They are deliberately NOT `FileRow`: that takes a
+ * cursor and a mark, and this column has neither.
+ */
+.preview--archive {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.preview__archive-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.preview__archive-body {
+  position: relative;
+  width: 100%;
+}
+
+/*
+ * Absolutely positioned by the virtualiser, so the indent has to be padding
+ * rather than a margin: `transform: translateY` moves the row and a left margin
+ * would fight the width it was given.
+ */
+.preview__archive-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.preview__archive-size {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+
+.preview__archive-counts {
+  flex: 0 0 auto;
+  margin: 4px 0 0;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+
+/* The depth indent, as a spacer rather than as padding on the row itself: the
+   row's own horizontal inset comes from `.row`, and an inline padding of zero
+   at depth 0 would override it. */
+.preview__archive-indent {
+  flex: 0 0 auto;
 }

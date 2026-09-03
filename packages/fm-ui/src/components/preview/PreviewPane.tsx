@@ -2,10 +2,15 @@ import type { EntrySummary } from "@symmetria/fm-core/entry";
 import type { PreviewRoute } from "@symmetria/fm-core/preview/route";
 
 import { FileIcon } from "../FileIcon.tsx";
+import { ArchivePreview } from "./ArchivePreview.tsx";
+import { AudioPreview } from "./AudioPreview.tsx";
 import { CodePreview } from "./CodePreview.tsx";
 import { DocumentPreview } from "./DocumentPreview.tsx";
+import { humanSize } from "./humanSize.ts";
 import { ImagePreview } from "./ImagePreview.tsx";
+import { SpreadsheetPreview } from "./SpreadsheetPreview.tsx";
 import { TextPreview } from "./TextPreview.tsx";
+import { VideoPreview } from "./VideoPreview.tsx";
 
 export interface PreviewPaneProps {
   readonly route: PreviewRoute;
@@ -13,18 +18,15 @@ export interface PreviewPaneProps {
   readonly size: number;
   /** Why there is nothing to show, when there is a reason. */
   readonly error?: string | null;
-}
-
-/** A size a person can read. */
-function humanSize(bytes: number): string {
-  const units = ["B", "kB", "MB", "GB", "TB"];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${unit === 0 ? value : value.toFixed(1)} ${units[unit]}`;
+  /**
+   * Whether the user has asked the audio under the cursor to play.
+   *
+   * Owned by `App` rather than by the pane, because clearing it needs to know
+   * where the cursor is and the pane does not. It must survive a re-render and
+   * must NOT survive a move to another file, which is why `App` stores it as a
+   * path rather than as a flag.
+   */
+  readonly audioPlaying?: boolean;
 }
 
 /**
@@ -35,11 +37,11 @@ function humanSize(bytes: number): string {
  * previews without re-deriving which one applies. In the Qt build that
  * separation is why a preview type added once appeared in both panes.
  */
-export function PreviewPane({ route, path, size, error }: PreviewPaneProps) {
+export function PreviewPane({ route, path, size, error, audioPlaying }: PreviewPaneProps) {
   return (
     <div className="list preview-pane" data-testid="column-preview" data-kind={route.kind}>
       {error == null ? (
-        body(route, path, size)
+        body(route, path, size, audioPlaying === true)
       ) : (
         <p className="preview__failed" data-testid="preview-error">
           {error}
@@ -49,18 +51,39 @@ export function PreviewPane({ route, path, size, error }: PreviewPaneProps) {
   );
 }
 
-function body(route: PreviewRoute, path: string | null, size: number) {
+function body(route: PreviewRoute, path: string | null, size: number, audioPlaying: boolean) {
   if (path === null || route.kind === "none") return null;
-  return contents(route, path) ?? notice(route, size);
+  return contents(route, path, size, audioPlaying) ?? notice(route, size);
 }
 
-/** The branches that render the file itself. */
-function contents(route: PreviewRoute, path: string) {
+/**
+ * The branches that render the file itself.
+ *
+ * `size` is passed through for the archive branch alone: a zip's index is at
+ * the END of the file, so reading one starts from its length — and the scan
+ * already knows it, which saves the pane a round trip to ask.
+ */
+function contents(route: PreviewRoute, path: string, size: number, audioPlaying: boolean) {
   switch (route.kind) {
     case "image":
       return <ImagePreview path={path} mime={route.mime} />;
     case "document":
       return <DocumentPreview path={path} mime={route.mime} />;
+    case "video":
+      return <VideoPreview path={path} mime={route.mime} />;
+    case "audio":
+      return <AudioPreview path={path} mime={route.mime} playing={audioPlaying} />;
+    case "spreadsheet":
+      return <SpreadsheetPreview path={path} mime={route.mime} />;
+    case "archive":
+      return (
+        <ArchivePreview
+          path={path}
+          format={route.format}
+          compression={route.compression}
+          size={size}
+        />
+      );
     case "code":
       return <CodePreview path={path} language={route.language} />;
     case "text":

@@ -10,7 +10,8 @@ import type {
 } from "@symmetria/fm-core/contract";
 
 import type { FsEntry } from "@symmetria/fm-core/entry";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_LISTING_OPTIONS } from "@symmetria/fm-core/listingOptions";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CHANNELS, REQUEST_CHANNELS } from "../src/ipc/channels.ts";
 import { electronIpcSurface, type InvokeEvent } from "../src/ipc/electronSurface.ts";
@@ -818,5 +819,107 @@ describe("the preview URL comes from the host", () => {
 
     expect(reply.value.url).not.toContain("secret-name");
     expect(reply.value.url).not.toContain(root);
+  });
+});
+
+/**
+ * The listing order, across the boundary.
+ *
+ * The store itself is covered in `listingOptions.test.ts`; what is left here is
+ * the pair of channels, and the one thing only this level can show — that a
+ * malformed payload is refused before anything reaches the disk.
+ */
+describe("the listing order crosses the boundary", () => {
+  let optionsDir: string;
+
+  beforeEach(async () => {
+    optionsDir = await mkdtemp(join(tmpdir(), "symfm-ipc-listing-"));
+    // Never the operator's real configuration. The store honours this for
+    // exactly that reason.
+    process.env["SYMMETRIA_FM_LISTING"] = join(optionsDir, "listing.json");
+  });
+
+  afterEach(async () => {
+    delete process.env["SYMMETRIA_FM_LISTING"];
+    await rm(optionsDir, { recursive: true, force: true });
+  });
+
+  it("answers the default before anything has been written", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { previewUrlFor });
+
+    const reply = await ipc.invoke(CHANNELS.listingRead, {});
+
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    expect(reply.value).toEqual({ options: DEFAULT_LISTING_OPTIONS });
+  });
+
+  it("round-trips a whole options object", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { previewUrlFor });
+    const options = { sort: "extension", reverse: false, showHidden: true };
+
+    const written = await ipc.invoke(CHANNELS.listingWrite, { options });
+    expect(written.ok).toBe(true);
+
+    const read = await ipc.invoke(CHANNELS.listingRead, {});
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.value).toEqual({ options });
+  });
+
+  it("refuses a malformed payload before it reaches the disk", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { previewUrlFor });
+
+    const reply = await ipc.invoke(CHANNELS.listingWrite, { options: "size" });
+
+    expect(reply.ok).toBe(false);
+    // And nothing was written: a rejected request must not leave a file
+    // behind that the next start would read back.
+    const read = await ipc.invoke(CHANNELS.listingRead, {});
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.value).toEqual({ options: DEFAULT_LISTING_OPTIONS });
+  });
+
+  it("refuses to write over a file it could not read", async () => {
+    // Acceptance criterion 4, which had no automated coverage until review
+    // said so. A file that exists and did not parse is the user's own data
+    // mid-edit; saving over it destroys something they are in the middle of
+    // fixing. Verification confirmed this by hand — that does not survive the
+    // next refactor and this does.
+    const ipc = fakeIpc();
+    createRegistry(ipc, { previewUrlFor });
+    const path = process.env["SYMMETRIA_FM_LISTING"] as string;
+    await writeFile(path, "{ half a file", "utf8");
+
+    const reply = await ipc.invoke(CHANNELS.listingWrite, {
+      options: { sort: "size", reverse: false, showHidden: false },
+    });
+
+    expect(reply.ok).toBe(false);
+    await expect(readFile(path, "utf8")).resolves.toBe("{ half a file");
+  });
+
+  it("stores the MEANING of a payload, not the payload", async () => {
+    // Shape, then meaning — the same two-step the bookmark write does. A
+    // caller must not be able to persist a value the next load would silently
+    // discard, which is a setting that appears to save and is gone next time.
+    const ipc = fakeIpc();
+    createRegistry(ipc, { previewUrlFor });
+
+    const written = await ipc.invoke(CHANNELS.listingWrite, {
+      options: { sort: "cromulent", reverse: true, showHidden: false },
+    });
+    expect(written.ok).toBe(true);
+
+    const read = await ipc.invoke(CHANNELS.listingRead, {});
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect((read.value as { options: { sort: string } }).options.sort).toBe(
+      DEFAULT_LISTING_OPTIONS.sort,
+    );
   });
 });

@@ -79,6 +79,31 @@
 
   /* ── Geometry ─────────────────────────────────────────────────────────── */
   --row-height: 24px;
+  /*
+   * The status bar's height, which is FIXED so the columns never move.
+   *
+   * Here rather than beside the rule, and that is not a preference:
+   * `theme.test.ts` requires every `var(--x)` any stylesheet reads to be
+   * DECLARED IN THIS FILE. Sized to fit a file dialog's Accept button and its
+   * save-name field, which are the tallest things the bar ever holds.
+   */
+  --status-bar-height: 26px;
+  /*
+   * The audio seek control, in two numbers.
+   *
+   * Here rather than local to the control's own rule, and that is not a
+   * preference: `theme.test.ts` requires every `var(--x)` any stylesheet reads
+   * to be DECLARED IN THIS FILE, so a property declared on `.preview__seek`
+   * fails the build. `--row-height` above is the same shape of value — one
+   * component's internal geometry — and sets the precedent.
+   *
+   * They are read by five rules between them, and the thumb's offset is
+   * `calc((track - thumb) / 2)`. Written out per rule instead, changing the
+   * track to 4px silently un-centres the playhead and leaves the groove and the
+   * fill at different heights, with nothing to catch it.
+   */
+  --seek-track: 3px;
+  --seek-thumb: 9px;
   --radius: 0.5rem;
   --radius-sm: 4px;
 

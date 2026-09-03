@@ -3,6 +3,32 @@ import type { FsEntry } from "./entry.ts";
 export type SortMode = "alphabetical" | "modified" | "size" | "extension" | "natural";
 
 /**
+ * Every mode, as values something can test an unknown string against.
+ *
+ * Beside the type rather than beside either of its readers: the wire contract
+ * and the stored preference each need to reject a mode that is not one, and
+ * they had grown a copy apiece. A sixth mode should be one edit.
+ */
+export const SORT_MODES: readonly SortMode[] = [
+  "alphabetical",
+  "modified",
+  "size",
+  "extension",
+  "natural",
+];
+
+/**
+ * A real narrowing, not an assertion.
+ *
+ * An early draft wrote `SORT_MODES.includes(sort as SortMode)` and then
+ * `sort as SortMode` again — two assertions telling the compiler something
+ * neither had checked. A predicate proves it instead, and both casts go.
+ */
+export function isSortMode(value: unknown): value is SortMode {
+  return SORT_MODES.some((mode) => mode === value);
+}
+
+/**
  * Compare two entries under `mode`.
  *
  * **Directories always come first, in every mode.** The Qt version's
@@ -19,25 +45,32 @@ export function compareEntries(a: FsEntry, b: FsEntry, mode: SortMode): number {
   if (aDir !== bDir) return aDir ? -1 : 1;
 
   const primary = comparePrimary(a, b, mode);
-  return primary !== 0 ? primary : byName(a.name, b.name);
+  return primary !== 0 ? primary : compareNames(a.name, b.name);
 }
 
 function comparePrimary(a: FsEntry, b: FsEntry, mode: SortMode): number {
   switch (mode) {
     case "alphabetical":
-      return byName(a.name, b.name);
+      return compareNames(a.name, b.name);
     case "modified":
       return a.modifiedMs - b.modifiedMs;
     case "size":
       return a.size - b.size;
     case "extension":
-      return byName(extensionOf(a.name), extensionOf(b.name));
+      return compareNames(extensionOf(a.name), extensionOf(b.name));
     case "natural":
       return naturalCompare(a.name, b.name);
   }
 }
 
-function byName(a: string, b: string): number {
+/**
+ * Two names, case-insensitively, with a stable tiebreak.
+ *
+ * Exported because the archive listing sorts by exactly this and a second copy
+ * would drift: an archive whose folders ordered differently from the columns
+ * beside them would look like a bug in one of the two.
+ */
+export function compareNames(a: string, b: string): number {
   const lowered = a.toLowerCase().localeCompare(b.toLowerCase());
   // Fall through to the cased form so `A` and `a` still have a stable order.
   return lowered !== 0 ? lowered : a.localeCompare(b);

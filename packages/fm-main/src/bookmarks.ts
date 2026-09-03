@@ -1,6 +1,5 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import {
   type BookmarkMap,
@@ -9,6 +8,8 @@ import {
   type StoredBookmarks,
   seedBookmarks,
 } from "@symmetria/fm-core/bookmarks";
+
+import { readJsonObject, writeJsonObject } from "./jsonStore.ts";
 
 /**
  * The bookmark file, on disk.
@@ -54,60 +55,26 @@ export function bookmarksFilePath({ home, override }: BookmarkLocation): string 
  * - a map — whatever the file legitimately said, which may be empty.
  */
 export async function loadBookmarks(path: string): Promise<StoredBookmarks> {
-  let text: string;
-  try {
-    text = await readFile(path, "utf8");
-  } catch (error) {
-    // Only a genuinely absent file is a first run. A directory in its place, a
-    // permission error or anything else is a file we could not read, and
-    // seeding over it would destroy something.
-    const code = (error as NodeJS.ErrnoException).code;
-    return code === "ENOENT" ? null : "unreadable";
-  }
+  const read = await readJsonObject(path);
+  if (read.kind === "absent") return null;
+  if (read.kind === "unreadable") return "unreadable";
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    // Invalid JSON, and an empty file is a special case of it: `JSON.parse("")`
-    // throws. Both mean the same thing here — do not touch it.
-    return "unreadable";
-  }
-
-  // A file holding `[]` or `"h=/home"` parsed, but it is not a store. It is
-  // treated as unreadable rather than as an empty one, which is the difference
-  // between "seed me, in memory, and leave my file alone to fix" and "the user
-  // deliberately deleted every bookmark". An earlier draft conflated the two.
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return "unreadable";
-
-  return decodeBookmarks(parsed);
+  return decodeBookmarks(read.value);
 }
 
 /**
  * Write the store, atomically.
  *
- * Write-then-rename, because `rename` is the only step that is atomic and a
- * half-written bookmarks file is a start with no jumps at all. The project's
- * own documentation records this as the pattern here, learned from a watcher
- * that dropped its subscription on exactly this sequence.
- *
- * The temporary file sits beside the target rather than in `/tmp`: a rename
- * across filesystems fails with `EXDEV`, and the two are guaranteed to be on
- * the same one only when they share a directory.
+ * The rename is `jsonStore.ts`'s; what is here is the shape a bookmark file
+ * takes, which the Qt build reads too.
  */
 export async function saveBookmarks(path: string, bookmarks: BookmarkMap): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-
   const asObject: Record<string, { path: string; label: string }> = {};
   for (const [letter, mark] of bookmarks) {
     asObject[letter] = { path: mark.path, label: mark.label };
   }
 
-  // Indented and newline-terminated: this is a file a person edits by hand, and
-  // the Qt build's version of it is readable too.
-  const temporary = `${path}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(asObject, null, 2)}\n`, "utf8");
-  await rename(temporary, path);
+  await writeJsonObject(path, asObject);
 }
 
 /**

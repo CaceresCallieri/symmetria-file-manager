@@ -10,8 +10,12 @@ import { classify, inheritsFrom, isImageMime, type MimeTables } from "../mime.ts
  * same rule holds here.
  *
  * ── The branch order is a contract ──────────────────────────────────────────
- * none → directory → remote directory → image → video → audio → archive →
- * spreadsheet → markup → code → text → fallback.
+ * none → directory → image → document → video → audio → spreadsheet →
+ * archive → code → text → fallback.
+ *
+ * Video before audio matters for the same reason: a Matroska carrying only an
+ * audio track resolves to `video/x-matroska`, and routing it as audio would
+ * hide a file the video element handles perfectly well.
  *
  * Image before text is the one that bites. `image/svg+xml` inherits from
  * `application/xml`, which inherits from `text/plain`, so an SVG *is* text
@@ -35,7 +39,13 @@ export interface PreviewTarget {
 }
 
 /** A branch the shape keeps but this cycle does not build. */
-export type UnbuiltKind = "video" | "audio" | "archive" | "spreadsheet";
+export type UnbuiltKind = "archive";
+
+/** Which reader can open this archive. */
+export type ArchiveFormat = "zip" | "tar";
+
+/** What the bytes have to go through before the reader sees them. */
+export type ArchiveCompression = "none" | "gzip";
 
 export type PreviewRoute =
   /** Nothing under the cursor. */
@@ -53,6 +63,26 @@ export type PreviewRoute =
     }
   | { readonly kind: "image"; readonly mime: string }
   | { readonly kind: "document"; readonly mime: string }
+  /** Played by the browser itself: silent, looping, at its own aspect ratio. */
+  | { readonly kind: "video"; readonly mime: string }
+  /** Cover art, tags and a transport. Never plays on its own. */
+  | { readonly kind: "audio"; readonly mime: string }
+  /** A grid, with a tab per sheet. Also where a csv goes. */
+  | { readonly kind: "spreadsheet"; readonly mime: string }
+  /**
+   * An archive one of the two readers can list.
+   *
+   * `format` says which reader; `compression` says what to pipe the bytes
+   * through first. They are separate because a `.tar` and a `.tar.gz` are the
+   * same format read differently, and folding them into one name would make
+   * the pane re-derive from the MIME type what the router already decided.
+   */
+  | {
+      readonly kind: "archive";
+      readonly mime: string;
+      readonly format: ArchiveFormat;
+      readonly compression: ArchiveCompression;
+    }
   | { readonly kind: "code"; readonly language: string }
   | { readonly kind: "text" }
   /** The branch exists and says so, rather than falling through to garbage. */
@@ -159,12 +189,9 @@ function isDocument(tables: MimeTables, mime: string): boolean {
   return mime === "application/pdf" || inheritsFrom(tables, mime, "application/pdf");
 }
 
-function unbuiltKind(tables: MimeTables, mime: string): UnbuiltKind | null {
-  if (mime.startsWith("video/")) return "video";
-  if (mime.startsWith("audio/")) return "audio";
-  if (isSpreadsheet(mime)) return "spreadsheet";
-  if (isArchive(tables, mime)) return "archive";
-  return null;
+/** Is `mime` this type, or a descendant of it? */
+function isOrInherits(tables: MimeTables, mime: string, root: string): boolean {
+  return mime === root || inheritsFrom(tables, mime, root);
 }
 
 const SPREADSHEETS: readonly string[] = [
@@ -178,19 +205,103 @@ function isSpreadsheet(mime: string): boolean {
   return SPREADSHEETS.includes(mime);
 }
 
-const ARCHIVE_ROOTS: readonly string[] = [
-  "application/zip",
-  "application/x-tar",
+/**
+ * The archives a reader can open, and how.
+ *
+ * ── The order is the contract, and it comes from the MIME database ──────────
+ * `/usr/share/mime/subclasses` says `application/x-compressed-tar` inherits
+ * from `application/gzip` and NOT from `application/x-tar` — a `.tar.gz` is a
+ * gzip as far as the database is concerned. So the gzip branch is what catches
+ * a tarball, and the tar branch catches only a bare `.tar`.
+ *
+ * Zip goes first because a great many things inherit from it. `.docx`, `.odt`,
+ * `.epub` and `.jar` are all subclasses of `application/zip`, so THIS FUNCTION
+ * lists them as archives — they are zips, and showing what is inside one beats
+ * a notice saying nothing can be shown. A `.xlsx` is a subclass too and never
+ * reaches this branch, because the spreadsheet test runs first.
+ *
+ * **The running panel does not see those edges yet**, and this comment used to
+ * imply it did. `packages/fm-ui/src/usePreview.ts` hands this router a small
+ * hand-written table rather than the system database, and no zip subclass is in
+ * it — so a `.jar` shows the generic fallback in the application while passing
+ * every test here. Read that file's header before trusting this paragraph.
+ */
+const READABLE_ARCHIVES: readonly {
+  readonly root: string;
+  readonly format: ArchiveFormat;
+  readonly compression: ArchiveCompression;
+}[] = [
+  { root: "application/zip", format: "zip", compression: "none" },
+  { root: "application/x-tar", format: "tar", compression: "none" },
+  { root: "application/gzip", format: "tar", compression: "gzip" },
+];
+
+/**
+ * The archives nothing here can open.
+ *
+ * 7z and rar have no reader in this language; xz, bzip2 and zstd have no
+ * decompressor in the browser. Each compressed tar reaches this list through
+ * its own compressor — `application/x-xz-compressed-tar` inherits from
+ * `application/x-xz` — so naming the compressors covers the tarballs too.
+ */
+const UNREADABLE_ARCHIVE_ROOTS: readonly string[] = [
   "application/x-7z-compressed",
   "application/vnd.rar",
-  "application/gzip",
   "application/x-xz",
   "application/zstd",
   "application/x-bzip2",
 ];
 
-function isArchive(tables: MimeTables, mime: string): boolean {
-  return ARCHIVE_ROOTS.some((root) => mime === root || inheritsFrom(tables, mime, root));
+function archiveRoute(tables: MimeTables, mime: string): PreviewRoute | null {
+  for (const { root, format, compression } of READABLE_ARCHIVES) {
+    if (isOrInherits(tables, mime, root)) return { kind: "archive", mime, format, compression };
+  }
+  return null;
+}
+
+function unreadableArchive(tables: MimeTables, mime: string): boolean {
+  return UNREADABLE_ARCHIVE_ROOTS.some((root) => isOrInherits(tables, mime, root));
+}
+
+/**
+ * Everything decidable from the MIME type alone, in the order that matters.
+ *
+ * Split out of `routePreview` because the two halves answer different
+ * questions: this one asks what KIND of thing the file is, while what remains
+ * there asks what to do when the type did not settle it. The complexity gate
+ * is what forced the seam, and it fell in a reasonable place.
+ *
+ * **The order here is the contract** documented at the top of this file. Every
+ * one of these runs before the content classification, and each has a reason:
+ * an SVG is text, a csv is text, and both would route wrongly the other way
+ * round.
+ */
+function routeByType(tables: MimeTables, mime: string): PreviewRoute | null {
+  // Before text, always. See the branch-order note above.
+  if (isImageMime(tables, mime)) return { kind: "image", mime };
+  if (isDocument(tables, mime)) return { kind: "document", mime };
+
+  // Routing is by type; whether these particular bytes decode is decided at the
+  // element, which is the only place that can know.
+  if (mime.startsWith("video/")) return { kind: "video", mime };
+  // After video, deliberately: a Matroska carrying only an audio track is still
+  // a `video/` type to the database, and the element decides what it can do.
+  if (mime.startsWith("audio/")) return { kind: "audio", mime };
+
+  // Before the archive branch, deliberately: a `.xlsx` is a subclass of
+  // `application/zip`, so it would otherwise list as an archive. And before the
+  // text classification, because a csv IS text and routing it as such would
+  // trade a grid for a wall of commas.
+  if (isSpreadsheet(mime)) return { kind: "spreadsheet", mime };
+
+  // Readable first: an unreadable root can never also be a readable one, but
+  // stating the order means a format that gains a reader later is a one-line
+  // move between the two lists rather than a rethink.
+  const archive = archiveRoute(tables, mime);
+  if (archive !== null) return archive;
+  if (unreadableArchive(tables, mime)) return { kind: "unbuilt", what: "archive", mime };
+
+  return null;
 }
 
 /**
@@ -207,14 +318,8 @@ export function routePreview(tables: MimeTables, target: PreviewTarget | null): 
 
   const mime = target.mime;
 
-  // Before text, always. See the branch-order note above.
-  if (mime !== null && isImageMime(tables, mime)) return { kind: "image", mime };
-  if (mime !== null && isDocument(tables, mime)) return { kind: "document", mime };
-
-  if (mime !== null) {
-    const unbuilt = unbuiltKind(tables, mime);
-    if (unbuilt !== null) return { kind: "unbuilt", what: unbuilt, mime };
-  }
+  const byType = mime === null ? null : routeByType(tables, mime);
+  if (byType !== null) return byType;
 
   // `classify` carries the content sniff, which is what makes an extensionless
   // config file preview as text instead of as bytes.

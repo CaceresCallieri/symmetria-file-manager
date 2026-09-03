@@ -1,6 +1,7 @@
 import type { Unsubscribe } from "@symmetria/fm-core/bridge";
 import { isFailure } from "@symmetria/fm-core/contract";
 import type { FsEntry } from "@symmetria/fm-core/entry";
+import type { ListingOptions } from "@symmetria/fm-core/listingOptions";
 import {
   clearSelection,
   enterDirectory,
@@ -21,7 +22,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { hideWindow, type ListOptions, listDirectory, watchDirectory } from "./bridge.ts";
+import { hideWindow, listDirectory, watchDirectory } from "./bridge.ts";
 import {
   activateTab,
   activePane,
@@ -39,6 +40,51 @@ import {
   updateActivePane,
   updatePaneById,
 } from "./state/tabs.ts";
+import { useListingOptions } from "./useListingOptions.ts";
+
+interface TabErrors {
+  /** The message for one tab, or none. `undefined` for no active tab. */
+  errorFor(id: string | undefined): string | null;
+  reportError: ReportError;
+}
+
+/**
+ * Which tabs failed to list, and why. One entry per failing tab.
+ *
+ * A map rather than a single message: an error belongs to the directory that
+ * would not open, so the bar shows the ACTIVE tab's — switching away hides it
+ * and switching back shows it again, with nothing cleared and nothing re-read.
+ *
+ * Its own hook because `useTabs` is measured as one function and the complexity
+ * gate failed when this went inline, which is the same pressure that produced
+ * `useDirectoryLoader` below it.
+ */
+function useTabErrors(): TabErrors {
+  const [errors, setErrors] = useState<ReadonlyMap<string, string>>(new Map());
+
+  const reportError = useCallback<ReportError>((id, message) => {
+    setErrors((previous) => {
+      if (message === null) {
+        if (!previous.has(id)) return previous;
+        const next = new Map(previous);
+        next.delete(id);
+        return next;
+      }
+
+      // The same message again is not a change, and returning the map itself
+      // keeps a repeated failure from re-rendering the window.
+      if (previous.get(id) === message) return previous;
+      return new Map(previous).set(id, message);
+    });
+  }, []);
+
+  const errorFor = useCallback(
+    (id: string | undefined) => (id === undefined ? null : (errors.get(id) ?? null)),
+    [errors],
+  );
+
+  return { errorFor, reportError };
+}
 
 /**
  * How a listing is asked for. One of these per WINDOW, not per tab.
@@ -48,13 +94,13 @@ import {
  * is how you want to read, not where you are. So switching tabs never changes
  * the order, and changing the order applies to every tab.
  *
- * An alias and not a second interface. It is exactly what `listDirectory`
- * takes, and two structurally identical shapes one file apart would drift the
- * first time a field was added to one of them.
+ * **Imported, not aliased, and no longer redeclared anywhere.** This file used
+ * to alias `listDirectory`'s own `ListOptions`, with a comment warning that two
+ * structurally identical shapes would drift the moment a field was added to
+ * one. The stored preference then became a THIRD shape with the same fields,
+ * and the assignment between them compiled by structural coincidence alone —
+ * exactly what that comment predicted. `ListOptions` is now this same type.
  */
-type ListingOptions = ListOptions;
-
-const INITIAL_OPTIONS: ListingOptions = { sort: "natural", reverse: false, showHidden: false };
 
 /** Whether two option sets would produce the same listing. */
 function sameOptions(a: ListingOptions, b: ListingOptions): boolean {
@@ -174,10 +220,22 @@ interface DirectoryLoader {
  * of the tab collection, the watches or the keyboard actions that share that
  * hook. Each map's own reason is on its declaration.
  */
+/**
+ * Record a tab's failure, or clear it. `null` clears.
+ *
+ * Per TAB and not per window, and that distinction is the whole of it: an error
+ * describes one directory that would not open, so showing it over another tab
+ * is a claim about a directory that is fine. Window-level state also cannot be
+ * cleared safely on a switch — doing that made an unreadable directory read as
+ * "0 entries" the moment you came back to it, because returning to a tab that
+ * already has a recorded listing does not re-attempt the read.
+ */
+type ReportError = (id: string, message: string | null) => void;
+
 function useDirectoryLoader(
   optionsRef: RefObject<ListingOptions>,
   setState: Dispatch<SetStateAction<TabsState>>,
-  setError: Dispatch<SetStateAction<string | null>>,
+  reportError: ReportError,
 ): DirectoryLoader {
   // Which read is the current one, per tab.
   //
@@ -228,7 +286,7 @@ function useDirectoryLoader(
   /** What a failed listing puts in the pane, and whether it is a retreat. */
   const failed = useCallback(
     (id: string, attempted: string, message: string) => {
-      setError(message);
+      reportError(id, message);
       reverting.current.delete(id);
 
       // Go back to the last place that worked. Changing the path here feeds
@@ -246,7 +304,7 @@ function useDirectoryLoader(
       reverting.current.add(id);
       setState((previous) => revertPaneById(previous, id, previousPath));
     },
-    [setError, setState],
+    [reportError, setState],
   );
 
   const loadTab = useCallback(
@@ -268,14 +326,14 @@ function useDirectoryLoader(
         // A revert's own load must NOT clear the message that caused it. Any
         // other successful load may: it means the user went somewhere real.
         const recovering = reverting.current.delete(id);
-        if (!recovering) setError(null);
+        if (!recovering) reportError(id, null);
         lastGood.current.set(id, path);
         setState((previous) =>
           updatePaneById(previous, id, (p) => setEntries(p, reply.value.entries)),
         );
       });
     },
-    [failed, optionsRef, setError, setState],
+    [failed, optionsRef, reportError, setState],
   );
 
   // Four maps keyed by tab id, and none of them was pruned — so every tab a
@@ -362,9 +420,10 @@ function useWatchReconciler(topology: string, loadTab: (id: string, path: string
 export function useTabs(initialPath: string): Tabs {
   const [state, setState] = useState<TabsState>(() => createTabs(initialPath));
   const [parentEntries, setParentEntries] = useState<readonly FsEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const { errorFor, reportError } = useTabErrors();
   const [loading, setLoading] = useState(true);
-  const [options, setOptions] = useState<ListingOptions>(INITIAL_OPTIONS);
+  const stored = useListingOptions();
+  const options = stored.options;
 
   // Read by `loadTab`, which must not depend on the options.
   //
@@ -403,7 +462,11 @@ export function useTabs(initialPath: string): Tabs {
   // so what it depends on and what it uses are the same thing.
   const topology = state.tabs.map((tab) => `${tab.id}${FIELD}${tab.pane.path}`).join(RECORD);
 
-  const { loadTab, release, listedOptionsFor } = useDirectoryLoader(optionsRef, setState, setError);
+  const { loadTab, release, listedOptionsFor } = useDirectoryLoader(
+    optionsRef,
+    setState,
+    reportError,
+  );
 
   useWatchReconciler(topology, loadTab);
 
@@ -465,9 +528,14 @@ export function useTabs(initialPath: string): Tabs {
   const close = useCallback(
     (index?: number) => {
       setState((previous) => {
-        // Release the per-tab bookkeeping with the tab.
+        // Release the per-tab bookkeeping with the tab. The errors map is
+        // keyed by tab id too, so it goes the same way — otherwise a closed
+        // tab's failure outlives it for the life of the window.
         const closing = previous.tabs[index ?? previous.activeIndex]?.id;
-        if (closing !== undefined) release(closing);
+        if (closing !== undefined) {
+          release(closing);
+          reportError(closing, null);
+        }
 
         const next = closeTab(previous, index ?? previous.activeIndex);
         if (next !== null) return next;
@@ -489,7 +557,7 @@ export function useTabs(initialPath: string): Tabs {
         return previous;
       });
     },
-    [release],
+    [release, reportError],
   );
 
   return {
@@ -506,15 +574,18 @@ export function useTabs(initialPath: string): Tabs {
     sort: options.sort,
     reverse: options.reverse,
     showHidden: options.showHidden,
-    error,
+    error: errorFor(activeId),
     loading,
 
     historyBack: () => setState((previous) => stepActiveHistory(previous, "back")),
     historyForward: () => setState((previous) => stepActiveHistory(previous, "forward")),
 
-    setSort: (sort, reverse) => setOptions((previous) => ({ ...previous, sort, reverse })),
-    toggleHidden: () =>
-      setOptions((previous) => ({ ...previous, showHidden: !previous.showHidden })),
+    // The next value is computed here and not inside a state updater. React
+    // may call an updater more than once and at a time of its choosing, so a
+    // write started from inside one is a side effect with no guarantee about
+    // how often it runs — which is exactly what it must not be.
+    setSort: (sort, reverse) => stored.set({ ...options, sort, reverse }),
+    toggleHidden: () => stored.set({ ...options, showHidden: !options.showHidden }),
 
     moveBy: (delta) => changeActive((p) => moveCursor(p, delta)),
     moveTo: (index) => changeActive((p) => moveCursor(p, index - p.cursorIndex)),
@@ -531,6 +602,12 @@ export function useTabs(initialPath: string): Tabs {
     // matters; see the note in App.
     openAt: (path) => setState((previous) => openOrActivateTab(previous, path)),
     close,
+    // None of these touches the errors, and that is the fix rather than an
+    // omission. Clearing on a switch was tried: it hid the stale message and
+    // ALSO wiped the live one, so coming back to an unreadable directory showed
+    // "0 entries" with nothing to say why — returning to a tab that already has
+    // a recorded listing does not re-attempt the read. The map is keyed by tab,
+    // so switching shows the right message with no clearing at all.
     goNext: () => setState(nextTab),
     goPrevious: () => setState(previousTab),
     activate: (index) => setState((previous) => activateTab(previous, index)),

@@ -13,11 +13,10 @@
 import type { FsEntry } from "@symmetria/fm-core/entry";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-
-import { INITIAL_RECT, observeWithFallback } from "../../src/components/FileList.tsx";
 import { MillerColumns } from "../../src/components/MillerColumns.tsx";
 import { PathBar } from "../../src/components/PathBar.tsx";
 import { StatusBar } from "../../src/components/StatusBar.tsx";
+import { INITIAL_RECT, observeWithFallback } from "../../src/components/virtualize.ts";
 
 afterEach(cleanup);
 
@@ -185,6 +184,13 @@ describe("PathBar", () => {
   });
 });
 
+/**
+ * The bar now takes the search field and the transient line as well, because
+ * both used to be rows of their own above and below the columns. These three
+ * assertions are about the counts, so both are handed over empty.
+ */
+const QUIET = { error: null, message: null, progress: null, onCancelTransfer: () => {} };
+
 describe("StatusBar", () => {
   it("shows the entry count, the selection count and the sort mode", () => {
     render(
@@ -195,6 +201,8 @@ describe("StatusBar", () => {
         sort="natural"
         reverse={false}
         showHidden={false}
+        search={null}
+        transient={QUIET}
       />,
     );
 
@@ -213,6 +221,8 @@ describe("StatusBar", () => {
         sort="alphabetical"
         reverse={false}
         showHidden={false}
+        search={null}
+        transient={QUIET}
       />,
     );
 
@@ -228,6 +238,8 @@ describe("StatusBar", () => {
         sort="alphabetical"
         reverse={false}
         showHidden={true}
+        search={null}
+        transient={QUIET}
       />,
     );
 

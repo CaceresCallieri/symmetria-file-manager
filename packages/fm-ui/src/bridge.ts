@@ -8,6 +8,7 @@ import {
   decodeChangedEvent,
   decodeDescribeReply,
   decodeFrecentReply,
+  decodeListingOptionsReply,
   decodeListReply,
   decodePreviewUrlReply,
   decodeReadTextReply,
@@ -26,7 +27,7 @@ import {
   type TransferReply,
   type TransferRequest,
 } from "@symmetria/fm-core/contract";
-import type { SortMode } from "@symmetria/fm-core/sort";
+import type { ListingOptions } from "@symmetria/fm-core/listingOptions";
 
 /**
  * The renderer's side of the bridge: untyped in, typed out.
@@ -57,11 +58,14 @@ function getBridge(): Bridge | null {
   return window[BRIDGE_KEY] ?? null;
 }
 
-export interface ListOptions {
-  readonly showHidden: boolean;
-  readonly sort: SortMode;
-  readonly reverse: boolean;
-}
+/**
+ * What a listing request carries, which is exactly a stored listing order.
+ *
+ * An alias rather than a third declaration of the same three fields. It was one,
+ * and `useTabs` aliased it a fourth time — so a field added to the stored
+ * preference would have compiled everywhere and been sent nowhere.
+ */
+export type ListOptions = ListingOptions;
 
 const MISSING_BRIDGE = "the preload bridge is not present; this build is incomplete";
 
@@ -374,7 +378,7 @@ export function onTransferProgress(
  */
 export async function readBookmarks(): Promise<Result<Map<string, Bookmark>>> {
   const bridge = getBridge();
-  if (bridge === null) return failure("read_failed", "the bridge is missing");
+  if (bridge === null) return failure("read_failed", MISSING_BRIDGE);
 
   // The Result first, then its value. Handing the whole envelope to the decoder
   // is the shape mistake this boundary invites, and it fails as "reply must be
@@ -390,12 +394,41 @@ export async function readBookmarks(): Promise<Result<Map<string, Bookmark>>> {
   );
 }
 
+/**
+ * The stored listing order, or the default.
+ *
+ * Never a failure the caller has to handle as one: the main process answers the
+ * default when there is no file and when there is one nobody can read, so the
+ * only failures left here are a missing bridge and a malformed reply. Both are
+ * reported, and `useTabs` treats either as "open on the default" — a missing
+ * preference is not a reason to refuse to list.
+ */
+export async function readListingOptions(): Promise<Result<ListingOptions>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("read_failed", MISSING_BRIDGE);
+
+  const reply = await bridge.listingRead({});
+  if (isFailure(reply)) return reply;
+
+  const decoded = decodeListingOptionsReply(reply.value);
+  return isFailure(decoded) ? decoded : success(decoded.value.options);
+}
+
+/** Replace the stored listing order. */
+export async function writeListingOptions(options: ListingOptions): Promise<Result<null>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("write_failed", MISSING_BRIDGE);
+
+  const reply = await bridge.listingWrite({ options });
+  return isFailure(reply) ? reply : success(null);
+}
+
 /** Replace the stored bookmarks. */
 export async function writeBookmarks(
   bookmarks: ReadonlyMap<string, Bookmark>,
 ): Promise<Result<null>> {
   const bridge = getBridge();
-  if (bridge === null) return failure("write_failed", "the bridge is missing");
+  if (bridge === null) return failure("write_failed", MISSING_BRIDGE);
 
   const reply = await bridge.bookmarksWrite({
     bookmarks: [...bookmarks].map(([letter, bookmark]) => ({ letter, bookmark })),

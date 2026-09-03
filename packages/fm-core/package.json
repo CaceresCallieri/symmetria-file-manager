@@ -32,7 +32,15 @@
     "./keys/cascade": "./src/keys/cascade.ts",
     "./keys/keyEvent": "./src/keys/keyEvent.ts",
     "./preview/route": "./src/preview/route.ts",
+    "./preview/duration": "./src/preview/duration.ts",
+    "./preview/waveform": "./src/preview/waveform.ts",
+    "./preview/sheet": "./src/preview/sheet.ts",
     "./icons/resolve": "./src/icons/resolve.ts",
-    "./bridge": "./src/bridge.ts"
+    "./bridge": "./src/bridge.ts",
+    "./preview/archive/types": "./src/preview/archive/types.ts",
+    "./preview/archive/zip": "./src/preview/archive/zip.ts",
+    "./preview/archive/tar": "./src/preview/archive/tar.ts",
+    "./preview/archive/listing": "./src/preview/archive/listing.ts",
+    "./listingOptions": "./src/listingOptions.ts"
   }
 }
