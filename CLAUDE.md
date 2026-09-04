@@ -71,6 +71,40 @@ To skip tests when doing a production build: `cmake -B build -DBUILD_TESTING=OFF
 
 GitHub Actions runs on every push/PR to `main` (`.github/workflows/ci.yml`). The workflow builds the C++ plugin and runs the QTest suite on Ubuntu 24.04. Qt 6.9 is installed via `jurplel/install-qt-action`; KF6SyntaxHighlighting and QXlsx are built from source and cached. The Rust toolchain is installed via `dtolnay/rust-toolchain@stable`; the submodule is checked out with `submodules: recursive`; the Cargo registry is cached by `actions/cache`.
 
+### Electron Changes — Rebuild and Restart Before Reporting
+
+An edit under `app/` or `packages/fm-*` is NOT live until the bundle is rebuilt
+and the daemon reloads it. `symmetria-fm-electron.service` is resident and holds
+the old code in memory, so a change reported as done while it still runs the
+previous bundle reads to the operator as a fix that did not work.
+
+**Finish every Electron change with this, then say it is reloaded:**
+
+```bash
+cd app && pnpm build && systemctl --user restart symmetria-fm-electron.service
+```
+
+The operator granted this as a standing permission and asked for it explicitly:
+reload after changes so they can check them. It covers
+`symmetria-fm-electron.service` ONLY. `symmetria-fm.service` is the Qt daemon,
+serves the system's portal dialogs, and still needs consent — see the warning in
+Project Overview.
+
+Two things this order protects against:
+
+- **A restart without the build reloads the OLD bundle.** Nothing in the unit
+  builds: `bin/symmetria-fm-electron` runs `pnpm build` only when
+  `dist-electron/main/index.js` is ABSENT, so a rebuild is the caller's job on
+  every run after the first.
+- **`pnpm -r test` also writes `app/dist-electron/`, and leaves a DEVELOPMENT
+  bundle there.** The app's vitest `globalSetup` runs the same `pnpm run build`,
+  but it inherits vitest's `NODE_ENV=test`, and vite then skips minification and
+  keeps React's development build: 744 kB against 495 kB, measured both ways
+  (`NODE_ENV=test pnpm build` reproduces the larger one exactly). A restart
+  straight after a test run therefore serves that bundle to the operator's real
+  window. **Rebuild after testing, never before**, and do not attribute the
+  difference to a different build command — there is only one.
+
 ### QML Changes
 
 No compilation needed — just restart the service:
