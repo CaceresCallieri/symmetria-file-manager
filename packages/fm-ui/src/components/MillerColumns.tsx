@@ -1,6 +1,6 @@
 import type { FsEntry } from "@symmetria/fm-core/entry";
 
-import { FileList, NO_FLASH_LABELS, NO_SELECTION } from "./FileList.tsx";
+import { FileList, NO_FLASH_LABELS, NO_SELECTION, type VisibleRange } from "./FileList.tsx";
 import type { FlashRowLabel } from "./FlashName.tsx";
 import { PreviewPane, type PreviewPaneProps } from "./preview/PreviewPane.tsx";
 
@@ -8,8 +8,16 @@ interface ParentColumnProps {
   readonly entries: readonly FsEntry[];
   /** Which entry it sits on — the directory we are inside. */
   readonly cursorName: string;
-  /** Go to a sibling directory. Absent leaves the whole column inert. */
-  readonly onLeaveTo?: (name: string) => void;
+  /**
+   * Go to a sibling directory. `undefined` leaves the whole column inert.
+   *
+   * Declared `| undefined` rather than optional, here and on the two components
+   * below, so the composition can forward what it was given without a
+   * conditional spread per prop — `exactOptionalPropertyTypes` forbids handing
+   * an optional prop `undefined`, and four such spreads cost more than the
+   * complexity bound allows in one function.
+   */
+  readonly onLeaveTo: ((name: string) => void) | undefined;
 }
 
 /**
@@ -78,6 +86,8 @@ export interface MillerColumnsProps {
   readonly onActivate?: (index: number) => void;
   /** Go to a directory named in the parent column. */
   readonly onLeaveTo?: (name: string) => void;
+  /** Which rows of the CURRENT column are on screen. Nowhere else reports. */
+  readonly onVisibleRange?: (range: VisibleRange) => void;
 }
 
 /**
@@ -87,6 +97,43 @@ export interface MillerColumnsProps {
  * model: the panes are opaque and the chrome between them is where the desktop
  * shows through.
  */
+interface CurrentColumnProps {
+  readonly entries: readonly FsEntry[];
+  readonly cursorIndex: number;
+  readonly selection: ReadonlySet<string>;
+  readonly flashLabels: ReadonlyMap<number, FlashRowLabel>;
+  readonly flashActive: boolean;
+  readonly matches: ReadonlySet<number> | undefined;
+  readonly onSelect: ((index: number) => void) | undefined;
+  readonly onActivate: ((index: number) => void) | undefined;
+  readonly onVisibleRange: ((range: VisibleRange) => void) | undefined;
+}
+
+/**
+ * The column you are in: the only one with a cursor, a selection and a search.
+ *
+ * Its own component for the reason `ParentColumn` and `PreviewSlot` are: the
+ * composition below is scored as one function, and its optional wiring — four
+ * conditional spreads, since `exactOptionalPropertyTypes` forbids handing an
+ * optional prop `undefined` — is most of what that function would cost.
+ */
+function CurrentColumn(props: CurrentColumnProps) {
+  return (
+    <FileList
+      entries={props.entries}
+      cursorIndex={props.cursorIndex}
+      testId="column-current"
+      selection={props.selection}
+      flashActive={props.flashActive}
+      flashLabels={props.flashLabels}
+      {...(props.matches === undefined ? {} : { matches: props.matches })}
+      {...(props.onSelect === undefined ? {} : { onSelect: props.onSelect })}
+      {...(props.onActivate === undefined ? {} : { onActivate: props.onActivate })}
+      {...(props.onVisibleRange === undefined ? {} : { onVisibleRange: props.onVisibleRange })}
+    />
+  );
+}
+
 interface PreviewSlotProps {
   /**
    * What to draw, or `undefined` for the empty slot.
@@ -137,24 +184,21 @@ export function MillerColumns({
   onSelect,
   onActivate,
   onLeaveTo,
+  onVisibleRange,
 }: MillerColumnsProps) {
   return (
     <div className="columns" data-path={path}>
-      <ParentColumn
-        entries={parentEntries}
-        cursorName={parentCursorName}
-        {...(onLeaveTo === undefined ? {} : { onLeaveTo })}
-      />
-      <FileList
+      <ParentColumn entries={parentEntries} cursorName={parentCursorName} onLeaveTo={onLeaveTo} />
+      <CurrentColumn
         entries={entries}
         cursorIndex={cursorIndex}
-        testId="column-current"
         selection={selection}
-        flashActive={flashActive}
         flashLabels={flashLabels}
-        {...(matches === undefined ? {} : { matches })}
-        {...(onSelect === undefined ? {} : { onSelect })}
-        {...(onActivate === undefined ? {} : { onActivate })}
+        flashActive={flashActive}
+        matches={matches}
+        onSelect={onSelect}
+        onActivate={onActivate}
+        onVisibleRange={onVisibleRange}
       />
       <PreviewSlot preview={preview} cursorName={entries[cursorIndex]?.name ?? ""} />
     </div>

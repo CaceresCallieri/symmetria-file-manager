@@ -339,6 +339,7 @@ export function App(props: AppProps = {}) {
         onSelect={tabs.moveTo}
         onActivate={(index) => activateAt(tabs, ops, index)}
         onLeaveTo={leaveTo}
+        onVisibleRange={flash.reportVisibleRange}
         preview={previewing.pane}
       />
       <WhichKeyOverlay

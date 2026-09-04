@@ -7,6 +7,7 @@ import {
 import { type FlashState, flashKey, newFlashState } from "@symmetria/fm-core/flash/session";
 import { useCallback, useMemo, useRef, useState } from "react";
 
+import type { VisibleRange } from "./components/FileList.tsx";
 import type { FlashRowLabel } from "./components/FlashName.tsx";
 
 /**
@@ -16,6 +17,15 @@ import type { FlashRowLabel } from "./components/FlashName.tsx";
  * every key means. This owns the things that only exist in a window: which
  * rows are candidates, where the cursor was when the session started, and what
  * a jump actually does to the pane.
+ *
+ * ── A session's candidates are FIXED when it starts ─────────────────────────
+ * The rows on screen when `s` is pressed are the rows it can label, for as long
+ * as it runs. Nothing on the keyboard can scroll a column mid-session — every
+ * key belongs to the session — so the only way to move the viewport under one
+ * is a mouse wheel, and the plan settled that case explicitly: the labels stay
+ * where they were computed, and relabelling on scroll is a named follow-up
+ * rather than part of this. Review found the code tracking the live range
+ * instead, which is a different feature from the one that was approved.
  *
  * ── Why this one is NOT focus-driven, unlike search ─────────────────────────
  * `useSearch` needs no key handling because its field is a real `<input>` and
@@ -40,6 +50,16 @@ export interface Flash {
   readonly labels: ReadonlyMap<number, FlashRowLabel>;
   /** Begin a session, remembering where the cursor is. */
   start(): void;
+  /**
+   * Tell the hook which rows the current column has on screen.
+   *
+   * Stable, so the column may pass it straight to an effect. It writes a ref
+   * and triggers no render — scrolling must not re-render the window — and a
+   * RUNNING session does not read it: the range it labels against was taken
+   * when it started. What this keeps current is the range the NEXT session
+   * will start from.
+   */
+  reportVisibleRange(range: VisibleRange): void;
   /** Hand one key to the session. */
   onKey(event: KeyboardEvent): void;
 }
@@ -70,6 +90,32 @@ function restoreIndex(memory: CursorMemory, candidates: readonly FlashCandidate[
   const byName = candidates.findIndex((candidate) => candidate.name === memory.name);
   if (byName >= 0) return byName;
   return Math.min(memory.index, Math.max(candidates.length - 1, 0));
+}
+
+/**
+ * Everything, until a column says otherwise.
+ *
+ * A host that never reports gets the Qt behaviour — every match labelled —
+ * rather than no labels at all. A feature that silently does nothing is the
+ * worse failure of the two, and the renderer tests catch a broken wiring
+ * anyway, because a label would then appear on a row that is off screen.
+ */
+const EVERYTHING: VisibleRange = { start: 0, end: Number.MAX_SAFE_INTEGER };
+
+/**
+ * The candidates a session may label: the rows on screen, and no others.
+ *
+ * The one place this port departs from the Qt build. Qt labels every match in
+ * the listing, so it hands out labels nobody can read and spends the
+ * single-character pool on them. Slicing preserves each candidate's `index`,
+ * which is what a jump moves the cursor to.
+ */
+function onScreen(
+  candidates: readonly FlashCandidate[],
+  range: VisibleRange,
+): readonly FlashCandidate[] {
+  if (range.end < range.start) return [];
+  return candidates.slice(range.start, range.end + 1);
 }
 
 /** Labels for the current column, keyed by the row they belong to. */
@@ -175,9 +221,22 @@ export function useFlash(host: FlashHost): Flash {
   latest.current = { candidates, cursorIndex: host.cursorIndex, moveTo: host.moveTo };
 
   const restoreTo = useRef<CursorMemory>({ index: 0, name: "" });
+  // TWO refs, and the split is the point. `visible` follows the viewport
+  // whether or not a session is running; `labelling` is the range the running
+  // session was started against and does not move under it.
+  const visible = useRef<VisibleRange>(EVERYTHING);
+  const labellingRange = useRef<VisibleRange>(EVERYTHING);
+  const reportVisibleRange = useCallback((range: VisibleRange) => {
+    visible.current = range;
+  }, []);
 
   const relabel = useCallback(
-    (query: string) => computeFlash(query, latest.current.candidates, latest.current.cursorIndex),
+    (query: string) =>
+      computeFlash(
+        query,
+        onScreen(latest.current.candidates, labellingRange.current),
+        latest.current.cursorIndex,
+      ),
     [],
   );
 
@@ -190,6 +249,7 @@ export function useFlash(host: FlashHost): Flash {
   const start = useCallback(() => {
     const { candidates: rows, cursorIndex } = latest.current;
     restoreTo.current = { index: cursorIndex, name: rows[cursorIndex]?.name ?? "" };
+    labellingRange.current = visible.current;
     const fresh = newFlashState();
     live.current = fresh;
     setSession(fresh);
@@ -223,5 +283,5 @@ export function useFlash(host: FlashHost): Flash {
 
   const chrome = useMemo(() => (session === null ? null : { query: session.query }), [session]);
 
-  return { active: session !== null, chrome, labels, start, onKey };
+  return { active: session !== null, chrome, labels, start, reportVisibleRange, onKey };
 }
