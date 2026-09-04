@@ -1,8 +1,28 @@
 import type { FsEntry } from "@symmetria/fm-core/entry";
+import type { FlashColumn } from "@symmetria/fm-core/flash/labels";
+import { useCallback } from "react";
+
+import type { ColumnLabels } from "../useFlash.ts";
 
 import { FileList, NO_FLASH_LABELS, NO_SELECTION, type VisibleRange } from "./FileList.tsx";
 import type { FlashRowLabel } from "./FlashName.tsx";
 import { PreviewPane, type PreviewPaneProps } from "./preview/PreviewPane.tsx";
+
+/** No labels anywhere. Shared, so an absent prop does not churn identities. */
+const NO_COLUMN_LABELS: ColumnLabels = {
+  current: NO_FLASH_LABELS,
+  preview: NO_FLASH_LABELS,
+  parent: NO_FLASH_LABELS,
+};
+
+/** A stable reporter for one column, or none when nobody is listening. */
+function useReporter(
+  column: FlashColumn,
+  report: ((column: FlashColumn, range: VisibleRange) => void) | undefined,
+): ((range: VisibleRange) => void) | undefined {
+  const bound = useCallback((range: VisibleRange) => report?.(column, range), [column, report]);
+  return report === undefined ? undefined : bound;
+}
 
 interface ParentColumnProps {
   readonly entries: readonly FsEntry[];
@@ -18,6 +38,9 @@ interface ParentColumnProps {
    * complexity bound allows in one function.
    */
   readonly onLeaveTo: ((name: string) => void) | undefined;
+  readonly flashLabels: ReadonlyMap<number, FlashRowLabel>;
+  readonly flashActive: boolean;
+  readonly onVisibleRange: ((range: VisibleRange) => void) | undefined;
 }
 
 /**
@@ -38,7 +61,14 @@ interface ParentColumnProps {
  * the complexity gate scores a component as one function and this column's
  * conditional wiring was most of that one's branching.
  */
-function ParentColumn({ entries, cursorName, onLeaveTo }: ParentColumnProps) {
+function ParentColumn({
+  entries,
+  cursorName,
+  onLeaveTo,
+  flashLabels,
+  flashActive,
+  onVisibleRange,
+}: ParentColumnProps) {
   // NOT clamped to 0. If the directory we are inside has been renamed or
   // removed between reads, clamping would highlight whatever sits at index
   // zero and claim "this is where you are" — a false statement, which is worse
@@ -51,6 +81,9 @@ function ParentColumn({ entries, cursorName, onLeaveTo }: ParentColumnProps) {
       cursorIndex={cursorIndex}
       testId="column-parent"
       selection={NO_SELECTION}
+      flashLabels={flashLabels}
+      flashActive={flashActive}
+      {...(onVisibleRange === undefined ? {} : { onVisibleRange })}
       {...(onLeaveTo === undefined
         ? {}
         : {
@@ -75,8 +108,8 @@ export interface MillerColumnsProps {
   readonly selection?: ReadonlySet<string>;
   /** Search matches in the CURRENT column, by index. Nowhere else searches. */
   readonly matches?: ReadonlySet<number>;
-  /** Flash labels for the CURRENT column, by index, and whether one is running. */
-  readonly flashLabels?: ReadonlyMap<number, FlashRowLabel>;
+  /** Flash labels for every column, by index within it, and whether one runs. */
+  readonly flashLabels?: ColumnLabels;
   readonly flashActive?: boolean;
   /** What the third column shows. Absent means an empty slot. */
   readonly preview?: PreviewPaneProps;
@@ -86,8 +119,8 @@ export interface MillerColumnsProps {
   readonly onActivate?: (index: number) => void;
   /** Go to a directory named in the parent column. */
   readonly onLeaveTo?: (name: string) => void;
-  /** Which rows of the CURRENT column are on screen. Nowhere else reports. */
-  readonly onVisibleRange?: (range: VisibleRange) => void;
+  /** Which rows of a column are on screen. Every column reports its own. */
+  readonly onVisibleRange?: (column: FlashColumn, range: VisibleRange) => void;
 }
 
 /**
@@ -135,6 +168,9 @@ function CurrentColumn(props: CurrentColumnProps) {
 }
 
 interface PreviewSlotProps {
+  readonly flashLabels: ReadonlyMap<number, FlashRowLabel>;
+  readonly flashActive: boolean;
+  readonly onVisibleRange: ((range: VisibleRange) => void) | undefined;
   /**
    * What to draw, or `undefined` for the empty slot.
    *
@@ -159,7 +195,13 @@ interface PreviewSlotProps {
  * above is scored as a single function, and a ternary in its JSX costs the same
  * as one anywhere else.
  */
-function PreviewSlot({ preview, cursorName }: PreviewSlotProps) {
+function PreviewSlot({
+  preview,
+  cursorName,
+  flashLabels,
+  flashActive,
+  onVisibleRange,
+}: PreviewSlotProps) {
   if (preview === undefined) {
     return (
       <div className="list" data-testid="column-preview">
@@ -167,7 +209,14 @@ function PreviewSlot({ preview, cursorName }: PreviewSlotProps) {
       </div>
     );
   }
-  return <PreviewPane {...preview} />;
+  return (
+    <PreviewPane
+      {...preview}
+      flashLabels={flashLabels}
+      flashActive={flashActive}
+      {...(onVisibleRange === undefined ? {} : { onVisibleRange })}
+    />
+  );
 }
 
 export function MillerColumns({
@@ -178,7 +227,7 @@ export function MillerColumns({
   parentCursorName,
   selection = NO_SELECTION,
   matches,
-  flashLabels = NO_FLASH_LABELS,
+  flashLabels = NO_COLUMN_LABELS,
   flashActive = false,
   preview,
   onSelect,
@@ -186,21 +235,41 @@ export function MillerColumns({
   onLeaveTo,
   onVisibleRange,
 }: MillerColumnsProps) {
+  // One stable reporter per column. Bound here rather than inline, because an
+  // arrow rebuilt each render would re-run the effect inside every column on
+  // every keystroke.
+  const reportCurrent = useReporter("current", onVisibleRange);
+  const reportPreview = useReporter("preview", onVisibleRange);
+  const reportParent = useReporter("parent", onVisibleRange);
+
   return (
     <div className="columns" data-path={path}>
-      <ParentColumn entries={parentEntries} cursorName={parentCursorName} onLeaveTo={onLeaveTo} />
+      <ParentColumn
+        entries={parentEntries}
+        cursorName={parentCursorName}
+        onLeaveTo={onLeaveTo}
+        flashLabels={flashLabels.parent}
+        flashActive={flashActive}
+        onVisibleRange={reportParent}
+      />
       <CurrentColumn
         entries={entries}
         cursorIndex={cursorIndex}
         selection={selection}
-        flashLabels={flashLabels}
+        flashLabels={flashLabels.current}
         flashActive={flashActive}
         matches={matches}
         onSelect={onSelect}
         onActivate={onActivate}
-        onVisibleRange={onVisibleRange}
+        onVisibleRange={reportCurrent}
       />
-      <PreviewSlot preview={preview} cursorName={entries[cursorIndex]?.name ?? ""} />
+      <PreviewSlot
+        preview={preview}
+        cursorName={entries[cursorIndex]?.name ?? ""}
+        flashLabels={flashLabels.preview}
+        flashActive={flashActive}
+        onVisibleRange={reportPreview}
+      />
     </div>
   );
 }

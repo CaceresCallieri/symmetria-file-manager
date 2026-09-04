@@ -1,7 +1,12 @@
 import type { EntrySummary } from "@symmetria/fm-core/entry";
 import type { PreviewRoute, RenderableAs } from "@symmetria/fm-core/preview/route";
 
+import { useCallback, useEffect, useState } from "react";
 import { FileIcon } from "../FileIcon.tsx";
+import { ROW_HEIGHT, type VisibleRange } from "../FileList.tsx";
+import { flashStateOf } from "../FileRow.tsx";
+import { FlashName, type FlashRowLabel } from "../FlashName.tsx";
+import { INITIAL_RECT } from "../virtualize.ts";
 import { ArchivePreview } from "./ArchivePreview.tsx";
 import { AudioPreview } from "./AudioPreview.tsx";
 import { CodePreview } from "./CodePreview.tsx";
@@ -14,7 +19,27 @@ import { SpreadsheetPreview } from "./SpreadsheetPreview.tsx";
 import { TextPreview } from "./TextPreview.tsx";
 import { VideoPreview } from "./VideoPreview.tsx";
 
+/** What a previewed directory's rows need in order to join a flash session. */
+interface DirectoryFlash {
+  readonly labels: ReadonlyMap<number, FlashRowLabel>;
+  readonly active: boolean;
+  readonly onVisibleRange: ((range: VisibleRange) => void) | undefined;
+}
+
+/** No labels. Shared, so a preview that is not a directory churns nothing. */
+const NO_LABELS: ReadonlyMap<number, FlashRowLabel> = new Map();
+
 export interface PreviewPaneProps {
+  /**
+   * Flash labels for a previewed DIRECTORY's rows, by index.
+   *
+   * Empty for every other kind of preview, because a code or text preview is
+   * not a list of names and has nothing a jump could land on.
+   */
+  readonly flashLabels?: ReadonlyMap<number, FlashRowLabel>;
+  readonly flashActive?: boolean;
+  /** Which of the listing's rows are on screen. See `FileList`'s own. */
+  readonly onVisibleRange?: (range: VisibleRange) => void;
   readonly route: PreviewRoute;
   readonly path: string | null;
   readonly size: number;
@@ -64,6 +89,9 @@ export function PreviewPane({
   renderAs,
   renderDocuments,
   audioPlaying,
+  flashLabels,
+  flashActive,
+  onVisibleRange,
 }: PreviewPaneProps) {
   // Rendering is the default, so an absent flag means rendered. The prop is
   // optional because most callers — every existing preview test among them —
@@ -76,6 +104,11 @@ export function PreviewPane({
   // to avoid doing so, and the bar already exists and already has a fixed
   // height. See `StatusBar`.
   const rendered = renderDocuments !== false;
+  const flash: DirectoryFlash = {
+    labels: flashLabels ?? NO_LABELS,
+    active: flashActive === true,
+    onVisibleRange,
+  };
 
   return (
     <div
@@ -85,7 +118,7 @@ export function PreviewPane({
       data-rendered={renderAs ?? undefined}
     >
       {error == null ? (
-        body(route, path, size, audioPlaying === true, rendered ? (renderAs ?? null) : null)
+        body(route, path, size, audioPlaying === true, rendered ? (renderAs ?? null) : null, flash)
       ) : (
         <p className="preview__failed" data-testid="preview-error">
           {error}
@@ -101,9 +134,10 @@ function body(
   size: number,
   audioPlaying: boolean,
   renderAs: RenderableAs | null,
+  flash: DirectoryFlash,
 ) {
   if (path === null || route.kind === "none") return null;
-  return contents(route, path, size, audioPlaying, renderAs) ?? notice(route, size);
+  return contents(route, path, size, audioPlaying, renderAs) ?? notice(route, size, flash);
 }
 
 /**
@@ -180,7 +214,59 @@ function contents(
  * component takes a cursor and a mark, and this column has neither — passing
  * `false` for both would imply a cursor could live here.
  */
-function directoryListing(entries: readonly EntrySummary[], total: number) {
+interface DirectoryListingProps {
+  readonly entries: readonly EntrySummary[];
+  /** How many the directory really holds. The listing itself is capped. */
+  readonly total: number;
+  readonly flash: DirectoryFlash;
+}
+
+/**
+ * Which rows of an unvirtualised, fixed-height listing are on screen.
+ *
+ * The same question `FileList` asks its virtualiser, answered by arithmetic
+ * because this listing has none: every row is in the document and only some are
+ * in view. `ROW_HEIGHT` is the virtualiser's own figure, imported rather than
+ * repeated, and the viewport falls back to `INITIAL_RECT` for the same reason
+ * `observeWithFallback` does — an element that has not laid out measures zero,
+ * and zero would say nothing is visible.
+ */
+function useListingRange(
+  count: number,
+  report: ((range: VisibleRange) => void) | undefined,
+): (node: HTMLDivElement | null) => void {
+  const [element, setElement] = useState<HTMLDivElement | null>(null);
+  const attach = useCallback((node: HTMLDivElement | null) => setElement(node), []);
+
+  useEffect(() => {
+    if (element === null || report === undefined) return;
+
+    const send = () => {
+      const height = element.clientHeight > 0 ? element.clientHeight : INITIAL_RECT.height;
+      report({
+        start: Math.max(0, Math.floor(element.scrollTop / ROW_HEIGHT)),
+        end: Math.min(count - 1, Math.floor((element.scrollTop + height) / ROW_HEIGHT)),
+      });
+    };
+
+    send();
+    element.addEventListener("scroll", send);
+    // A resize with no scroll changes the window too. The virtualised columns
+    // get this from their own `ResizeObserver`; this one has to ask.
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(send);
+    observer?.observe(element);
+
+    return () => {
+      element.removeEventListener("scroll", send);
+      observer?.disconnect();
+    };
+  }, [element, count, report]);
+
+  return attach;
+}
+
+function DirectoryListing({ entries, total, flash }: DirectoryListingProps) {
+  const attach = useListingRange(entries.length, flash.onVisibleRange);
   const hidden = total - entries.length;
 
   return (
@@ -188,18 +274,25 @@ function directoryListing(entries: readonly EntrySummary[], total: number) {
       {entries.length === 0 ? (
         <p className="preview__empty">empty</p>
       ) : (
-        <div className="preview__listing">
-          {entries.map((entry) => (
-            <div
-              key={entry.name}
-              data-testid="preview-entry"
-              className="row"
-              data-kind={entry.kind}
-            >
-              <FileIcon name={entry.name} kind={entry.kind} />
-              <span className="row__name">{entry.name}</span>
-            </div>
-          ))}
+        <div className="preview__listing" ref={attach}>
+          {entries.map((entry, index) => {
+            const label = flash.labels.get(index) ?? null;
+            const dimmed = flash.active && label === null;
+            return (
+              <div
+                key={entry.name}
+                data-testid="preview-entry"
+                data-kind={entry.kind}
+                data-flash={flashStateOf(flash.active, dimmed)}
+                className={`row${dimmed ? " row--flash-dim" : ""}`}
+              >
+                <FileIcon name={entry.name} kind={entry.kind} />
+                <span className="row__name">
+                  <FlashName name={entry.name} flash={label} />
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
       {hidden > 0 ? <p className="preview__truncated">and {hidden} more</p> : null}
@@ -208,8 +301,10 @@ function directoryListing(entries: readonly EntrySummary[], total: number) {
 }
 
 /** The branches that describe the entry instead of showing it. */
-function notice(route: PreviewRoute, size: number) {
-  if (route.kind === "directory") return directoryListing(route.entries, route.entryCount);
+function notice(route: PreviewRoute, size: number, flash: DirectoryFlash) {
+  if (route.kind === "directory") {
+    return <DirectoryListing entries={route.entries} total={route.entryCount} flash={flash} />;
+  }
 
   // Naming what is missing is a different statement from showing a size and
   // hoping the reader works it out.

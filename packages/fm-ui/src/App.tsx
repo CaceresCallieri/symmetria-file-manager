@@ -29,7 +29,7 @@ import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { useBookmarks } from "./useBookmarks.ts";
 import { useExternalOpen } from "./useExternalOpen.ts";
 import { type FileOps, useFileOps } from "./useFileOps.ts";
-import { useFlash } from "./useFlash.ts";
+import { type FlashHost, type PreviewedDirectory, useFlash } from "./useFlash.ts";
 import { type KeyWiring, useKeyActions } from "./useKeyActions.ts";
 import { usePicker } from "./usePicker.ts";
 import { type Preview, usePreviewPane } from "./usePreview.ts";
@@ -128,6 +128,45 @@ function transientOf(tabs: Tabs, ops: FileOps, modes: KeyWiring["modes"]): Trans
     message: ops.message ?? modes.message,
     progress: ops.progress,
     onCancelTransfer: ops.cancelRunningTransfer,
+  };
+}
+
+/**
+ * The previewed directory a flash session may label, or null.
+ *
+ * Guarded on the described path for the same reason the two functions above
+ * are: the preview is debounced by 150 ms, so just after a cursor move the
+ * route still describes the PREVIOUS entry — and a label that navigates
+ * somewhere the cursor has already left is the worst kind of wrong, because
+ * it does something rather than nothing.
+ */
+function previewDirectoryOf(
+  preview: Preview,
+  cursorPath: string | null,
+): PreviewedDirectory | null {
+  if (preview.path === null || preview.path !== cursorPath) return null;
+  if (preview.route.kind !== "directory") return null;
+  return { path: preview.path, entries: preview.route.entries };
+}
+
+/**
+ * What a flash session sees: three columns and two ways to move.
+ *
+ * A plain function rather than a hook, and it is rebuilt on every render on
+ * purpose — `useFlash` keys its own memos on the LISTINGS rather than on this
+ * object, so a fresh wrapper costs nothing and there is no dependency array
+ * here to fall out of step.
+ */
+function flashHostFor(tabs: Tabs, preview: Preview, cursorPath: string | null): FlashHost {
+  return {
+    entries: tabs.pane.entries,
+    cursorIndex: tabs.pane.cursorIndex,
+    path: tabs.pane.path,
+    parentEntries: tabs.parentEntries,
+    parentPath: parentOf(tabs.pane.path),
+    previewDirectory: previewDirectoryOf(preview, cursorPath),
+    moveTo: tabs.moveTo,
+    navigateTo: tabs.navigateTo,
   };
 }
 
@@ -259,12 +298,6 @@ export function App(props: AppProps = {}) {
     path: tabs.pane.path,
     moveTo: tabs.moveTo,
   });
-  const flash = useFlash({
-    entries: tabs.pane.entries,
-    cursorIndex: tabs.pane.cursorIndex,
-    path: tabs.pane.path,
-    moveTo: tabs.moveTo,
-  });
   const bookmarks = useBookmarks();
 
   // Wired here rather than inside `useTabs`, and the placement is the point:
@@ -279,6 +312,8 @@ export function App(props: AppProps = {}) {
   // order.
   const cursorPath = cursorPathOf(tabs.pane);
   const previewing = usePreviewPane(cursorPath, tabs.renderDocuments);
+  // After the preview, because a session may label the directory it shows.
+  const flash = useFlash(flashHostFor(tabs, previewing.preview, cursorPath));
 
   const { actions, modes, state } = useKeyActions(
     tabs,

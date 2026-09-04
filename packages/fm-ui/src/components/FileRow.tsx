@@ -90,8 +90,14 @@ function rowClassName(states: RowStates): string {
   return classes.join(" ");
 }
 
-/** What a row reports about the running session: matched, dimmed, or nothing. */
-function flashStateOf(active: boolean, dimmed: boolean): "match" | "dim" | undefined {
+/**
+ * What a row reports about the running session: matched, dimmed, or nothing.
+ *
+ * Exported because the previewed directory's rows are deliberately NOT
+ * `FileRow` — they have neither a cursor nor a mark — and yet must answer this
+ * question identically. One function rather than two that agree today.
+ */
+export function flashStateOf(active: boolean, dimmed: boolean): "match" | "dim" | undefined {
   if (!active) return undefined;
   return dimmed ? "dim" : "match";
 }

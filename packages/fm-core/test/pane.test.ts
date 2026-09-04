@@ -15,6 +15,7 @@ import {
   leaveDirectory,
   moveCursor,
   type PaneState,
+  rememberCursorAt,
   setEntries,
   toggleSelection,
 } from "../src/pane.ts";
@@ -24,6 +25,14 @@ function entry(name: string, kind: FsEntry["kind"] = "file"): FsEntry {
 }
 
 const listing = [entry("src", "directory"), entry("a.txt"), entry("b.txt"), entry("c.txt")];
+
+/** A pane at `path` already holding the named entries. */
+function withEntries(pane: PaneState, names: readonly string[]): PaneState {
+  return setEntries(
+    pane,
+    names.map((name) => entry(name)),
+  );
+}
 
 describe("the cursor", () => {
   it("starts on the first entry", () => {
@@ -357,5 +366,44 @@ describe("the directory / file boundary", () => {
     // cursor when the first non-directory happened to be one of them.
     const pane = setEntries(createPane("/tmp"), [entry("d", "directory"), entry("sock", "other")]);
     expect(boundaryIndex(pane)).toBe(1);
+  });
+});
+
+describe("remembering a cursor for somewhere else", () => {
+  it("lands on the remembered name when the pane later goes there", () => {
+    const pane = withEntries(createPane("/home/jc"), ["alpha", "beta", "gamma"]);
+
+    const armed = rememberCursorAt(pane, "/home/jc/projects", "beta");
+    const arrived = setEntries(goToPath(armed, "/home/jc/projects"), [
+      entry("one"),
+      entry("beta"),
+      entry("three"),
+    ]);
+
+    expect(arrived.cursorIndex).toBe(1);
+  });
+
+  it("leaves the cursor remembered for the pane's own directory alone", () => {
+    // A flash jump records the DESTINATION's cursor and then moves. The Qt
+    // build had to warn that the two writes must happen in a particular order,
+    // because both went into one cache under different keys; recording for a
+    // named path rather than for "here" removes the hazard rather than
+    // documenting it.
+    const here = moveCursor(withEntries(createPane("/home/jc"), ["a", "b", "c"]), 2);
+    expect(here.cursorMemory.get("/home/jc")).toBe("c");
+
+    const armed = rememberCursorAt(here, "/home", "other");
+
+    expect(armed.cursorMemory.get("/home/jc")).toBe("c");
+    expect(armed.cursorMemory.get("/home")).toBe("other");
+  });
+
+  it("returns a new pane rather than writing into the one it was given", () => {
+    const pane = withEntries(createPane("/home/jc"), ["a"]);
+
+    const armed = rememberCursorAt(pane, "/elsewhere", "x");
+
+    expect(armed).not.toBe(pane);
+    expect(pane.cursorMemory.has("/elsewhere")).toBe(false);
   });
 });

@@ -183,12 +183,20 @@ export function moveCursor(pane: PaneState, delta: number): PaneState {
 function remember(pane: PaneState, index: number): ReadonlyMap<string, string> {
   const name = pane.entries[index]?.name;
   if (name === undefined) return pane.cursorMemory;
+  return rememberIn(pane.cursorMemory, pane.path, name);
+}
 
-  const next = new Map(pane.cursorMemory);
+/** Record `name` as the cursor for `path`, evicting the least recent. */
+function rememberIn(
+  memory: ReadonlyMap<string, string>,
+  path: string,
+  name: string,
+): ReadonlyMap<string, string> {
+  const next = new Map(memory);
   // Re-inserting moves the key to the end, so the iteration order is
   // least-recently-used first and the eviction below drops the right one.
-  next.delete(pane.path);
-  next.set(pane.path, name);
+  next.delete(path);
+  next.set(path, name);
 
   while (next.size > MEMORY_LIMIT) {
     const oldest = next.keys().next().value;
@@ -196,6 +204,24 @@ function remember(pane: PaneState, index: number): ReadonlyMap<string, string> {
     next.delete(oldest);
   }
   return next;
+}
+
+/**
+ * Record where the cursor should land in a directory the pane is not in yet.
+ *
+ * The other half of a jump into another column: record, then go. `setEntries`
+ * restores from this memory by NAME when the listing arrives, so the cursor
+ * ends on the entry that was labelled rather than at the top.
+ *
+ * **By name and for a NAMED path, which is what removes a hazard rather than
+ * documenting one.** The Qt build writes the destination's cursor and the
+ * departing directory's cursor into one cache, and carries a comment warning
+ * that the two calls must happen in a particular order or the second overwrites
+ * what the first meant. Here the departing directory's own memory is untouched,
+ * so there is no order to get wrong.
+ */
+export function rememberCursorAt(pane: PaneState, path: string, name: string): PaneState {
+  return { ...pane, cursorMemory: rememberIn(pane.cursorMemory, path, name) };
 }
 
 /**

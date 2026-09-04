@@ -1,10 +1,16 @@
-import type { FsEntry } from "@symmetria/fm-core/entry";
+import type { EntrySummary, FsEntry } from "@symmetria/fm-core/entry";
 import {
   computeFlash,
   type FlashCandidate,
+  type FlashColumn,
   type FlashLabelling,
 } from "@symmetria/fm-core/flash/labels";
-import { type FlashState, flashKey, newFlashState } from "@symmetria/fm-core/flash/session";
+import {
+  type FlashOutcome,
+  type FlashState,
+  flashKey,
+  newFlashState,
+} from "@symmetria/fm-core/flash/session";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import type { VisibleRange } from "./components/FileList.tsx";
@@ -46,22 +52,28 @@ export interface Flash {
    * is already at the complexity gate's shoulder.
    */
   readonly chrome: { readonly query: string } | null;
-  /** Labels for the current column, by row index. */
-  readonly labels: ReadonlyMap<number, FlashRowLabel>;
+  /** Labels for each column, by row index within that column. */
+  readonly labels: ColumnLabels;
   /** Begin a session, remembering where the cursor is. */
   start(): void;
   /**
-   * Tell the hook which rows the current column has on screen.
+   * Tell the hook which rows one column has on screen.
    *
-   * Stable, so the column may pass it straight to an effect. It writes a ref
-   * and triggers no render — scrolling must not re-render the window — and a
-   * RUNNING session does not read it: the range it labels against was taken
-   * when it started. What this keeps current is the range the NEXT session
-   * will start from.
+   * Stable, so a column may pass it straight to an effect. It writes a ref and
+   * triggers no render — scrolling must not re-render the window — and a
+   * RUNNING session does not read it: the ranges it labels against were taken
+   * when it started. What this keeps current is what the NEXT session starts
+   * from.
    */
-  reportVisibleRange(range: VisibleRange): void;
+  reportVisibleRange(column: FlashColumn, range: VisibleRange): void;
   /** Hand one key to the session. */
   onKey(event: KeyboardEvent): void;
+}
+
+/** What one previewed directory offers a session. */
+export interface PreviewedDirectory {
+  readonly path: string;
+  readonly entries: readonly EntrySummary[];
 }
 
 export interface FlashHost {
@@ -69,7 +81,27 @@ export interface FlashHost {
   readonly cursorIndex: number;
   /** Where the pane is. Changing it ends any session. */
   readonly path: string;
+  /** The column you came from, and where it lives. */
+  readonly parentEntries: readonly FsEntry[];
+  readonly parentPath: string;
+  /**
+   * The directory under the cursor, once its listing has arrived.
+   *
+   * `null` while the cursor is on a file, and also for the 150 ms after a
+   * cursor move, during which the preview still describes the PREVIOUS entry.
+   * The caller decides both; a stale directory here would offer labels that
+   * navigate somewhere the user is no longer pointing at.
+   */
+  readonly previewDirectory: PreviewedDirectory | null;
   moveTo(index: number): void;
+  navigateTo(path: string, name: string): void;
+}
+
+/** One map per column, each keyed by the row index within that column. */
+export interface ColumnLabels {
+  readonly current: ReadonlyMap<number, FlashRowLabel>;
+  readonly preview: ReadonlyMap<number, FlashRowLabel>;
+  readonly parent: ReadonlyMap<number, FlashRowLabel>;
 }
 
 /**
@@ -86,10 +118,44 @@ interface CursorMemory {
 }
 
 /** Where cancelling should put the cursor, in the listing as it stands now. */
-function restoreIndex(memory: CursorMemory, candidates: readonly FlashCandidate[]): number {
-  const byName = candidates.findIndex((candidate) => candidate.name === memory.name);
+function restoreIndex(memory: CursorMemory, entries: readonly { readonly name: string }[]): number {
+  const byName = entries.findIndex((entry) => entry.name === memory.name);
   if (byName >= 0) return byName;
-  return Math.min(memory.index, Math.max(candidates.length - 1, 0));
+  return Math.min(memory.index, Math.max(entries.length - 1, 0));
+}
+
+/**
+ * Do what one outcome says: put the cursor back, move it, or navigate.
+ *
+ * A module function rather than a branch inside the callback, because the hook
+ * is scored as one function and this is four of its branches. It performs and
+ * decides nothing else — the engine already decided.
+ */
+function perform(outcome: FlashOutcome, host: FlashHost, restore: CursorMemory): void {
+  if (outcome.kind === "cancel") {
+    host.moveTo(restoreIndex(restore, host.entries));
+    return;
+  }
+  if (outcome.kind !== "jump") return;
+  if (outcome.match.column === "current") {
+    host.moveTo(outcome.match.index);
+    return;
+  }
+
+  const destination = destinationOf(host, outcome.match.column);
+  if (destination !== null) host.navigateTo(destination, outcome.match.name);
+}
+
+/**
+ * Where a jump into a column other than the current one is going.
+ *
+ * `null` when there is nowhere — the previewed directory can go away between
+ * the moment a label is drawn and the moment it is pressed, and navigating on
+ * a guess would be worse than doing nothing.
+ */
+function destinationOf(host: FlashHost, column: FlashColumn): string | null {
+  if (column === "parent") return host.parentPath;
+  return host.previewDirectory?.path ?? null;
 }
 
 /**
@@ -102,51 +168,82 @@ function restoreIndex(memory: CursorMemory, candidates: readonly FlashCandidate[
  */
 const EVERYTHING: VisibleRange = { start: 0, end: Number.MAX_SAFE_INTEGER };
 
+/** One visible range per column. A named shape, not a dictionary. */
+interface ColumnRanges {
+  current: VisibleRange;
+  preview: VisibleRange;
+  parent: VisibleRange;
+}
+
+function everywhere(): ColumnRanges {
+  return { current: EVERYTHING, preview: EVERYTHING, parent: EVERYTHING };
+}
+
 /**
  * The candidates a session may label: the rows on screen, and no others.
  *
  * The one place this port departs from the Qt build. Qt labels every match in
  * the listing, so it hands out labels nobody can read and spends the
- * single-character pool on them. Slicing preserves each candidate's `index`,
- * which is what a jump moves the cursor to.
+ * single-character pool on them.
+ *
+ * Filtered rather than sliced, because the candidates of all three columns
+ * arrive in one list and each has its own window. Filtering also leaves every
+ * candidate's `index` alone, which is what a jump lands on.
  */
 function onScreen(
   candidates: readonly FlashCandidate[],
-  range: VisibleRange,
+  ranges: ColumnRanges,
+  columns: ReadonlySet<FlashColumn>,
 ): readonly FlashCandidate[] {
-  if (range.end < range.start) return [];
-  return candidates.slice(range.start, range.end + 1);
+  return candidates.filter((candidate) => {
+    if (!columns.has(candidate.column)) return false;
+    const range = ranges[candidate.column];
+    return candidate.index >= range.start && candidate.index <= range.end;
+  });
 }
 
-/** Labels for the current column, keyed by the row they belong to. */
-function labelsFor(session: FlashState | null): ReadonlyMap<number, FlashRowLabel> {
-  const labels = new Map<number, FlashRowLabel>();
-  if (session === null) return labels;
+/** Labels for every column, keyed by the row they belong to. */
+function labelsFor(session: FlashState | null): ColumnLabels {
+  const byColumn = {
+    current: new Map<number, FlashRowLabel>(),
+    preview: new Map<number, FlashRowLabel>(),
+    parent: new Map<number, FlashRowLabel>(),
+  };
+  if (session === null) return byColumn;
 
   for (const match of session.labelling.matches) {
     // An unlabelled match has nothing to press, so it is not drawn as a match
     // and dims with the rest. That is the Qt behaviour and it is the honest
     // one: a highlight offering no key is a highlight that lies.
-    if (match.column === "current" && match.label !== "") {
-      labels.set(match.index, {
-        query: session.query,
-        label: match.label,
-        matchStart: match.matchStart,
-      });
-    }
+    if (match.label === "") continue;
+    byColumn[match.column].set(match.index, {
+      query: session.query,
+      label: match.label,
+      matchStart: match.matchStart,
+    });
   }
-  return labels;
+  return byColumn;
 }
 
-/** A mutable holder for the session `onKey` reads. Named, so it can be passed. */
-interface LiveSession {
-  current: FlashState | null;
+/** No rows. A shared instance, so an absent column does not churn the memo. */
+const NO_ENTRIES: readonly { readonly name: string }[] = [];
+
+/** Every candidate the three columns offer, each tagged with where it lives. */
+function candidatesOf(
+  current: readonly { readonly name: string }[],
+  preview: readonly { readonly name: string }[],
+  parent: readonly { readonly name: string }[],
+): FlashCandidate[] {
+  const named = (names: readonly { readonly name: string }[], column: FlashColumn) =>
+    names.map((entry, index) => ({ name: entry.name, column, index }));
+
+  return [...named(current, "current"), ...named(preview, "preview"), ...named(parent, "parent")];
 }
 
 interface UpkeepInputs {
   readonly path: string;
   readonly candidates: readonly FlashCandidate[];
-  readonly live: LiveSession;
+  readonly refs: SessionRefs;
   readonly setSession: (session: FlashState | null) => void;
   readonly relabel: (query: string) => FlashLabelling;
 }
@@ -163,25 +260,26 @@ interface UpkeepInputs {
  * is being replaced wholesale.
  *
  * **A listing that changes without the pane moving relabels instead** — a
- * watcher refresh, a re-sort, a download landing. This is not tidiness: a label
- * carries the index it was computed for, and the jump moves the cursor to that
- * index, so a session that outlived one inserted row would draw its labels over
- * the wrong names and then jump to the wrong file, silently and plausibly.
- * Review found this. The Qt build has the same gap between two keystrokes and
- * it is worse here, because nothing else rebuilds the candidate list.
+ * watcher refresh, a re-sort, a download landing, a previewed directory
+ * arriving. This is not tidiness: a label carries the index it was computed
+ * for, and the jump goes to that index, so a session that outlived one
+ * inserted row would draw its labels over the wrong names and then move to the
+ * wrong file, silently and plausibly. Review found this. The Qt build has the
+ * same gap between two keystrokes and it is worse here, because nothing else
+ * rebuilds the candidate list.
  *
  * A held prefix does NOT survive a relabelling: a fresh pass can hand its first
  * character to a different match, so what the user half-typed no longer means
  * what they read.
  */
-function useSessionUpkeep({ path, candidates, live, setSession, relabel }: UpkeepInputs): void {
+function useSessionUpkeep({ path, candidates, refs, setSession, relabel }: UpkeepInputs): void {
   const [pathSeen, setPathSeen] = useState(path);
   const [candidatesSeen, setCandidatesSeen] = useState(candidates);
 
   if (pathSeen !== path) {
     setPathSeen(path);
     setCandidatesSeen(candidates);
-    live.current = null;
+    refs.live = null;
     setSession(null);
     return;
   }
@@ -189,99 +287,147 @@ function useSessionUpkeep({ path, candidates, live, setSession, relabel }: Upkee
   if (candidatesSeen === candidates) return;
   setCandidatesSeen(candidates);
 
-  const running = live.current;
+  const running = refs.live;
   if (running === null) return;
 
   const relabelled = { ...running, pendingLabel: "", labelling: relabel(running.query) };
-  live.current = relabelled;
+  refs.live = relabelled;
   setSession(relabelled);
+}
+
+/**
+ * Everything a keypress needs, in one place that render keeps current.
+ *
+ * A single ref rather than six, because `onKey` is attached once and reads
+ * through it: two keys can arrive before React re-renders — a held key repeats
+ * faster than a commit — and reading state would hand the second key the state
+ * the first one replaced. Deriving the next state inside a `setState` updater
+ * would fix that and introduce a worse problem, since a jump moves the cursor
+ * and React may call an updater more than once.
+ */
+interface SessionRefs {
+  /** The running session. `null` between sessions. */
+  live: FlashState | null;
+  /** Where the cursor was when it started. */
+  restoreTo: CursorMemory;
+  /** Each column's viewport, always current. */
+  visible: ColumnRanges;
+  /** The viewports this session labels against. Frozen at `start`. */
+  labelling: ColumnRanges;
+  /**
+   * Which columns this session may label. Frozen at `start`.
+   *
+   * A session's ROWS may be relabelled under it — a watcher refresh, a
+   * download landing — because a label carries an index and a stale index
+   * jumps to the wrong file. A whole COLUMN is a different thing. The
+   * previewed directory arrives 150 ms after the cursor lands on one, so a
+   * session started inside that window would gain a third column part-way
+   * through and every label would move: verification watched the parent
+   * column's `g` and `h` become `k` and `l` while it ran. A label the user has
+   * already read must not change what it means.
+   */
+  columns: ReadonlySet<FlashColumn>;
+  candidates: readonly FlashCandidate[];
+  host: FlashHost;
+}
+
+/** What the status bar draws for a session, or nothing. */
+function chromeOf(session: FlashState | null): { readonly query: string } | null {
+  return session === null ? null : { query: session.query };
+}
+
+/**
+ * Hand one key to the session and apply whatever it decides.
+ *
+ * A module function rather than a body inside the callback, because the hook is
+ * scored as one function and this is most of its branching.
+ */
+function pressKey(
+  event: KeyboardEvent,
+  refs: SessionRefs,
+  setSession: (session: FlashState | null) => void,
+  relabel: (query: string) => FlashLabelling,
+): void {
+  const current = refs.live;
+  if (current === null) return;
+
+  const outcome = flashKey(current, { key: event.key }, relabel);
+  if (outcome.kind === "state") {
+    refs.live = outcome.state;
+    setSession(outcome.state);
+    return;
+  }
+
+  refs.live = null;
+  setSession(null);
+  // Cancelling puts the cursor back where the session started. A jump in the
+  // current column moves the cursor; a jump in either other column navigates
+  // and lands on the entry that was labelled.
+  perform(outcome, refs.host, refs.restoreTo);
 }
 
 export function useFlash(host: FlashHost): Flash {
   const [session, setSession] = useState<FlashState | null>(null);
 
-  // The session is ALSO held in a ref, and the ref is what `onKey` reads.
-  //
-  // Two keys can arrive before React re-renders — a held key repeats faster
-  // than a commit — and reading the state variable would then hand the second
-  // key the state the first one replaced. Deriving the next state inside a
-  // `setState` updater would fix that and introduce a worse problem: a jump
-  // moves the cursor, which is a side effect, and React may call an updater
-  // more than once.
-  const live = useRef<FlashState | null>(null);
-
+  // Keyed on the three ARRAYS, not on the host object. The host is rebuilt on
+  // every render of the window; its listings are not, and rebuilding the
+  // candidates for an unchanged listing would make `useSessionUpkeep` relabel
+  // on every render — which is a render loop, not a slow path.
+  const previewEntries = host.previewDirectory?.entries ?? NO_ENTRIES;
   const candidates = useMemo<FlashCandidate[]>(
-    () => host.entries.map((entry, index) => ({ name: entry.name, column: "current", index })),
-    [host.entries],
+    () => candidatesOf(host.entries, previewEntries, host.parentEntries),
+    [host.entries, previewEntries, host.parentEntries],
   );
 
-  // One listener's worth of fresh inputs, read through a ref for the same
-  // reason `useKeyDispatch` does: `onKey` must not change identity per keypress.
-  const latest = useRef({ candidates, cursorIndex: host.cursorIndex, moveTo: host.moveTo });
-  latest.current = { candidates, cursorIndex: host.cursorIndex, moveTo: host.moveTo };
+  const refs = useRef<SessionRefs>({
+    live: null,
+    restoreTo: { index: 0, name: "" },
+    visible: everywhere(),
+    labelling: everywhere(),
+    columns: new Set<FlashColumn>(),
+    candidates,
+    host,
+  });
+  refs.current.candidates = candidates;
+  refs.current.host = host;
 
-  const restoreTo = useRef<CursorMemory>({ index: 0, name: "" });
-  // TWO refs, and the split is the point. `visible` follows the viewport
-  // whether or not a session is running; `labelling` is the range the running
-  // session was started against and does not move under it.
-  const visible = useRef<VisibleRange>(EVERYTHING);
-  const labellingRange = useRef<VisibleRange>(EVERYTHING);
-  const reportVisibleRange = useCallback((range: VisibleRange) => {
-    visible.current = range;
+  const reportVisibleRange = useCallback((column: FlashColumn, range: VisibleRange) => {
+    refs.current.visible[column] = range;
   }, []);
 
   const relabel = useCallback(
     (query: string) =>
       computeFlash(
         query,
-        onScreen(latest.current.candidates, labellingRange.current),
-        latest.current.cursorIndex,
+        onScreen(refs.current.candidates, refs.current.labelling, refs.current.columns),
+        refs.current.host.cursorIndex,
       ),
     [],
   );
 
-  const finish = useCallback((index: number) => {
-    live.current = null;
-    setSession(null);
-    latest.current.moveTo(index);
-  }, []);
-
   const start = useCallback(() => {
-    const { candidates: rows, cursorIndex } = latest.current;
-    restoreTo.current = { index: cursorIndex, name: rows[cursorIndex]?.name ?? "" };
-    labellingRange.current = visible.current;
+    const { host: current } = refs.current;
+    refs.current.restoreTo = {
+      index: current.cursorIndex,
+      name: current.entries[current.cursorIndex]?.name ?? "",
+    };
+    refs.current.labelling = { ...refs.current.visible };
+    refs.current.columns = new Set(refs.current.candidates.map((candidate) => candidate.column));
     const fresh = newFlashState();
-    live.current = fresh;
+    refs.current.live = fresh;
     setSession(fresh);
   }, []);
 
   const onKey = useCallback(
-    (event: KeyboardEvent) => {
-      const current = live.current;
-      if (current === null) return;
-
-      const outcome = flashKey(current, { key: event.key }, relabel);
-      if (outcome.kind === "state") {
-        live.current = outcome.state;
-        setSession(outcome.state);
-        return;
-      }
-      // Cancelling puts the cursor back; jumping puts it on the target. The
-      // engine reports which, and neither is its own to perform.
-      finish(
-        outcome.kind === "cancel"
-          ? restoreIndex(restoreTo.current, latest.current.candidates)
-          : outcome.match.index,
-      );
-    },
-    [finish, relabel],
+    (event: KeyboardEvent) => pressKey(event, refs.current, setSession, relabel),
+    [relabel],
   );
 
-  useSessionUpkeep({ path: host.path, candidates, live, setSession, relabel });
+  useSessionUpkeep({ path: host.path, candidates, refs: refs.current, setSession, relabel });
 
   const labels = useMemo(() => labelsFor(session), [session]);
 
-  const chrome = useMemo(() => (session === null ? null : { query: session.query }), [session]);
+  const chrome = useMemo(() => chromeOf(session), [session]);
 
   return { active: session !== null, chrome, labels, start, reportVisibleRange, onKey };
 }

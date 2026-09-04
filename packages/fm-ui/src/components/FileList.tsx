@@ -84,8 +84,14 @@ export const NO_SELECTION: ReadonlySet<string> = new Set();
  */
 export const NO_FLASH_LABELS: ReadonlyMap<number, FlashRowLabel> = new Map();
 
-/** Row height in pixels. Fixed, so the virtualiser needs no measurement pass. */
-const ROW_HEIGHT = 24;
+/**
+ * Row height in pixels. Fixed, so the virtualiser needs no measurement pass.
+ *
+ * Exported because the previewed directory's listing is NOT virtualised and has
+ * to work out its own visible window from the same figure. Two constants that
+ * happened to agree would drift the first time a row grew.
+ */
+export const ROW_HEIGHT = 24;
 
 /**
  * Tell the caller which rows are on screen, whenever that changes.

@@ -10,6 +10,7 @@ import {
   moveCursor,
   type PaneState,
   parentOf,
+  rememberCursorAt,
   setEntries,
   toggleSelection,
 } from "@symmetria/fm-core/pane";
@@ -161,6 +162,23 @@ export interface Tabs {
   enter(): void;
   leave(): void;
   navigate(path: string): void;
+  /**
+   * Go to a path AND land the cursor on a named entry there.
+   *
+   * Distinct from `navigate`, which lands at the top. Its caller is a flash
+   * jump into another column: the user pressed a label drawn on a specific
+   * row, so arriving anywhere else would be arriving somewhere they did not
+   * point at.
+   *
+   * **A destination equal to the pane's own path lands nowhere.** `goToPath`
+   * returns the pane by reference for that case — deliberately, see its own
+   * comment — so nothing re-lists and the recorded name is never consumed. No
+   * caller can reach it today: a previewed directory is always a strict
+   * subdirectory, and the parent column is empty at the root, so it offers no
+   * label to press. A future caller that could reach it must move the cursor
+   * itself rather than expect this to.
+   */
+  navigateTo(path: string, name: string): void;
   toggleMark(): void;
   clearMarks(): void;
 
@@ -653,6 +671,9 @@ export function useTabs(initialPath: string): Tabs {
     enter: () => goTo(enterDirectory),
     leave: () => goTo(leaveDirectory),
     navigate: (path) => goTo((p) => goToPath(p, path)),
+    // Recorded BEFORE the move, and into the destination's own key, so the
+    // listing that arrives restores from it. See `rememberCursorAt`.
+    navigateTo: (path, name) => goTo((p) => goToPath(rememberCursorAt(p, path, name), path)),
     toggleMark: () => changeActive(toggleSelection),
     clearMarks: () => changeActive(clearSelection),
 
