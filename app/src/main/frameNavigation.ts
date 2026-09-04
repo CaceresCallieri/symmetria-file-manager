@@ -76,15 +76,65 @@ import { APP_SCHEME_PROTOCOL } from "./appScheme.ts";
  */
 
 /**
+ * Chromium's own PDF viewer, which arrives here as a document request.
+ *
+ * ── Why this exception exists, and what it cost to find ─────────────────────
+ * `<embed type="application/pdf">` does not render a PDF itself. Chromium
+ * answers it by loading an internal extension page into a CHILD FRAME, and
+ * that page is addressed `chrome-extension://<this host>/index.html`. To the
+ * rule below that is a document request off the application's scheme, so it
+ * was cancelled — `net::ERR_BLOCKED_BY_CLIENT`, with the embed element still
+ * in the DOM at its full size and nothing drawn inside it.
+ *
+ * That is invisible from the page: no error reaches the console, the element
+ * looks correct to every DOM assertion, and the frame tree simply has one
+ * fewer child. The PDF preview shipped working and stopped the moment the
+ * navigation guard was registered, three commits later, with every test still
+ * green because no test drives a real PDF.
+ *
+ * ── Why permitting it is safe ───────────────────────────────────────────────
+ * This is the browser's own viewer, not content. It reaches no network — the
+ * bytes come from the `<embed>`'s own URL, which is already one of ours — and
+ * a previewed page cannot navigate itself here in any case, because Chromium
+ * refuses web content a route to an extension resource that is not declared
+ * web-accessible. The exception widens the allow-list by exactly one internal
+ * viewer and by nothing that a document could ask for.
+ *
+ * ── The host is Chromium's, and it is a constant ────────────────────────────
+ * The same id in every Chromium and every Electron for many years. If it ever
+ * changes, the PDF preview goes blank again in exactly the way described
+ * above, and this is the line to look at first.
+ */
+const PDF_VIEWER_PROTOCOL = "chrome-extension:";
+const PDF_VIEWER_HOST = "mhjfbmdgcfjbbpaeojofohoefgiehjai";
+
+/**
+ * Is this the built-in viewer being loaded for an `<embed>` we served?
+ *
+ * Host AND scheme, not `origin`: `chrome-extension` is not a special scheme,
+ * so the URL parser reports its origin as the string `"null"` — and comparing
+ * against that would match every opaque origin there is.
+ */
+function isBuiltInPdfViewer(url: URL): boolean {
+  return url.protocol === PDF_VIEWER_PROTOCOL && url.host === PDF_VIEWER_HOST;
+}
+
+/**
  * May a frame in this window navigate to `url`?
  *
- * True only for the application's own scheme. That covers the frame's initial
- * load and any move between previewed documents, and refuses everything else —
- * `https:`, `http:`, `file:`, `data:`, `javascript:` and any scheme a future
- * handler might add.
+ * The application's own scheme — which covers the frame's initial load and any
+ * move between previewed documents — plus Chromium's built-in PDF viewer, for
+ * the reason given above it. Everything else is refused: `https:`, `http:`,
+ * `file:`, `data:`, `javascript:` and any scheme a future handler might add.
  *
  * An allow-list rather than a deny-list, so a scheme nobody thought of is
  * refused by default instead of permitted until somebody notices.
+ *
+ * **Both locks ask this one question**, and that is why the viewer is admitted
+ * here rather than beside the request-level block alone. `will-frame-navigate`
+ * may not fire on a sandboxed renderer today, but if a future Electron fixes
+ * that, a copy of the rule that had not heard about the viewer would break the
+ * PDF preview a second time, from the other layer.
  *
  * Exported and pure so it can be tested. The Electron wiring below cannot be:
  * it needs a real session, and a rule nobody can check is how a navigation
@@ -92,7 +142,8 @@ import { APP_SCHEME_PROTOCOL } from "./appScheme.ts";
  */
 export function mayNavigateTo(url: string): boolean {
   try {
-    return new URL(url).protocol === APP_SCHEME_PROTOCOL;
+    const parsed = new URL(url);
+    return parsed.protocol === APP_SCHEME_PROTOCOL || isBuiltInPdfViewer(parsed);
   } catch {
     // Not a URL at all. Nothing legitimate reaches here, and refusing an
     // unparseable target is the only safe reading of it.

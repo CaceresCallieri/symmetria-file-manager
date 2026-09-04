@@ -26,8 +26,29 @@ describe("where a frame may go", () => {
     ["the renderer's own entry point", "symmetria-fm://app/index.html"],
     ["a previewed file", "symmetria-fm://app/__preview/abc123"],
     ["a neighbour under a directory grant", "symmetria-fm://app/__preview/abc123/style.css"],
+    [
+      "Chromium's own PDF viewer, which an embed loads into a child frame",
+      "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html",
+    ],
   ])("permits %s", (_why, url) => {
     expect(mayNavigateTo(url)).toBe(true);
+  });
+
+  it("permits the built-in viewer and no other extension", () => {
+    // The exception is one host, not a scheme. `chrome-extension:` opened as a
+    // whole would admit anything a future `session.loadExtension` installed,
+    // which is a wider grant than the PDF preview ever asked for.
+    expect(mayNavigateTo("chrome-extension://someotherextensionidhere00000000/index.html")).toBe(
+      false,
+    );
+  });
+
+  it("does not admit an opaque origin as if it were the viewer", () => {
+    // `chrome-extension` is not a special scheme, so `new URL(...).origin` is
+    // the string "null" for every one of these. A guard written against
+    // `origin` would therefore let each of them past.
+    expect(mayNavigateTo("data:text/html,<h1>hi")).toBe(false);
+    expect(mayNavigateTo("chrome-untrusted://print/")).toBe(false);
   });
 
   it.each([
@@ -170,6 +191,25 @@ describe("which requests are refused", () => {
     refuseDocumentRequestsOffScheme(s);
 
     expect(request("symmetria-fm://app/__preview/token/page.html", "subFrame")).toBe(false);
+  });
+
+  it("lets Chromium's own PDF viewer load", () => {
+    // ── The regression this file exists to prevent a second time ────────────
+    // An `<embed type="application/pdf">` is answered by loading an internal
+    // extension page into a child frame. Blocking it cancelled that request
+    // with `net::ERR_BLOCKED_BY_CLIENT` and left the PDF preview a blank
+    // rectangle — with the embed element still present and correct, so nothing
+    // in the DOM said anything was wrong.
+    //
+    // This test pins OUR rule, which is what broke. It cannot pin Chromium's
+    // — if the viewer's extension id ever changes, the preview goes blank
+    // again and this test still passes.
+    const { session: s, request } = session();
+    refuseDocumentRequestsOffScheme(s);
+
+    expect(
+      request("chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html", "subFrame"),
+    ).toBe(false);
   });
 
   it.each([
