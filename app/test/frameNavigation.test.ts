@@ -74,12 +74,23 @@ describe("where a frame may go", () => {
   });
 });
 
+/**
+ * A `NavigableContents` under test, with the two questions to ask it.
+ *
+ * Named rather than written inline on the helper's return type: an anonymous
+ * shape declared at a return says the same thing while discarding what the
+ * body already proved, and it has nowhere to carry this sentence.
+ */
+interface ContentsSpy {
+  readonly contents: NavigableContents;
+  /** Drive one navigation and report whether it was prevented. */
+  readonly navigate: (url: string) => boolean;
+  /** Was a handler installed, and does it deny? */
+  readonly openHandlerInstalled: () => boolean;
+}
+
 describe("what the window is told", () => {
-  function spy(): {
-    readonly contents: NavigableContents;
-    readonly navigate: (url: string) => boolean;
-    readonly openHandlerInstalled: () => boolean;
-  } {
+  function spy(): ContentsSpy {
     let listener: ((d: { url: string; preventDefault(): void }) => void) | null = null;
     let openHandler: ((d: { url: string }) => { action: "deny" }) | null = null;
 
@@ -95,7 +106,6 @@ describe("what the window is told", () => {
 
     return {
       contents,
-      /** Drive one navigation and report whether it was prevented. */
       navigate: (url) => {
         let prevented = false;
         listener?.({ url, preventDefault: () => (prevented = true) });
@@ -154,18 +164,21 @@ describe("what the window is told", () => {
  * `webPreferences.sandbox: true` — which this application sets deliberately.
  * `onBeforeRequest` runs beneath that layer and is not subject to it.
  */
+/** A `BlockableSession` under test, with the one question to ask it. */
+interface SessionSpy {
+  readonly session: BlockableSession;
+  /** Drive one request and report whether it was cancelled. */
+  readonly request: (url: string, resourceType: string) => boolean;
+}
+
 describe("which requests are refused", () => {
-  function session(): {
-    readonly session: BlockableSession;
-    readonly request: (url: string, resourceType: string) => boolean;
-  } {
+  function session(): SessionSpy {
     let listener:
       | ((d: { url: string; resourceType: string }, cb: (r: { cancel?: boolean }) => void) => void)
       | null = null;
 
     return {
       session: { webRequest: { onBeforeRequest: (l) => (listener = l) } },
-      /** Drive one request and report whether it was cancelled. */
       request: (url, resourceType) => {
         let cancelled = false;
         listener?.({ url, resourceType }, (response) => {

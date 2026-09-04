@@ -178,12 +178,21 @@ export interface BlockableSession {
   };
 }
 
-/** The part of `WebContents` this module uses. Narrow, for the same reason. */
+/**
+ * The part of `WebContents` this module uses. Narrow, for the same reason.
+ *
+ * `on` is declared `void` although Electron's own returns `this` for chaining.
+ * That is the honest statement of what this module needs — it registers a
+ * handler and never reads the result — and it costs nothing at the call site,
+ * because a function returning a value is assignable to a signature returning
+ * `void`. The real `WebContents` still satisfies it, and so does a test double
+ * that returns itself.
+ */
 export interface NavigableContents {
   on(
     event: "will-frame-navigate",
     listener: (details: { readonly url: string; preventDefault(): void }) => void,
-  ): unknown;
+  ): void;
   setWindowOpenHandler(handler: (details: { readonly url: string }) => { action: "deny" }): void;
 }
 
