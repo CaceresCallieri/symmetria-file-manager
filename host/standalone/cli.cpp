@@ -10,17 +10,34 @@
 // Exits 0 on success, non-zero on connection / protocol error.
 
 #include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocalSocket>
+#include <QProcess>
 #include <QStringList>
 #include <QTextStream>
+#include <QThread>
 #include <iostream>
 
 namespace {
 
-constexpr int kConnectTimeoutMs = 2000;
-constexpr int kReadTimeoutMs = 2000;
+// Per-attempt connect timeout. Deliberately short: it only ever covers a
+// connect that is genuinely in flight. When the socket FILE is absent the
+// kernel refuses instantly, so this timeout is not what rides out a daemon
+// restart — connectWithRetry's budget is.
+constexpr int kConnectAttemptMs = 200;
+// Total time we keep retrying before giving up. Must comfortably exceed the
+// service's RestartSec plus its ~0.3 s startup.
+constexpr int kConnectBudgetMs = 5000;
+constexpr int kRetryDelayMs = 50;
+// Head start given to systemd's own Restart=always before we ask it to start
+// the unit ourselves.
+constexpr int kAutostartAfterMs = 250;
+// Read timeout. Generous because a connection can land while the freshly
+// started daemon is still loading QML: QLocalServer::newConnection only fires
+// once the event loop runs, so the request sits queued until then.
+constexpr int kReadTimeoutMs = 5000;
 
 QString socketPath()
 {
@@ -28,6 +45,47 @@ QString socketPath()
     if (!runtime.isEmpty())
         return QString::fromUtf8(runtime) + QStringLiteral("/symmetria-fm.sock");
     return QStringLiteral("/tmp/symmetria-fm.sock");
+}
+
+// Connects to the daemon, riding out the window in which no socket exists.
+//
+// symmetria-fm exits when its last window closes (main.cpp documents that as a
+// deliberate design decision) and systemd's Restart=always brings up a fresh
+// instance. Between those two events the daemon has REMOVED the socket file,
+// so connectToServer fails in ~10 ms with ServerNotFoundError — a plain
+// waitForConnected timeout never helps, because there is no connect in flight
+// to wait on. A keybind that runs this CLI therefore did nothing at all,
+// silently (compositors discard the stderr of an exec bind), whenever the user
+// pressed it right after closing the last window. Retrying is the fix.
+//
+// The systemctl call covers the other half: a unit that is stopped, failed, or
+// otherwise not coming back on its own. It is a no-op when a restart job is
+// already queued.
+bool connectWithRetry(QLocalSocket& socket, const QString& path)
+{
+    QElapsedTimer clock;
+    clock.start();
+    bool autostartRequested = false;
+
+    forever {
+        socket.connectToServer(path);
+        if (socket.waitForConnected(kConnectAttemptMs))
+            return true;
+        socket.abort(); // reset the socket state before the next attempt
+
+        if (clock.elapsed() >= kConnectBudgetMs)
+            return false;
+
+        if (!autostartRequested && clock.elapsed() >= kAutostartAfterMs) {
+            autostartRequested = true;
+            QProcess::startDetached(QStringLiteral("systemctl"),
+                                    {QStringLiteral("--user"),
+                                     QStringLiteral("start"),
+                                     QStringLiteral("symmetria-fm.service")});
+        }
+
+        QThread::msleep(kRetryDelayMs);
+    }
 }
 
 void printUsage()
@@ -81,12 +139,12 @@ int main(int argc, char* argv[])
     const QByteArray line = QJsonDocument(envelope).toJson(QJsonDocument::Compact) + '\n';
 
     QLocalSocket socket;
-    socket.connectToServer(socketPath());
-    if (!socket.waitForConnected(kConnectTimeoutMs)) {
+    if (!connectWithRetry(socket, socketPath())) {
         std::cerr << "symmetria-fm-cli: cannot connect to symmetria-fm at "
-                  << socketPath().toStdString() << ": "
+                  << socketPath().toStdString() << " after "
+                  << kConnectBudgetMs << " ms: "
                   << socket.errorString().toStdString() << "\n"
-                  << "Is symmetria-fm running?\n";
+                  << "Check: systemctl --user status symmetria-fm\n";
         return 1;
     }
 
