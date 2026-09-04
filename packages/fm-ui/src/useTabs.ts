@@ -5,6 +5,7 @@ import type { ListingOptions } from "@symmetria/fm-core/listingOptions";
 import {
   clearSelection,
   enterDirectory,
+  goToPath,
   leaveDirectory,
   moveCursor,
   type PaneState,
@@ -651,7 +652,7 @@ export function useTabs(initialPath: string): Tabs {
     moveTo: (index) => changeActive((p) => moveCursor(p, index - p.cursorIndex)),
     enter: () => goTo(enterDirectory),
     leave: () => goTo(leaveDirectory),
-    navigate: (path) => goTo((p) => ({ ...p, path, entries: [], cursorIndex: 0 })),
+    navigate: (path) => goTo((p) => goToPath(p, path)),
     toggleMark: () => changeActive(toggleSelection),
     clearMarks: () => changeActive(clearSelection),
 

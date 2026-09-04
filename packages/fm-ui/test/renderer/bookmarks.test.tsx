@@ -188,3 +188,15 @@ describe("a bookmark whose directory is gone", () => {
     await waitFor(() => expect(screen.getByTestId("crumb-current").textContent).toBe("jc"));
   });
 });
+
+describe("jumping to the directory you are already standing in", () => {
+  it("leaves the listing alone rather than emptying it", async () => {
+    await opened();
+    expect(namesIn("column-current")).toContain("notes.txt");
+
+    go("h");
+
+    await act(async () => undefined);
+    expect(namesIn("column-current")).toContain("notes.txt");
+  });
+});

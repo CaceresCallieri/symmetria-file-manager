@@ -5,7 +5,7 @@ import {
   stepForward,
   visit,
 } from "@symmetria/fm-core/history";
-import { createPane, type PaneState } from "@symmetria/fm-core/pane";
+import { createPane, goToPath, type PaneState } from "@symmetria/fm-core/pane";
 
 /**
  * The tab collection, as pure transitions.
@@ -287,9 +287,12 @@ export type HistoryDirection = "back" | "forward";
 /**
  * Walk the active tab's trail one step, or leave everything alone.
  *
- * The pane is emptied the same way `navigate` empties it, so the listing that
- * arrives replaces nothing and the cursor memory puts the cursor back where it
- * was left in that directory.
+ * It goes through `goToPath`, the same transition every other jump takes, so
+ * the listing that arrives replaces nothing and the cursor memory puts the
+ * cursor back where it was left in that directory. Sharing the transition is
+ * what keeps a step subject to its same-path rule: a trail entry that names the
+ * directory we are already in would otherwise empty the column and never
+ * re-list it, and the step is refused outright rather than half-taken.
  */
 export function stepActiveHistory(state: TabsState, direction: HistoryDirection): TabsState {
   const current = state.tabs[state.activeIndex];
@@ -301,9 +304,14 @@ export function stepActiveHistory(state: TabsState, direction: HistoryDirection)
       : stepForward(current.history, current.pane.path);
   if (step === null) return state;
 
+  const pane = goToPath(current.pane, step.path);
+  // Nowhere to go, so the trail must not move either — consuming the entry
+  // would spend a step that never happened.
+  if (pane === current.pane) return state;
+
   return withActiveTab(state, {
     ...current,
-    pane: { ...current.pane, path: step.path, entries: [], cursorIndex: 0 },
+    pane,
     history: step.history,
     // A step is as optimistic as any other move, and the directory it returns
     // to may have stopped being readable since it was last seen.

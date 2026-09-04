@@ -7,8 +7,10 @@ import {
   clearSelection,
   createPane,
   cursorEntry,
+  didNavigate,
   enterDirectory,
   entryAt,
+  goToPath,
   isDirectoryEntry,
   leaveDirectory,
   moveCursor,
@@ -123,6 +125,54 @@ describe("entering and leaving", () => {
     const back = setEntries(leaveDirectory(inside), listing);
 
     expect(cursorEntry(back)?.name).toBe("src");
+  });
+});
+
+describe("jumping to a path named outright", () => {
+  it("goes there and empties the listing, ready for the one that arrives", () => {
+    const pane = setEntries(createPane("/home/jc"), listing);
+    const jumped = goToPath(pane, "/home/jc/Downloads");
+
+    expect(jumped.path).toBe("/home/jc/Downloads");
+    expect(jumped.entries).toEqual([]);
+    expect(jumped.cursorIndex).toBe(0);
+  });
+
+  it("returns the very same pane when the jump goes nowhere", () => {
+    // BY REFERENCE, which is the whole of the fix. Emptying a pane and
+    // re-listing it are separate mechanisms joined only by the path changing,
+    // so a jump that clears the entries without moving leaves a column that
+    // nothing will ever fill: `gd` inside Downloads read "0 entries" against a
+    // directory full of files, and only leaving and coming back repaired it.
+    const pane = setEntries(createPane("/home/jc"), listing);
+
+    expect(goToPath(pane, "/home/jc")).toBe(pane);
+  });
+
+  it("makes that refusal visible through didNavigate, like the other two", () => {
+    const pane = setEntries(createPane("/home/jc"), listing);
+
+    expect(didNavigate(pane, goToPath(pane, "/home/jc"))).toBe(false);
+    expect(didNavigate(pane, goToPath(pane, "/home/jc/projects"))).toBe(true);
+  });
+
+  it("does not carry a selection to the destination", () => {
+    // The same rule entering and leaving obey, and for the same reason. A jump
+    // reached it late: it was the one location change that never became a named
+    // transition, so it never inherited any of the rules the others share.
+    const marked = toggleSelection(setEntries(createPane("/tmp"), [entry("a.txt")]));
+    expect(marked.selection.size).toBe(1);
+
+    expect(goToPath(marked, "/tmp/sub").selection.size).toBe(0);
+  });
+
+  it("keeps the cursor memory, so returning restores the cursor", () => {
+    let pane = setEntries(createPane("/home/jc"), listing);
+    pane = moveCursor(pane, 2); // b.txt
+    const away = setEntries(goToPath(pane, "/tmp"), [entry("x")]);
+    const back = setEntries(goToPath(away, "/home/jc"), listing);
+
+    expect(cursorEntry(back)?.name).toBe("b.txt");
   });
 });
 

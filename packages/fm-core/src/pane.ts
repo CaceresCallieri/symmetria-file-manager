@@ -236,6 +236,44 @@ export function leaveDirectory(pane: PaneState): PaneState {
 }
 
 /**
+ * Go to a path named outright, rather than to one the cursor is standing on.
+ *
+ * The third way a pane changes location, beside entering and leaving, and the
+ * one every jump takes: a bookmark letter, a zoxide result, a breadcrumb, a
+ * click in the parent column.
+ *
+ * **A jump to where we already are returns the pane BY REFERENCE, and that is
+ * not a nicety.** Emptying a pane and re-listing it are two separate
+ * mechanisms: the transition clears `entries` so the column blanks and refills,
+ * and the watch reconciler starts the read — but the reconciler is keyed on the
+ * PATH, so a jump that does not change the path never asks for a listing. The
+ * hand-rolled transition this replaced cleared the entries anyway, and the
+ * column then sat empty for as long as the tab stayed there: `gd` inside
+ * Downloads reported "0 entries" for a directory full of files, and so did a
+ * click on the current directory in the parent column. Nothing recovered it but
+ * navigating away and back.
+ *
+ * The rule that follows, for anything added here later: **no transition may
+ * empty a pane without changing its path.** `didNavigate` is how a caller asks
+ * whether one did.
+ *
+ * The selection is dropped for the same reason `enterDirectory` drops it — a
+ * mark is a NAME, and a name that survives the move can match a different file
+ * at the destination.
+ */
+export function goToPath(pane: PaneState, path: string): PaneState {
+  if (path === pane.path) return pane;
+
+  return {
+    path,
+    entries: [],
+    cursorIndex: 0,
+    cursorMemory: pane.cursorMemory,
+    selection: new Set(),
+  };
+}
+
+/**
  * Mark or unmark the entry under the cursor, and step past it.
  *
  * Advancing is what makes marking a run of files a repeated single keystroke
