@@ -13,10 +13,10 @@ same day on branch `t3code/map-electron-file-manager`. The daemon is enabled and
 starts at login. This note is the record of *why*, because none of it is
 derivable from the code.
 
-⚠ **Everything cited below — `docs/electron-transition/`, `packages/fm-main`,
-`packages/fm-ui`, the unit, the desktop entry — exists ONLY on that branch.**
-`main` has no Electron tree at all. Reading these paths from `main` will find
-nothing, and that is not evidence the note is stale.
+**MERGED TO `main` on 2026-09-02** (PR #52, merge commit `6eb9550`). Every path
+cited below — `docs/electron-transition/`, `packages/fm-main`, `packages/fm-ui`,
+the unit, the desktop entry — is now on `main`. This note previously warned that
+they existed only on the branch; that is no longer true.
 
 ## What shipped
 
