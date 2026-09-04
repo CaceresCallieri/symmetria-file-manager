@@ -32,6 +32,14 @@ export interface StatusBarProps {
   readonly renderMode?: RenderMode | null;
   /** The search field, when one is open. Null closes it. */
   readonly search: SearchFieldProps | null;
+  /**
+   * The running flash session, or null.
+   *
+   * It has no field of its own — the query is read from the raw key stream —
+   * so this bar is the only place it is visible at all. Above the transient
+   * line and below the search field in precedence, which is the Qt order.
+   */
+  readonly flash?: { readonly query: string } | null;
   /** A failure, a running transfer, or what just happened. */
   readonly transient: TransientLineProps;
 }
@@ -52,10 +60,12 @@ export interface StatusBarProps {
  * layout engine, so what is checked is the cause rather than the pixels.
  *
  * ── Precedence, highest first ───────────────────────────────────────────────
- * The search field, because the user is typing into it. Then a failure, which
- * is the one they must act on. Then a transfer, which is running. Then a
- * message. Then the counts. The middle three are `transientLine`'s own order and
- * its comment says why; this file does not repeat it.
+ * The search field, because the user is typing into it. Then a running flash
+ * session, which is also the user typing and has no field of its own. Then a
+ * failure, which is the one they must act on. Then a transfer, which is
+ * running. Then a message. Then the counts. The last three are
+ * `transientLine`'s own order and its comment says why; this file does not
+ * repeat it.
  *
  * The dialog chrome is a separate axis from the mode: Accept, Cancel and the
  * save-name field show whenever this is a dialog UNLESS search has the bar.
@@ -70,6 +80,7 @@ export function StatusBar({
   showHidden,
   renderMode,
   search,
+  flash,
   transient,
 }: StatusBarProps) {
   return (
@@ -98,13 +109,14 @@ export function StatusBar({
               onChange={(event) => picker.setSaveName(event.target.value)}
             />
           ) : null}
-          <Body
+          <BarContent
             entryCount={entryCount}
             selectedCount={selectedCount}
             sort={sort}
             reverse={reverse}
             showHidden={showHidden}
             renderMode={renderMode ?? null}
+            flash={flash ?? null}
             transient={transient}
           />
           {picker === null ? null : (
@@ -126,6 +138,24 @@ export function StatusBar({
 }
 
 /**
+ * What the bar is showing, once the search field has declined it.
+ *
+ * A component rather than a ternary inside `StatusBar`, because the complexity
+ * gate scores a component as one function and this bar already carries the
+ * dialog chrome's branches.
+ */
+function BarContent({ flash, ...body }: Omit<StatusBarProps, "picker" | "search">) {
+  if (flash === null || flash === undefined) return <Body {...body} />;
+
+  return (
+    <span data-testid="status-flash" className="status-bar__flash">
+      <kbd>s</kbd>
+      {flash.query}
+    </span>
+  );
+}
+
+/**
  * What is in this pane, or what just happened to it.
  *
  * The transient line REPLACES the counts rather than sitting beside them, which
@@ -143,7 +173,7 @@ function Body({
   showHidden,
   renderMode,
   transient,
-}: Omit<StatusBarProps, "picker" | "search">) {
+}: Omit<StatusBarProps, "picker" | "search" | "flash">) {
   const transientContent = transientLine(transient);
   if (transientContent !== null) return transientContent;
 

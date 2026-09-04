@@ -19,18 +19,21 @@ import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { MillerColumns } from "./components/MillerColumns.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
 import { PathBar } from "./components/PathBar.tsx";
+import type { SearchFieldProps } from "./components/SearchField.tsx";
 import { type RenderMode, StatusBar } from "./components/StatusBar.tsx";
 import { TabBar } from "./components/TabBar.tsx";
+import type { TransientLineProps } from "./components/transientLine.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
 import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
 import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { useBookmarks } from "./useBookmarks.ts";
 import { useExternalOpen } from "./useExternalOpen.ts";
 import { type FileOps, useFileOps } from "./useFileOps.ts";
+import { useFlash } from "./useFlash.ts";
 import { type KeyWiring, useKeyActions } from "./useKeyActions.ts";
 import { usePicker } from "./usePicker.ts";
 import { type Preview, usePreviewPane } from "./usePreview.ts";
-import { useSearch } from "./useSearch.ts";
+import { type Search, useSearch } from "./useSearch.ts";
 import { type Tabs, useTabs } from "./useTabs.ts";
 
 /**
@@ -95,6 +98,39 @@ function renderModeOf(
   return renderDocuments ? "rendered" : "source";
 }
 
+/**
+ * The search field's props, or null when no search is open.
+ *
+ * A module-level function for the same reason `cursorImageMimeOf` and
+ * `renderModeOf` above are: `App` is scored as one function and every
+ * conditional inside its JSX counts against the same bound.
+ */
+function searchChromeOf(search: Search): SearchFieldProps | null {
+  if (!search.active) return null;
+  return {
+    query: search.query,
+    matchCount: search.matchCount,
+    onChange: search.setQuery,
+    onConfirm: search.confirm,
+    onCancel: search.cancel,
+  };
+}
+
+/**
+ * A failure, a running transfer, or what just happened — whichever there is.
+ *
+ * The precedence between them belongs to `transientLine`; this only decides
+ * which message there is to show, since two sources can offer one.
+ */
+function transientOf(tabs: Tabs, ops: FileOps, modes: KeyWiring["modes"]): TransientLineProps {
+  return {
+    error: tabs.error,
+    message: ops.message ?? modes.message,
+    progress: ops.progress,
+    onCancelTransfer: ops.cancelRunningTransfer,
+  };
+}
+
 export interface AppProps {
   /** Overridden by tests, which must not depend on the real location. */
   readonly startPath?: string;
@@ -129,6 +165,7 @@ function cascadeModeFor(
   modes: KeyWiring["modes"],
   opsModalKind: string,
   searchActive: boolean,
+  flashActive: boolean,
 ): CascadeMode {
   return {
     // One gate for every dialog: the help sheet and the operation dialogs
@@ -138,9 +175,10 @@ function cascadeModeFor(
     modalOpen: modes.helpOpen || modes.zoxideOpen || opsModalKind !== "none",
     bookmarkSubMode: modes.bookmarkSubMode,
     chordPrefix: modes.chordPrefix,
-    // Flash jump is a text-input mode that arrives with its own phase. Until
-    // then nothing can enter it, so the cascade never reaches that step.
-    flashActive: false,
+    // Flash jump is a text-input mode with no input to focus: it reads the raw
+    // key stream, so saying so here is the ONLY thing that stops `j` from
+    // moving the cursor while a session is narrowing.
+    flashActive,
     // The seam the cascade documented and nothing used until now. The field is
     // a real `<input>`, so `useKeyDispatch` would report this anyway from the
     // event target — stating it here as well means a key that arrives while the
@@ -221,6 +259,12 @@ export function App(props: AppProps = {}) {
     path: tabs.pane.path,
     moveTo: tabs.moveTo,
   });
+  const flash = useFlash({
+    entries: tabs.pane.entries,
+    cursorIndex: tabs.pane.cursorIndex,
+    path: tabs.pane.path,
+    moveTo: tabs.moveTo,
+  });
   const bookmarks = useBookmarks();
 
   // Wired here rather than inside `useTabs`, and the placement is the point:
@@ -245,6 +289,7 @@ export function App(props: AppProps = {}) {
     cursorImageMimeOf(previewing.preview, cursorPath),
     picker,
     previewing.toggleAudio,
+    flash.start,
   );
 
   const context = useMemo<KeyContext>(
@@ -255,11 +300,11 @@ export function App(props: AppProps = {}) {
   );
 
   const mode = useMemo<CascadeMode>(
-    () => cascadeModeFor(modes, ops.modal.kind, search.active),
-    [modes, ops.modal.kind, search.active],
+    () => cascadeModeFor(modes, ops.modal.kind, search.active, flash.active),
+    [modes, ops.modal.kind, search.active, flash.active],
   );
 
-  useKeyDispatch({ mode, context });
+  useKeyDispatch({ mode, context, onFlashKey: flash.onKey });
 
   /**
    * A click in the parent column: go to that sibling directory.
@@ -289,6 +334,8 @@ export function App(props: AppProps = {}) {
         parentCursorName={tabs.parentCursorName}
         selection={tabs.pane.selection}
         matches={search.matches}
+        flashLabels={flash.labels}
+        flashActive={flash.active}
         onSelect={tabs.moveTo}
         onActivate={(index) => activateAt(tabs, ops, index)}
         onLeaveTo={leaveTo}
@@ -311,23 +358,9 @@ export function App(props: AppProps = {}) {
         reverse={tabs.reverse}
         showHidden={tabs.showHidden}
         renderMode={renderModeOf(previewing.preview, cursorPath, tabs.renderDocuments)}
-        search={
-          search.active
-            ? {
-                query: search.query,
-                matchCount: search.matchCount,
-                onChange: search.setQuery,
-                onConfirm: search.confirm,
-                onCancel: search.cancel,
-              }
-            : null
-        }
-        transient={{
-          error: tabs.error,
-          message: ops.message ?? modes.message,
-          progress: ops.progress,
-          onCancelTransfer: ops.cancelRunningTransfer,
-        }}
+        search={searchChromeOf(search)}
+        flash={flash.chrome}
+        transient={transientOf(tabs, ops, modes)}
       />
       <Overlays
         modes={modes}

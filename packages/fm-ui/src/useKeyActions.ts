@@ -126,6 +126,16 @@ export function useKeyActions(
    * and can therefore tell when the request stops applying.
    */
   toggleAudioPlayback: () => void,
+  /**
+   * Begin a flash session.
+   *
+   * Supplied by the caller rather than built here, like the two above: the
+   * session needs the listing, the cursor and the pane, and this hook holds
+   * none of them. Passed as the bare function rather than the whole hook so its
+   * identity is stable — the hook's own object changes on every keystroke of a
+   * running session, and the whole action table would be rebuilt with it.
+   */
+  startFlash: () => void,
 ): KeyWiring {
   const [chordPrefix, setChordPrefix] = useState("");
   const [bookmarkSubMode, setBookmarkSubMode] = useState<BookmarkSubMode | null>(null);
@@ -182,7 +192,7 @@ export function useKeyActions(
       startSearch: () => search.open(),
       nextMatch: () => search.goNext(),
       previousMatch: () => search.goPrevious(),
-      startFlash: soon("Flash jump"),
+      startFlash,
       openFuzzyFinder: soon("The fuzzy finder"),
       openZoxide: () => setZoxideOpen(true),
 
@@ -261,7 +271,7 @@ export function useKeyActions(
       treeToggleGitignore: soon("The tree view"),
       treeRefresh: soon("The tree view"),
     };
-  }, [tabs, ops, search, bookmarks, home, picker, toggleAudioPlayback]);
+  }, [tabs, ops, search, bookmarks, home, picker, toggleAudioPlayback, startFlash]);
 
   const state = useMemo<KeyState>(() => {
     const entry = tabs.pane.entries[tabs.pane.cursorIndex];

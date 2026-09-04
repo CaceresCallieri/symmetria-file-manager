@@ -3,6 +3,7 @@ import { defaultRangeExtractor, type Range, useVirtualizer } from "@tanstack/rea
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FileRow } from "./FileRow.tsx";
+import type { FlashRowLabel } from "./FlashName.tsx";
 import { INITIAL_RECT, observeWithFallback } from "./virtualize.ts";
 
 export interface FileListProps {
@@ -19,6 +20,18 @@ export interface FileListProps {
    * deliberately keyed differently and are not interchangeable.
    */
   readonly matches?: ReadonlySet<number>;
+  /**
+   * Flash labels for this column, by INDEX, and whether a session is running.
+   *
+   * By index rather than by name, like `matches` and for the same reason: a
+   * label is computed against the listing as it stands and does not outlive a
+   * re-sort. The two are separate maps because a row can be both.
+   *
+   * A running session with no entry for a row means that row did not match,
+   * which is what dims it — so the flag cannot be inferred from the map.
+   */
+  readonly flashLabels?: ReadonlyMap<number, FlashRowLabel>;
+  readonly flashActive?: boolean;
   /** A single click on a row. Absent leaves the whole column unclickable. */
   readonly onSelect?: (index: number) => void;
   /** A double click on a row. */
@@ -42,6 +55,15 @@ export interface FileListProps {
  */
 export const NO_SELECTION: ReadonlySet<string> = new Set();
 
+/**
+ * No flash labels.
+ *
+ * A shared frozen instance for the same reason `NO_SELECTION` is one, and it
+ * also spares every caller a conditional spread: an optional prop under
+ * `exactOptionalPropertyTypes` cannot simply be handed `undefined`.
+ */
+export const NO_FLASH_LABELS: ReadonlyMap<number, FlashRowLabel> = new Map();
+
 /** Row height in pixels. Fixed, so the virtualiser needs no measurement pass. */
 const ROW_HEIGHT = 24;
 
@@ -51,6 +73,8 @@ export function FileList({
   testId,
   selection,
   matches,
+  flashLabels = NO_FLASH_LABELS,
+  flashActive = false,
   onSelect,
   onActivate,
   clickableWhen,
@@ -178,6 +202,8 @@ export function FileList({
                 isCursor={isCursor}
                 isMarked={selection.has(entry.name)}
                 isMatch={matches?.has(item.index) === true}
+                flash={flashLabels.get(item.index) ?? null}
+                flashActive={flashActive}
                 {...(onSelect === undefined || !reachable
                   ? {}
                   : { onSelect: () => onSelect(item.index) })}

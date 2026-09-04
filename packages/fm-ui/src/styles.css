@@ -895,6 +895,61 @@ kbd {
 }
 
 /*
+ * A row a flash session cannot reach.
+ *
+ * Fading rather than hiding: the rows are still the map of the directory, and
+ * removing them would move every label under the reader's eyes. A quarter is
+ * the Qt build's figure and it reads the same over this near-black base.
+ *
+ * No transition, like every other row state in this file — a per-row animation
+ * measured as visible stutter during fast cursor movement.
+ */
+.row--flash-dim {
+  opacity: 0.25;
+}
+
+/*
+ * The characters that matched what was typed, inside a name being overtyped.
+ *
+ * A quiet grey, not a second bright fill: it sits directly against the label,
+ * and two strong fills abutting read as one block rather than as two things.
+ */
+.row__flash-query {
+  background: var(--flash-query);
+  border-radius: 2px;
+}
+
+/*
+ * The keys to press, drawn over the characters that follow the match.
+ *
+ * Inverted — dark ink on a near-white chip — which makes it the strongest
+ * thing on the row without introducing a colour. During a session it is the
+ * only thing worth reading, and it has to win against a cursor fill underneath
+ * it.
+ */
+.row__flash-label {
+  background: var(--flash-label);
+  color: var(--flash-label-ink);
+  font-weight: 700;
+  border-radius: 2px;
+}
+
+/*
+ * The running session, in the status bar.
+ *
+ * The keycap repeats the key that started it, so the bar says what mode this
+ * is rather than only what has been typed into it. Monochrome, like the labels
+ * it belongs to.
+ */
+.status-bar__flash {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+}
+
+/*
  * The search field, which lives INSIDE the status bar.
  *
  * It was a row of its own above the columns and had its own vertical padding

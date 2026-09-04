@@ -50,6 +50,22 @@
    * one that is.
    */
   --search-match: rgb(255 255 255 / 5%);
+  /*
+   * Flash jump, and it is MONOCHROME on purpose.
+   *
+   * The Qt build draws the label as a near-white chip with dark ink and the
+   * matched characters on a much quieter grey, and the operator asked for the
+   * same here after seeing a coloured first attempt side by side with it. The
+   * accent colour is spoken for — it means "the application is doing
+   * something" — and a jump label is not that; it is the brightest thing on
+   * screen for a second and then gone.
+   *
+   * The contrast between the two is what separates them, so they may sit
+   * adjacent without reading as one block: 18% white against solid white.
+   */
+  --flash-query: rgb(255 255 255 / 18%);
+  --flash-label: var(--foreground);
+  --flash-label-ink: var(--background);
   /* The cut/mark indicator. Hardcoded in the Qt build for the same reason it is
      its own token here: an indicator that stops being legible is worse than one
      that does not match. */
