@@ -97,6 +97,20 @@
    * than the small inaccuracy.
    */
   --scrollbar-width: 6px;
+  /*
+   * What the lane is painted on.
+   *
+   * Transparent HERE, so the column surface runs under it rather than being
+   * interrupted by a stripe of its own. It is a token rather than the literal
+   * `transparent` because the SAME six rules are served into every previewed
+   * HTML document, where transparent is the one value that cannot be used:
+   * measured against Chromium 41, a custom-styled track in a framed document
+   * composites against the frame's own white base, which the previewed page
+   * cannot paint — with or without a background on its `html`. So a transparent
+   * track there is a white stripe down a dark page, which is the exact defect
+   * this whole token exists to end. `scrollbar.ts` gives it a solid value.
+   */
+  --scrollbar-track: transparent;
   --scrollbar-thumb: rgb(255 255 255 / 8%);
   --scrollbar-thumb-hover: rgb(255 255 255 / 12%);
 

@@ -818,11 +818,25 @@ kbd {
  * which over a near-black window is the loudest thing on screen. This replaces
  * it with a thin lane the same colour family as the borders.
  *
+ * ── These six rules are a COPY, and the original is not here ────────────────
+ * `@symmetria/fm-core/scrollbar` holds the same six rules as text, because a
+ * previewed HTML file is a SECOND DOCUMENT with its own cascade: it cannot see
+ * one declaration of this stylesheet, so the main process appends that text to
+ * every HTML document it serves. Without it a framed page draws Chromium's
+ * white default beside this one, which is the state a screenshot caught with
+ * three of them at once.
+ *
+ * They live here as well, rather than being injected from JavaScript into both
+ * documents, because CSS loaded as CSS paints before any script runs. Do not
+ * edit one side alone: `theme.test.ts` compares them declaration by
+ * declaration and fails when they drift.
+ *
  * ── Global on purpose ──────────────────────────────────────────────────────
  * Not scoped to `.list`. Six surfaces scroll today — the three columns, a
  * preview body, a directory listing and the modal panel — and the search field
  * and the tree view will add more. A rule per class means remembering to add
- * the seventh.
+ * the seventh. In a framed document there are no class names to scope to at
+ * all, which is a second reason the same rules serve both.
  *
  * ── Why the WebKit pseudo-elements and not `scrollbar-color` ────────────────
  * Chromium is the only engine this ships on, and the standard properties cannot
@@ -840,9 +854,7 @@ kbd {
 }
 
 ::-webkit-scrollbar-track {
-  /* Transparent, so the column surface runs under the lane rather than being
-     interrupted by a stripe of its own. */
-  background: transparent;
+  background: var(--scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
@@ -859,7 +871,7 @@ kbd {
 }
 
 ::-webkit-scrollbar-corner {
-  background: transparent;
+  background: var(--scrollbar-track);
 }
 
 /*

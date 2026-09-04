@@ -1,6 +1,10 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-
+import {
+  FOREIGN_DOCUMENT_STYLE,
+  FOREIGN_DOCUMENT_TOKENS,
+  SCROLLBAR_RULES,
+} from "@symmetria/fm-core/scrollbar";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -102,6 +106,33 @@ describe("the palette", () => {
 });
 
 /**
+ * Every `selector { … }` block in a sheet, as sorted declaration lists.
+ *
+ * Sorted and whitespace-flattened so the comparison is about what the rules
+ * SAY, not about how either copy is laid out. Comments come out first: the
+ * panel's copy explains itself inside its rule bodies and the served copy does
+ * not, and that difference is not a drift.
+ */
+function rulesIn(css: string): Map<string, string[]> {
+  const rules = new Map<string, string[]>();
+
+  for (const match of css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const declarations = (match[2] ?? "")
+      .split(";")
+      .map((one) => one.trim().replace(/\s+/g, " "))
+      .filter((one) => one !== "")
+      .sort();
+    rules.set((match[1] ?? "").trim(), declarations);
+  }
+  return rules;
+}
+
+/** The value `tokens.css` declares for one custom property. */
+function declaredValue(tokens: string, name: string): string | undefined {
+  return new RegExp(`^\\s*${name}:\\s*([^;]+);`, "m").exec(tokens)?.[1]?.trim();
+}
+
+/**
  * The scrollbars.
  *
  * Chromium draws a wide white scrollbar with arrow buttons by default, and over
@@ -143,10 +174,12 @@ describe("the scrollbar", () => {
     expect(thumb).toMatch(/border-radius:/);
   });
 
-  it("leaves the track transparent, so the surface shows through the lane", async () => {
+  it("leaves the panel's track transparent, so the surface shows through the lane", async () => {
     const track = /::-webkit-scrollbar-track\s*\{[^}]*\}/.exec(await sheet())?.[0] ?? "";
+    const tokens = await readFile(TOKENS, "utf8");
 
-    expect(track).toContain("transparent");
+    expect(track).toContain("var(--scrollbar-track)");
+    expect(declaredValue(tokens, "--scrollbar-track")).toBe("transparent");
   });
 
   it("draws no arrow buttons at the ends", async () => {
@@ -173,6 +206,75 @@ describe("the scrollbar", () => {
 
     expect(selectors.length).toBeGreaterThan(0);
     expect(selectors.every((prefix) => prefix === "" || prefix === "*")).toBe(true);
+  });
+
+  /**
+   * One definition, two documents.
+   *
+   * A previewed HTML file is a second document with its own cascade — it
+   * cannot see one declaration of `styles.css` — so the main process appends
+   * `SCROLLBAR_RULES` to every HTML document it serves. The rules therefore
+   * exist twice, and these are what stop the copies drifting into two
+   * scrollbars that merely resemble each other.
+   */
+  it("says exactly what the main process serves to a framed document", async () => {
+    const shared = rulesIn(SCROLLBAR_RULES);
+    const panel = rulesIn(await sheet());
+
+    // Every rule, not a sample: a declaration added to one copy alone is the
+    // whole failure being guarded against.
+    expect(shared.size).toBe(6);
+    for (const [selector, declarations] of shared) {
+      expect({ selector, declarations: panel.get(selector) }).toEqual({ selector, declarations });
+    }
+  });
+
+  it("gives a framed document every one of the panel's own values but one", async () => {
+    // A page carries no `tokens.css`, so the served copy has to declare the
+    // values itself. Four of the five are the panel's exactly — the two
+    // lengths and both thumb colours — which is what makes the lane in a
+    // preview the same object as the lane in the file list rather than one
+    // that resembles it.
+    const tokens = await readFile(TOKENS, "utf8");
+    const foreign = rulesIn(FOREIGN_DOCUMENT_TOKENS).get(":root") ?? [];
+
+    for (const name of [
+      "--scrollbar-width",
+      "--radius-sm",
+      "--scrollbar-thumb",
+      "--scrollbar-thumb-hover",
+    ]) {
+      expect(foreign).toContain(`${name}: ${declaredValue(tokens, name)}`);
+    }
+  });
+
+  it("paints that document's track solid, because transparent cannot work there", async () => {
+    // THE finding this arrangement exists for, and the edit a future reader
+    // will be tempted to make. Measured against Chromium 41: once a track
+    // carries author styles, a framed document composites it against the
+    // FRAME's own white base rather than against the page. A previewed page
+    // cannot paint that area — a background on its `body` and a background on
+    // its `html` were both tried, and both left a white stripe down a dark
+    // page, which is worse than the default scrollbar it replaced.
+    //
+    // Solid, and specifically the panel's own base: that known substrate is
+    // what lets the four values above be the panel's rather than a second set
+    // chosen to survive an unknown background.
+    const tokens = await readFile(TOKENS, "utf8");
+    const foreign = rulesIn(FOREIGN_DOCUMENT_TOKENS).get(":root") ?? [];
+
+    expect(foreign).not.toContain("--scrollbar-track: transparent");
+    expect(foreign).toContain(`--scrollbar-track: ${declaredValue(tokens, "--background")}`);
+  });
+
+  it("travels as one style element, tokens first", async () => {
+    // Order matters inside the served text: the rules read the tokens, and a
+    // `var()` with no declaration drops its whole declaration silently.
+    expect(FOREIGN_DOCUMENT_STYLE.startsWith("<style>")).toBe(true);
+    expect(FOREIGN_DOCUMENT_STYLE.endsWith("</style>")).toBe(true);
+    expect(FOREIGN_DOCUMENT_STYLE.indexOf(":root")).toBeLessThan(
+      FOREIGN_DOCUMENT_STYLE.indexOf("::-webkit-scrollbar"),
+    );
   });
 });
 

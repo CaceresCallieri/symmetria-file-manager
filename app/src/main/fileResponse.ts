@@ -1,5 +1,6 @@
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
+import { FOREIGN_DOCUMENT_STYLE } from "@symmetria/fm-core/scrollbar";
 
 import { parseRange, partialHeaders, unsatisfiableHeaders, wholeHeaders } from "./fileRange.ts";
 
@@ -108,6 +109,107 @@ function documentPolicy(
     : null;
 }
 
+/**
+ * The type whose scrollbars this process restyles, and it is only the one.
+ *
+ * `text/html` is parsed by the HTML parser, which reparents stray content at
+ * the end of the document back into the body — so a `<style>` appended after
+ * `</html>` is picked up and applied. **`application/xhtml+xml` is parsed as
+ * XML**, where anything after the root element is a fatal "junk after document
+ * element" error and Chromium shows a parse failure instead of the page. So an
+ * XHTML preview keeps Chromium's default scrollbars, deliberately: a wrong
+ * scrollbar is a blemish, and a document that will not parse is a broken
+ * feature.
+ */
+const STYLED_DOCUMENT_TYPE = "text/html";
+
+/** The panel's scrollbar, as bytes to append to a document. */
+const SCROLLBAR_STYLE = Buffer.from(FOREIGN_DOCUMENT_STYLE, "utf8");
+
+/**
+ * Does this document announce itself as UTF-16?
+ *
+ * A byte order mark takes precedence over every other encoding signal, so a
+ * document that carries one is decoded as UTF-16 whatever the response says.
+ * Appending UTF-8 bytes to it would decode as a line of CJK-looking rubbish at
+ * the foot of the page — visible, unexplained, and worse than the default
+ * scrollbar it was trying to replace. Such a file keeps its own scrollbars.
+ */
+function hasUtf16Mark(chunk: Uint8Array): boolean {
+  const first = chunk[0];
+  const second = chunk[1];
+  return (first === 0xff && second === 0xfe) || (first === 0xfe && second === 0xff);
+}
+
+/**
+ * The document, with the panel's scrollbar rules appended.
+ *
+ * ── Appended rather than spliced into the head, and that is the safe end ────
+ * Inserting near the top means finding a place that is not before the doctype
+ * — anything ahead of it puts the page into quirks mode and changes its
+ * layout — which means matching tags in bytes whose encoding is not yet known.
+ * The end of the document needs no parsing at all, and the cascade is
+ * unaffected: CSS applies wherever it is declared.
+ *
+ * Being last also decides the one real conflict. A page that styles its own
+ * scrollbars loses, because these rules come after its own at equal
+ * specificity — which is what was asked for. The panel's scrollbar is meant to
+ * be the scrollbar everywhere, including over a page that had opinions.
+ *
+ * The stream is wrapped rather than the file being read into memory: a
+ * previewed document can be large, and the whole point of the streaming path
+ * is that nothing here holds a file.
+ */
+function withScrollbarStyle(body: ReadableStream<Uint8Array> | null): ReadableStream<Uint8Array> {
+  const reader = body?.getReader() ?? null;
+  let seenFirstChunk = false;
+  let append = true;
+
+  return new ReadableStream({
+    async pull(controller) {
+      if (reader !== null) {
+        const { done, value } = await reader.read();
+        if (!done) {
+          if (!seenFirstChunk) {
+            seenFirstChunk = true;
+            append = !hasUtf16Mark(value);
+          }
+          controller.enqueue(value);
+          return;
+        }
+      }
+
+      if (append) controller.enqueue(SCROLLBAR_STYLE);
+      controller.close();
+    },
+    cancel(reason) {
+      return reader?.cancel(reason);
+    },
+  });
+}
+
+/**
+ * A framed document, restyled.
+ *
+ * **It declares no `content-length`, and that is required rather than lazy.**
+ * The appended bytes are decided inside the stream, from the first chunk, so
+ * the final length is not known when the headers are written. A length that
+ * was wrong by 400 bytes would leave Chromium waiting for a body that never
+ * finishes. A document needs no length — only a media element does, which is
+ * what `wholeHeaders` exists for — so the honest answer is to omit it and say
+ * that ranges are not on offer.
+ */
+function documentResponse(
+  body: ReadableStream<Uint8Array> | null,
+  contentType: string,
+  policy: { readonly "content-security-policy": string } | null,
+): Response {
+  return new Response(withScrollbarStyle(body), {
+    status: 200,
+    headers: { "content-type": contentType, "accept-ranges": "none", ...policy },
+  });
+}
+
 /** Serve `path`, honouring `rangeHeader` when it names one satisfiable range. */
 export function fileResponse(
   path: string,
@@ -136,6 +238,9 @@ export function fileResponse(
   // An empty file has no byte to stream, and `createReadStream` given an `end`
   // of -1 reads to the end of the file rather than reading nothing.
   const body = size === 0 ? null : fileStream(path, 0, size - 1);
+
+  if (contentType === STYLED_DOCUMENT_TYPE) return documentResponse(body, contentType, policy);
+
   return new Response(body, {
     status: 200,
     headers: { ...wholeHeaders(size, contentType), ...policy },
