@@ -193,10 +193,14 @@ describe("jumping to the directory you are already standing in", () => {
   it("leaves the listing alone rather than emptying it", async () => {
     await opened();
     expect(namesIn("column-current")).toContain("notes.txt");
+    const before = [...log.listed];
 
     go("h");
 
     await act(async () => undefined);
     expect(namesIn("column-current")).toContain("notes.txt");
+    // And it costs no disk read either. Surviving the jump would also be true
+    // of a version that emptied the column and re-listed it, which flickers.
+    expect(log.listed).toEqual(before);
   });
 });

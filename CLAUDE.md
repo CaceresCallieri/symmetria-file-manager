@@ -73,37 +73,45 @@ GitHub Actions runs on every push/PR to `main` (`.github/workflows/ci.yml`). The
 
 ### Electron Changes — Rebuild and Restart Before Reporting
 
-An edit under `app/` or `packages/fm-*` is NOT live until the bundle is rebuilt
-and the daemon reloads it. `symmetria-fm-electron.service` is resident and holds
-the old code in memory, so a change reported as done while it still runs the
-previous bundle reads to the operator as a fix that did not work.
+An edit to anything bundled into `app/dist-electron/` — `app/src/**` and
+`packages/fm-*/src/**` — is NOT live until the bundle is rebuilt and the daemon
+restarts onto it. `symmetria-fm-electron.service` is resident and holds the old
+code in memory, so the operator then tests the previous bundle and sees a fix
+that did not work. A change confined to tests, docs or tooling needs no restart.
 
-**Finish every Electron change with this, then say it is reloaded:**
+**This is the LAST command of the change — after the tests, after the gates.**
+`pnpm -r test` rebuilds `app/dist-electron/` itself and leaves a DEVELOPMENT
+bundle there, so anything that runs the suite must be followed by this again:
 
 ```bash
-cd app && pnpm build && systemctl --user restart symmetria-fm-electron.service
+readlink -f ~/.local/bin/symmetria-fm-electron   # must resolve inside THIS tree
+pnpm --filter @symmetria/fm-app build \
+  && systemctl --user restart symmetria-fm-electron.service \
+  && systemctl --user is-active symmetria-fm-electron.service
 ```
 
-The operator granted this as a standing permission and asked for it explicitly:
-reload after changes so they can check them. It covers
-`symmetria-fm-electron.service` ONLY. `symmetria-fm.service` is the Qt daemon,
-serves the system's portal dialogs, and still needs consent — see the warning in
-Project Overview.
+- **The `readlink` is not ceremony.** That launcher and the unit are symlinks
+  into ONE tree, and this project is worked on in `t3` worktrees. From any other
+  worktree the build succeeds and changes nothing the operator can see — the
+  same silent-stale failure this rule exists to prevent. If it resolves
+  elsewhere, say so instead of restarting.
+- **A failed build must NOT be followed by a restart** — the old bundle is still
+  serving the operator. Report the build output instead.
+- If the service is not `active` afterwards, report
+  `systemctl --user status symmetria-fm-electron.service`. Never `pkill`.
 
-Two things this order protects against:
+Then state in the final summary that the daemon was rebuilt and restarted, so
+the operator knows the running window holds the new code.
 
-- **A restart without the build reloads the OLD bundle.** Nothing in the unit
-  builds: `bin/symmetria-fm-electron` runs `pnpm build` only when
-  `dist-electron/main/index.js` is ABSENT, so a rebuild is the caller's job on
-  every run after the first.
-- **`pnpm -r test` also writes `app/dist-electron/`, and leaves a DEVELOPMENT
-  bundle there.** The app's vitest `globalSetup` runs the same `pnpm run build`,
-  but it inherits vitest's `NODE_ENV=test`, and vite then skips minification and
-  keeps React's development build: 744 kB against 495 kB, measured both ways
-  (`NODE_ENV=test pnpm build` reproduces the larger one exactly). A restart
-  straight after a test run therefore serves that bundle to the operator's real
-  window. **Rebuild after testing, never before**, and do not attribute the
-  difference to a different build command — there is only one.
+Restarting this unit needs NO consent: the operator asked for the reload so they
+can check the change, and accepts that it closes any open Electron FM window.
+The permission covers `symmetria-fm-electron.service` ONLY. `symmetria-fm.service`
+is the Qt daemon, serves the system's portal dialogs, and still needs consent —
+see the warning in Project Overview.
+
+Why the unit does not rebuild, and why a test run poisons the bundle:
+`docs/electron-transition/22-desktop-integration.md` → *Rebuilding before a
+restart*.
 
 ### QML Changes
 
@@ -229,7 +237,7 @@ pnpm exec tsc -p packages/fm-ui --noEmit --pretty false  # types — panel SOURC
 pnpm exec tsc -p packages/fm-ui/tsconfig.test.json --noEmit --pretty false  # types — panel TESTS: Node, they read the source tree
 pnpm exec tsc -p app/tsconfig.main.json --noEmit --pretty false  # types — host main process: Node, no DOM
 pnpm exec tsc -p app/tsconfig.renderer.json --noEmit --pretty false  # types — host renderer entry: DOM, no Node
-pnpm -r test  # the whole suite, per package. NEVER `vitest` from the root — see below
+pnpm -r test  # the whole suite, per package. NEVER `vitest` from the root — see below. Leaves a DEVELOPMENT bundle in app/dist-electron/: rebuild before any daemon restart (Build & Run → Electron Changes)
 pnpm exec knip --reporter json  # files, exports, dependencies, and the workspace package graph
 pnpm exec fallow dead-code --fail-on-issues  # whole-project dead code; any issue gates
 pnpm exec fallow health --score --hotspots --fail-on-issues  # complexity, cycles, and health hotspots

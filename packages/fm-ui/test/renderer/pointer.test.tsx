@@ -107,12 +107,14 @@ describe("clicking in the parent column", () => {
     // we already are, and a jump like that used to empty the column for good.
     render(<App startPath="/home/jc/projects" />);
     await waitFor(() => expect(namesIn("column-current")).toContain("beta.md"));
+    const before = [...log.listed];
 
     fireEvent.click(rowNamed("column-parent", "projects"));
 
     await act(async () => undefined);
     expect(namesIn("column-current")).toContain("beta.md");
     expect(screen.getByTestId("crumb-current").textContent).toBe("projects");
+    expect(log.listed).toEqual(before);
   });
 
   it("leaves a file in that column inert, because it is not a destination", async () => {

@@ -221,18 +221,18 @@ export function enterDirectory(pane: PaneState): PaneState {
   };
 }
 
-/** Go to the parent, stopping at the root rather than climbing past it. */
+/**
+ * Go to the parent, stopping at the root rather than climbing past it.
+ *
+ * The stop IS `goToPath`'s same-path rule and not a second guard beside it:
+ * `parentOf("/")` returns `"/"`, so climbing from the root asks to go where it
+ * already is and gets the pane back by reference. The body of this function was
+ * byte-identical to that transition, guard included, which is one pane literal
+ * too many — a field added to `PaneState` would have had to be remembered here
+ * as well.
+ */
 export function leaveDirectory(pane: PaneState): PaneState {
-  const parent = parentOf(pane.path);
-  if (parent === pane.path) return pane;
-
-  return {
-    path: parent,
-    entries: [],
-    cursorIndex: 0,
-    cursorMemory: pane.cursorMemory,
-    selection: new Set(),
-  };
+  return goToPath(pane, parentOf(pane.path));
 }
 
 /**
@@ -253,9 +253,12 @@ export function leaveDirectory(pane: PaneState): PaneState {
  * click on the current directory in the parent column. Nothing recovered it but
  * navigating away and back.
  *
- * The rule that follows, for anything added here later: **no transition may
- * empty a pane without changing its path.** `didNavigate` is how a caller asks
- * whether one did.
+ * The rule that follows, for anything added here later: **no NAVIGATION
+ * transition may empty a pane without changing its path.** `didNavigate` is how
+ * a caller asks whether one did. A listing that FAILS empties the pane at the
+ * same path on purpose — see the `failed` branch in `useTabs.ts` — because that
+ * is a report about a directory, not a move to one. Do not "fix" it to match
+ * this rule.
  *
  * The selection is dropped for the same reason `enterDirectory` drops it — a
  * mark is a NAME, and a name that survives the move can match a different file
@@ -349,9 +352,11 @@ export function breadcrumbs(path: string): Breadcrumb[] {
 /**
  * Did a navigation actually happen?
  *
- * `enterDirectory` and `leaveDirectory` return the pane BY REFERENCE when there
- * is nowhere to go, so a caller can bind them to a key without asking first.
- * This names that convention rather than leaving each call site to know it.
+ * `enterDirectory`, `leaveDirectory` and `goToPath` all return the pane BY
+ * REFERENCE when there is nowhere to go, so a caller can bind them to a key
+ * without asking first. This names that convention rather than leaving each
+ * call site to know it. Keep the list complete: a transition that follows the
+ * convention but is missing here is one a reader will not know to trust.
  */
 export function didNavigate(before: PaneState, after: PaneState): boolean {
   return before !== after;

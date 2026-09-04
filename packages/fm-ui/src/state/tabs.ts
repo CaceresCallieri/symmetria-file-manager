@@ -293,6 +293,11 @@ export type HistoryDirection = "back" | "forward";
  * what keeps a step subject to its same-path rule: a trail entry that names the
  * directory we are already in would otherwise empty the column and never
  * re-list it, and the step is refused outright rather than half-taken.
+ *
+ * It also DROPS the selection, which the hand-rolled step used to carry. A step
+ * lands in a different directory, and a mark is a NAME that can match a
+ * different file there — the same rule, and the same reason, as
+ * `enterDirectory`.
  */
 export function stepActiveHistory(state: TabsState, direction: HistoryDirection): TabsState {
   const current = state.tabs[state.activeIndex];
@@ -307,6 +312,15 @@ export function stepActiveHistory(state: TabsState, direction: HistoryDirection)
   const pane = goToPath(current.pane, step.path);
   // Nowhere to go, so the trail must not move either — consuming the entry
   // would spend a step that never happened.
+  //
+  // The cost of that choice, stated so it is a decision and not an oversight:
+  // the offending entry stays on the stack, so `back` would be inert for that
+  // tab rather than wrong once. Refusing is still preferred, because a step
+  // that moved the trail without moving the pane puts the two out of step, and
+  // every later step then compounds the error. The state is unreachable through
+  // the trail the pane builds for itself — `navigateActivePane` never records a
+  // move that did not move — so this is defence, and it should fail loudly
+  // rather than quietly limp.
   if (pane === current.pane) return state;
 
   return withActiveTab(state, {
@@ -328,9 +342,13 @@ export function stepActiveHistory(state: TabsState, direction: HistoryDirection)
  * the snapshot the move itself left — see `historyBeforeMove` for why an undo
  * operation could not do it.
  *
- * Only ever called where the attempted path differs from the last good one, so
- * a watcher refresh that fails on the directory the pane is already in cannot
- * reach it and cannot undo a move the user really made.
+ * The caller only reaches it where the attempted path differs from the last good
+ * one, so a watcher refresh that fails on the directory the pane is already in
+ * cannot undo a move the user really made. That guard is now held HERE as well,
+ * through `goToPath`. It used to be the caller's alone, and this function wrote
+ * the pane out by hand — the one shape left in the codebase that could empty a
+ * listing nothing would re-fetch, kept safe only by a condition a reader had to
+ * go and find in another file.
  *
  * By id and not on the active tab, because a background tab's listing can fail
  * too and the answer must reach the tab that asked.
@@ -341,10 +359,15 @@ export function revertPaneById(state: TabsState, id: string, path: string): Tabs
   // The tab closed while its read was in flight. Nothing to put back.
   if (current === undefined) return state;
 
+  // Already where the retreat would put it, so there is nothing to put back and
+  // emptying the listing would be pure loss.
+  const pane = goToPath(current.pane, path);
+  if (pane === current.pane) return state;
+
   const tabs = [...state.tabs];
   tabs[index] = {
     ...current,
-    pane: { ...current.pane, path, entries: [] },
+    pane,
     history: current.historyBeforeMove,
   };
   return { ...state, tabs };

@@ -176,15 +176,6 @@ function at(state: TabsState): string {
   return activePane(state)?.path ?? "";
 }
 
-/**
- * A navigation that fails, and what it must leave behind.
- *
- * The pane's path moves BEFORE the listing answers — that is what makes
- * entering a directory feel instant — so a navigation that turns out to be
- * unreadable has already been recorded by the time anyone finds out. Putting
- * the pane back is not enough: the trail has to go back to exactly what it was,
- * or the failed attempt keeps costing keystrokes afterwards.
- */
 describe("a navigation that goes nowhere", () => {
   it("changes nothing at all, rather than emptying the pane it is already in", () => {
     // The state must come back BY REFERENCE. Anything else is a render whose
@@ -207,6 +198,16 @@ describe("a navigation that goes nowhere", () => {
     expect(at(state)).toBe("/a");
   });
 
+  it("refuses a revert to the path the pane is already on", () => {
+    // The retreat after a failed listing was the last transition writing the
+    // pane out by hand. Its guard lived in the caller, so this state was
+    // unreachable only for as long as that one call site stayed correct.
+    let state = createTabs("/a");
+    state = goTo(state, "/b");
+
+    expect(revertPaneById(state, "tab-0", "/b")).toBe(state);
+  });
+
   it("refuses a trail step that names the directory the pane is in", () => {
     // Not reachable through the trail the pane builds for itself, which never
     // records a move that did not move. It is pinned because the step used to
@@ -220,6 +221,15 @@ describe("a navigation that goes nowhere", () => {
   });
 });
 
+/**
+ * A navigation that fails, and what it must leave behind.
+ *
+ * The pane's path moves BEFORE the listing answers — that is what makes
+ * entering a directory feel instant — so a navigation that turns out to be
+ * unreadable has already been recorded by the time anyone finds out. Putting
+ * the pane back is not enough: the trail has to go back to exactly what it was,
+ * or the failed attempt keeps costing keystrokes afterwards.
+ */
 describe("a navigation that fails", () => {
   it("leaves no step behind for a later back press to waste itself on", () => {
     let state = createTabs("/a");
