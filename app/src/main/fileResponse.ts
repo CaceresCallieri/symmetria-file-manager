@@ -74,6 +74,12 @@ const FRAMED_DOCUMENT_TYPES: readonly string[] = ["text/html", "application/xhtm
  * `style=` attributes are most of what makes it look like itself, and a style
  * cannot exfiltrate anything when no remote origin is reachable to send it to.
  *
+ * **It is load-bearing for this process's own style too.** The scrollbar rules
+ * appended below arrive as an inline `<style>`, so dropping `'unsafe-inline'`
+ * — an otherwise reasonable hardening — silently reverts every previewed page
+ * to Chromium's white default scrollbar, with no error anywhere to say why.
+ * Serve the rules from a `'self'` URL first if that token ever has to go.
+ *
  * ── `form-action` and `base-uri` are named because they DO NOT inherit ──────
  * Almost every fetch directive falls back to `default-src` when absent —
  * `img-src`, `style-src`, `font-src`, `media-src`, `object-src`, `frame-src`
@@ -93,6 +99,10 @@ const DOCUMENT_POLICY =
   "default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
   "font-src 'self'; media-src 'self'; form-action 'none'; base-uri 'none'";
 
+/** The one header `documentPolicy` answers with. Named, because it is written
+ *  at three call sites and the anonymous shape carries none of the meaning. */
+type DocumentPolicy = { readonly "content-security-policy": string };
+
 /**
  * The policy header for a content type, or nothing.
  *
@@ -101,9 +111,7 @@ const DOCUMENT_POLICY =
  * any test, so a security rule chosen there would be one nobody could check.
  * This module runs against real files in plain Node.
  */
-function documentPolicy(
-  contentType: string,
-): { readonly "content-security-policy": string } | null {
+function documentPolicy(contentType: string): DocumentPolicy | null {
   return FRAMED_DOCUMENT_TYPES.includes(contentType)
     ? { "content-security-policy": DOCUMENT_POLICY }
     : null;
@@ -123,8 +131,43 @@ function documentPolicy(
  */
 const STYLED_DOCUMENT_TYPE = "text/html";
 
-/** The panel's scrollbar, as bytes to append to a document. */
-const SCROLLBAR_STYLE = Buffer.from(FOREIGN_DOCUMENT_STYLE, "utf8");
+/**
+ * The panel's scrollbar, as bytes to append to a document.
+ *
+ * ── Why three stray end tags come first ─────────────────────────────────────
+ * Appending assumes the tokenizer is in its ordinary data state when the file
+ * runs out. It is not, for a file whose bytes end inside `<textarea>`,
+ * `<title>` or `<script>` — all three swallow what follows as TEXT rather than
+ * parsing it, and the first two then draw it. A truncated or hand-written
+ * fragment would therefore show this stylesheet's source at the foot of the
+ * preview, which is the same visible-rubbish failure the byte order mark check
+ * below exists to prevent, so it gets the same answer rather than a different
+ * one.
+ *
+ * Each closer is ignored by the parser when its element is not open — an end
+ * tag with no match is a parse error the HTML parser drops, emitting nothing —
+ * so a well-formed document is unaffected. `</textarea>` leads because it is
+ * the only token that ends `textarea` content; the other two are text inside
+ * it and are dropped once it closes.
+ *
+ * **Two cases stay unhandled, deliberately, because both fail harmlessly.** A
+ * file ending inside `<style>` or inside an unterminated `<!--` swallows this
+ * whole block as CSS or as comment content: nothing is drawn, the page keeps
+ * Chromium's scrollbar, and nobody sees anything they should not. Closing
+ * those would need `-->` in the appended bytes, which a well-formed document
+ * renders as literal text — trading a silent non-effect for a visible one.
+ */
+const APPENDED_STYLE = `</textarea></title></script>${FOREIGN_DOCUMENT_STYLE}`;
+
+/**
+ * The same, as bytes.
+ *
+ * Read once at module scope and copied per response, rather than enqueued
+ * directly: one `Buffer` handed to every concurrent stream is an aliasing
+ * contract nobody stated, and 400 bytes per previewed document is not a cost
+ * worth stating it for.
+ */
+const APPENDED_STYLE_BYTES = Buffer.from(APPENDED_STYLE, "utf8");
 
 /**
  * Does this document announce itself as UTF-16?
@@ -134,6 +177,11 @@ const SCROLLBAR_STYLE = Buffer.from(FOREIGN_DOCUMENT_STYLE, "utf8");
  * Appending UTF-8 bytes to it would decode as a line of CJK-looking rubbish at
  * the foot of the page — visible, unexplained, and worse than the default
  * scrollbar it was trying to replace. Such a file keeps its own scrollbars.
+ *
+ * It reads the FIRST CHUNK only, and a mark is two bytes. A chunk shorter than
+ * that answers false and the document is appended to — which is correct rather
+ * than merely tolerable: `createReadStream` reads in 64 KiB blocks, and a file
+ * of one or two bytes cannot be a UTF-16 document in any case.
  */
 function hasUtf16Mark(chunk: Uint8Array): boolean {
   const first = chunk[0];
@@ -162,24 +210,24 @@ function hasUtf16Mark(chunk: Uint8Array): boolean {
  */
 function withScrollbarStyle(body: ReadableStream<Uint8Array> | null): ReadableStream<Uint8Array> {
   const reader = body?.getReader() ?? null;
-  let seenFirstChunk = false;
-  let append = true;
+  // Null until the first chunk decides it. One piece of state rather than a
+  // flag plus an answer, which could disagree.
+  let append: boolean | null = null;
 
   return new ReadableStream({
     async pull(controller) {
       if (reader !== null) {
         const { done, value } = await reader.read();
         if (!done) {
-          if (!seenFirstChunk) {
-            seenFirstChunk = true;
-            append = !hasUtf16Mark(value);
-          }
+          append ??= !hasUtf16Mark(value);
           controller.enqueue(value);
           return;
         }
       }
 
-      if (append) controller.enqueue(SCROLLBAR_STYLE);
+      // An empty file never sets it, and an empty HTML document should still
+      // carry the rules — so absent means yes.
+      if (append !== false) controller.enqueue(new Uint8Array(APPENDED_STYLE_BYTES));
       controller.close();
     },
     cancel(reason) {
@@ -202,7 +250,7 @@ function withScrollbarStyle(body: ReadableStream<Uint8Array> | null): ReadableSt
 function documentResponse(
   body: ReadableStream<Uint8Array> | null,
   contentType: string,
-  policy: { readonly "content-security-policy": string } | null,
+  policy: DocumentPolicy | null,
 ): Response {
   return new Response(withScrollbarStyle(body), {
     status: 200,
@@ -217,16 +265,30 @@ export function fileResponse(
   contentType: string,
   rangeHeader: string | null,
 ): Response {
+  // An XHTML document can still be fetched by range, so the policy goes on
+  // EVERY answer below. On the 200 alone it would be a lock on the front door
+  // with the window left open.
+  const policy = documentPolicy(contentType);
+
+  // An empty file has no byte to stream, and `createReadStream` given an `end`
+  // of -1 reads to the end of the file rather than reading nothing.
+  const whole = () => (size === 0 ? null : fileStream(path, 0, size - 1));
+
+  // A styled document is answered WHOLE, and any range on it is ignored.
+  //
+  // Not an oversight and not laziness. `documentResponse` cannot declare a
+  // length — what it appends is decided inside the stream — so it declares
+  // `accept-ranges: none`, and a compliant client will not ask. Answering a
+  // range anyway would make the module say two incompatible things about one
+  // resource, and would serve a slice of a document with the rules cut off. A
+  // 200 in reply to a range request is a legal answer; a contradiction is not.
+  if (contentType === STYLED_DOCUMENT_TYPE) return documentResponse(whole(), contentType, policy);
+
   const asked = parseRange(rangeHeader, size);
 
   if (asked.kind === "unsatisfiable") {
     return new Response(null, { status: 416, headers: unsatisfiableHeaders(size) });
   }
-
-  // A framed document CAN be fetched by range, so the policy goes on BOTH
-  // answers. On the 200 alone it would be a lock on the front door with the
-  // window left open.
-  const policy = documentPolicy(contentType);
 
   if (asked.kind === "partial") {
     return new Response(fileStream(path, asked.range.start, asked.range.end), {
@@ -235,13 +297,7 @@ export function fileResponse(
     });
   }
 
-  // An empty file has no byte to stream, and `createReadStream` given an `end`
-  // of -1 reads to the end of the file rather than reading nothing.
-  const body = size === 0 ? null : fileStream(path, 0, size - 1);
-
-  if (contentType === STYLED_DOCUMENT_TYPE) return documentResponse(body, contentType, policy);
-
-  return new Response(body, {
+  return new Response(whole(), {
     status: 200,
     headers: { ...wholeHeaders(size, contentType), ...policy },
   });

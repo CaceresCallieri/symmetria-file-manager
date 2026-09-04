@@ -195,7 +195,13 @@ describe("the document content policy", () => {
   it("carries the policy on a partial response too", () => {
     // A framed document CAN be fetched by range. A policy applied only to the
     // 200 would be a lock on the front door with the window left open.
-    const partial = fileResponse(path, CONTENT.length, "text/html", "bytes=0-4");
+    //
+    // XHTML rather than HTML, and the difference is real rather than
+    // cosmetic: `text/html` is answered whole now, ranges ignored, because the
+    // scrollbar rules are appended to it and its length is therefore not known
+    // when the headers are written. XHTML takes no rules, stays rangeable, and
+    // is what keeps this assertion about something that can still happen.
+    const partial = fileResponse(path, CONTENT.length, "application/xhtml+xml", "bytes=0-4");
 
     expect(partial.status).toBe(206);
     expect(policyOf(partial)).toContain("default-src 'none'");
@@ -233,7 +239,22 @@ describe("the scrollbar a framed document is given", () => {
     // other — which is the state this whole change exists to end.
     const body = await bodyOf(fileResponse(page, PAGE.length, "text/html", null));
 
-    expect(body).toBe(`${PAGE}${FOREIGN_DOCUMENT_STYLE}`);
+    expect(body).toBe(`${PAGE}</textarea></title></script>${FOREIGN_DOCUMENT_STYLE}`);
+  });
+
+  it("closes the elements that would swallow the rules as text", async () => {
+    // A file whose bytes end inside `<textarea>`, `<title>` or `<script>`
+    // leaves the tokenizer in a state where what follows is TEXT, not markup —
+    // and the first two DRAW it, so a truncated fragment would show this
+    // stylesheet's source at the foot of the preview. Each closer is dropped by
+    // the parser when its element is not open, so a well-formed document is
+    // unaffected; `</textarea>` leads because it is the only token that ends
+    // `textarea` content.
+    const body = await bodyOf(fileResponse(page, PAGE.length, "text/html", null));
+    const appended = body.slice(PAGE.length);
+
+    expect(appended.startsWith("</textarea></title></script>")).toBe(true);
+    expect(appended.indexOf("</textarea>")).toBeLessThan(appended.indexOf("</script>"));
   });
 
   it("leaves the document's own bytes first and unaltered", async () => {
@@ -299,10 +320,22 @@ describe("the scrollbar a framed document is given", () => {
     },
   );
 
-  it("appends nothing to a partial answer", async () => {
-    // A range names bytes of the FILE. Appending to a slice of one would answer
-    // a request for five bytes with four hundred.
+  it("ignores a range on a styled document rather than serving a slice", async () => {
+    // The answer declares `accept-ranges: none`, so a compliant client does not
+    // ask — and answering one anyway would make this module say two
+    // incompatible things about one resource, and hand back a document with
+    // the appended rules cut off. A 200 in reply to a range request is legal.
     const response = fileResponse(page, PAGE.length, "text/html", "bytes=0-4");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("accept-ranges")).toBe("none");
+    expect(await response.text()).toContain("::-webkit-scrollbar");
+  });
+
+  it("still answers a range on XHTML, which takes no rules", async () => {
+    // The other half of the rule above. Only the styled type gives up ranges;
+    // everything else, framed or not, keeps them.
+    const response = fileResponse(page, PAGE.length, "application/xhtml+xml", "bytes=0-4");
 
     expect(response.status).toBe(206);
     expect(await response.text()).toBe(PAGE.slice(0, 5));
@@ -315,7 +348,7 @@ describe("the scrollbar a framed document is given", () => {
     const emptyPage = join(directory, "blank.html");
     writeFileSync(emptyPage, "");
 
-    expect(await bodyOf(fileResponse(emptyPage, 0, "text/html", null))).toBe(
+    expect(await bodyOf(fileResponse(emptyPage, 0, "text/html", null))).toContain(
       FOREIGN_DOCUMENT_STYLE,
     );
   });

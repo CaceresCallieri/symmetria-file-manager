@@ -18,6 +18,19 @@
  * would trade a real property for a tidiness one. `theme.test.ts` compares the
  * two declaration by declaration and fails when they drift, which is the part
  * that makes "one definition" true rather than merely intended.
+ *
+ * ── The obvious way to remove the duplication does not work here ────────────
+ * A review proposed one shared `scrollbar.css`, `@import`ed by the panel and
+ * pulled into this module as text with Vite's `?raw`. It was tried and
+ * rejected before this file existed, and the reason is not visible from the
+ * source: **the main process is bundled by esbuild**, not by Vite — see
+ * `app/scripts/build.mjs`, which says why — and esbuild does not understand
+ * the `?raw` suffix. Vitest, which runs the tests, DOES resolve it, so the
+ * arrangement would type-check and pass every test and fail only in the
+ * shipped bundle. Reviving it means either giving esbuild a `.css` text loader
+ * and teaching vitest the same resolution, or moving the main build to Vite.
+ * Neither is wrong; both are larger than this, and the drift test is what
+ * makes waiting safe.
  */
 
 /**
