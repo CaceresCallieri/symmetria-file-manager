@@ -1,8 +1,8 @@
 import type { EntrySummary } from "@symmetria/fm-core/entry";
 import { humanSize } from "@symmetria/fm-core/format";
 import type { PreviewRoute, RenderableAs } from "@symmetria/fm-core/preview/route";
+import { FileIcon } from "@symmetria/fm-search/ui";
 import { useCallback, useEffect, useState } from "react";
-import { FileIcon } from "../FileIcon.tsx";
 import { ROW_HEIGHT, type VisibleRange } from "../FileList.tsx";
 import { flashStateOf } from "../FileRow.tsx";
 import { FlashName, type FlashRowLabel } from "../FlashName.tsx";

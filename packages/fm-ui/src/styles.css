@@ -1398,6 +1398,14 @@ kbd {
   overflow: hidden;
 }
 
+/* The finder's rows carry an icon; the zoxide popup's do not. `.overlay__row`
+   aligns on the baseline, which is right for two runs of text and wrong for a
+   glyph beside them — an SVG has no baseline of its own and sits low. Centred
+   here, exactly as the pane's own rows are. */
+.finder__row {
+  align-items: center;
+}
+
 .finder__status {
   margin: 8px 0 0;
   color: var(--muted-foreground);

@@ -367,3 +367,66 @@ describe("leaving the finder", () => {
     expect(document.activeElement).toBe(screen.getByTestId("finder-query"));
   });
 });
+
+describe("the icon on each row", () => {
+  /** The `data-icon` each row's icon reports, in order. */
+  function icons(): string[] {
+    return within(screen.getByTestId("finder"))
+      .queryAllByTestId("finder-row")
+      .map((element) => element.querySelector("[data-icon]")?.getAttribute("data-icon") ?? "");
+  }
+
+  it("draws one, so a row is not four words of undifferentiated text", async () => {
+    await opened({ search: () => [row("src/format.ts", "format.ts")] });
+    await type("fmt");
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    expect(icons()).toEqual(["typescript"]);
+  });
+
+  it("draws a different symbol per kind, from the shared resolver", async () => {
+    // `@symmetria/fm-core/icons/resolve` is the single place that decides
+    // this, and the pane's rows and the directory preview read the same table.
+    // Change an icon there and it changes in all three.
+    await opened({
+      search: () => [
+        row("a.ts", "a.ts"),
+        row("b.md", "b.md"),
+        row("c.png", "c.png"),
+        row("d.rs", "d.rs"),
+      ],
+    });
+    await type("x");
+    await waitFor(() => expect(rows()).toHaveLength(4));
+    expect(icons()).toEqual(["typescript", "markdown", "image", "rust"]);
+  });
+
+  it("draws a folder for a directory", async () => {
+    await opened({
+      search: () => [row("notes/", "notes", { fullPath: "/home/jc/notes/", isDir: true })],
+    });
+    await type("notes");
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    expect(icons()).toEqual(["folder"]);
+  });
+
+  it("draws video, audio and document symbols a search row has no MIME type for", async () => {
+    // The gap this closed. A search index carries no type at all, so these
+    // three resolved to the blank `default` symbol until the shared resolver
+    // learnt to answer from a name as well.
+    await opened({
+      search: () => [row("a.mp4", "a.mp4"), row("b.flac", "b.flac"), row("c.pdf", "c.pdf")],
+    });
+    await type("x");
+    await waitFor(() => expect(rows()).toHaveLength(3));
+    expect(icons()).toEqual(["video", "audio", "document"]);
+  });
+
+  it("falls back rather than drawing nothing for an unknown extension", async () => {
+    // A file manager that showed no icon for an unrecognised file would show
+    // none for much of a real tree.
+    await opened({ search: () => [row("a.zzzz", "a.zzzz")] });
+    await type("x");
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    expect(icons()).toEqual(["default"]);
+  });
+});

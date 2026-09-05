@@ -79,3 +79,33 @@ describe("chromeIconFor", () => {
     expect(chromeIconFor("file", null)).toBeNull();
   });
 });
+
+describe("chromeIconFor, from a name when there is no MIME type", () => {
+  it("draws a video, an audio file and a document from their extensions", () => {
+    // The finder's rows come from a search index that carries no type at all,
+    // and a listing row has none until it has been described. Without this
+    // they draw the blank `default` symbol, which reads as a broken icon.
+    expect(chromeIconFor("file", null, "holiday.mp4")).toBe("video");
+    expect(chromeIconFor("file", null, "track.flac")).toBe("audio");
+    expect(chromeIconFor("file", null, "invoice.pdf")).toBe("document");
+  });
+
+  it("still answers nothing for a name the file-type set does cover", () => {
+    // Paired with the case above, so a fallback that answered something for
+    // every name could not pass both. A `.ts` has a real symbol of its own and
+    // must reach `iconTokenFor` instead.
+    expect(chromeIconFor("file", null, "index.ts")).toBeNull();
+    expect(chromeIconFor("file", null, "notes.md")).toBeNull();
+  });
+
+  it("lets a known MIME type overrule the name, never the other way round", () => {
+    // A name is an inference; a MIME type is what the filesystem established.
+    expect(chromeIconFor("file", "text/plain", "holiday.mp4")).toBeNull();
+    expect(chromeIconFor("file", "video/mp4", "notes.md")).toBe("video");
+  });
+
+  it("is unchanged for a caller that passes no name at all", () => {
+    expect(chromeIconFor("file", null)).toBeNull();
+    expect(chromeIconFor("directory", null)).toBe("folder");
+  });
+});

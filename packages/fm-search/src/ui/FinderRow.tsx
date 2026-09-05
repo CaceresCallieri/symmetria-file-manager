@@ -14,6 +14,8 @@
  */
 import type { SearchReplyRow } from "@symmetria/fm-core/contract";
 
+import { FileIcon } from "./FileIcon.tsx";
+
 /** A run of characters, either matched by the query or not. */
 interface Segment {
   readonly text: string;
@@ -115,8 +117,14 @@ export function FinderRow({ row, id, active }: FinderRowProps) {
       role="option"
       aria-selected={active}
       data-active={active ? "true" : undefined}
-      className={`overlay__row${active ? " overlay__row--active" : ""}`}
+      className={`overlay__row finder__row${active ? " overlay__row--active" : ""}`}
     >
+      {/* The SAME component the pane's rows and the directory preview draw, so
+          a `.ts` looks like a `.ts` everywhere and there is one place to change
+          it — `@symmetria/fm-core/icons/resolve` names the symbol, this draws
+          it. The row carries no MIME type, which is why `FileIcon` resolves the
+          chrome symbols from the name as well. */}
+      <FileIcon name={row.name} kind={row.isDir ? "directory" : "file"} />
       <span className="finder__name" data-testid="finder-row-name">
         <MarkedText text={name} positions={inName} />
       </span>

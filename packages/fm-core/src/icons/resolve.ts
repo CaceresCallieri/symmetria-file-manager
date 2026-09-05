@@ -231,17 +231,65 @@ export function iconTokenFor(name: string): IconToken {
  */
 export type ChromeIcon = "folder" | "video" | "audio" | "document" | "symlink" | "binary";
 
-/** What an entry needs drawn, when a file-type symbol is not the answer. */
+/**
+ * The same three answers, reachable from a NAME when there is no MIME type.
+ *
+ * A MIME type is authoritative and is always preferred. But two callers never
+ * have one: the file finder's rows come from a search index that carries no
+ * type at all, and a listing row has none either until the entry has been
+ * described. Without this those callers draw the blank `default` symbol for a
+ * video, which reads as a broken icon rather than as a fallback.
+ *
+ * Extensions rather than a guess: this is the same shape of table as
+ * `BY_EXTENSION` above and belongs beside it, so changing what a `.mkv` draws
+ * is one edit in the one file that owns icon naming.
+ */
+const CHROME_BY_EXTENSION: ReadonlyMap<string, ChromeIcon> = new Map([
+  ["mp4", "video"],
+  ["m4v", "video"],
+  ["mkv", "video"],
+  ["mov", "video"],
+  ["webm", "video"],
+  ["avi", "video"],
+  ["mp3", "audio"],
+  ["m4a", "audio"],
+  ["aac", "audio"],
+  ["flac", "audio"],
+  ["ogg", "audio"],
+  ["opus", "audio"],
+  ["wav", "audio"],
+  ["pdf", "document"],
+]);
+
+/**
+ * What an entry needs drawn, when a file-type symbol is not the answer.
+ *
+ * `name` is optional and is consulted ONLY when there is no MIME type. A caller
+ * that has one is telling this function something the filesystem established;
+ * a name is an inference, and an inference must not override a fact.
+ */
 export function chromeIconFor(
   kind: "file" | "directory" | "other",
   mime: string | null,
+  name?: string,
 ): ChromeIcon | null {
   if (kind === "directory") return "folder";
   if (kind === "other") return "binary";
-  if (mime === null) return null;
 
-  if (mime.startsWith("video/")) return "video";
-  if (mime.startsWith("audio/")) return "audio";
-  if (mime === "application/pdf") return "document";
+  if (mime !== null) {
+    if (mime.startsWith("video/")) return "video";
+    if (mime.startsWith("audio/")) return "audio";
+    if (mime === "application/pdf") return "document";
+    // A type that IS known and is none of those wants a file-type symbol, not
+    // a chrome one. Falling through to the name here would let a mislabelled
+    // extension overrule the filesystem.
+    return null;
+  }
+
+  if (name === undefined) return null;
+  for (const candidate of extensionCandidates(name.toLowerCase())) {
+    const byExtension = CHROME_BY_EXTENSION.get(candidate);
+    if (byExtension !== undefined) return byExtension;
+  }
   return null;
 }

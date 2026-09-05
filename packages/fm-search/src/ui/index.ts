@@ -12,6 +12,7 @@ export {
   searchIn,
   startSearchIndex,
 } from "./bridge.ts";
+export { FileIcon, type FileIconProps } from "./FileIcon.tsx";
 export { FinderInfoPanel, type RenderPreview } from "./FinderInfoPanel.tsx";
 export { FinderOverlay, type FinderOverlayProps } from "./FinderOverlay.tsx";
 export { type Finder, SEARCH_DEBOUNCE_MS, useFinder } from "./useFinder.ts";

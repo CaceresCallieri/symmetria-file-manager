@@ -1,6 +1,6 @@
 import type { FsEntry } from "@symmetria/fm-core/entry";
 
-import { FileIcon } from "./FileIcon.tsx";
+import { FileIcon } from "@symmetria/fm-search/ui";
 import { FlashName, type FlashRowLabel } from "./FlashName.tsx";
 
 export interface FileRowProps {
