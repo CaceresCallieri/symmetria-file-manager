@@ -1,0 +1,11 @@
+{
+  // The privileged half of the finder. Node yes, DOM NO.
+  //
+  // Same split, and the same reason, as `packages/fm-main`: this half runs in a
+  // main or utility process where `window` and `document` do not exist. The
+  // panel half lives under `src/ui` and gets its own configuration when it
+  // arrives, so an accidental DOM reference here cannot type-check.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "lib": ["ES2023"], "types": ["node"] },
+  "include": ["src/main/**/*.ts", "test/**/*.ts"]
+}
