@@ -12,9 +12,15 @@
     "./main": "./src/main/index.ts",
     "./main/store": "./src/main/store.ts",
     "./main/rows": "./src/main/rows.ts",
-    "./main/match": "./src/main/match.ts"
+    "./main/match": "./src/main/match.ts",
+    "./main/pool": "./src/main/pool.ts",
+    "./main/worker": "./src/main/worker.ts",
+    "./main/client": "./src/main/client.ts"
   },
   "dependencies": {
     "@ff-labs/fff-node": "0.9.4"
+  },
+  "devDependencies": {
+    "@symmetria/fm-core": "workspace:*"
   }
 }

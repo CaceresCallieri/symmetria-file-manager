@@ -320,6 +320,7 @@ export type IpcReply =
   | Result<BookmarksReply>
   | Result<ListingOptionsReply>
   | Result<FrecentReply>
+  | Result<SearchReply>
   | Result<null>;
 
 // ── decoding ──────────────────────────────────────────────────────────────
@@ -945,3 +946,144 @@ export const decodeBookmarksReply: Decoder<BookmarksReply> = (raw) =>
 
 export const decodeBookmarksWriteRequest: Decoder<BookmarksWriteRequest> = (raw) =>
   decodeBookmarkList("invalid_request", "request", raw);
+
+// ── search ────────────────────────────────────────────────────────────────
+
+export interface SearchReplyRow {
+  readonly relativePath: string;
+  readonly name: string;
+  readonly fullPath: string;
+  readonly isDir: boolean;
+  readonly score: number;
+  readonly size: number;
+  readonly modifiedMs: number;
+  readonly gitStatus: string;
+  readonly matchIndices: readonly number[];
+}
+
+export interface SearchReply {
+  readonly rows: readonly SearchReplyRow[];
+  readonly matchedQuery: string;
+  readonly truncated: boolean;
+  readonly cap: number;
+}
+
+/**
+ * The search reply, parsed rather than trusted.
+ *
+ * The rows arrive from a separate process that itself talks to a native
+ * library, which is about the least trustworthy sender on this boundary.
+ *
+ * **A bad ROW is dropped; a bad REPLY fails.** That asymmetry is the same
+ * judgement `decodeFrecentReply` makes and it is deliberate: one unreadable
+ * entry should not cost the user the other forty, but a reply with no answered
+ * query cannot be used at all — the caller has no way to tell whether it is
+ * stale.
+ *
+ * ⚠ `SearchReplyRow` duplicates `SearchRow` from `@symmetria/fm-search` on
+ * purpose. Importing it would either invert the dependency direction or make a
+ * host take two git-pinned packages to get the finder. `searchRowShape.test.ts`
+ * asserts the two stay structurally identical, so the duplication is checked
+ * rather than hoped at.
+ */
+export const decodeSearchReply: Decoder<SearchReply> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_reply", "reply must be an object");
+  if (!Array.isArray(raw["rows"])) return failure("invalid_reply", "reply.rows must be an array");
+  if (typeof raw["matchedQuery"] !== "string") {
+    return failure("invalid_reply", "reply.matchedQuery must be a string");
+  }
+
+  const rows: SearchReplyRow[] = [];
+  for (const candidate of raw["rows"]) {
+    const row = decodeSearchRow(candidate);
+    if (row !== null) rows.push(row);
+  }
+
+  return success({
+    rows,
+    matchedQuery: raw["matchedQuery"],
+    truncated: raw["truncated"] === true,
+    cap: typeof raw["cap"] === "number" && Number.isFinite(raw["cap"]) ? raw["cap"] : 0,
+  });
+};
+
+/** One row, or `null` when it cannot be read. */
+function decodeSearchRow(raw: unknown): SearchReplyRow | null {
+  if (!isRecord(raw)) return null;
+  const required = requiredRowFields(raw);
+  if (required === null) return null;
+
+  return {
+    ...required,
+    isDir: raw["isDir"] === true,
+    size: numberOr(raw["size"], 0),
+    modifiedMs: numberOr(raw["modifiedMs"], 0),
+    gitStatus: typeof raw["gitStatus"] === "string" ? raw["gitStatus"] : "",
+    matchIndices: matchIndicesOf(raw["matchIndices"]),
+  };
+}
+
+/**
+ * The four fields a row cannot be read without, or `null`.
+ *
+ * Split out because the optional fields all fall back to a default and the
+ * required ones all reject the row — two different jobs that read as one long
+ * chain of guards when they share a function.
+ */
+function requiredRowFields(
+  raw: Record<string, unknown>,
+): Pick<SearchReplyRow, "relativePath" | "name" | "fullPath" | "score"> | null {
+  const relativePath = raw["relativePath"];
+  const name = raw["name"];
+  const fullPath = raw["fullPath"];
+  const score = raw["score"];
+  if (typeof relativePath !== "string" || typeof name !== "string") return null;
+  // Absolute, or the renderer would resolve it against whatever it thinks its
+  // working directory is — not a decision this boundary leaves open.
+  if (typeof fullPath !== "string" || !fullPath.startsWith("/")) return null;
+  // `typeof NaN === "number"`, so the type test alone lets a NaN through, and a
+  // NaN score sorts unpredictably and renders as nothing.
+  if (typeof score !== "number" || !Number.isFinite(score)) return null;
+  return { relativePath, name, fullPath, score };
+}
+
+function matchIndicesOf(value: unknown): readonly number[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((at): at is number => typeof at === "number" && Number.isInteger(at));
+}
+
+function numberOr(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+/** Which directory to index, or to search, or to let go. */
+export interface SearchDirectoryRequest {
+  readonly directory: string;
+}
+
+/** A search: which index, and what to look for. */
+export interface SearchQueryRequest extends SearchDirectoryRequest {
+  readonly query: string;
+}
+
+export const decodeSearchDirectoryRequest: Decoder<SearchDirectoryRequest> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_request", "request must be an object");
+  // `decodePath` and not a local check. This string becomes the pool's map key
+  // AND an `argv` entry handed to a forked process, so it needs the same length
+  // cap and NUL refusal every other path on this boundary gets — a NUL
+  // truncates at the exec boundary, approving one directory and opening
+  // another. A hand-rolled check here was the second copy of those rules, and
+  // the looser copy is always the hole.
+  const directory = decodePath(raw["directory"]);
+  if (isFailure(directory)) return directory;
+  return success({ directory: directory.value });
+};
+
+export const decodeSearchQueryRequest: Decoder<SearchQueryRequest> = (raw) => {
+  const base = decodeSearchDirectoryRequest(raw);
+  if (isFailure(base)) return base;
+  if (!isRecord(raw) || typeof raw["query"] !== "string") {
+    return failure("invalid_request", "request.query must be a string");
+  }
+  return success({ directory: base.value.directory, query: raw["query"] });
+};

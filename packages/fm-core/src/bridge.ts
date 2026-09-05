@@ -25,6 +25,12 @@ export interface Bridge {
   readText(request: unknown): Promise<Result<unknown>>;
   /** Abandon an in-flight listing. */
   cancel(request: unknown): Promise<Result<unknown>>;
+  /** Open a search index over a directory. */
+  searchStart(request: unknown): Promise<Result<unknown>>;
+  /** Search an open index. */
+  searchQuery(request: unknown): Promise<Result<unknown>>;
+  /** Release a search index. */
+  searchRelease(request: unknown): Promise<Result<unknown>>;
   /** Everything the preview router needs about one entry. */
   describe(request: unknown): Promise<Result<unknown>>;
   /** Make one file loadable by the renderer, and name the URL. */

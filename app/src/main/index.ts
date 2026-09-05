@@ -11,6 +11,7 @@ import { PUSH_CHANNELS, REQUEST_CHANNELS } from "@symmetria/fm-main/ipc/channels
 import type { ElectronTransport } from "@symmetria/fm-main/ipc/electronSurface";
 import { electronIpcSurface } from "@symmetria/fm-main/ipc/electronSurface";
 import { createRegistry, type Registry } from "@symmetria/fm-main/ipc/register";
+import { closeAllSearchIndices } from "@symmetria/fm-main/search";
 import { app, BrowserWindow, ipcMain, session } from "electron";
 import { writeToFifo } from "./fifo.ts";
 import { refuseDocumentRequestsOffScheme, refuseNavigationAwayFromApp } from "./frameNavigation.ts";
@@ -811,7 +812,13 @@ app.whenReady().then(async () => {
   // Hung off `will-quit` alone. It used to also hang off the window's `closed`
   // event, which now never fires — the window is hidden rather than destroyed —
   // so leaving it there would have looked like cleanup that no longer ran.
-  app.on("will-quit", () => registry.dispose());
+  app.on("will-quit", () => {
+    registry.dispose();
+    // Every search worker dies with the application. A utility process that
+    // outlives its owner is the failure that takes the resident daemon with
+    // it, and nothing else in the tree would notice it had happened.
+    closeAllSearchIndices();
+  });
   app.on("before-quit", () => residency.beginQuit());
 
   // The socket is the authority on who is the daemon, and taking it is what

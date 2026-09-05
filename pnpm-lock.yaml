@@ -38,6 +38,9 @@ importers:
 
   app:
     dependencies:
+      '@ff-labs/fff-node':
+        specifier: 0.9.4
+        version: 0.9.4
       '@symmetria/fm-core':
         specifier: workspace:*
         version: link:../packages/fm-core
@@ -77,6 +80,9 @@ importers:
       '@symmetria/fm-core':
         specifier: workspace:*
         version: link:../fm-core
+      '@symmetria/fm-search':
+        specifier: workspace:*
+        version: link:../fm-search
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -90,6 +96,10 @@ importers:
       '@ff-labs/fff-node':
         specifier: 0.9.4
         version: 0.9.4
+    devDependencies:
+      '@symmetria/fm-core':
+        specifier: workspace:*
+        version: link:../fm-core
 
   packages/fm-ui:
     dependencies:

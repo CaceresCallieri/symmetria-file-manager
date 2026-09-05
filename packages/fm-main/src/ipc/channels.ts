@@ -47,6 +47,19 @@ export const REQUEST_CHANNELS = {
   trash: "symmetria-fm:trash",
   /** The directories zoxide records this user going to. */
   frecent: "symmetria-fm:frecent",
+  /**
+   * Open a search index over a directory.
+   *
+   * Three channels rather than one, because an index has a LIFETIME. Folding
+   * "open" into "search" would make the first keystroke of every session pay
+   * for a full scan with no way to say so, and would leave nothing able to say
+   * when the index is no longer wanted.
+   */
+  searchStart: "symmetria-fm:search-start",
+  /** Search an open index. */
+  searchQuery: "symmetria-fm:search-query",
+  /** Release an index now, rather than waiting for it to go idle. */
+  searchRelease: "symmetria-fm:search-release",
   /** Put text or an image on the system clipboard. */
   clipboard: "symmetria-fm:clipboard",
   /** Hand an entry to whatever the desktop says opens it. */

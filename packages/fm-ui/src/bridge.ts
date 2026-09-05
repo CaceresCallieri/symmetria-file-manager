@@ -13,6 +13,7 @@ import {
   decodePreviewUrlReply,
   decodeReadTextReply,
   decodeRenameReply,
+  decodeSearchReply,
   decodeTransferProgress,
   decodeTransferReply,
   type FrecentReply,
@@ -23,6 +24,7 @@ import {
   type ReadTextReply,
   type RenameReply,
   type Result,
+  type SearchReply,
   success,
   type TransferReply,
   type TransferRequest,
@@ -481,5 +483,42 @@ export async function writeBookmarks(
   const reply = await bridge.bookmarksWrite({
     bookmarks: [...bookmarks].map(([letter, bookmark]) => ({ letter, bookmark })),
   });
+  return isFailure(reply) ? reply : success(null);
+}
+
+// ── search ────────────────────────────────────────────────────────────────
+
+/**
+ * Open a search index over a directory.
+ *
+ * Separate from `searchIn` because an index has a lifetime: the first call pays
+ * for a full scan, and folding that into the first keystroke would make the
+ * overlay feel broken on a large tree with no way to say why.
+ */
+export async function startSearchIndex(directory: string): Promise<Result<null>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("read_failed", MISSING_BRIDGE);
+  const reply = await bridge.searchStart({ directory });
+  return isFailure(reply) ? reply : success(null);
+}
+
+/**
+ * Search an open index.
+ *
+ * The reply names the query it answered, so a caller can drop a reply the user
+ * has already typed past rather than drawing it against newer input.
+ */
+export async function searchIn(directory: string, query: string): Promise<Result<SearchReply>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("read_failed", MISSING_BRIDGE);
+  const reply = await bridge.searchQuery({ directory, query });
+  return isFailure(reply) ? reply : decodeSearchReply(reply.value);
+}
+
+/** Release an index now rather than waiting for it to go idle. */
+export async function releaseSearchIndex(directory: string): Promise<Result<null>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("read_failed", MISSING_BRIDGE);
+  const reply = await bridge.searchRelease({ directory });
   return isFailure(reply) ? reply : success(null);
 }

@@ -35,6 +35,6 @@
     "docs/**",
     "tools/oxlint/anti-slop/**"
   ],
-  "ignoreDependencies": ["@oxlint/plugins"],
+  "ignoreDependencies": ["@oxlint/plugins", "@ff-labs/fff-node"],
   "ignoreBinaries": ["systemd-analyze", "xdg-mime"]
 }
