@@ -19,7 +19,7 @@
  * every child. A leaked worker is the failure that takes the resident daemon
  * with it.
  */
-import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createWorkerClient, type WorkerChannel } from "@symmetria/fm-search/main/client";
 import { createIndexPool, type IndexPool, type IndexWorker } from "@symmetria/fm-search/main/pool";
 import type { WorkerMessage } from "@symmetria/fm-search/main/worker";
@@ -28,9 +28,23 @@ import { type UtilityProcess, utilityProcess } from "electron";
 /** How often idle indices are swept. Far coarser than the timeout itself. */
 const SWEEP_EVERY_MS = 60_000;
 
-/** Where the bundled worker entry lands beside this file after bundling. */
+/**
+ * Where the bundled worker entry lands beside this file after bundling.
+ *
+ * `import.meta.url` and NOT `__dirname`. The main process is bundled as ESM —
+ * `app/package.json` declares `"type": "module"` and `build.mjs` emits
+ * `format: "esm"` — and esbuild does not shim the CommonJS globals into an ESM
+ * output. `__dirname` therefore stood in the built bundle as an unresolved
+ * reference that threw the moment this line ran, which is the first search of
+ * a session. Nothing caught it: the source type-checks, the bundle builds, and
+ * no test loads this module because it imports `electron`. Independent
+ * verification found it by driving the real window.
+ *
+ * `app/test/workerBundle.test.ts` now refuses a CommonJS global anywhere in the
+ * ESM bundles, which is the check that holds the whole class.
+ */
 function workerEntry(): string {
-  return join(__dirname, "searchWorker.js");
+  return fileURLToPath(new URL("./searchWorker.js", import.meta.url));
 }
 
 function spawnWorker(directory: string): IndexWorker {

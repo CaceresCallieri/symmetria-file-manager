@@ -51,6 +51,14 @@ export interface IndexWorker {
    */
   readonly ready: Promise<void>;
   search(query: string): Promise<SearchReply>;
+  /**
+   * Attribute a chosen file to the query that found it.
+   *
+   * Returns nothing and settles nothing: the engine's tracker write has no
+   * outcome the caller can act on. See `SearchIndex.record` for what the write
+   * buys, and why that is currently zero.
+   */
+  record(query: string, chosenPath: string): void;
   close(): void;
 }
 
@@ -72,6 +80,14 @@ export interface IndexPool {
    */
   start(directory: string): Promise<void>;
   search(directory: string, query: string): Promise<SearchReply>;
+  /**
+   * Attribute a chosen file to the query that found it.
+   *
+   * Silent when the directory has no open index. A record for a directory
+   * nobody is searching would have to spawn a whole process to write a
+   * statistic, which is a worse trade than losing the statistic.
+   */
+  record(directory: string, query: string, chosenPath: string): void;
   /** Retire this directory's worker now. Silent when there is none. */
   release(directory: string): void;
   /** Retire every worker idle for longer than the timeout. */
@@ -134,6 +150,9 @@ export function createIndexPool(options: PoolOptions): IndexPool {
       const entry = open.get(directory);
       if (entry !== undefined) entry.lastUsed = now();
       return reply;
+    },
+    record(directory, query, chosenPath) {
+      open.get(directory)?.worker.record(query, chosenPath);
     },
     release: retire,
     sweep() {

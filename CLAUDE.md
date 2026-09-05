@@ -199,6 +199,8 @@ git diff -z --name-only --diff-filter=ACMR <base> -- '*.js' '*.jsx' '*.mjs' '*.c
 pnpm exec tsc -p packages/fm-core --noEmit --pretty false  # types — shared core: no environment at all
 pnpm exec tsc -p packages/fm-main --noEmit --pretty false  # types — privileged half: Node, no DOM
 pnpm exec tsc -p packages/fm-ui --noEmit --pretty false  # types — panel SOURCE: DOM, no Node
+pnpm exec tsc -p packages/fm-search --noEmit --pretty false  # types — finder engine: Node, no DOM
+pnpm exec tsc -p packages/fm-search/tsconfig.ui.json --noEmit --pretty false  # types — finder overlay: DOM, no Node
 pnpm exec tsc -p packages/fm-ui/tsconfig.test.json --noEmit --pretty false  # types — panel TESTS: Node, they read the source tree
 pnpm exec tsc -p app/tsconfig.main.json --noEmit --pretty false  # types — host main process: Node, no DOM
 pnpm exec tsc -p app/tsconfig.renderer.json --noEmit --pretty false  # types — host renderer entry: DOM, no Node
@@ -212,7 +214,9 @@ git diff -z --name-only --diff-filter=ACMR <base> -- '*.qml' | xargs -0 -r tools
 
 Biome, `tsc` and the QML gate exit non-zero on findings. Anti-slop exits non-zero for its eight error rules; its seven pilot warnings print and exit zero. Fallow uses the gating `audit` command. The QML line exits 0 when the change touches no `.qml` file, which is the normal case for the Electron tree.
 
-**One `tsc` line per context, not one for the tree.** There are SIX and they must not share a `lib`. `packages/fm-core` is imported by everything and gets no environment at all; `packages/fm-main` — the privileged half — gets Node and no DOM; `packages/fm-ui` — the panel — gets DOM and no Node; the host's two halves get the same treatment as the packages they load. A shared `lib` would let a `window` reference type-check inside a main process and a `node:fs` import type-check inside a sandboxed renderer.
+**One `tsc` line per context, not one for the tree.** There are EIGHT and they must not share a `lib`. `packages/fm-core` is imported by everything and gets no environment at all; `packages/fm-main` — the privileged half — gets Node and no DOM; `packages/fm-ui` — the panel — gets DOM and no Node; the host's two halves get the same treatment as the packages they load. A shared `lib` would let a `window` reference type-check inside a main process and a `node:fs` import type-check inside a sandboxed renderer.
+
+**`packages/fm-search` is TWO of the eight, because it spans the boundary.** It is the only package that ships code for both sides — an engine that runs in a utility process and an overlay that runs in the sandboxed renderer — so it carries the fm-main and fm-ui treatments in one package: `tsconfig.json` covers `src/main` with Node and no DOM, `tsconfig.ui.json` covers `src/ui` with DOM and no Node. One config for the package would defeat the split the package exists to hold, since a host must be able to mount the overlay alone.
 
 **`packages/fm-ui` has TWO configs and both are in the fence.** Its `tsconfig.json` covers `src` alone with `types: []`, which is the real contract: the panel is sandboxed and must not reach Node. Its tests DO need Node, because the invariant test reads every source file to prove that contract holds — so they live in `tsconfig.test.json`. One shared config would hand the source whatever the tests need, which is the whole thing this package exists to prevent. The rule earns its keep in practice, not only in principle: `packages/fm-core/src/windowUrl.ts` reaches for `URLSearchParams` and cannot have it, because that package compiles against no environment at all — which is what forced a hand-rolled parse, and the hand-rolled one turned out to be more correct anyway (`URLSearchParams` decodes `+` as a space, so a directory named `c++` would come back wrong).
 
@@ -234,6 +238,8 @@ pnpm exec oxlint --config anti-slop.config.mjs --disable-nested-config --format 
 pnpm exec tsc -p packages/fm-core --noEmit --pretty false  # types — shared core: no environment at all
 pnpm exec tsc -p packages/fm-main --noEmit --pretty false  # types — privileged half: Node, no DOM
 pnpm exec tsc -p packages/fm-ui --noEmit --pretty false  # types — panel SOURCE: DOM, no Node
+pnpm exec tsc -p packages/fm-search --noEmit --pretty false  # types — finder engine: Node, no DOM
+pnpm exec tsc -p packages/fm-search/tsconfig.ui.json --noEmit --pretty false  # types — finder overlay: DOM, no Node
 pnpm exec tsc -p packages/fm-ui/tsconfig.test.json --noEmit --pretty false  # types — panel TESTS: Node, they read the source tree
 pnpm exec tsc -p app/tsconfig.main.json --noEmit --pretty false  # types — host main process: Node, no DOM
 pnpm exec tsc -p app/tsconfig.renderer.json --noEmit --pretty false  # types — host renderer entry: DOM, no Node

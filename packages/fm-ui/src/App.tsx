@@ -2,6 +2,7 @@ import type { Bookmark } from "@symmetria/fm-core/bookmarks";
 import type { CascadeMode } from "@symmetria/fm-core/keys/cascade";
 import type { KeyContext } from "@symmetria/fm-core/keys/types";
 import {
+  basename,
   cursorEntry,
   entryAt,
   isDirectoryEntry,
@@ -14,6 +15,7 @@ import {
   type PickerWindowRequest,
   pickerFromSearch,
 } from "@symmetria/fm-core/windowUrl";
+import { FinderOverlay } from "@symmetria/fm-search/ui";
 import { useMemo } from "react";
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { MillerColumns } from "./components/MillerColumns.tsx";
@@ -24,6 +26,7 @@ import { type RenderMode, StatusBar } from "./components/StatusBar.tsx";
 import { TabBar } from "./components/TabBar.tsx";
 import type { TransientLineProps } from "./components/transientLine.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
+
 import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
 import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { useBookmarks } from "./useBookmarks.ts";
@@ -211,7 +214,7 @@ function cascadeModeFor(
     // share it, so two can never be open at once. The zoxide list joins the
     // same gate — it is a dialog with a text field, and two of those open at
     // once would each think the keyboard was theirs.
-    modalOpen: modes.helpOpen || modes.zoxideOpen || opsModalKind !== "none",
+    modalOpen: modes.helpOpen || modes.zoxideOpen || modes.finderOpen || opsModalKind !== "none",
     bookmarkSubMode: modes.bookmarkSubMode,
     chordPrefix: modes.chordPrefix,
     // Flash jump is a text-input mode with no input to focus: it reads the raw
@@ -259,13 +262,35 @@ function Overlays({
   modes,
   context,
   bookmarks,
+  directory,
   onNavigate,
+  onReveal,
 }: {
   readonly modes: KeyWiring["modes"];
   readonly context: KeyContext;
   readonly bookmarks: ReadonlyMap<string, Bookmark>;
+  /** The tree the finder searches: whatever the active pane is showing. */
+  readonly directory: string;
   onNavigate(path: string): void;
+  onReveal(path: string): void;
 }) {
+  if (modes.finderOpen) {
+    return (
+      <FinderOverlay
+        directory={directory}
+        onChoose={(path, isDir) => {
+          modes.closeFinder();
+          // A directory is ENTERED and a file is REVEALED. The overlay reports
+          // which it handed back rather than leaving the caller to read the
+          // engine's trailing separator, which is a convention a caller can get
+          // wrong exactly once.
+          if (isDir) onNavigate(path);
+          else onReveal(path);
+        }}
+        onClose={modes.closeFinder}
+      />
+    );
+  }
   if (modes.zoxideOpen) {
     return (
       <ZoxidePopup
@@ -402,7 +427,9 @@ export function App(props: AppProps = {}) {
         modes={modes}
         context={context}
         bookmarks={bookmarks.byLetter}
+        directory={tabs.pane.path}
         onNavigate={tabs.navigate}
+        onReveal={(path) => tabs.navigateTo(parentOf(path), basename(path))}
       />
       <OpsModals
         modal={ops.modal}

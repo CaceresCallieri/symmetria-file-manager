@@ -97,6 +97,13 @@ export function createWorkerClient(directory: string, channel: WorkerChannel): I
         channel.post({ id, kind: "search", query });
       });
     },
+    record(query: string, chosenPath: string): void {
+      // Dropped rather than queued when the child is gone. The whole point of
+      // this write is that nothing depends on it, so holding it against a
+      // process that may never come back would be a leak in aid of nothing.
+      if (gone !== undefined) return;
+      channel.post({ id: 0, kind: "record", query, chosenPath });
+    },
     close(): void {
       // Asked politely, then killed. A worker mid-scan will not answer a
       // message, and an unanswered close is a process that never exits.

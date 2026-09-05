@@ -1,6 +1,7 @@
 import { isFailure } from "@symmetria/fm-core/contract";
 import { type FrecentDirectory, filterFrecent } from "@symmetria/fm-core/zoxide";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useOverlayList } from "@symmetria/fm-search/ui";
+import { useEffect, useMemo, useState } from "react";
 
 import { frecentDirectories } from "../bridge.ts";
 
@@ -29,8 +30,6 @@ export function ZoxidePopup({ onChoose, onClose }: ZoxidePopupProps) {
   const [entries, setEntries] = useState<readonly FrecentDirectory[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [active, setActive] = useState(0);
-  const field = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let current = true;
@@ -47,61 +46,17 @@ export function ZoxidePopup({ onChoose, onClose }: ZoxidePopupProps) {
     };
   }, []);
 
-  // The field takes the keyboard, so what the user types goes into it rather
-  // than into the pane behind. The cascade also reports a text input as
-  // focused, which is the other half of the same guarantee.
-  useEffect(() => {
-    field.current?.focus();
-  }, []);
-
-  // Escape, at the window, as a backstop — the same listener the help sheet
-  // has and for the same reason.
-  //
-  // The handler below is a prop on the input, so it fires only while the input
-  // has focus. Review found that Tab moved focus off it and the popup then
-  // became UNCLOSABLE by keyboard: no handler fired, and the cascade's modal
-  // step only calls `preventDefault`, so every key was swallowed by a dialog
-  // nothing could dismiss. Tab is trapped below as well; this is the half that
-  // does not depend on having thought of every key.
-  useEffect(() => {
-    const onWindowKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onWindowKeyDown);
-    return () => window.removeEventListener("keydown", onWindowKeyDown);
-  }, [onClose]);
-
   const shown = useMemo(() => filterFrecent(entries, query), [entries, query]);
 
-  // Clamp rather than reset: narrowing the list under a highlight that was near
-  // the bottom must leave it on something real, and putting it back to the top
-  // on every keystroke would fight the user's arrow keys.
-  const highlighted = Math.min(active, Math.max(shown.length - 1, 0));
+  // Focus, the Escape backstop, the Tab trap and the clamped highlight all
+  // live in `useOverlayList`, shared with the finder. This dialog was once
+  // UNCLOSABLE by keyboard because that logic had a gap; one copy of it is how
+  // the fix stays fixed in both places. See that module's header.
+  const list = useOverlayList(shown.length, onClose);
+  const highlighted = list.highlighted;
 
   const onKeyDown = (event: React.KeyboardEvent) => {
-    // Every key belongs to the popup while it is up. Letting one through would
-    // move the cursor in the pane the user cannot see behind it.
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onClose();
-      return;
-    }
-    // There is one focusable element in this popup, so a Tab has nowhere
-    // useful to go and moving focus off the field takes the keyboard with it.
-    if (event.key === "Tab") {
-      event.preventDefault();
-      return;
-    }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActive(Math.min(highlighted + 1, Math.max(shown.length - 1, 0)));
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setActive(Math.max(highlighted - 1, 0));
-      return;
-    }
+    if (list.handleKey(event)) return;
     if (event.key === "Enter") {
       event.preventDefault();
       const chosen = shown[highlighted];
@@ -120,8 +75,8 @@ export function ZoxidePopup({ onChoose, onClose }: ZoxidePopupProps) {
             owns every key while it is up. */}
         <input
           data-testid="zoxide-query"
-          ref={field}
-          className="zoxide__query"
+          ref={list.field}
+          className="overlay__query"
           value={query}
           placeholder="jump to…"
           role="combobox"
@@ -130,7 +85,7 @@ export function ZoxidePopup({ onChoose, onClose }: ZoxidePopupProps) {
           aria-activedescendant={shown[highlighted] === undefined ? undefined : rowId(highlighted)}
           onChange={(event) => {
             setQuery(event.target.value);
-            setActive(0);
+            list.resetHighlight();
           }}
           onKeyDown={onKeyDown}
         />
@@ -153,7 +108,7 @@ export function ZoxidePopup({ onChoose, onClose }: ZoxidePopupProps) {
             in between silently detaches it. */}
         <div
           id="zoxide-list"
-          className="zoxide__list"
+          className="overlay__list"
           role="listbox"
           aria-label="Frecent directories"
           tabIndex={-1}
@@ -167,7 +122,7 @@ export function ZoxidePopup({ onChoose, onClose }: ZoxidePopupProps) {
               role="option"
               aria-selected={index === highlighted}
               data-active={index === highlighted ? "true" : undefined}
-              className={`zoxide__row${index === highlighted ? " zoxide__row--active" : ""}`}
+              className={`overlay__row${index === highlighted ? " overlay__row--active" : ""}`}
             >
               <span className="zoxide__score">{Math.round(entry.score)}</span>
               <span className="zoxide__path">{entry.path}</span>

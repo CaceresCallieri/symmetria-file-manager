@@ -1,5 +1,6 @@
 import { seedBookmarks } from "@symmetria/fm-core/bookmarks";
 import { BRIDGE_KEY, type Bridge } from "@symmetria/fm-core/bridge";
+import type { SearchReplyRow } from "@symmetria/fm-core/contract";
 import type { FsEntry } from "@symmetria/fm-core/entry";
 import { DEFAULT_LISTING_OPTIONS, type ListingOptions } from "@symmetria/fm-core/listingOptions";
 import { screen, within } from "@testing-library/react";
@@ -198,6 +199,7 @@ export function inertBridge(): Bridge {
     cancel: ok,
     searchStart: ok,
     searchQuery: ok,
+    searchRecord: ok,
     searchRelease: ok,
     describe: ok,
     previewUrl: ok,
@@ -234,6 +236,20 @@ export interface ListAsk {
 
 export interface BridgeLog {
   readonly listed: string[];
+  /** Every directory the finder asked to open an index over. */
+  readonly searchStarts: string[];
+  /** Every query the finder actually sent, after its debounce. */
+  readonly searchQueries: string[];
+  /**
+   * Every file attributed to the query that found it.
+   *
+   * Recorded because the write is fire-and-forget by design: nothing waits on
+   * it and nothing on screen changes, so this log is the only thing that can
+   * tell "it was sent" from "it was forgotten".
+   */
+  readonly searchRecords: { query: string; chosenPath: string }[];
+  /** Let a held index finish opening. Does nothing when none is held. */
+  releaseSearchStart(): void;
   /**
    * Every listing order written back to the store.
    *
@@ -371,6 +387,24 @@ export interface BridgeOptions {
    * behaviour it had before this preference existed.
    */
   readonly storedListing?: ListingOptions | null;
+  /**
+   * What the fake engine answers for a query.
+   *
+   * A function rather than a fixed list, because a finder test is about what
+   * happens as the query CHANGES — narrowing, missing, and answering late are
+   * three different behaviours of the same call.
+   */
+  readonly search?: (query: string) => readonly SearchReplyRow[];
+  /** Make opening the index fail, with this reason. */
+  readonly searchStartFails?: string;
+  /**
+   * Hold the index open until the test releases it.
+   *
+   * The only way to observe the indexing state at all: the fixture otherwise
+   * answers within a microtask, so the overlay is past it before a test can
+   * look.
+   */
+  readonly searchStartHeld?: boolean;
   /** Make the read fail, which a missing preference must survive. */
   readonly listingReadFails?: boolean;
   /**
@@ -384,6 +418,10 @@ export interface BridgeOptions {
 
 export function installBridge(options: BridgeOptions = {}): BridgeLog {
   const listed: string[] = [];
+  const searchStarts: string[] = [];
+  const searchQueries: string[] = [];
+  const searchRecords: { query: string; chosenPath: string }[] = [];
+  let releaseHeldStart: (() => void) | null = null;
   const listingWrites: ListingOptions[] = [];
   let storedListing: ListingOptions | null = options.storedListing ?? null;
   const slowFirstWrite = options.slowFirstListingWrite === true;
@@ -414,6 +452,37 @@ export function installBridge(options: BridgeOptions = {}): BridgeLog {
   const bridge: Bridge = {
     ...inertBridge(),
     version: "test",
+    searchStart: (request) => {
+      const { directory } = request as { directory: string };
+      searchStarts.push(directory);
+      const answer =
+        options.searchStartFails === undefined
+          ? { ok: true as const, value: null }
+          : {
+              ok: false as const,
+              error: { code: "read_failed" as const, message: options.searchStartFails },
+            };
+      if (options.searchStartHeld !== true) return Promise.resolve(answer);
+      return new Promise((resolve) => {
+        releaseHeldStart = () => resolve(answer);
+      });
+    },
+    searchQuery: (request) => {
+      const { query } = request as { directory: string; query: string };
+      searchQueries.push(query);
+      const rows = options.search?.(query) ?? [];
+      // The reply echoes the query it answered, exactly as the real one does.
+      // A fixture that dropped that field would let a stale-reply bug pass.
+      return Promise.resolve({
+        ok: true as const,
+        value: { rows, matchedQuery: query, truncated: rows.length >= 200, cap: 200 },
+      });
+    },
+    searchRecord: (request) => {
+      const { query, chosenPath } = request as { query: string; chosenPath: string };
+      searchRecords.push({ query, chosenPath });
+      return Promise.resolve({ ok: true as const, value: null });
+    },
     list: (request) => {
       const ask = request as {
         path: string;
@@ -725,6 +794,10 @@ export function installBridge(options: BridgeOptions = {}): BridgeLog {
 
   return {
     listed,
+    searchStarts,
+    searchQueries,
+    searchRecords,
+    releaseSearchStart: () => releaseHeldStart?.(),
     directoryGrants,
     listingWrites,
     storedListingNow: () => storedListing,

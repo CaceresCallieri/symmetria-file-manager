@@ -125,10 +125,12 @@ describe("the application boots", () => {
     // did; `pickerConfirm` and `pickerCancel` when the file dialog gained its
     // Accept and Cancel; `listingRead` and `listingWrite` when the sort order
     // gained a file to live in; `previewDirectoryUrl` when a rendered document
-    // needed to reach the images beside it; and `searchStart`, `searchQuery` and
-    // `searchRelease` when the file finder gained its index. This assertion caught that addition before
-    // anything else did — the whole suite compiled and every package's own
-    // tests passed — which is the whole reason it is an exact string.
+    // needed to reach the images beside it; `searchStart`, `searchQuery` and
+    // `searchRelease` when the file finder gained its index; and `searchRecord`
+    // when the finder began attributing a chosen file to the query that found
+    // it. This assertion caught each addition before anything else did — the
+    // whole suite compiled and every package's own tests passed — which is the
+    // whole reason it is an exact string.
     //
     // RUN THIS SUITE WITH `pnpm -r test`, never with `vitest` from the
     // repository root. The root has no vitest config, so the app's own
@@ -136,7 +138,7 @@ describe("the application boots", () => {
     // run, and this assertion then reads a stale build and passes against code
     // that is no longer there. It did exactly that for three phases.
     expect(report.bridgeKeys).toBe(
-      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,clipboard,create,describe,frecent,hideWindow,list,listingRead,listingWrite,onChanged,onListBatch,onOpenPath,onTransferProgress,open,pickerCancel,pickerConfirm,previewDirectoryUrl,previewUrl,readText,rename,searchQuery,searchRelease,searchStart,transfer,trash,unwatch,version,watch",
+      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,clipboard,create,describe,frecent,hideWindow,list,listingRead,listingWrite,onChanged,onListBatch,onOpenPath,onTransferProgress,open,pickerCancel,pickerConfirm,previewDirectoryUrl,previewUrl,readText,rename,searchQuery,searchRecord,searchRelease,searchStart,transfer,trash,unwatch,version,watch",
     );
   });
 

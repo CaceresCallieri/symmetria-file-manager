@@ -21,6 +21,8 @@ function fakeWorker(directory: string, log: string[], ready?: Promise<void>): In
     ready: ready ?? Promise.resolve(),
     search: (query: string): Promise<SearchReply> =>
       Promise.resolve({ rows: [], matchedQuery: query, truncated: false, cap: 200 }),
+    record: (query: string, chosenPath: string) =>
+      log.push(`record:${directory}:${query}:${chosenPath}`),
     close: () => log.push(`close:${directory}`),
   };
 }
@@ -260,5 +262,28 @@ describe("starting an index that opens", () => {
     await pool.start("/a");
     expect(log).toEqual(["spawn:/a"]);
     expect(pool.size()).toBe(1);
+  });
+});
+
+describe("recording which file a query chose", () => {
+  it("passes the query and the chosen path to that directory's worker", () => {
+    const log: string[] = [];
+    const pool = poolWith(log, { value: 0 });
+    pool.acquire("/a");
+    pool.record("/a", "fmt", "/a/src/format.ts");
+    expect(log).toEqual(["spawn:/a", "record:/a:fmt:/a/src/format.ts"]);
+  });
+
+  it("says nothing for a directory with no open index", () => {
+    // Spawning a whole process to write a statistic nobody reads is a worse
+    // trade than losing the statistic. Paired with a directory that IS open, so
+    // a `record` that did nothing at all could not pass this.
+    const log: string[] = [];
+    const pool = poolWith(log, { value: 0 });
+    pool.acquire("/open");
+    expect(() => pool.record("/closed", "q", "/closed/a.ts")).not.toThrow();
+    expect(log).toEqual(["spawn:/open"]);
+    pool.record("/open", "q", "/open/a.ts");
+    expect(log).toEqual(["spawn:/open", "record:/open:q:/open/a.ts"]);
   });
 });

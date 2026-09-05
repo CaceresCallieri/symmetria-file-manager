@@ -29,9 +29,11 @@ interface KeyModes {
   readonly bookmarkSubMode: BookmarkSubMode | null;
   readonly helpOpen: boolean;
   readonly zoxideOpen: boolean;
+  readonly finderOpen: boolean;
   readonly message: string | null;
   closeHelp(): void;
   closeZoxide(): void;
+  closeFinder(): void;
   clearMessage(): void;
 }
 
@@ -141,6 +143,7 @@ export function useKeyActions(
   const [bookmarkSubMode, setBookmarkSubMode] = useState<BookmarkSubMode | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [zoxideOpen, setZoxideOpen] = useState(false);
+  const [finderOpen, setFinderOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const actions = useMemo<KeyActions>(() => {
@@ -193,7 +196,7 @@ export function useKeyActions(
       nextMatch: () => search.goNext(),
       previousMatch: () => search.goPrevious(),
       startFlash,
-      openFuzzyFinder: soon("The fuzzy finder"),
+      openFuzzyFinder: () => setFinderOpen(true),
       openZoxide: () => setZoxideOpen(true),
 
       // Chords resolve for real; what they resolve TO may not exist yet.
@@ -310,12 +313,14 @@ export function useKeyActions(
       bookmarkSubMode,
       helpOpen,
       zoxideOpen,
+      finderOpen,
       message,
       closeHelp: () => setHelpOpen(false),
       closeZoxide: () => setZoxideOpen(false),
+      closeFinder: () => setFinderOpen(false),
       clearMessage: () => setMessage(null),
     }),
-    [chordPrefix, bookmarkSubMode, helpOpen, zoxideOpen, message],
+    [chordPrefix, bookmarkSubMode, helpOpen, zoxideOpen, finderOpen, message],
   );
 
   return { actions, modes, state };

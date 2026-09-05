@@ -94,11 +94,23 @@
     "packages/fm-search/src/main/worker-entry.ts"
   ],
 
-  // Two paths inside `new URL(...)` point at build OUTPUT, not at modules:
-  // `../renderer/index.html` is the page the window loads, and
-  // `../preload/index.cjs` is the bundle Chromium loads. They resolve at
-  // runtime, relative to `dist-electron/`, and never at analysis time.
-  "ignoreUnresolvedImports": ["../renderer/index.html", "../preload/index.cjs"],
+  // Three paths inside `new URL(...)` point at build OUTPUT, not at modules:
+  // `../renderer/index.html` is the page the window loads,
+  // `../preload/index.cjs` is the bundle Chromium loads, and
+  // `./searchWorker.js` is the bundle `utilityProcess.fork` is handed. All
+  // three resolve at runtime, relative to `dist-electron/`, and never at
+  // analysis time.
+  //
+  // Observed for the worker: `fallow audit` reported it as an unresolved import
+  // the moment the path stopped being built from `__dirname`. It had to stop —
+  // the main bundle is ESM, where `__dirname` is a `ReferenceError` waiting for
+  // the first search — so `import.meta.url` is the correct form and this entry
+  // is the cost of it.
+  "ignoreUnresolvedImports": [
+    "../renderer/index.html",
+    "../preload/index.cjs",
+    "./searchWorker.js"
+  ],
 
   // The side effect of excluding the tree above: fallow can no longer see that
   // `tools/oxlint/anti-slop/index.ts` imports `@oxlint/plugins`, so it reported

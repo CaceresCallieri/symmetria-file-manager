@@ -50,7 +50,7 @@ export const REQUEST_CHANNELS = {
   /**
    * Open a search index over a directory.
    *
-   * Three channels rather than one, because an index has a LIFETIME. Folding
+   * Four channels rather than one, because an index has a LIFETIME. Folding
    * "open" into "search" would make the first keystroke of every session pay
    * for a full scan with no way to say so, and would leave nothing able to say
    * when the index is no longer wanted.
@@ -58,6 +58,14 @@ export const REQUEST_CHANNELS = {
   searchStart: "symmetria-fm:search-start",
   /** Search an open index. */
   searchQuery: "symmetria-fm:search-query",
+  /**
+   * Attribute a chosen file to the query that found it.
+   *
+   * Its own channel rather than a flag on the search, because it happens once
+   * per session at the moment the overlay closes, and folding it into the
+   * query would make every keystroke carry a field only the last one uses.
+   */
+  searchRecord: "symmetria-fm:search-record",
   /** Release an index now, rather than waiting for it to go idle. */
   searchRelease: "symmetria-fm:search-release",
   /** Put text or an image on the system clipboard. */

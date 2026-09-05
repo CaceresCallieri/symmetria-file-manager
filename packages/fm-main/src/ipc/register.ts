@@ -19,6 +19,7 @@ import {
   decodeRenameRequest,
   decodeSearchDirectoryRequest,
   decodeSearchQueryRequest,
+  decodeSearchRecordRequest,
   decodeTransferRequest,
   decodeTrashRequest,
   decodeUnwatchRequest,
@@ -619,6 +620,18 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
     guard(decodeSearchQueryRequest, "read_failed", async (request) => {
       const reply = await searchPool().search(request.directory, request.query);
       return success(reply);
+    }),
+  );
+
+  ipc.handle(
+    CHANNELS.searchRecord,
+    guard(decodeSearchRecordRequest, "write_failed", async (request) => {
+      // Fire and forget, deliberately. The engine's tracker write has no
+      // outcome a user could act on, and making the overlay wait for it would
+      // put a statistic on the path between pressing Enter and the file
+      // opening. Silent when the index is already gone.
+      searchPool().record(request.directory, request.query, request.chosenPath);
+      return success(null);
     }),
   );
 

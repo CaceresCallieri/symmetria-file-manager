@@ -21,8 +21,10 @@ import { MAX_RESULTS, type SearchReply } from "./pool.ts";
 
 export interface WorkerRequest {
   readonly id: number;
-  readonly kind: "search" | "close";
+  readonly kind: "search" | "close" | "record";
   readonly query?: string;
+  /** The file a `record` request is attributing to its query. */
+  readonly chosenPath?: string;
 }
 
 export type WorkerMessage =
@@ -64,6 +66,13 @@ export async function serve(directory: string, transport: WorkerTransport): Prom
     if (request.kind === "close") {
       index.close();
       transport.close();
+      return;
+    }
+    if (request.kind === "record") {
+      // No reply, by design. Nothing waits on this and nothing can repair a
+      // failed tracker write, so an id to correlate would be ceremony around a
+      // statistic.
+      index.record(request.query ?? "", request.chosenPath ?? "");
       return;
     }
     const query = request.query ?? "";

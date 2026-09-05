@@ -29,6 +29,8 @@ export interface Bridge {
   searchStart(request: unknown): Promise<Result<unknown>>;
   /** Search an open index. */
   searchQuery(request: unknown): Promise<Result<unknown>>;
+  /** Attribute a chosen file to the query that found it. */
+  searchRecord(request: unknown): Promise<Result<unknown>>;
   /** Release a search index. */
   searchRelease(request: unknown): Promise<Result<unknown>>;
   /** Everything the preview router needs about one entry. */

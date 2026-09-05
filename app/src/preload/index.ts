@@ -30,6 +30,7 @@ const bridge: Bridge = {
   cancel: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.cancel, request),
   searchStart: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.searchStart, request),
   searchQuery: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.searchQuery, request),
+  searchRecord: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.searchRecord, request),
   searchRelease: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.searchRelease, request),
   describe: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.describe, request),
   previewUrl: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.previewUrl, request),

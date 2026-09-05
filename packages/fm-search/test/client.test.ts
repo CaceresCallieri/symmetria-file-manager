@@ -204,3 +204,26 @@ describe("close", () => {
     expect(child.killed()).toBe(1);
   });
 });
+
+describe("recording a chosen file", () => {
+  it("posts the query and the path without waiting for anything", () => {
+    const child = harness();
+    const client = createWorkerClient("/a", child.channel);
+    child.deliver({ ready: true });
+    client.record("fmt", "/a/src/format.ts");
+    expect(child.posted).toEqual([
+      { id: 0, kind: "record", query: "fmt", chosenPath: "/a/src/format.ts" },
+    ]);
+  });
+
+  it("drops the record rather than posting it to a child that is gone", () => {
+    // Paired with a live worker in the same file, so a `record` that never
+    // posted anything could not pass the assertion above.
+    const child = harness();
+    const client = createWorkerClient("/a", child.channel);
+    child.deliver({ ready: true });
+    child.exit("gone");
+    client.record("fmt", "/a/src/format.ts");
+    expect(child.posted).toEqual([]);
+  });
+});

@@ -30,6 +30,17 @@ import { describe, expect, it } from "vitest";
 const bundleDir = fileURLToPath(new URL("../dist-electron/main", import.meta.url));
 const bundle = `${bundleDir}/searchWorker.js`;
 
+/**
+ * The bundles built as ES modules.
+ *
+ * The preload is deliberately absent: it is emitted as CommonJS (`index.cjs`),
+ * where `__dirname` is not only legal but correct.
+ */
+const ESM_BUNDLES = [bundle, `${bundleDir}/index.js`];
+
+/** The globals that exist in CommonJS and do not exist in an ES module. */
+const COMMONJS_GLOBALS = /(?<![\w$.])(__dirname|__filename|module\.exports|exports\.)/;
+
 /** Every bare specifier the bundle imports, builtins excluded. */
 function externalImports(source: string): string[] {
   const found = new Set<string>();
@@ -73,5 +84,33 @@ describe("the built search worker", () => {
     // Paired with the assertion above so a resolver that answered "yes" to
     // everything could not pass it for free.
     expect(resolvesFromBundleDir("@ff-labs/not-a-real-package")).toBe(false);
+  });
+});
+
+describe("the ESM bundles", () => {
+  it("reference no CommonJS global", () => {
+    // `__dirname` in an ES module is not a compile error, not a bundling error
+    // and not a boot error. It is a `ReferenceError` thrown the first time the
+    // line runs — which for the search worker's path was the first search of a
+    // session, weeks of green tests after it was written. esbuild does not shim
+    // the CommonJS globals into an ESM output, and nothing else in this
+    // repository would have noticed.
+    const offences: string[] = [];
+    for (const file of ESM_BUNDLES) {
+      readFileSync(file, "utf8")
+        .split("\n")
+        .forEach((line, index) => {
+          if (COMMONJS_GLOBALS.test(line)) offences.push(`${file}:${index + 1}: ${line.trim()}`);
+        });
+    }
+    expect(offences).toEqual([]);
+  });
+
+  it("resolve their sibling files through `import.meta.url` instead", () => {
+    // Paired with the assertion above, so a check that simply found nothing —
+    // an empty file list, a regex that matches nothing — could not pass it for
+    // free. This is the form the same problem has to be solved in.
+    const main = readFileSync(`${bundleDir}/index.js`, "utf8");
+    expect(main).toContain("import.meta.url");
   });
 });

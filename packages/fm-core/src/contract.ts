@@ -1087,3 +1087,19 @@ export const decodeSearchQueryRequest: Decoder<SearchQueryRequest> = (raw) => {
   }
   return success({ directory: base.value.directory, query: raw["query"] });
 };
+
+/** Which file a query ended up choosing, in the index it was found in. */
+export interface SearchRecordRequest extends SearchQueryRequest {
+  readonly chosenPath: string;
+}
+
+export const decodeSearchRecordRequest: Decoder<SearchRecordRequest> = (raw) => {
+  const base = decodeSearchQueryRequest(raw);
+  if (isFailure(base)) return base;
+  // The chosen path gets the full path rules, not a laxer set: it reaches the
+  // engine as a key in a store on disk, and this boundary does not get to
+  // decide that a key is a safer place for a NUL byte than a filename is.
+  const chosenPath = decodePath(isRecord(raw) ? raw["chosenPath"] : undefined);
+  if (isFailure(chosenPath)) return chosenPath;
+  return success({ ...base.value, chosenPath: chosenPath.value });
+};

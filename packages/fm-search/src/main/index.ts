@@ -24,6 +24,21 @@ const SCAN_TIMEOUT_MS = 30_000;
 export interface SearchIndex {
   /** Search this index. Synchronous: the engine answers from memory. */
   search(query: string): readonly SearchRow[];
+  /**
+   * Record which file a query ended up choosing.
+   *
+   * **This does NOT teach frecency, and the name is chosen to avoid implying
+   * it.** The write lands in the engine's query tracker: one record per
+   * project-and-query pair holding the selected file and an open count. A later
+   * search whose query matches that record adds the open count times a
+   * multiplier to the score.
+   *
+   * In this application that multiplier is currently zero, so the gain is
+   * currently zero too. It is written anyway because it is the parity behaviour
+   * and because the record accumulates for whenever the multiplier is raised —
+   * an empty tracker on the day it is turned on would learn nothing.
+   */
+  record(query: string, chosenPath: string): void;
   /** Release the native handle. The caller owns the process boundary. */
   close(): void;
 }
@@ -71,6 +86,13 @@ export async function createIndex(directory: string): Promise<SearchIndex> {
       return result.value.items.map((item, at) =>
         toRow(item, result.value.scores[at], directory, query),
       );
+    },
+    record(query: string, chosenPath: string): void {
+      if (query === "") return;
+      // The result is deliberately dropped. Nothing the user does next depends
+      // on it, and the caller has no repair to offer for a tracker write that
+      // failed — reporting it would be a dialog about a statistic.
+      finder.trackQuery(query, chosenPath);
     },
     close(): void {
       // Guarded: a consumer may well close on window-close AND on process

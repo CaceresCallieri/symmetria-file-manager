@@ -15,12 +15,18 @@
     "./main/match": "./src/main/match.ts",
     "./main/pool": "./src/main/pool.ts",
     "./main/worker": "./src/main/worker.ts",
-    "./main/client": "./src/main/client.ts"
+    "./main/client": "./src/main/client.ts",
+    "./ui": "./src/ui/index.ts"
   },
   "dependencies": {
-    "@ff-labs/fff-node": "0.9.4"
+    "@ff-labs/fff-node": "0.9.4",
+    "@symmetria/fm-core": "workspace:*"
   },
   "devDependencies": {
-    "@symmetria/fm-core": "workspace:*"
+    "@types/react": "^19.2.18",
+    "react": "^19.2.8"
+  },
+  "peerDependencies": {
+    "react": "^19.2.8"
   }
 }
