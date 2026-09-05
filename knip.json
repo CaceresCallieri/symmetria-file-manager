@@ -17,6 +17,15 @@
       "entry": ["src/**/*.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
+    "packages/fm-search": {
+      "entry": [
+        "src/main/index.ts",
+        "src/main/worker-entry.ts",
+        "src/main/worker-entry-electron.ts",
+        "src/ui/index.ts"
+      ],
+      "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"]
+    },
     "packages/fm-ui": {
       "entry": [
         "src/App.tsx",

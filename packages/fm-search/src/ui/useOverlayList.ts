@@ -51,11 +51,52 @@ export function useOverlayList(count: number, onClose: () => void): OverlayList 
     field.current?.focus();
   }, []);
 
+  /**
+   * The exact Escape the field already handled.
+   *
+   * An Escape typed into the field is handled below and then BUBBLES to the
+   * window, so without this the backstop closes a second time. Invisible inside
+   * the file manager, whose close handler is a `setState(false)` and idempotent
+   * — which is why no test there caught it — but a host's may pop a navigation
+   * stack or restore a focus, and doing that twice is a real fault. The
+   * standalone mount is the only place anything counts the calls.
+   *
+   * **`defaultPrevented` is NOT usable for this, and was tried.** The dispatch
+   * cascade calls `preventDefault` on every key while a modal is open — that is
+   * what "a modal handles it" means there — so the flag is already true for
+   * reasons that have nothing to do with this component, and checking it
+   * swallowed the close entirely. The question is not "did anyone prevent
+   * this" but "have I already handled this one", so the event itself is the
+   * only honest answer.
+   *
+   * **Object identity, not a boolean.** That is what makes a ref that is never
+   * cleared harmless: no two dispatches share a `KeyboardEvent` instance, so a
+   * stale value can only ever match the event it was set from and can never
+   * swallow a later, genuine Escape. Clearing it below is about not retaining a
+   * spent event and its target, nothing more.
+   *
+   * **`event.stopPropagation()` is a verified one-line alternative**, confirmed
+   * equivalent in this stack by review. It was not taken: it silences the
+   * event for EVERY window listener rather than for this hook's own, which is a
+   * decision about code this hook does not own, and the shipped form is already
+   * verified end to end in a real window. A maintainer who prefers the simpler
+   * form should re-verify both paths there before switching — the field path
+   * and the backstop path, which is the one that fails silently.
+   */
+  const handledEscape = useRef<globalThis.KeyboardEvent | null>(null);
+
   // Escape at the WINDOW, as a backstop. See this module's header for the bug
   // that put it here.
   useEffect(() => {
     const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      if (handledEscape.current === event) {
+        // Released so this hook holds no reference to a spent event, and its
+        // target with it.
+        handledEscape.current = null;
+        return;
+      }
+      onClose();
     };
     window.addEventListener("keydown", onWindowKeyDown);
     return () => window.removeEventListener("keydown", onWindowKeyDown);
@@ -72,6 +113,9 @@ export function useOverlayList(count: number, onClose: () => void): OverlayList 
     // would move the cursor in the pane the user cannot see behind it.
     if (event.key === "Escape") {
       event.preventDefault();
+      // Named before closing, because the same physical event is about to reach
+      // the window listener above.
+      handledEscape.current = event.nativeEvent;
       onClose();
       return true;
     }

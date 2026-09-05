@@ -201,6 +201,7 @@ pnpm exec tsc -p packages/fm-main --noEmit --pretty false  # types — privilege
 pnpm exec tsc -p packages/fm-ui --noEmit --pretty false  # types — panel SOURCE: DOM, no Node
 pnpm exec tsc -p packages/fm-search --noEmit --pretty false  # types — finder engine: Node, no DOM
 pnpm exec tsc -p packages/fm-search/tsconfig.ui.json --noEmit --pretty false  # types — finder overlay: DOM, no Node
+pnpm exec tsc -p packages/fm-search/tsconfig.test.json --noEmit --pretty false  # types — finder TESTS: both, they read the source tree
 pnpm exec tsc -p packages/fm-ui/tsconfig.test.json --noEmit --pretty false  # types — panel TESTS: Node, they read the source tree
 pnpm exec tsc -p app/tsconfig.main.json --noEmit --pretty false  # types — host main process: Node, no DOM
 pnpm exec tsc -p app/tsconfig.renderer.json --noEmit --pretty false  # types — host renderer entry: DOM, no Node
@@ -214,9 +215,9 @@ git diff -z --name-only --diff-filter=ACMR <base> -- '*.qml' | xargs -0 -r tools
 
 Biome, `tsc` and the QML gate exit non-zero on findings. Anti-slop exits non-zero for its eight error rules; its seven pilot warnings print and exit zero. Fallow uses the gating `audit` command. The QML line exits 0 when the change touches no `.qml` file, which is the normal case for the Electron tree.
 
-**One `tsc` line per context, not one for the tree.** There are EIGHT and they must not share a `lib`. `packages/fm-core` is imported by everything and gets no environment at all; `packages/fm-main` — the privileged half — gets Node and no DOM; `packages/fm-ui` — the panel — gets DOM and no Node; the host's two halves get the same treatment as the packages they load. A shared `lib` would let a `window` reference type-check inside a main process and a `node:fs` import type-check inside a sandboxed renderer.
+**One `tsc` line per context, not one for the tree.** There are NINE and they must not share a `lib`. `packages/fm-core` is imported by everything and gets no environment at all; `packages/fm-main` — the privileged half — gets Node and no DOM; `packages/fm-ui` — the panel — gets DOM and no Node; the host's two halves get the same treatment as the packages they load. A shared `lib` would let a `window` reference type-check inside a main process and a `node:fs` import type-check inside a sandboxed renderer.
 
-**`packages/fm-search` is TWO of the eight, because it spans the boundary.** It is the only package that ships code for both sides — an engine that runs in a utility process and an overlay that runs in the sandboxed renderer — so it carries the fm-main and fm-ui treatments in one package: `tsconfig.json` covers `src/main` with Node and no DOM, `tsconfig.ui.json` covers `src/ui` with DOM and no Node. One config for the package would defeat the split the package exists to hold, since a host must be able to mount the overlay alone.
+**`packages/fm-search` is THREE of the nine, because it spans the boundary.** It is the only package that ships code for both sides — an engine that runs in a utility process and an overlay that runs in the sandboxed renderer — so it carries the fm-main and fm-ui treatments in one package: `tsconfig.json` covers `src/main` with Node and no DOM, `tsconfig.ui.json` covers `src/ui` with DOM and no Node. One config for the package would defeat the split the package exists to hold, since a host must be able to mount the overlay alone. Its `tsconfig.test.json` is the third and gets BOTH, for the same reason `packages/fm-ui` needs one: the boundary test reads every source file under `src/ui` to prove that half never imports Node, so it needs a filesystem, and the standalone test mounts the overlay, so it needs a DOM. Neither permission may reach either source.
 
 **`packages/fm-ui` has TWO configs and both are in the fence.** Its `tsconfig.json` covers `src` alone with `types: []`, which is the real contract: the panel is sandboxed and must not reach Node. Its tests DO need Node, because the invariant test reads every source file to prove that contract holds — so they live in `tsconfig.test.json`. One shared config would hand the source whatever the tests need, which is the whole thing this package exists to prevent. The rule earns its keep in practice, not only in principle: `packages/fm-core/src/windowUrl.ts` reaches for `URLSearchParams` and cannot have it, because that package compiles against no environment at all — which is what forced a hand-rolled parse, and the hand-rolled one turned out to be more correct anyway (`URLSearchParams` decodes `+` as a space, so a directory named `c++` would come back wrong).
 
@@ -240,6 +241,7 @@ pnpm exec tsc -p packages/fm-main --noEmit --pretty false  # types — privilege
 pnpm exec tsc -p packages/fm-ui --noEmit --pretty false  # types — panel SOURCE: DOM, no Node
 pnpm exec tsc -p packages/fm-search --noEmit --pretty false  # types — finder engine: Node, no DOM
 pnpm exec tsc -p packages/fm-search/tsconfig.ui.json --noEmit --pretty false  # types — finder overlay: DOM, no Node
+pnpm exec tsc -p packages/fm-search/tsconfig.test.json --noEmit --pretty false  # types — finder TESTS: both, they read the source tree
 pnpm exec tsc -p packages/fm-ui/tsconfig.test.json --noEmit --pretty false  # types — panel TESTS: Node, they read the source tree
 pnpm exec tsc -p app/tsconfig.main.json --noEmit --pretty false  # types — host main process: Node, no DOM
 pnpm exec tsc -p app/tsconfig.renderer.json --noEmit --pretty false  # types — host renderer entry: DOM, no Node
@@ -284,6 +286,29 @@ Model classes in C++ namespace `symmetria::filemanager::models`:
 | `AppIconProvider` | Resolves a `.desktop` id to a themed app-icon file path for the "Open With" menu via `IconThemeResolver::resolveApp`; cached per id |
 
 **Icon resolution returns file paths, not `QIcon`s, by design.** `IconThemeResolver::resolve` (MIME/folder icons) and `IconThemeResolver::resolveApp` (application icons, the `apps/` context path) hand-roll XDG theme lookup to return the real SVG/PNG path on disk — because QML `Image { source: "file://..." }` renders an SVG source crisply, whereas `QIcon::fromTheme(...).pixmap()` would rasterize and lose the vector. This is why a new `.desktop` app entry resolves automatically without QML changes.
+
+### The file finder: `packages/fm-search`
+
+The finder ships as its own workspace package because a host must be able to
+mount it **without** the file-manager panel — Mesura Code takes the finder, not
+the file manager. Everything a consumer looks up lives in
+`packages/fm-search/README.md`; what an agent has to know **before touching this
+tree** is only this:
+
+- **Two halves, two environments, and they must not cross.** `./main` is the
+  engine and runs in a Node process; `./ui` is the overlay and runs in a
+  sandboxed renderer. `test/boundary.test.ts` reads every source file under each
+  and fails on a `node:` import in `src/ui` or an `@symmetria/fm-ui` import in
+  either. The panel depends on this package, so an import back would also be a
+  cycle.
+- **One index per process, keyed by directory.** The engine's store refuses a
+  second open inside one program. This is the one place the port deliberately
+  departs from Qt, whose single process-wide engine swaps its base path and
+  races across windows. Do not "simplify" `main/pool` into a shared engine.
+- **The overlay reaches the engine through the bridge global, not through the
+  panel.** Its `onChoose` / `onClose` / `renderPreview` props are the activation
+  seam; a host supplies all three, and the panel's own preview arrives through
+  `renderPreview` rather than an import.
 
 ### Symmetria Shell Dependency (One-Sided)
 
