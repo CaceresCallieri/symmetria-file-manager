@@ -97,6 +97,10 @@ export function createWorkerClient(directory: string, channel: WorkerChannel): I
         channel.post({ id, kind: "search", query });
       });
     },
+    refresh(): void {
+      if (gone !== undefined) return;
+      channel.post({ id: 0, kind: "refresh" });
+    },
     record(query: string, chosenPath: string): void {
       // Dropped rather than queued when the child is gone. The whole point of
       // this write is that nothing depends on it, so holding it against a

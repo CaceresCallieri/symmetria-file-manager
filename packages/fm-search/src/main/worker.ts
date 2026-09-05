@@ -21,7 +21,7 @@ import { MAX_RESULTS, type SearchReply } from "./pool.ts";
 
 export interface WorkerRequest {
   readonly id: number;
-  readonly kind: "search" | "close" | "record";
+  readonly kind: "search" | "close" | "record" | "refresh";
   readonly query?: string;
   /** The file a `record` request is attributing to its query. */
   readonly chosenPath?: string;
@@ -66,6 +66,12 @@ export async function serve(directory: string, transport: WorkerTransport): Prom
     if (request.kind === "close") {
       index.close();
       transport.close();
+      return;
+    }
+    if (request.kind === "refresh") {
+      // No reply, like `record`. The caller is opening a finder and cannot wait
+      // on a filesystem walk, and there is no outcome it could act on.
+      index.refresh();
       return;
     }
     if (request.kind === "record") {

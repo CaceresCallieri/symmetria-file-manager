@@ -227,3 +227,24 @@ describe("recording a chosen file", () => {
     expect(child.posted).toEqual([]);
   });
 });
+
+describe("asking the engine to re-scan", () => {
+  it("posts the request without waiting for anything", () => {
+    const child = harness();
+    const client = createWorkerClient("/a", child.channel);
+    child.deliver({ ready: true });
+    client.refresh();
+    expect(child.posted).toEqual([{ id: 0, kind: "refresh" }]);
+  });
+
+  it("drops it rather than posting to a child that is gone", () => {
+    // Paired with the live case above, so a `refresh` that never posted could
+    // not pass either assertion.
+    const child = harness();
+    const client = createWorkerClient("/a", child.channel);
+    child.deliver({ ready: true });
+    child.exit("gone");
+    client.refresh();
+    expect(child.posted).toEqual([]);
+  });
+});

@@ -160,6 +160,39 @@
   --radius: 0.5rem;
   --radius-sm: 4px;
 
+  /*
+   * The file finder, in three numbers.
+   *
+   * Here rather than beside the rules, and that is not a preference:
+   * `theme.test.ts` requires every `var(--x)` any stylesheet reads to be
+   * DECLARED IN THIS FILE, so a property declared on `.finder` fails the build.
+   *
+   * `--finder-list-share` is THE lever on the split, and it is one number on
+   * purpose. The user asked for sixty/forty and asked to try fifty/fifty; that
+   * second experiment is this line and nothing else. Expressed as a share
+   * rather than as a pixel count deliberately — Qt pins its information panel
+   * at exactly 360 pixels with a hard minimum and maximum because a Qt layout
+   * let a long file name blow the panel out and starve the list, and a flex
+   * ratio with a zero minimum width on the list cannot fail that way.
+   *
+   * It is a UNITLESS FRACTION, not a percentage, and the gap is a token beside
+   * it, because the split has to divide the space that is actually available.
+   * A plain `60%` basis is 60% of the WHOLE body, so the 12px gap comes out of
+   * the flexible side alone and the real ratio measures 61.5:38.5 — verified in
+   * a real window at 542px, where the list took 325.19 and the panel 204.81.
+   * `calc((100% - gap) * share)` divides what is left after the gap, so 0.6 is
+   * exactly sixty/forty and 0.5 would be exactly half. A lever whose number
+   * does not mean what it says is a lever nobody can experiment with.
+   *
+   * The two widths are the empty and answered states. The overlay is narrow
+   * until there are results, which is what makes it feel like it grows into its
+   * answer; the Qt original goes from 672 to 1080 pixels for the same reason.
+   */
+  --finder-list-share: 0.6;
+  --finder-gap: 12px;
+  --finder-width: 672px;
+  --finder-width-wide: 1080px;
+
   /* ── Type ─────────────────────────────────────────────────────────────── */
   --font-sans: Rubik, system-ui, sans-serif;
   --font-mono: "CaskaydiaCove NF", ui-monospace, monospace;

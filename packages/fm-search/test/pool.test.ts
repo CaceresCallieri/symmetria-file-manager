@@ -23,6 +23,7 @@ function fakeWorker(directory: string, log: string[], ready?: Promise<void>): In
       Promise.resolve({ rows: [], matchedQuery: query, truncated: false, cap: 200 }),
     record: (query: string, chosenPath: string) =>
       log.push(`record:${directory}:${query}:${chosenPath}`),
+    refresh: () => log.push(`refresh:${directory}`),
     close: () => log.push(`close:${directory}`),
   };
 }
@@ -255,12 +256,15 @@ describe("starting an index that cannot open", () => {
 });
 
 describe("starting an index that opens", () => {
-  it("reuses the worker a plain acquire already spawned", async () => {
+  it("reuses the worker a plain acquire already spawned, and re-scans it", async () => {
+    // The re-scan is the point rather than an accident: `acquire` left an index
+    // whose snapshot is however old that call was, and `start` is the moment a
+    // user is about to read it. One worker, not two.
     const log: string[] = [];
     const pool = poolWith(log, { value: 0 });
     pool.acquire("/a");
     await pool.start("/a");
-    expect(log).toEqual(["spawn:/a"]);
+    expect(log).toEqual(["spawn:/a", "refresh:/a"]);
     expect(pool.size()).toBe(1);
   });
 });
@@ -285,5 +289,49 @@ describe("recording which file a query chose", () => {
     expect(log).toEqual(["spawn:/open"]);
     pool.record("/open", "q", "/open/a.ts");
     expect(log).toEqual(["spawn:/open", "record:/open:q:/open/a.ts"]);
+  });
+});
+
+describe("starting an index that is already warm", () => {
+  it("asks the engine to re-scan, because the open one is a snapshot", async () => {
+    // The defect this exists for. Closing the finder deliberately does NOT
+    // release the index, so reopening reuses a scan taken whenever the index
+    // opened — verification watched a file's modification time stay at its
+    // pre-edit value across a close and a reopen.
+    const log: string[] = [];
+    const pool = poolWith(log, { value: 0 });
+    await pool.start("/a");
+    await pool.start("/a");
+    expect(log).toEqual(["spawn:/a", "refresh:/a"]);
+  });
+
+  it("does not re-scan an index it has only just opened", async () => {
+    // A worker spawned now has nothing to refresh: its scan is the one `ready`
+    // waited for. Paired with the case above, so a `start` that refreshed
+    // unconditionally could not pass both.
+    const log: string[] = [];
+    const pool = poolWith(log, { value: 0 });
+    await pool.start("/a");
+    expect(log).toEqual(["spawn:/a"]);
+  });
+
+  it("re-scans only the directory being started", async () => {
+    const log: string[] = [];
+    const pool = poolWith(log, { value: 0 });
+    await pool.start("/a");
+    await pool.start("/b");
+    await pool.start("/a");
+    expect(log).toEqual(["spawn:/a", "spawn:/b", "refresh:/a"]);
+  });
+
+  it("re-scans nothing after the worker was retired, and spawns instead", async () => {
+    const log: string[] = [];
+    const clock = { value: 0 };
+    const pool = poolWith(log, clock);
+    await pool.start("/a");
+    clock.value = 1001;
+    pool.sweep();
+    await pool.start("/a");
+    expect(log).toEqual(["spawn:/a", "close:/a", "spawn:/a"]);
   });
 });

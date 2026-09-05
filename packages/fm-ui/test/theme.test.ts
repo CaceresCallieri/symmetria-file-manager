@@ -415,3 +415,48 @@ describe("the status bar's height", () => {
     expect(bodyOf(pathBarRule ?? "")).not.toContain("overflow:");
   });
 });
+
+describe("the file finder's split", () => {
+  it("drives the list's share from one declared token", async () => {
+    // The user asked for sixty/forty and asked to try fifty/fifty. That second
+    // experiment has to be ONE number, which is only true while the rule reads
+    // a token rather than a literal.
+    const tokens = await readFile(TOKENS, "utf8");
+    const styles = await readFile(join(RENDERER, "styles.css"), "utf8");
+    expect(tokens).toMatch(/--finder-list-share:\s*0\.6\b/);
+    // The gap is subtracted before the share is taken. Declared as a plain
+    // percentage the list got its cut of the WHOLE body and the gap came out of
+    // the panel alone, which measured 61.5:38.5 in a real window against a
+    // token that said sixty/forty.
+    expect(styles).toContain("calc((100% - var(--finder-gap)) * var(--finder-list-share))");
+  });
+
+  it("lets the list shrink below its content, so a long path elides", async () => {
+    // A flex item's default minimum is its content, so without `min-width: 0` a
+    // single very long path would push the list past its share and starve it —
+    // the exact failure Qt worked around by pinning its information panel to
+    // 360px with a hard maximum. The ratio is only safe with this line.
+    const styles = await readFile(join(RENDERER, "styles.css"), "utf8");
+    const rule = styles.slice(styles.indexOf(".finder__list {"));
+    expect(rule.slice(0, rule.indexOf("}"))).toContain("min-width: 0");
+  });
+
+  it("cancels the shared list's top margin, so the two panes align", async () => {
+    // `.overlay__list` is shared with the zoxide popup and carries
+    // `margin: 8px 0 0`, which is right where the list follows the field
+    // directly. In the finder the body owns that gap, so the inherited margin
+    // both doubles it and drops the list 8px below the panel beside it — two
+    // flex siblings under `align-items: stretch`, only one of which moved.
+    const styles = await readFile(join(RENDERER, "styles.css"), "utf8");
+    const rule = styles.slice(styles.indexOf(".finder__list {"));
+    expect(rule.slice(0, rule.indexOf("}"))).toContain("margin-top: 0");
+  });
+
+  it("declares both overlay widths as tokens, narrow and answered", async () => {
+    // Paired with the two above so a token file that declared nothing could not
+    // satisfy this suite by accident.
+    const tokens = await readFile(TOKENS, "utf8");
+    expect(tokens).toContain("--finder-width:");
+    expect(tokens).toContain("--finder-width-wide:");
+  });
+});

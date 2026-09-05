@@ -17,6 +17,7 @@ import {
 } from "@symmetria/fm-core/windowUrl";
 import { FinderOverlay } from "@symmetria/fm-search/ui";
 import { useMemo } from "react";
+import { FinderPreview } from "./components/FinderPreview.tsx";
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { MillerColumns } from "./components/MillerColumns.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
@@ -26,7 +27,6 @@ import { type RenderMode, StatusBar } from "./components/StatusBar.tsx";
 import { TabBar } from "./components/TabBar.tsx";
 import type { TransientLineProps } from "./components/transientLine.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
-
 import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
 import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { useBookmarks } from "./useBookmarks.ts";
@@ -263,6 +263,7 @@ function Overlays({
   context,
   bookmarks,
   directory,
+  renderDocuments,
   onNavigate,
   onReveal,
 }: {
@@ -271,6 +272,8 @@ function Overlays({
   readonly bookmarks: ReadonlyMap<string, Bookmark>;
   /** The tree the finder searches: whatever the active pane is showing. */
   readonly directory: string;
+  /** Passed through to the finder's preview, as the pane's own preview gets it. */
+  readonly renderDocuments: boolean;
   onNavigate(path: string): void;
   onReveal(path: string): void;
 }) {
@@ -278,6 +281,7 @@ function Overlays({
     return (
       <FinderOverlay
         directory={directory}
+        renderPreview={(path) => <FinderPreview path={path} renderDocuments={renderDocuments} />}
         onChoose={(path, isDir) => {
           modes.closeFinder();
           // A directory is ENTERED and a file is REVEALED. The overlay reports
@@ -428,6 +432,7 @@ export function App(props: AppProps = {}) {
         context={context}
         bookmarks={bookmarks.byLetter}
         directory={tabs.pane.path}
+        renderDocuments={tabs.renderDocuments}
         onNavigate={tabs.navigate}
         onReveal={(path) => tabs.navigateTo(parentOf(path), basename(path))}
       />

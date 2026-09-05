@@ -1,6 +1,6 @@
 import type { EntrySummary } from "@symmetria/fm-core/entry";
+import { humanSize } from "@symmetria/fm-core/format";
 import type { PreviewRoute, RenderableAs } from "@symmetria/fm-core/preview/route";
-
 import { useCallback, useEffect, useState } from "react";
 import { FileIcon } from "../FileIcon.tsx";
 import { ROW_HEIGHT, type VisibleRange } from "../FileList.tsx";
@@ -12,7 +12,6 @@ import { AudioPreview } from "./AudioPreview.tsx";
 import { CodePreview } from "./CodePreview.tsx";
 import { DocumentPreview } from "./DocumentPreview.tsx";
 import { HtmlPreview } from "./HtmlPreview.tsx";
-import { humanSize } from "./humanSize.ts";
 import { ImagePreview } from "./ImagePreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
 import { SpreadsheetPreview } from "./SpreadsheetPreview.tsx";

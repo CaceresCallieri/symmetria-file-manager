@@ -16,14 +16,11 @@
  */
 import type { SearchReplyRow } from "@symmetria/fm-core/contract";
 
+import { FinderInfoPanel, type RenderPreview } from "./FinderInfoPanel.tsx";
 import { FinderRow } from "./FinderRow.tsx";
+import { withoutTrailingSeparator } from "./paths.ts";
 import { useFinder } from "./useFinder.ts";
 import { useOverlayList } from "./useOverlayList.ts";
-
-/** Root stays "/"; anything else loses its trailing separator. */
-function withoutTrailingSeparator(path: string): string {
-  return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
-}
 
 /** A stable id per row, so the field can name the one that is current. */
 function rowId(index: number): string {
@@ -42,13 +39,23 @@ export interface FinderOverlayProps {
    */
   onChoose(path: string, isDir: boolean): void;
   onClose(): void;
+  /**
+   * Draw a live preview of the highlighted result.
+   *
+   * Injected rather than built in, because this package must not import the
+   * file-manager panel — see `FinderInfoPanel`'s header for the full reasoning.
+   * Omit it and the information panel still shows the name and the four facts,
+   * with no preview beneath them.
+   */
+  readonly renderPreview?: RenderPreview | undefined;
 }
 
-export function FinderOverlay({ directory, onChoose, onClose }: FinderOverlayProps) {
+export function FinderOverlay({ directory, onChoose, onClose, renderPreview }: FinderOverlayProps) {
   const finder = useFinder(directory);
   const rows = finder.rows;
   const list = useOverlayList(rows.length, onClose);
   const highlighted = list.highlighted;
+  const current = rows[highlighted];
 
   const choose = (row: SearchReplyRow | undefined) => {
     if (row === undefined) return;
@@ -72,13 +79,20 @@ export function FinderOverlay({ directory, onChoose, onClose }: FinderOverlayPro
     if (list.handleKey(event)) return;
     if (event.key === "Enter") {
       event.preventDefault();
-      choose(rows[highlighted]);
+      choose(current);
     }
   };
 
   return (
     <div className="overlay">
-      <div data-testid="finder" className="overlay__panel finder">
+      {/* Narrow until there is something to show. The Qt original grows from
+          672 to 1080 pixels once results exist, and the growth is what makes
+          the surface feel like it is answering rather than waiting. */}
+      <div
+        data-testid="finder"
+        data-wide={current === undefined ? undefined : "true"}
+        className={`overlay__panel finder${current === undefined ? "" : " finder--wide"}`}
+      >
         <input
           data-testid="finder-query"
           ref={list.field}
@@ -88,7 +102,7 @@ export function FinderOverlay({ directory, onChoose, onClose }: FinderOverlayPro
           role="combobox"
           aria-expanded={true}
           aria-controls="finder-list"
-          aria-activedescendant={rows[highlighted] === undefined ? undefined : rowId(highlighted)}
+          aria-activedescendant={current === undefined ? undefined : rowId(highlighted)}
           onChange={(event) => {
             finder.setQuery(event.target.value);
             list.resetHighlight();
@@ -98,24 +112,39 @@ export function FinderOverlay({ directory, onChoose, onClose }: FinderOverlayPro
         <p className="finder__status" data-testid="finder-status">
           {statusLine(finder.problem, finder.indexing, rows.length, finder.truncated, finder.cap)}
         </p>
-        {/* Plain elements carrying the roles, rather than a `ul` and `li` given
-            them: a list element with an interactive role is a list to the
-            parser and a listbox to the reader, and the two disagree. */}
-        <div
-          id="finder-list"
-          className="overlay__list"
-          role="listbox"
-          aria-label="Results"
-          tabIndex={-1}
-        >
-          {rows.map((row, index) => (
-            <FinderRow
-              key={row.fullPath}
-              row={row}
-              id={rowId(index)}
-              active={index === highlighted}
-            />
-          ))}
+        {/* The body is the split: the list at sixty per cent, the information
+            panel at the rest. With no results there is no panel at all and the
+            overlay stays narrow, which is what makes the surface feel like it
+            grows into its answer.
+
+            Qt pins its panel at exactly 360 pixels with a hard minimum AND
+            maximum, because a Qt layout let a long file name blow the panel out
+            to full width and starve the list. That failure does not carry over:
+            a ratio with a zero minimum width on the list is safe by
+            construction, so a long path elides instead of pushing. */}
+        <div className="finder__body">
+          {/* Plain elements carrying the roles, rather than a `ul` and `li`
+              given them: a list element with an interactive role is a list to
+              the parser and a listbox to the reader, and the two disagree. */}
+          <div
+            id="finder-list"
+            className="overlay__list finder__list"
+            role="listbox"
+            aria-label="Results"
+            tabIndex={-1}
+          >
+            {rows.map((row, index) => (
+              <FinderRow
+                key={row.fullPath}
+                row={row}
+                id={rowId(index)}
+                active={index === highlighted}
+              />
+            ))}
+          </div>
+          {current === undefined ? null : (
+            <FinderInfoPanel row={current} renderPreview={renderPreview} />
+          )}
         </div>
       </div>
     </div>

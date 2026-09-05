@@ -44,6 +44,7 @@
     "./preview/archive/tar": "./src/preview/archive/tar.ts",
     "./preview/archive/listing": "./src/preview/archive/listing.ts",
     "./listingOptions": "./src/listingOptions.ts",
-    "./scrollbar": "./src/scrollbar.ts"
+    "./scrollbar": "./src/scrollbar.ts",
+    "./format": "./src/format.ts"
   }
 }

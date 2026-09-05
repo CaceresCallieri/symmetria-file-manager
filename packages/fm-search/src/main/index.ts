@@ -39,6 +39,36 @@ export interface SearchIndex {
    * an empty tracker on the day it is turned on would learn nothing.
    */
   record(query: string, chosenPath: string): void;
+  /**
+   * Ask the engine to re-scan the tree.
+   *
+   * **Load-bearing, and measured to be.** An index is a snapshot taken when it
+   * opens, and the finder deliberately does not release its index when it
+   * closes — reopening would otherwise pay for a whole fresh scan of the tree.
+   * So without this call, reopening a finder shows facts from whenever the
+   * index first opened, which can be minutes and several edits ago.
+   *
+   * The engine also keeps its own background watcher, and a probe under plain
+   * Node showed that watcher picking an `mtime` change up within 400 ms with no
+   * refresh at all — which suggested this call was redundant. **It is not.**
+   * Verification inside a real Electron utility process measured the four
+   * steps: a file touched to 400 days old still read `just now` two seconds
+   * later on a fresh query in the SAME open session, and only read `1y ago`
+   * after the finder was closed and reopened. The watcher does not close the
+   * gap in the process this actually runs in; this call does.
+   *
+   * **What is still true, and is not a defect to fix here:** an edit made while
+   * the finder is OPEN is not reflected until it is reopened. Refreshing per
+   * search would put a filesystem walk on every keystroke, which is a far worse
+   * trade than a fact that is one reopen behind. The research records the same
+   * shape in the Qt build for git status — "open the finder after editing a
+   * file and the info pane still says clean" — there because `opts.watch` is
+   * false and no refresh is ever called at all.
+   *
+   * Returns nothing and blocks on nothing. The scan lands when it lands; the
+   * caller is opening a finder, not waiting on a filesystem walk.
+   */
+  refresh(): void;
   /** Release the native handle. The caller owns the process boundary. */
   close(): void;
 }
@@ -93,6 +123,12 @@ export async function createIndex(directory: string): Promise<SearchIndex> {
       // on it, and the caller has no repair to offer for a tracker write that
       // failed — reporting it would be a dialog about a statistic.
       finder.trackQuery(query, chosenPath);
+    },
+    refresh(): void {
+      // The result is dropped: a rescan is a hint, not a request. There is
+      // nothing a caller could do about one that failed except show the user
+      // slightly older data, which is what they would have had anyway.
+      finder.scanFiles();
     },
     close(): void {
       // Guarded: a consumer may well close on window-close AND on process

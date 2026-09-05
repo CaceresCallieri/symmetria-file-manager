@@ -59,6 +59,8 @@ export interface IndexWorker {
    * buys, and why that is currently zero.
    */
   record(query: string, chosenPath: string): void;
+  /** Ask the engine to re-scan. Returns nothing and blocks on nothing. */
+  refresh(): void;
   close(): void;
 }
 
@@ -139,7 +141,20 @@ export function createIndexPool(options: PoolOptions): IndexPool {
   return {
     acquire,
     async start(directory) {
-      await acquire(directory).ready;
+      // A worker that is ALREADY open scanned the tree whenever it opened,
+      // which may be minutes ago and several edits back — closing the finder
+      // deliberately does not release the index, so reopening reuses that
+      // snapshot. A worker spawned just now has nothing to refresh; its scan is
+      // the one `ready` is waiting for.
+      const warm = open.get(directory) !== undefined;
+      const worker = acquire(directory);
+      await worker.ready;
+      // Fired, not awaited. The user is opening a finder; making them wait on a
+      // filesystem walk to see the first keystroke would trade a stale fact for
+      // a frozen overlay. Measured in a real window: a file touched to 400 days
+      // old read `just now` on a requery in the same open session and `1y ago`
+      // after a close and reopen, so this is the call that closes the gap.
+      if (warm) worker.refresh();
     },
     async search(directory, query) {
       const worker = acquire(directory);
