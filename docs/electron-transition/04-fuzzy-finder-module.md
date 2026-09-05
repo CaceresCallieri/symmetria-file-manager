@@ -114,7 +114,7 @@ The header exports about 80 functions. The file manager calls **eight**.
 | `fff_wait_for_scan` | `fuzzyfinder.cpp:157`, `:185` | `(void* handle, uint64_t timeout_ms)` | Blocks until the initial index finishes. `->int_value` is `1` for completed and `0` for timed out. The file manager passes 30000 ms and only warns on timeout. |
 | `fff_restart_index` | `fuzzyfinder.cpp:178` | `(void* handle, const char* new_path)` | Re-points the existing engine at a new directory. Success flag only, no payload. |
 | `fff_search_mixed` | `fuzzyfinder.cpp:438` | `(handle, query, current_file, max_threads, page_index, page_size, combo_boost_multiplier, min_combo_count)` | Files **and** directories in one flat list, interleaved by descending total score. `->handle` is a `FffMixedSearchResult*`. |
-| `fff_track_query` | `fuzzyfinder.cpp:504` | `(handle, query, file_path)` | Records that `file_path` was opened for `query`. `->int_value` is `1` on success. Keys on the **absolute** path. |
+| `fff_track_query` | `fuzzyfinder.cpp:504` | `(handle, query, file_path)` | Records that `file_path` was opened for `query`. `->int_value` is `1` on success. The record is keyed on `hash(project_path + "::" + query)`; the absolute path is the selection it stores, **not** the key. |
 | `fff_free_mixed_search_result` | `fuzzyfinder.cpp:466` | `FffMixedSearchResult*` | Frees the struct, both arrays, and every heap string inside them. |
 | `fff_free_result` | `fuzzyfinder.cpp:151`, `:166`, `:180`, `:190`, `:469`, `:505` | `FffResult*` | Frees the envelope only. It does **not** free `->handle`. |
 | `fff_destroy` | `fuzzyfinder.cpp:171` (deleter) | `void* handle` | Destroys the instance. In practice never runs — see A.5. |
@@ -343,10 +343,15 @@ Two LMDB environments live under it: `frecency/` and `history/`
 manual `mkdir` is needed; the code pre-creates only the parent defensively
 (`:129`).
 
-`fff_track_query(handle, query, absolutePath)` records the pair. It feeds two
-things: the per-file access frecency score that boosts future rankings
-(`FffScore.frecency_boost`), and the query history that drives the combo-match
-boost (`FffScore.combo_match_boost`) and `fff_get_historical_query`.
+`fff_track_query(handle, query, absolutePath)` records the pair, and it feeds
+**one** thing: the query history that drives the combo-match boost
+(`FffScore.combo_match_boost`) and `fff_get_historical_query`.
+
+⚠ It does **not** write the frecency database, and this document said it did.
+`FffScore.frecency_boost` is written by `Frecency::track_access`, which is **not
+among the 78 `fff_*` symbols the shipped `libfff_c.so` exports** — so no C-ABI
+caller can reach it at all. Measured three ways in
+`20-spike-search-topology.md` §2.1.
 
 `FuzzyFinderTest` redirects the databases into a `QTemporaryDir` through the
 environment variable (`plugin/tests/FuzzyFinderTest.cpp:74-77`), so the suite
