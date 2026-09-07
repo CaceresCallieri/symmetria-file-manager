@@ -20,6 +20,14 @@ import { describe, expect, it } from "vitest";
 
 const RENDERER = join(import.meta.dirname, "..", "src");
 const TOKENS = join(RENDERER, "theme", "tokens.css");
+/**
+ * The finder ships its own stylesheet, and it is in scope here.
+ *
+ * It moved out of this package when its components did, and a rule that is not
+ * scanned is a rule that may carry a colour literal. The invariant is about the
+ * PANEL AS RENDERED, not about one directory — so the check follows the CSS.
+ */
+const FINDER_CSS = join(import.meta.dirname, "..", "..", "fm-search", "src", "ui", "finder.css");
 
 /** Hex, `rgb()`, `hsl()` and `oklch()` — every way to write a colour. */
 const COLOUR = /#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(|\boklch\(|\bcolor-mix\(/;
@@ -65,7 +73,10 @@ describe("colour inheritance", () => {
   });
 
   it("lets icons take the surrounding colour rather than carrying their own", async () => {
-    const sheet = await readFile(join(RENDERER, "styles.css"), "utf8");
+    // The rule moved with its component into the finder's package. This test
+    // did not move: the property it pins is about how the PANEL renders, and
+    // the panel imports that stylesheet.
+    const sheet = await readFile(FINDER_CSS, "utf8");
     const rule = /\.file-icon \{[^}]*\}/.exec(sheet)?.[0] ?? "";
 
     expect(rule).toContain("currentcolor");
@@ -82,7 +93,7 @@ describe("the palette", () => {
   it("has no colour literal in any stylesheet but the token file", async () => {
     // The generated syntax theme is the other exemption: it IS a palette, and
     // it is regenerated from the KDE theme the Qt build reads.
-    const sheets = (await sourceFiles(RENDERER, /\.css$/)).filter(
+    const sheets = [...(await sourceFiles(RENDERER, /\.css$/)), FINDER_CSS].filter(
       (file) => !file.endsWith("syntax-wine.css"),
     );
 
@@ -422,7 +433,7 @@ describe("the file finder's split", () => {
     // experiment has to be ONE number, which is only true while the rule reads
     // a token rather than a literal.
     const tokens = await readFile(TOKENS, "utf8");
-    const styles = await readFile(join(RENDERER, "styles.css"), "utf8");
+    const styles = await readFile(FINDER_CSS, "utf8");
     expect(tokens).toMatch(/--finder-list-share:\s*0\.6\b/);
     // The gap is subtracted before the share is taken. Declared as a plain
     // percentage the list got its cut of the WHOLE body and the gap came out of
@@ -436,7 +447,7 @@ describe("the file finder's split", () => {
     // single very long path would push the list past its share and starve it —
     // the exact failure Qt worked around by pinning its information panel to
     // 360px with a hard maximum. The ratio is only safe with this line.
-    const styles = await readFile(join(RENDERER, "styles.css"), "utf8");
+    const styles = await readFile(FINDER_CSS, "utf8");
     const rule = styles.slice(styles.indexOf(".finder__list {"));
     expect(rule.slice(0, rule.indexOf("}"))).toContain("min-width: 0");
   });
@@ -447,7 +458,7 @@ describe("the file finder's split", () => {
     // directly. In the finder the body owns that gap, so the inherited margin
     // both doubles it and drops the list 8px below the panel beside it — two
     // flex siblings under `align-items: stretch`, only one of which moved.
-    const styles = await readFile(join(RENDERER, "styles.css"), "utf8");
+    const styles = await readFile(FINDER_CSS, "utf8");
     const rule = styles.slice(styles.indexOf(".finder__list {"));
     expect(rule.slice(0, rule.indexOf("}"))).toContain("margin-top: 0");
   });

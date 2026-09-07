@@ -16,7 +16,8 @@
     "./main/pool": "./src/main/pool.ts",
     "./main/worker": "./src/main/worker.ts",
     "./main/client": "./src/main/client.ts",
-    "./ui": "./src/ui/index.ts"
+    "./ui": "./src/ui/index.ts",
+    "./ui/styles.css": "./src/ui/finder.css"
   },
   "dependencies": {
     "@ff-labs/fff-node": "0.9.4",

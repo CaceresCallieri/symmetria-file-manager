@@ -34,7 +34,14 @@ export interface MimeTables {
 const SNIFF_BYTES = 8192;
 
 /** The type the database returns when it has nothing useful to say. */
-const GENERIC = "application/octet-stream";
+/**
+ * The type the database returns when it recognised nothing.
+ *
+ * Exported because `icons/resolve.ts` has to make the same judgement — a type
+ * that carries no information must not be treated as an established fact — and
+ * two spellings of that rule is how one of them silently stops matching.
+ */
+export const GENERIC = "application/octet-stream";
 
 /**
  * Resolve a filename to a MIME type, or `null`.

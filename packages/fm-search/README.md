@@ -13,6 +13,7 @@ gets its own type-check context in this repository for that reason.
 |---|---|---|
 | `@symmetria/fm-search/main` | A Node process — a main process, or a utility process | Node. **No DOM.** |
 | `@symmetria/fm-search/ui` | A sandboxed renderer | The DOM. **No Node.** |
+| `@symmetria/fm-search/ui/styles.css` | The renderer's stylesheet | — |
 
 `test/boundary.test.ts` enforces that split by reading every source file under
 each half. It is not a convention; it fails the build.
@@ -40,6 +41,28 @@ against workers the host spawns. `packages/fm-main/src/search.ts` in this
 repository is a working adapter for Electron's `utilityProcess`, and is about
 forty lines.
 
+### What you must supply besides the handlers
+
+**Import the stylesheet.** `@symmetria/fm-search/ui/styles.css` ships beside the
+components and is not optional — without it the overlay renders as unstyled
+text. It is deliberately not self-contained, and needs two things from you:
+
+- **The design tokens it reads**: `--border`, `--accent`, `--foreground`,
+  `--muted-foreground`, `--radius-sm`, `--font-mono`, and `--finder-list-share`,
+  `--finder-gap`, `--finder-width`, `--finder-width-wide`. Declare them with
+  those names and the finder takes your palette;
+  `packages/fm-ui/src/theme/tokens.css` in this repository is the reference set.
+- **`.overlay` and `.overlay__panel`** — the full-screen scrim and the centred
+  panel. They are shared with dialogs that belong to the file-manager panel, so
+  they are not claimed here.
+
+**Two renderer dependencies come with the package.** `@pierre/trees` (the icon
+sprite) and `lucide-react` (the five glyphs the sprite has no drawing for) are
+plain `dependencies`, so a host that consumes ONLY `./main` still installs them.
+That is a deliberate trade-off rather than an oversight: making them optional
+peers would push an install obligation onto every UI host to spare an engine-only
+host two packages, and the engine-only case is the rarer one.
+
 Mounting is one component:
 
 ```tsx
@@ -62,6 +85,13 @@ import { FinderOverlay } from "@symmetria/fm-search/ui";
   name and the four facts, with nothing beneath them. The file manager passes a
   component that calls its own preview router; a host in an editor is expected
   to pass its own, which is better than inheriting a file manager's.
+
+Icons need nothing from you. `FileIcon` draws from the bundled sprite, and
+`@symmetria/fm-core/icons/resolve` is the single table that decides which
+extension gets which symbol — edit it and every consumer changes at once. One
+limit worth knowing: the sprite is injected into `document.body`, so a host that
+renders the overlay into a **shadow root** gets blank icons, because
+`<use href="#id">` cannot cross that boundary.
 
 ## One index per process
 

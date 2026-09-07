@@ -39,20 +39,35 @@ function spriteId(token: string): string {
   return `file-tree-builtin-${token}`;
 }
 
+/** Documents that already hold the sprite. */
+const injected = new WeakSet<Document>();
+
 /**
  * Put the sprite in the document, once.
  *
  * A `<use>` reference needs its `<symbol>` definitions present somewhere in the
  * document. Injecting per icon would put 37 kilobytes into the page for every
  * row; injecting once puts it there for all of them.
+ *
+ * **The guard is a `WeakSet` rather than a `getElementById`**, because this
+ * hook runs once per ICON — every row of the pane, every archive entry, every
+ * finder result — and a DOM query per row to discover a fact that cannot change
+ * is a query per row for nothing. Keyed by document rather than by a module
+ * boolean so a host with more than one window still gets the sprite in each.
+ *
+ * **Known limit:** it targets `document.body`, so a host that renders into a
+ * SHADOW ROOT gets the sprite outside it, and `<use href="#id">` cannot cross
+ * that boundary — the icons come out blank with no error. No consumer does that
+ * today. Fixing it means resolving the owner document from the rendered node,
+ * which needs a ref the chrome branch below does not have.
  */
 function useSpriteSheet(): void {
   useEffect(() => {
-    const id = "symmetria-fm-icon-sprite";
-    if (document.getElementById(id) !== null) return;
+    if (injected.has(document)) return;
+    injected.add(document);
 
     const host = document.createElement("div");
-    host.id = id;
+    host.id = "symmetria-fm-icon-sprite";
     host.hidden = true;
     host.innerHTML = getBuiltInSpriteSheet(ICON_SET);
     document.body.appendChild(host);
@@ -64,7 +79,6 @@ const CHROME = {
   video: FileVideo,
   audio: FileAudio,
   document: FileText,
-  symlink: FileText,
   binary: Binary,
 } as const;
 

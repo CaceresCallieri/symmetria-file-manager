@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { chromeIconFor, extensionCandidates, iconTokenFor } from "../src/icons/resolve.ts";
+import {
+  CHROME_EXTENSIONS,
+  chromeIconFor,
+  extensionCandidates,
+  iconTokenFor,
+} from "../src/icons/resolve.ts";
 
 /**
  * The cascade, and the one property that matters most: it never fails.
@@ -90,12 +95,15 @@ describe("chromeIconFor, from a name when there is no MIME type", () => {
     expect(chromeIconFor("file", null, "invoice.pdf")).toBe("document");
   });
 
-  it("still answers nothing for a name the file-type set does cover", () => {
+  it("still answers nothing for a name the file-type set covers", () => {
     // Paired with the case above, so a fallback that answered something for
-    // every name could not pass both. A `.ts` has a real symbol of its own and
-    // must reach `iconTokenFor` instead.
+    // every name could not pass both. The second assertion of each pair is
+    // what makes this about PRECEDENCE rather than about absence: without it,
+    // an unknown extension like `.zzzz` would satisfy the test identically.
     expect(chromeIconFor("file", null, "index.ts")).toBeNull();
+    expect(iconTokenFor("index.ts")).toBe("typescript");
     expect(chromeIconFor("file", null, "notes.md")).toBeNull();
+    expect(iconTokenFor("notes.md")).toBe("markdown");
   });
 
   it("lets a known MIME type overrule the name, never the other way round", () => {
@@ -107,5 +115,45 @@ describe("chromeIconFor, from a name when there is no MIME type", () => {
   it("is unchanged for a caller that passes no name at all", () => {
     expect(chromeIconFor("file", null)).toBeNull();
     expect(chromeIconFor("directory", null)).toBe("folder");
+  });
+});
+
+describe("a MIME type that says nothing", () => {
+  it("is treated as no type at all, so the name still answers", () => {
+    // `""` and `application/octet-stream` are the database saying it
+    // recognised nothing. Reading them as an established fact is what sent a
+    // `.pdf` it could not type to the blank default symbol — and `classify` in
+    // `mime.ts` already treats both the same way.
+    expect(chromeIconFor("file", "", "holiday.mp4")).toBe("video");
+    expect(chromeIconFor("file", "application/octet-stream", "invoice.pdf")).toBe("document");
+  });
+
+  it("still lets a real type win, so the fix did not invert the rule", () => {
+    // Paired with the case above: a guard that ignored EVERY MIME type would
+    // satisfy it, and this is what refuses that.
+    expect(chromeIconFor("file", "text/plain", "holiday.mp4")).toBeNull();
+  });
+});
+
+describe("the two extension tables", () => {
+  it("never claim the same extension", () => {
+    // `FileIcon` asks `chromeIconFor` first, so an extension present in both
+    // tables would silently draw the chrome symbol and the file-type symbol a
+    // maintainer had just added would never appear. Nothing else would notice.
+    const contested = CHROME_EXTENSIONS.filter(
+      (extension) => iconTokenFor(`x.${extension}`) !== "default",
+    );
+    expect(contested).toEqual([]);
+  });
+
+  it("has extensions to check, so this cannot pass by finding nothing", () => {
+    expect(CHROME_EXTENSIONS.length).toBeGreaterThan(20);
+  });
+
+  it("answers a chrome symbol for every one of them", () => {
+    const missing = CHROME_EXTENSIONS.filter(
+      (extension) => chromeIconFor("file", null, `x.${extension}`) === null,
+    );
+    expect(missing).toEqual([]);
   });
 });

@@ -401,9 +401,10 @@ describe("the icon on each row", () => {
   });
 
   it("draws a folder for a directory", async () => {
-    await opened({
-      search: () => [row("notes/", "notes", { fullPath: "/home/jc/notes/", isDir: true })],
-    });
+    // `isDir` is NOT overridden: `row()` derives it from the trailing
+    // separator, and restating it here would hide a regression in that
+    // derivation behind a value the test supplied itself.
+    await opened({ search: () => [row("notes/", "notes")] });
     await type("notes");
     await waitFor(() => expect(rows()).toHaveLength(1));
     expect(icons()).toEqual(["folder"]);
@@ -419,6 +420,22 @@ describe("the icon on each row", () => {
     await type("x");
     await waitFor(() => expect(rows()).toHaveLength(3));
     expect(icons()).toEqual(["video", "audio", "document"]);
+  });
+
+  it("puts the icon sprite in the document exactly once, however many rows draw", async () => {
+    // The sprite is 37 kilobytes of `<symbol>` definitions that every `<use>`
+    // reference needs present somewhere in the document. It is injected from a
+    // hook that runs once per ICON — every pane row, every archive entry, every
+    // result — so "exactly once" is the whole contract, and nothing tested it.
+    await opened({
+      search: () => Array.from({ length: 6 }, (_, at) => row(`f${at}.ts`, `f${at}.ts`)),
+    });
+    await type("f");
+    await waitFor(() => expect(rows()).toHaveLength(6));
+
+    const hosts = document.querySelectorAll("#symmetria-fm-icon-sprite");
+    expect(hosts).toHaveLength(1);
+    expect(hosts[0]?.innerHTML ?? "").not.toBe("");
   });
 
   it("falls back rather than drawing nothing for an unknown extension", async () => {
