@@ -23,6 +23,9 @@ function utilityTransport(): WorkerTransport {
   return {
     send: (message: WorkerMessage) => process.parentPort.postMessage(message),
     onMessage: (handler) => {
+      // SAFETY: `parentPort` carries messages from the one process that spawned
+      // this utility process, and that parent posts nothing but a
+      // `WorkerRequest`. `serve` rejects an unrecognised request anyway.
       process.parentPort.on("message", (event) => handler(event.data as WorkerRequest));
     },
     close: () => process.exit(0),

@@ -112,6 +112,9 @@ export async function serve(directory: string, transport: WorkerTransport): Prom
 export function nodeChildTransport(): WorkerTransport {
   return {
     send: (message) => process.send?.(message),
+    // SAFETY: widens the handler's parameter so `process.on` accepts it. The
+    // only writer on a fork's channel is the parent that forked it, and
+    // `createWorkerClient` posts nothing but a `WorkerRequest`.
     onMessage: (handler) => process.on("message", handler as (value: unknown) => void),
     close: () => process.exit(0),
   };

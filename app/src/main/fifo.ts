@@ -70,6 +70,9 @@ async function openFifoForWriting(path: string): Promise<OpenOutcome> {
   try {
     handle = await open(path, constants.O_WRONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
   } catch (cause) {
+    // SAFETY: `open` rejects only with an `ErrnoException`, and `code` is
+    // declared optional on it, so a rejection from anywhere else still reads as
+    // `undefined` rather than throwing.
     const code = (cause as NodeJS.ErrnoException).code;
     if (code === "ENXIO") return { kind: "no-reader" };
     return { kind: "refused", reason: `${path}: ${code ?? String(cause)}` };
@@ -109,6 +112,8 @@ async function writeAll(
       const { bytesWritten } = await handle.write(bytes, written, bytes.length - written);
       written += bytesWritten;
     } catch (cause) {
+      // SAFETY: as in `openFifoForWriting` above — `handle.write` rejects with
+      // an `ErrnoException`, and `code` is optional on it.
       const code = (cause as NodeJS.ErrnoException).code;
       if (code !== "EAGAIN") return failure("write_failed", `could not write: ${String(cause)}`);
       if (Date.now() >= deadline) return failure("write_failed", "the reader stopped reading");

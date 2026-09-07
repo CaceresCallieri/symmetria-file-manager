@@ -650,6 +650,9 @@ function finiteField(raw: Record<string, unknown>, field: string): number | null
 const ENTRY_KINDS = ["file", "directory", "other"] as const;
 
 function isEntryKind(value: string): value is FsEntry["kind"] {
+  // SAFETY: widens the const tuple to compare an arbitrary string against it.
+  // It loosens the element type and asserts nothing about `value`, which is
+  // what the predicate above then establishes.
   return (ENTRY_KINDS as readonly string[]).includes(value);
 }
 

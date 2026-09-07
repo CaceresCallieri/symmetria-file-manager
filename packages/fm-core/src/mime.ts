@@ -160,6 +160,8 @@ export function inheritsFrom(tables: MimeTables, mime: string, ancestor: string)
   const queue = [start];
 
   while (queue.length > 0) {
+    // SAFETY: `queue.length > 0` is the loop condition, so `pop` returns an
+    // element rather than `undefined`.
     const current = queue.pop() as string;
     if (seen.has(current)) continue;
     seen.add(current);

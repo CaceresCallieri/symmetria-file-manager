@@ -62,6 +62,9 @@ function spawnWorker(directory: string): IndexWorker {
 
   const channel: WorkerChannel = {
     post: (request) => child.postMessage(request),
+    // SAFETY: the only writer on this channel is the worker this function just
+    // forked, and `serve` sends nothing but a `WorkerMessage`. The assertion
+    // restates that, because `child.on` types its listener as `(...args: any[])`.
     onMessage: (handler) => child.on("message", handler as (message: WorkerMessage) => void),
     onExit: (handler) => {
       child.on("exit", (code) => handler(`the search worker exited with code ${code}`));
