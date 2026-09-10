@@ -1,13 +1,42 @@
 import { expect, it } from "vitest";
-import { minimapProjection, projectMinimapViewport } from "../src/overview/viewport.ts";
+import {
+  minimapProjection,
+  minimapWorldPoint,
+  projectMinimapViewport,
+} from "../src/overview/viewport.ts";
 
-it("fits the graph uniformly in a quarter-width map with adaptive capped height", () => {
+it("fits both map dimensions to the graph within viewport caps", () => {
   const wide = minimapProjection({ width: 2000, height: 1000 }, { width: 1200, height: 800 });
   expect(wide).toMatchObject({ width: 300, height: 158, scale: 0.142, offset: { x: 8, y: 8 } });
   const tall = minimapProjection({ width: 100, height: 10000 }, { width: 1200, height: 800 });
-  expect(tall).toMatchObject({ width: 300, height: 240, scale: 0.0224 });
-  expect(tall?.offset.x).toBeCloseTo(148.88);
+  expect(tall).toMatchObject({ width: 80, height: 240, scale: 0.0224 });
+  expect(tall?.offset.x).toBeCloseTo(38.88);
 });
+
+it.each([
+  { width: 1000, height: 2000, mapWidth: 128, mapHeight: 240 },
+  { width: 2000, height: 1000, mapWidth: 300, mapHeight: 158 },
+  { width: 1000, height: 1000, mapWidth: 240, mapHeight: 240 },
+  { width: 10000, height: 100, mapWidth: 300, mapHeight: 80 },
+])(
+  "keeps compact $width × $height maps aligned for navigation",
+  ({ width, height, mapWidth, mapHeight }) => {
+    const projection = minimapProjection({ width, height }, { width: 1200, height: 800 });
+    if (!projection) throw new Error("missing projection");
+    expect(projection.width).toBeCloseTo(mapWidth);
+    expect(projection.height).toBeCloseTo(mapHeight);
+    const indicator = projectMinimapViewport(
+      { x: width / 4, y: height / 4, width: width / 2, height: height / 2 },
+      projection,
+    );
+    const center = minimapWorldPoint(
+      { x: indicator.x + indicator.width / 2, y: indicator.y + indicator.height / 2 },
+      projection,
+    );
+    expect(center.x).toBeCloseTo(width / 2);
+    expect(center.y).toBeCloseTo(height / 2);
+  },
+);
 
 it("clips the viewport to the graph and marks a viewport outside its bounds", () => {
   const projection = minimapProjection({ width: 2000, height: 1000 }, { width: 1200, height: 800 });

@@ -36,13 +36,18 @@ export interface MinimapProjection extends Size {
   readonly graph: Size;
 }
 export function minimapProjection(graph: Size, viewport: Size): MinimapProjection | null {
-  const width = Math.min(viewport.width / 4, viewport.width - 32);
-  const cap = Math.min(viewport.height * 0.3, viewport.height - 32);
-  if (width <= 16 || cap <= 16) return null;
+  const maxWidth = Math.min(viewport.width / 4, viewport.width - 32);
+  const maxHeight = Math.min(viewport.height * 0.3, viewport.height - 32);
+  const padding = 16;
+  if (maxWidth <= padding || maxHeight <= padding) return null;
   const safeGraph = { width: Math.max(1, graph.width), height: Math.max(1, graph.height) };
-  const naturalHeight = ((width - 16) * safeGraph.height) / safeGraph.width + 16;
-  const height = Math.max(Math.min(80, cap), Math.min(cap, naturalHeight));
-  const scale = Math.min((width - 16) / safeGraph.width, (height - 16) / safeGraph.height);
+  const scale = Math.min(
+    (maxWidth - padding) / safeGraph.width,
+    (maxHeight - padding) / safeGraph.height,
+  );
+  // Fit both surface dimensions to the graph; retain a usable pointer target for thin graphs.
+  const width = Math.max(Math.min(80, maxWidth), safeGraph.width * scale + padding);
+  const height = Math.max(Math.min(80, maxHeight), safeGraph.height * scale + padding);
   return {
     width,
     height,
