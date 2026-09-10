@@ -5,7 +5,7 @@ import { useOverview } from "../../src/overview/useOverview.ts";
 import { installBridge } from "./support.ts";
 
 afterEach(cleanup);
-it("caps initial traversal at four concurrent reads, 128 reads, depth four and 5000 inspected entries", async () => {
+it("caps initial traversal at four concurrent reads, 512 reads, depth eight and 5000 inspected entries", async () => {
   installBridge();
   let active = 0;
   let peak = 0;
@@ -38,13 +38,13 @@ it("caps initial traversal at four concurrent reads, 128 reads, depth four and 5
   const { result } = renderHook(() => useOverview("/root", false));
   await waitFor(() => expect(result.current.loading).toBe(false));
   expect(paths.length).toBeGreaterThan(1);
-  expect(paths.length).toBeLessThanOrEqual(128);
+  expect(paths.length).toBeLessThanOrEqual(512);
   expect(peak).toBeLessThanOrEqual(4);
   expect(inspected).toBeLessThanOrEqual(5000);
-  expect(paths.every((path) => path.split("/").length <= 5)).toBe(true);
+  expect(paths.every((path) => path.split("/").length <= 9)).toBe(true);
 });
 
-it("stops a narrow deep tree at depth four", async () => {
+it("stops a narrow deep tree at depth eight", async () => {
   installBridge();
   const paths: string[] = [];
   Object.assign(window.symmetriaFm ?? {}, {
@@ -62,14 +62,14 @@ it("stops a narrow deep tree at depth four", async () => {
   });
   const { result } = renderHook(() => useOverview("/root", false));
   await waitFor(() => expect(result.current.loading).toBe(false));
-  expect(paths).toHaveLength(4);
+  expect(paths).toHaveLength(8);
   expect(
     [...result.current.folders.values()].some(
-      (folder) => folder.depth === 4 && folder.status === "Depth limit reached",
+      (folder) => folder.depth === 8 && folder.status === "Depth limit reached",
     ),
   ).toBe(true);
 });
-it("stops broad empty branches at 128 reads", async () => {
+it("stops broad empty branches at 512 reads", async () => {
   installBridge();
   const paths: string[] = [];
   Object.assign(window.symmetriaFm ?? {}, {
@@ -77,7 +77,7 @@ it("stops broad empty branches at 128 reads", async () => {
       paths.push(request.path);
       const entries =
         request.path === "/root"
-          ? Array.from({ length: 200 }, (_, i) => ({
+          ? Array.from({ length: 600 }, (_, i) => ({
               name: `d${i}`,
               kind: "directory",
               isSymlink: false,
@@ -89,7 +89,7 @@ it("stops broad empty branches at 128 reads", async () => {
   });
   const { result } = renderHook(() => useOverview("/root", false));
   await waitFor(() => expect(result.current.loading).toBe(false));
-  expect(paths).toHaveLength(128);
+  expect(paths).toHaveLength(512);
   expect(
     [...result.current.folders.values()].some(
       (folder) => folder.status === "Traversal budget reached",
@@ -100,7 +100,7 @@ it("stops broad empty branches at 128 reads", async () => {
       (count, folder) => count + folder.entries.length,
       0,
     ),
-  ).toBe(200);
+  ).toBe(600);
 });
 
 it("queues an explicit excluded folder during an active read without duplicate work", async () => {

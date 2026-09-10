@@ -1,4 +1,5 @@
 import { watchDirectory } from "../bridge.ts";
+import { OVERVIEW_LIMITS } from "./limits.ts";
 import { overviewWatchBudget } from "./watchBudget.ts";
 
 interface Slot {
@@ -21,7 +22,7 @@ export class OverviewSubscriptions {
     const existing = this.slots.get(path);
     if (existing) return existing.ready;
     if (this.stopped) return Promise.resolve();
-    if (this.slots.size >= 128) {
+    if (this.slots.size >= OVERVIEW_LIMITS.directoryWatches) {
       this.coverage(path, "Watch limit reached");
       return Promise.resolve();
     }

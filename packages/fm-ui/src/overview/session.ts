@@ -4,6 +4,7 @@ import type { OverviewFolder } from "@symmetria/fm-core/overview/model";
 import { isAncestorPath } from "@symmetria/fm-core/overview/model";
 import { joinPath } from "@symmetria/fm-core/pane";
 import { cancelOverview, readOverview } from "../bridge.ts";
+import { OVERVIEW_LIMITS } from "./limits.ts";
 import { OverviewSubscriptions } from "./subscriptions.ts";
 export const EXCLUSIONS = [
   ".git",
@@ -118,7 +119,7 @@ export class OverviewSession {
       });
   }
   private limit(job: Job): number {
-    if (!job.refresh && this.reads >= 128) return 0;
+    if (!job.refresh && this.reads >= OVERVIEW_LIMITS.directoryReads) return 0;
     const available =
       5000 -
       representedEntries(this.folders) +
@@ -278,6 +279,6 @@ function canRevalidate(folder: OverviewFolder): boolean {
 }
 function childStatus(name: string, depth: number, recursive: boolean): string {
   if (EXCLUSIONS.some((excluded) => excluded === name)) return "Excluded by scope";
-  if (depth >= 4) return "Depth limit reached";
+  if (depth >= OVERVIEW_LIMITS.automaticDepth) return "Depth limit reached";
   return recursive ? "Queued" : "Not loaded";
 }

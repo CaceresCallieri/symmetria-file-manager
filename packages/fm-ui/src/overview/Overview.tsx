@@ -1,6 +1,7 @@
 import { type ReactNode, useRef } from "react";
 import { useDialogFocus } from "../hooks/useDialogFocus.ts";
 import { ConnectedGroups } from "./ConnectedGroups.tsx";
+import { OVERVIEW_LIMITS } from "./limits.ts";
 import { EXCLUSIONS } from "./session.ts";
 import type { useOverview } from "./useOverview.ts";
 import type { OverviewPort } from "./useOverviewMode.ts";
@@ -87,7 +88,10 @@ function OverviewToolbar({
           <button type="button" aria-label="Refresh snapshot" onClick={model.refresh}>
             Refresh
           </button>
-          <p>Depth 4 · 5,000 entries · 128 directories</p>
+          <p>
+            Depth {OVERVIEW_LIMITS.automaticDepth} · 5,000 entries ·{" "}
+            {OVERVIEW_LIMITS.directoryReads} directories
+          </p>
           <p>Excluded: {EXCLUSIONS.join(", ")}</p>
         </div>
       </details>
