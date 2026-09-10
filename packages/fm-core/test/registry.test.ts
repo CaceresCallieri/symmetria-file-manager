@@ -127,7 +127,8 @@ describe("view scoping", () => {
     // count that drifts means a row was dropped in the port rather than
     // deliberately removed.
     expect(CORE).toHaveLength(28);
-    expect(MILLER_ONLY).toHaveLength(20);
+    // The connected overview adds one binding to the ported table.
+    expect(MILLER_ONLY).toHaveLength(21);
     expect(TREE_ONLY).toHaveLength(6);
   });
 });

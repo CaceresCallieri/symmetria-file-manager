@@ -12,6 +12,7 @@
 
 /** Renderer asks, main process replies. Each one has exactly one handler. */
 export const REQUEST_CHANNELS = {
+  overview: "symmetria-fm:overview",
   /** List a directory. */
   list: "symmetria-fm:list",
   /** Start watching a directory. */

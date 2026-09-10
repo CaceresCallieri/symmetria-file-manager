@@ -135,6 +135,7 @@ export function inertBridge(): Bridge {
   const ok = () => Promise.resolve({ ok: true as const, value: null });
   return {
     version: "inert",
+    overview: ok,
     list: ok,
     watch: ok,
     unwatch: ok,
@@ -345,6 +346,18 @@ export function installBridge(options: BridgeOptions = {}): BridgeLog {
   const bridge: Bridge = {
     ...inertBridge(),
     version: "test",
+    overview: async (request) => {
+      const { path, limit } = request as { path: string; limit: number };
+      const entries = tree.get(path) ?? [];
+      return {
+        ok: true,
+        value: {
+          entries: entries.slice(0, limit),
+          inspected: Math.min(limit, entries.length),
+          truncated: entries.length >= limit,
+        },
+      };
+    },
     list: (request) => {
       const ask = request as {
         path: string;

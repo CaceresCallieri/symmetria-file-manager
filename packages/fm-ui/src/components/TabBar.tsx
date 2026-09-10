@@ -1,6 +1,7 @@
 import type { TabView } from "../useTabs.ts";
 
 export interface TabBarProps {
+  readonly visible?: boolean;
   readonly views: readonly TabView[];
   readonly activeIndex: number;
   onActivate(index: number): void;
@@ -15,7 +16,8 @@ export interface TabBarProps {
  * which is what the user navigated to and thinks of it as; the full path is the
  * title, for the case where two tabs share a name.
  */
-export function TabBar({ views, activeIndex, onActivate, onClose }: TabBarProps) {
+export function TabBar({ views, activeIndex, onActivate, onClose, visible = true }: TabBarProps) {
+  if (!visible) return null;
   return (
     <nav className="tab-bar" data-testid="tab-bar">
       {views.map((view, index) => (

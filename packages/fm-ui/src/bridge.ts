@@ -28,6 +28,7 @@ import {
   type TransferRequest,
 } from "@symmetria/fm-core/contract";
 import type { ListingOptions } from "@symmetria/fm-core/listingOptions";
+import { decodeOverviewReply, type OverviewReply } from "@symmetria/fm-core/overview/contract";
 
 /**
  * The renderer's side of the bridge: untyped in, typed out.
@@ -434,4 +435,22 @@ export async function writeBookmarks(
     bookmarks: [...bookmarks].map(([letter, bookmark]) => ({ letter, bookmark })),
   });
   return isFailure(reply) ? reply : success(null);
+}
+
+export async function readOverview(
+  path: string,
+  requestId: string,
+  limit: number,
+): Promise<Result<OverviewReply>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("scan_failed", MISSING_BRIDGE);
+  try {
+    const reply = await bridge.overview({ path, requestId, limit });
+    return isFailure(reply) ? reply : decodeOverviewReply(reply.value);
+  } catch (cause) {
+    return failure("scan_failed", String(cause));
+  }
+}
+export function cancelOverview(requestId: string): void {
+  void getBridge()?.cancel({ streamId: requestId });
 }

@@ -24,6 +24,8 @@ import { TabBar } from "./components/TabBar.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
 import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
 import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
+import { OverviewLayer } from "./overview/Overview.tsx";
+import { useOverviewMode } from "./overview/useOverviewMode.ts";
 import { useBookmarks } from "./useBookmarks.ts";
 import { useExternalOpen } from "./useExternalOpen.ts";
 import { type FileOps, useFileOps } from "./useFileOps.ts";
@@ -192,6 +194,7 @@ function Overlays({
 export function App(props: AppProps = {}) {
   const tabs = useTabs(initialPath(props.startPath));
   const home = homePath(props.homePath);
+  const overview = useOverviewMode(tabs.pane.path, tabs.showHidden, tabs.openAt);
   // Memoised because `pickerFromSearch` PARSES the URL: a fresh object each
   // render would defeat every memo inside `usePicker`, and through it the whole
   // key action table. The URL cannot change for this window's lifetime.
@@ -209,7 +212,7 @@ export function App(props: AppProps = {}) {
   // Wired here rather than inside `useTabs`, and the placement is the point:
   // `useTabs` owns the tab collection, while composing an external event source
   // onto it is this component's job.
-  useExternalOpen(tabs.openAt);
+  useExternalOpen(overview.openExternal);
 
   // The preview is resolved BEFORE the key actions, not after, because one of
   // those actions needs its answer: the copy chord's image row asks whether the
@@ -233,8 +236,8 @@ export function App(props: AppProps = {}) {
   const context = useMemo<KeyContext>(
     // Miller is the only view that exists. The tree rows are ported and
     // unreachable until it does, which is deliberate — see the registry.
-    () => ({ view: "miller", state, actions }),
-    [state, actions],
+    () => ({ view: overview.view, state, actions, overview }),
+    [state, actions, overview],
   );
 
   const mode = useMemo<CascadeMode>(
@@ -254,77 +257,79 @@ export function App(props: AppProps = {}) {
   const leaveTo = (name: string) => tabs.navigate(joinPath(parentOf(tabs.pane.path), name));
 
   return (
-    <main className="app">
-      {tabs.showBar ? (
+    <>
+      <main className="app" inert={overview.root !== null}>
         <TabBar
+          visible={tabs.showBar}
           views={tabs.views}
           activeIndex={tabs.activeIndex}
           onActivate={tabs.activate}
           onClose={tabs.close}
         />
-      ) : null}
-      <PathBar path={tabs.pane.path} onNavigate={tabs.navigate} />
-      <MillerColumns
-        path={tabs.pane.path}
-        parentEntries={tabs.parentEntries}
-        entries={tabs.pane.entries}
-        cursorIndex={tabs.pane.cursorIndex}
-        parentCursorName={tabs.parentCursorName}
-        selection={tabs.pane.selection}
-        matches={search.matches}
-        onSelect={tabs.moveTo}
-        onActivate={(index) => activateAt(tabs, ops, index)}
-        onLeaveTo={leaveTo}
-        preview={previewing.pane}
-      />
-      <WhichKeyOverlay
-        prefix={modes.chordPrefix}
-        cursorIsImage={state.cursorEntry?.isImage === true}
-        bookmarks={bookmarks.byLetter}
-      />
-      {/* One bar, and nothing above it that comes and goes. The search field
+        <PathBar path={tabs.pane.path} onNavigate={tabs.navigate} />
+        <MillerColumns
+          path={tabs.pane.path}
+          parentEntries={tabs.parentEntries}
+          entries={tabs.pane.entries}
+          cursorIndex={tabs.pane.cursorIndex}
+          parentCursorName={tabs.parentCursorName}
+          selection={tabs.pane.selection}
+          matches={search.matches}
+          onSelect={tabs.moveTo}
+          onActivate={(index) => activateAt(tabs, ops, index)}
+          onLeaveTo={leaveTo}
+          preview={previewing.pane}
+        />
+        <WhichKeyOverlay
+          prefix={modes.chordPrefix}
+          cursorIsImage={state.cursorEntry?.isImage === true}
+          bookmarks={bookmarks.byLetter}
+        />
+        {/* One bar, and nothing above it that comes and goes. The search field
           and the transient line were rows of their own here, so opening a
           search pushed the columns down and a copy starting pushed them up.
           Both now live inside the bar, which has a fixed height. */}
-      <StatusBar
-        picker={picker.chrome}
-        entryCount={tabs.pane.entries.length}
-        selectedCount={state.selectedCount}
-        sort={tabs.sort}
-        reverse={tabs.reverse}
-        showHidden={tabs.showHidden}
-        search={
-          search.active
-            ? {
-                query: search.query,
-                matchCount: search.matchCount,
-                onChange: search.setQuery,
-                onConfirm: search.confirm,
-                onCancel: search.cancel,
-              }
-            : null
-        }
-        transient={{
-          error: tabs.error,
-          message: ops.message ?? modes.message,
-          progress: ops.progress,
-          onCancelTransfer: ops.cancelRunningTransfer,
-        }}
-      />
-      <Overlays
-        modes={modes}
-        context={context}
-        bookmarks={bookmarks.byLetter}
-        onNavigate={tabs.navigate}
-      />
-      <OpsModals
-        modal={ops.modal}
-        onCancel={ops.closeModal}
-        onConfirmDelete={ops.confirmDelete}
-        onConfirmRename={ops.confirmRename}
-        onConfirmCreate={ops.confirmCreate}
-        onConfirmOverwrite={ops.confirmOverwrite}
-      />
-    </main>
+        <StatusBar
+          picker={picker.chrome}
+          entryCount={tabs.pane.entries.length}
+          selectedCount={state.selectedCount}
+          sort={tabs.sort}
+          reverse={tabs.reverse}
+          showHidden={tabs.showHidden}
+          search={
+            search.active
+              ? {
+                  query: search.query,
+                  matchCount: search.matchCount,
+                  onChange: search.setQuery,
+                  onConfirm: search.confirm,
+                  onCancel: search.cancel,
+                }
+              : null
+          }
+          transient={{
+            error: tabs.error,
+            message: ops.message ?? modes.message,
+            progress: ops.progress,
+            onCancelTransfer: ops.cancelRunningTransfer,
+          }}
+        />
+        <Overlays
+          modes={modes}
+          context={context}
+          bookmarks={bookmarks.byLetter}
+          onNavigate={tabs.navigate}
+        />
+        <OpsModals
+          modal={ops.modal}
+          onCancel={ops.closeModal}
+          onConfirmDelete={ops.confirmDelete}
+          onConfirmRename={ops.confirmRename}
+          onConfirmCreate={ops.confirmCreate}
+          onConfirmOverwrite={ops.confirmOverwrite}
+        />
+      </main>
+      <OverviewLayer root={overview.root} model={overview.model} onClose={overview.close} />
+    </>
   );
 }

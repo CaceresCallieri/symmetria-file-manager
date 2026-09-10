@@ -5,7 +5,7 @@
  */
 
 /** Which set of bindings is in force. */
-export type ViewKind = "miller" | "tree";
+export type ViewKind = "miller" | "tree" | "overview";
 
 /**
  * One key press, reduced to what a binding can match on.
@@ -200,6 +200,7 @@ export interface KeyActions {
 
 /** What a binding is handed. */
 export interface KeyContext {
+  readonly overview?: { toggle(): void };
   readonly view: ViewKind;
   readonly state: KeyState;
   readonly actions: KeyActions;

@@ -335,7 +335,40 @@ export const CORE: readonly Binding[] = [
 
 // ── MILLER_ONLY ─────────────────────────────────────────────────────────────
 
+export const OVERVIEW_ONLY: readonly Binding[] = [
+  {
+    id: "overview.close",
+    keys: ["escape"],
+    mods: "",
+    keycap: "Esc",
+    label: "Close overview",
+    icon: "close",
+    group: "View",
+    run: (ctx) => ctx.overview?.toggle(),
+  },
+  {
+    id: "overview.toggle",
+    keys: ["o"],
+    mods: "Shift",
+    keycap: "Shift+O",
+    label: "Close overview",
+    icon: "close",
+    group: "View",
+    run: (ctx) => ctx.overview?.toggle(),
+  },
+];
 export const MILLER_ONLY: readonly Binding[] = [
+  {
+    id: "miller.overview",
+    keys: ["o"],
+    mods: "Shift",
+    keycap: "Shift+O",
+    label: "Folder overview",
+    icon: "account_tree",
+    group: "View",
+    when: (ctx) => !ctx.state.picker.active,
+    run: (ctx) => ctx.overview?.toggle(),
+  },
   {
     id: "miller.up",
     keys: ["h", "arrowleft"],
@@ -642,6 +675,7 @@ function isHtml(ctx: KeyContext): boolean {
 }
 
 export function bindingsFor(view: ViewKind): readonly Binding[] {
+  if (view === "overview") return OVERVIEW_ONLY;
   return [...CORE, ...(view === "tree" ? TREE_ONLY : MILLER_ONLY)];
 }
 

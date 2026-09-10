@@ -300,6 +300,7 @@ export interface TransferProgress {
  * the channels whose whole answer is "it worked".
  */
 export type IpcReply =
+  | Result<import("./overview/contract.ts").OverviewReply>
   | Result<ListReply>
   | Result<ReadTextReply>
   | Result<DescribeReply>
