@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { type ReactNode, useRef } from "react";
 import { useDialogFocus } from "../hooks/useDialogFocus.ts";
 import { ConnectedGroups } from "./ConnectedGroups.tsx";
 import { EXCLUSIONS } from "./session.ts";
@@ -43,36 +43,58 @@ function Overview({
         }
       }}
     >
-      <header className="overview-toolbar">
-        <strong>Folder overview</strong>
-        <span>{statusText(model)}</span>
-        {model.coverage?.size ? (
-          <button type="button" aria-label="Refresh overview" onClick={model.refresh}>
-            Retry
-          </button>
-        ) : null}
-        <details>
-          <summary>{model.coverage?.size ? "Scope · Live updates unavailable" : "Scope"}</summary>
-          <div className="overview-popover">
-            {model.coverage?.size ? (
-              <p>
-                Coverage degraded in {model.coverage.size} folders.{" "}
-                {[...model.coverage.values()][0]}
-              </p>
-            ) : null}
-            <button type="button" aria-label="Refresh snapshot" onClick={model.refresh}>
-              Refresh
-            </button>
-            <p>Depth 4 · 5,000 entries · 128 directories</p>
-            <p>Excluded: {EXCLUSIONS.join(", ")}</p>
-          </div>
-        </details>
-        <button type="button" onClick={onClose}>
-          Close · Esc
-        </button>
-      </header>
-      <ConnectedGroups root={root} model={model} port={port} />
+      <ConnectedGroups
+        root={root}
+        model={model}
+        port={port}
+        renderToolbar={(controls) => (
+          <OverviewToolbar model={model} onClose={onClose}>
+            {controls}
+          </OverviewToolbar>
+        )}
+      />
     </div>
+  );
+}
+
+function OverviewToolbar({
+  model,
+  onClose,
+  children,
+}: {
+  readonly model: ReturnType<typeof useOverview>;
+  readonly onClose: () => void;
+  readonly children: ReactNode;
+}) {
+  return (
+    <header className="overview-toolbar">
+      <strong>Folder overview</strong>
+      <span title={statusText(model)}>{statusText(model)}</span>
+      {model.coverage?.size ? (
+        <button type="button" aria-label="Refresh overview" onClick={model.refresh}>
+          Retry
+        </button>
+      ) : null}
+      <details>
+        <summary>{model.coverage?.size ? "Scope · Live updates unavailable" : "Scope"}</summary>
+        <div className="overview-popover">
+          {model.coverage?.size ? (
+            <p>
+              Coverage degraded in {model.coverage.size} folders. {[...model.coverage.values()][0]}
+            </p>
+          ) : null}
+          <button type="button" aria-label="Refresh snapshot" onClick={model.refresh}>
+            Refresh
+          </button>
+          <p>Depth 4 · 5,000 entries · 128 directories</p>
+          <p>Excluded: {EXCLUSIONS.join(", ")}</p>
+        </div>
+      </details>
+      {children}
+      <button type="button" onClick={onClose}>
+        Close · Esc
+      </button>
+    </header>
   );
 }
 

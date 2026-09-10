@@ -2,6 +2,7 @@ import type { GraphGroup, Measurement } from "@symmetria/fm-core/overview/layout
 import { basename } from "@symmetria/fm-core/overview/model";
 import { joinPath, parentOf } from "@symmetria/fm-core/pane";
 import { useLayoutEffect, useRef } from "react";
+import { FileIcon } from "../components/FileIcon.tsx";
 export function FolderGroup({
   group,
   selected,
@@ -50,7 +51,8 @@ export function FolderGroup({
           data-selected={selected === group.path}
           onClick={() => onSelect(group.path)}
         >
-          {basename(group.path)}
+          <FileIcon name={basename(group.path)} kind="directory" />
+          <span>{basename(group.path)}</span>
         </button>
         <button
           type="button"
@@ -78,9 +80,8 @@ export function FolderGroup({
                 key={entry.name}
                 onClick={() => onSelect(joinPath(group.path, entry.name))}
               >
-                <span aria-hidden="true">
-                  {entry.kind === "directory" ? "▸" : entry.isSymlink ? "↗" : "·"}
-                </span>
+                <FileIcon name={entry.name} kind={entry.kind} />
+                {entry.isSymlink ? <span aria-hidden="true">↗</span> : null}
                 <span>{entry.name}</span>
               </button>
             ))}

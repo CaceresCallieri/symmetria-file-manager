@@ -1,6 +1,6 @@
 import { graphBounds, intersects, visibleGroups } from "@symmetria/fm-core/overview/layout";
 import { joinPath } from "@symmetria/fm-core/pane";
-import { useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { FolderGroup } from "./FolderGroup.tsx";
 import { OverviewControls } from "./OverviewControls.tsx";
 import { OverviewLinks } from "./OverviewLinks.tsx";
@@ -15,10 +15,12 @@ export function ConnectedGroups({
   root,
   model,
   port,
+  renderToolbar,
 }: {
   readonly root: string;
   readonly model: ReturnType<typeof useOverview>;
   readonly port?: OverviewPort;
+  readonly renderToolbar?: (controls: ReactNode) => ReactNode;
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const extent = useRef<HTMLDivElement>(null);
@@ -102,6 +104,16 @@ export function ConnectedGroups({
     port,
     search: () => setSearchOpen(true),
   });
+  const controls = (
+    <OverviewControls
+      zoom={zoom}
+      run={commands.run}
+      selected={selected}
+      canFocus={model.folders.has(selected)}
+      onFocus={() => port?.focus(selected)}
+      onRearrange={rearrange}
+    />
+  );
   return (
     <>
       {searchOpen ? (
@@ -114,14 +126,7 @@ export function ConnectedGroups({
           }}
         />
       ) : null}
-      <OverviewControls
-        zoom={zoom}
-        run={commands.run}
-        selected={selected}
-        canFocus={model.folders.has(selected)}
-        onFocus={() => port?.focus(selected)}
-        onRearrange={rearrange}
-      />
+      {renderToolbar ? renderToolbar(controls) : controls}
       <div
         ref={viewport}
         className="connected-groups"

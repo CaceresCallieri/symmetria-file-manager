@@ -336,10 +336,15 @@ export const CORE: readonly Binding[] = [
 
 // ── MILLER_ONLY ─────────────────────────────────────────────────────────────
 
-const OVERVIEW_DIRECTIONS: readonly { direction: Direction; key: string; arrow: string }[] = [
+const OVERVIEW_DIRECTIONS: readonly {
+  direction: Direction;
+  key: string;
+  arrow: string;
+  halfAlias?: string;
+}[] = [
   { direction: "left", key: "h", arrow: "arrowleft" },
-  { direction: "down", key: "j", arrow: "arrowdown" },
-  { direction: "up", key: "k", arrow: "arrowup" },
+  { direction: "down", key: "j", arrow: "arrowdown", halfAlias: "d" },
+  { direction: "up", key: "k", arrow: "arrowup", halfAlias: "u" },
   { direction: "right", key: "l", arrow: "arrowright" },
 ];
 const OVERVIEW_KEYCAPS = new Map([
@@ -369,9 +374,14 @@ function overviewBinding(
   };
 }
 export const OVERVIEW_ONLY: readonly Binding[] = [
-  ...OVERVIEW_DIRECTIONS.flatMap(({ direction, key, arrow }) => [
+  ...OVERVIEW_DIRECTIONS.flatMap(({ direction, key, arrow, halfAlias }) => [
     overviewBinding(direction, [key, arrow], "", `Select ${direction}`),
-    overviewBinding(`half-${direction}`, [key, arrow], "Ctrl", `Pan half viewport ${direction}`),
+    overviewBinding(
+      `half-${direction}`,
+      halfAlias ? [key, arrow, halfAlias] : [key, arrow],
+      "Ctrl",
+      `Pan half viewport ${direction}`,
+    ),
     overviewBinding(
       `full-${direction}`,
       [key, arrow],

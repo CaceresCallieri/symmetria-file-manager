@@ -129,3 +129,19 @@ it("keeps a selected filesystem-root entry mounted outside overscan", () => {
   fireEvent.scroll(viewport);
   expect(container.querySelector('[data-group="/"]')).not.toBeNull();
 });
+
+it("renders shared folder and file-type icons in the overview", async () => {
+  const view = await graph();
+  await waitFor(() =>
+    expect(view.querySelector('[data-entry="/home/jc/projects/beta.md"]')).toBeTruthy(),
+  );
+  expect(
+    view.querySelector('[data-group="/home/jc/projects"] [data-basename] [data-icon="folder"]'),
+  ).toBeTruthy();
+  expect(view.querySelector('[data-entry="/home/jc/projects"] [data-icon="folder"]')).toBeTruthy();
+  expect(
+    view
+      .querySelector('[data-entry="/home/jc/projects/beta.md"] .file-icon use')
+      ?.getAttribute("href"),
+  ).toContain("markdown");
+});

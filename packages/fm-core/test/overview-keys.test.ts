@@ -44,3 +44,21 @@ it("names Space and directional aliases in help", () => {
   expect(rows.find((row) => row.id === "overview.toggle")?.keycap).toBe("Space");
   expect(rows.find((row) => row.id === "overview.left")?.keycap).toBe("h / ←");
 });
+
+it("maps Ctrl+D and Ctrl+U to the existing half-viewport commands", () => {
+  for (const [key, direction] of [
+    ["d", "down"],
+    ["u", "up"],
+  ] as const) {
+    const matches = bindingsFor("overview").filter((binding) =>
+      matchKey(binding, { ...plain, key, ctrl: true }),
+    );
+    expect(matches.map((binding) => binding.id)).toEqual([`overview.half-${direction}`]);
+    expect(matches[0]?.keycap).toContain(key);
+    expect(
+      bindingsFor("overview").some((binding) =>
+        matchKey(binding, { ...plain, key, ctrl: true, shift: true }),
+      ),
+    ).toBe(false);
+  }
+});

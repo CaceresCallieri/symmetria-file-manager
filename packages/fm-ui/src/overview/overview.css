@@ -1,4 +1,6 @@
 .overview {
+  /* The dialog receives programmatic focus; rows and controls show selection. */
+  outline: none;
   position: absolute;
   inset: 0;
   z-index: 20;
@@ -12,24 +14,29 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 8px;
+  gap: 8px;
+  padding: 0 var(--toolbar-inset);
   border-bottom: 1px solid var(--border);
 }
 .overview-toolbar details {
   position: relative;
+  flex-shrink: 0;
+}
+.overview-toolbar summary {
+  white-space: nowrap;
 }
 .overview-toolbar details[open] {
   background: var(--card);
   z-index: 2;
 }
+.overview-toolbar > strong,
 .overview-toolbar button {
-  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .overview-camera-controls {
-  position: absolute;
-  top: 0;
-  right: 100px;
+  flex: 0 0 auto;
+  margin-left: auto;
   height: 32px;
   display: flex;
   align-items: center;
@@ -48,6 +55,10 @@
   outline-offset: 1px;
 }
 .overview-toolbar > span {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 11px;
   color: var(--muted-foreground);
 }
@@ -102,12 +113,21 @@
 }
 .folder-group .folder-group-name {
   flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
   text-align: left;
   border: 0;
   background: var(--card);
   font-weight: 600;
   overflow-wrap: anywhere;
   min-width: 0;
+}
+.folder-group-name > span {
+  min-width: 0;
+}
+.folder-group .file-icon {
+  margin-top: 1px;
 }
 .folder-ancestors {
   overflow: hidden;
