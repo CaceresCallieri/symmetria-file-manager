@@ -194,7 +194,13 @@ function Overlays({
 export function App(props: AppProps = {}) {
   const tabs = useTabs(initialPath(props.startPath));
   const home = homePath(props.homePath);
-  const overview = useOverviewMode(tabs.pane.path, tabs.showHidden, tabs.openAt);
+  const overview = useOverviewMode(
+    tabs.pane.path,
+    tabs.showHidden,
+    tabs.openAt,
+    tabs.reveal,
+    tabs.navigate,
+  );
   // Memoised because `pickerFromSearch` PARSES the URL: a fresh object each
   // render would defeat every memo inside `usePicker`, and through it the whole
   // key action table. The URL cannot change for this window's lifetime.
@@ -314,12 +320,6 @@ export function App(props: AppProps = {}) {
             onCancelTransfer: ops.cancelRunningTransfer,
           }}
         />
-        <Overlays
-          modes={modes}
-          context={context}
-          bookmarks={bookmarks.byLetter}
-          onNavigate={tabs.navigate}
-        />
         <OpsModals
           modal={ops.modal}
           onCancel={ops.closeModal}
@@ -329,7 +329,18 @@ export function App(props: AppProps = {}) {
           onConfirmOverwrite={ops.confirmOverwrite}
         />
       </main>
-      <OverviewLayer root={overview.root} model={overview.model} onClose={overview.close} />
+      <OverviewLayer
+        root={overview.root}
+        model={overview.model}
+        onClose={overview.close}
+        port={overview.port}
+      />
+      <Overlays
+        modes={modes}
+        context={context}
+        bookmarks={bookmarks.byLetter}
+        onNavigate={tabs.navigate}
+      />
     </>
   );
 }

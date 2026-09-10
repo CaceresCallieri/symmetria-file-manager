@@ -121,7 +121,7 @@ function contextWith(state: Partial<KeyState>, view: ViewKind = "miller"): KeyCo
     state: { ...permissiveState(), ...state },
     actions,
     calls,
-    overview: { toggle: () => calls.push("overview.toggle") },
+    overview: { toggle: () => calls.push("overview.toggle"), command: (name) => calls.push(name) },
   };
 }
 

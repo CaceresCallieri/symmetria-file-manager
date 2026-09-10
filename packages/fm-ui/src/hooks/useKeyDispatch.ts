@@ -37,6 +37,7 @@ export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.defaultPrevented) return;
       const { mode: currentMode, context: ctx, onFlashKey: flash } = latest.current;
 
       // Focus wins over everything, and it is decided by the DOM rather than by
@@ -53,6 +54,7 @@ export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions
           shift: event.shiftKey,
           alt: event.altKey,
           meta: event.metaKey,
+          altGraph: event.getModifierState("AltGraph"),
         },
         effective,
         ctx,

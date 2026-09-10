@@ -1,63 +1,42 @@
-import {
-  type GraphGroup,
-  graphBounds,
-  intersects,
-  layoutGroups,
-  type Measurement,
-  visibleGroups,
-} from "@symmetria/fm-core/overview/layout";
-import { isAncestorPath } from "@symmetria/fm-core/overview/model";
+import { graphBounds, intersects, visibleGroups } from "@symmetria/fm-core/overview/layout";
 import { joinPath } from "@symmetria/fm-core/pane";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { FolderGroup } from "./FolderGroup.tsx";
+import { OverviewControls } from "./OverviewControls.tsx";
+import { OverviewLinks } from "./OverviewLinks.tsx";
+import { OverviewSearch } from "./OverviewSearch.tsx";
+import { useGraphAnchor } from "./useGraphAnchor.ts";
+import { useGraphCommands } from "./useGraphCommands.ts";
+import { useGraphScene } from "./useGraphScene.ts";
 import type { useOverview } from "./useOverview.ts";
+import type { OverviewPort } from "./useOverviewMode.ts";
 export function ConnectedGroups({
   root,
   model,
+  port,
 }: {
   readonly root: string;
   readonly model: ReturnType<typeof useOverview>;
+  readonly port?: OverviewPort;
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const extent = useRef<HTMLDivElement>(null);
-  const boxes = useRef(new Map<string, GraphGroup>());
-  const [measurements, setMeasurements] = useState(new Map<string, Measurement>());
   const [collapsed, setCollapsed] = useState(new Set<string>());
   const [selected, setSelected] = useState(root);
   const [zoom, setZoom] = useState(1);
+  const [origin, setOrigin] = useState({ x: 0, y: 0 });
+  const [searchOpen, setSearchOpen] = useState(false);
   const [scroll, setScroll] = useState({ x: 0, y: 0, width: 1200, height: 800 });
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
-  const groups = useMemo(() => {
-    const next = layoutGroups([...model.folders.values()], boxes.current, measurements);
-    boxes.current = new Map(next.map((group) => [group.path, group]));
-    return next;
-  }, [model.folders, measurements]);
+  const { groups, boxes, onMeasure, rearrange } = useGraphScene(model.folders);
   const shown = visibleGroups(groups, collapsed);
   const bounds = graphBounds(shown);
   const windowBox = {
-    x: scroll.x / zoom,
-    y: scroll.y / zoom,
+    x: (scroll.x - origin.x) / zoom,
+    y: (scroll.y - origin.y) / zoom,
     width: scroll.width / zoom,
     height: scroll.height / zoom,
   };
-  const onMeasure = useCallback(
-    (path: string, size: Measurement) =>
-      setMeasurements((current) => {
-        const old = current.get(path);
-        if (old?.width === size.width && old.height === size.height) return current;
-        const next = new Map(current);
-        next.set(path, size);
-        return next;
-      }),
-    [],
-  );
-  const toggle = (path: string) =>
-    setCollapsed((current) => {
-      const next = new Set(current);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
   const sample = () => {
     const node = viewport.current;
     if (node)
@@ -84,100 +63,65 @@ export function ConnectedGroups({
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
-  const anchor = useRef<{ selection: string; path: string; x: number; y: number } | null>(null);
-  useLayoutEffect(() => {
-    const group =
-      groups.find((item) => item.path === selected) ??
-      groups.find((item) =>
-        item.entries.some((entry) => joinPath(item.path, entry.name) === selected),
-      );
-    if (!group) return;
-    const previous = anchor.current;
-    const node = viewport.current;
-    if (node && previous?.selection === selected && previous.path === group.path) {
-      const x = node.scrollLeft + (group.x - previous.x) * zoom;
-      const y = node.scrollTop + (group.y - previous.y) * zoom;
-      // A last group has no content below it. Reserve trailing camera space
-      // before scrolling so the browser does not clamp away the retained anchor.
-      if (extent.current) {
-        extent.current.style.minWidth = `${Math.max(0, x) + node.clientWidth}px`;
-        extent.current.style.minHeight = `${Math.max(0, y) + node.clientHeight}px`;
-      }
-      node.scrollLeft = x;
-      node.scrollTop = y;
-    }
-    anchor.current = { selection: selected, path: group.path, x: group.x, y: group.y };
-  }, [groups, selected, zoom]);
+  useGraphAnchor(groups, selected, zoom, viewport, extent);
   const mounted = shown.filter(
     (group) =>
       intersects(group, windowBox, 200 / zoom) ||
       group.path === selected ||
       group.entries.some((entry) => joinPath(group.path, entry.name) === selected),
   );
+  const commands = useGraphCommands({
+    root,
+    model,
+    selected,
+    setSelected,
+    collapsed,
+    setCollapsed,
+    viewport,
+    zoom,
+    setZoom,
+    origin,
+    setOrigin,
+    extent,
+    bounds,
+    port,
+    search: () => setSearchOpen(true),
+  });
   return (
     <>
-      <div className="overview-camera-controls">
-        <button
-          type="button"
-          aria-label="Zoom out"
-          onClick={() => setZoom((value) => Math.max(0.1, value / 1.2))}
-        >
-          −
-        </button>
-        <span>{Math.round(zoom * 100)}%</span>
-        <button
-          type="button"
-          aria-label="Zoom in"
-          onClick={() => setZoom((value) => Math.min(2, value * 1.2))}
-        >
-          +
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setZoom(
-              Math.max(
-                0.1,
-                Math.min(
-                  2,
-                  (scroll.width - 48) / bounds.width,
-                  (scroll.height - 48) / bounds.height,
-                ),
-              ),
-            );
-            viewport.current?.scrollTo(0, 0);
+      {searchOpen ? (
+        <OverviewSearch
+          model={model}
+          onChoose={commands.select}
+          onClose={() => {
+            setSearchOpen(false);
+            viewport.current?.closest<HTMLElement>('[role="dialog"]')?.focus();
           }}
-        >
-          Fit
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            boxes.current = new Map();
-            setMeasurements(new Map());
-          }}
-        >
-          Rearrange
-        </button>
-        <details>
-          <summary>Details</summary>
-          <div className="overview-popover">
-            <p>{selected}</p>
-          </div>
-        </details>
-      </div>
+        />
+      ) : null}
+      <OverviewControls
+        zoom={zoom}
+        run={commands.run}
+        selected={selected}
+        canFocus={model.folders.has(selected)}
+        onFocus={() => port?.focus(selected)}
+        onRearrange={rearrange}
+      />
       <div
         ref={viewport}
         className="connected-groups"
         data-testid="connected-groups"
         data-zoom={zoom}
+        data-selected={selected}
         onScroll={sample}
+        onWheel={commands.cancel}
         onPointerDown={(event) => {
           if (
             event.button !== 0 ||
             (event.target instanceof Element && event.target.closest("button,section,details"))
           )
             return;
+          commands.cancel();
           const node = event.currentTarget;
           drag.current = {
             x: event.clientX,
@@ -201,59 +145,38 @@ export function ConnectedGroups({
           drag.current = null;
         }}
       >
-        <div ref={extent} style={{ width: bounds.width * zoom, height: bounds.height * zoom }}>
+        <div
+          ref={extent}
+          style={{
+            width: bounds.width * zoom + origin.x + 24,
+            height: bounds.height * zoom + origin.y + 24,
+            overflow: "hidden",
+          }}
+        >
           <div
             className="overview-canvas"
-            style={{ width: bounds.width, height: bounds.height, transform: `scale(${zoom})` }}
+            style={{
+              width: bounds.width,
+              height: bounds.height,
+              transform: `translate(${origin.x}px, ${origin.y}px) scale(${zoom})`,
+            }}
           >
-            <svg
-              className="overview-links"
-              width={bounds.width}
-              height={bounds.height}
-              aria-hidden="true"
-            >
-              {shown.map((group) => {
-                if (group.parent === null) return null;
-                const parent = boxes.current.get(group.parent);
-                if (!parent) return null;
-                const x = parent.x + parent.width,
-                  y = parent.y + 20,
-                  ty = group.y + 20;
-                if (
-                  !intersects(
-                    { x, y: Math.min(y, ty), width: group.x - x, height: Math.abs(y - ty) },
-                    windowBox,
-                    200 / zoom,
-                  )
-                )
-                  return null;
-                return (
-                  <g
-                    key={group.path}
-                    data-edge={group.path}
-                    className={
-                      isAncestorPath(group.path, selected)
-                        ? "overview-edge active"
-                        : "overview-edge"
-                    }
-                  >
-                    <path
-                      d={`M ${x} ${y} C ${x + 40} ${y}, ${group.x - 40} ${ty}, ${group.x} ${ty}`}
-                    />
-                    <circle cx={x} cy={y} r={3} />
-                    <circle cx={group.x} cy={ty} r={3} />
-                  </g>
-                );
-              })}
-            </svg>
+            <OverviewLinks
+              shown={shown}
+              boxes={boxes.current}
+              bounds={bounds}
+              windowBox={windowBox}
+              zoom={zoom}
+              selected={selected}
+            />
             {mounted.map((group) => (
               <FolderGroup
                 key={group.path}
                 group={group}
                 selected={selected}
                 collapsed={collapsed.has(group.path)}
-                onSelect={setSelected}
-                onToggle={toggle}
+                onSelect={commands.select}
+                onToggle={commands.toggle}
                 onMeasure={onMeasure}
                 onInclude={model.include}
               />

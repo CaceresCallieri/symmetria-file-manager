@@ -1,3 +1,4 @@
+import type { OverviewCommand } from "../overview/navigation.ts";
 /**
  * The shapes the keyboard registry is built from.
  *
@@ -21,6 +22,7 @@ export interface KeyEvent {
   readonly shift: boolean;
   readonly alt: boolean;
   readonly meta: boolean;
+  readonly altGraph?: boolean;
 }
 
 /**
@@ -35,7 +37,7 @@ export interface KeyEvent {
  * and real chords keep precise modifiers, because there the modifier is the
  * user's intent rather than a side effect of the layout.
  */
-export type Mods = "" | "Ctrl" | "Shift" | "Alt" | "Ctrl+Shift" | "*";
+export type Mods = "" | "Ctrl" | "Shift" | "Alt" | "Ctrl+Shift" | "*" | "Symbol";
 
 /** Where a binding appears in the help sheet. */
 export type HelpGroup =
@@ -200,7 +202,7 @@ export interface KeyActions {
 
 /** What a binding is handed. */
 export interface KeyContext {
-  readonly overview?: { toggle(): void };
+  readonly overview?: { toggle(): void; command?(name: OverviewCommand): void };
   readonly view: ViewKind;
   readonly state: KeyState;
   readonly actions: KeyActions;

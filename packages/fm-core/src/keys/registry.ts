@@ -1,3 +1,4 @@
+import type { Direction, OverviewCommand } from "../overview/navigation.ts";
 import type { Binding, HelpGroup, KeyContext, ViewKind } from "./types.ts";
 
 /**
@@ -335,7 +336,57 @@ export const CORE: readonly Binding[] = [
 
 // ── MILLER_ONLY ─────────────────────────────────────────────────────────────
 
+const OVERVIEW_DIRECTIONS: readonly { direction: Direction; key: string; arrow: string }[] = [
+  { direction: "left", key: "h", arrow: "arrowleft" },
+  { direction: "down", key: "j", arrow: "arrowdown" },
+  { direction: "up", key: "k", arrow: "arrowup" },
+  { direction: "right", key: "l", arrow: "arrowright" },
+];
+const OVERVIEW_KEYCAPS = new Map([
+  [" ", "Space"],
+  ["enter", "Enter"],
+  ["arrowleft", "←"],
+  ["arrowdown", "↓"],
+  ["arrowup", "↑"],
+  ["arrowright", "→"],
+]);
+function overviewBinding(
+  command: OverviewCommand,
+  keys: readonly string[],
+  mods: Binding["mods"],
+  label: string,
+): Binding {
+  return {
+    id: `overview.${command}`,
+    keys,
+    mods,
+    keycap:
+      `${mods === "Symbol" ? "" : mods} ${keys.map((key) => OVERVIEW_KEYCAPS.get(key) ?? key).join(" / ")}`.trim(),
+    label,
+    icon: "account_tree",
+    group: "View",
+    run: (ctx) => (command === "help" ? ctx.actions.openHelp() : ctx.overview?.command?.(command)),
+  };
+}
 export const OVERVIEW_ONLY: readonly Binding[] = [
+  ...OVERVIEW_DIRECTIONS.flatMap(({ direction, key, arrow }) => [
+    overviewBinding(direction, [key, arrow], "", `Select ${direction}`),
+    overviewBinding(`half-${direction}`, [key, arrow], "Ctrl", `Pan half viewport ${direction}`),
+    overviewBinding(
+      `full-${direction}`,
+      [key, arrow],
+      "Ctrl+Shift",
+      `Pan full viewport ${direction}`,
+    ),
+  ]),
+  overviewBinding("zoom-in", ["+", "="], "Symbol", "Zoom in"),
+  overviewBinding("zoom-out", ["-"], "Symbol", "Zoom out"),
+  overviewBinding("reset", ["0"], "", "Reset zoom"),
+  overviewBinding("fit", ["f"], "", "Fit loaded graph"),
+  overviewBinding("toggle", [" "], "", "Toggle folder"),
+  overviewBinding("search", ["/"], "Symbol", "Search loaded paths"),
+  overviewBinding("help", ["?"], "Symbol", "Overview help"),
+  overviewBinding("reveal", ["enter"], "", "Reveal in Miller"),
   {
     id: "overview.close",
     keys: ["escape"],
