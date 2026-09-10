@@ -8,6 +8,7 @@ import { OverviewSearch } from "./OverviewSearch.tsx";
 import { useGraphAnchor } from "./useGraphAnchor.ts";
 import { useGraphCommands } from "./useGraphCommands.ts";
 import { useGraphScene } from "./useGraphScene.ts";
+import { useGraphState, useRememberGraph } from "./useGraphState.ts";
 import type { useOverview } from "./useOverview.ts";
 import type { OverviewPort } from "./useOverviewMode.ts";
 export function ConnectedGroups({
@@ -21,14 +22,18 @@ export function ConnectedGroups({
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const extent = useRef<HTMLDivElement>(null);
-  const [collapsed, setCollapsed] = useState(new Set<string>());
-  const [selected, setSelected] = useState(root);
-  const [zoom, setZoom] = useState(1);
-  const [origin, setOrigin] = useState({ x: 0, y: 0 });
+  const state = useGraphState(root, model);
+  const { collapsed, setCollapsed, selected, setSelected, zoom, setZoom, origin, setOrigin } =
+    state;
   const [searchOpen, setSearchOpen] = useState(false);
   const [scroll, setScroll] = useState({ x: 0, y: 0, width: 1200, height: 800 });
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
-  const { groups, boxes, onMeasure, rearrange } = useGraphScene(model.folders);
+  const { groups, boxes, onMeasure, rearrange } = useGraphScene(
+    model.folders,
+    state.initial?.boxes,
+  );
+  useRememberGraph(model, state, viewport, boxes);
+  const initialScroll = useRef(state.initial?.scroll);
   const shown = visibleGroups(groups, collapsed);
   const bounds = graphBounds(shown);
   const windowBox = {
@@ -50,6 +55,16 @@ export function ConnectedGroups({
   useLayoutEffect(() => {
     const node = viewport.current;
     if (!node) return;
+    if (initialScroll.current) {
+      // Restore the trailing camera space used by anchor compensation before
+      // setting offsets. Otherwise the browser clamps the cached position.
+      if (extent.current) {
+        extent.current.style.minWidth = `${initialScroll.current.x + node.clientWidth}px`;
+        extent.current.style.minHeight = `${initialScroll.current.y + node.clientHeight}px`;
+      }
+      node.scrollLeft = initialScroll.current.x;
+      node.scrollTop = initialScroll.current.y;
+    }
     const measure = () =>
       setScroll({
         x: node.scrollLeft,

@@ -17,7 +17,7 @@ export interface Measurement {
 /** Retain assigned slots; resize only the affected box and following collisions. */
 export function layoutGroups(
   folders: readonly OverviewFolder[],
-  previous: ReadonlyMap<string, GraphGroup>,
+  previous: ReadonlyMap<string, Box>,
   measurements: ReadonlyMap<string, Measurement> = new Map(),
 ): GraphGroup[] {
   const result: GraphGroup[] = [];

@@ -23,7 +23,10 @@ export function useGraphCommands(options: GraphCommandOptions) {
   const pendingChild = useRef<string | null>(null);
   const camera = useGraphCamera(options);
   const { cancel, changeZoom, pan, fit } = camera;
+  const previousSelection = useRef(selected);
   useLayoutEffect(() => {
+    if (previousSelection.current === selected) return;
+    previousSelection.current = selected;
     const node = viewport.current;
     if (node)
       selectedElement(node, selected)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });

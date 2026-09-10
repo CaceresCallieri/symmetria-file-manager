@@ -1,8 +1,9 @@
+import { type FSWatcher, type WatchListener, watch } from "node:fs";
 import { appendFile, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { watchDirectory } from "../src/fs/watch.ts";
 
@@ -168,4 +169,28 @@ describe("watchDirectory", () => {
     await expect(halt()).resolves.not.toThrow();
     stop = null;
   });
+});
+
+it("reports unnamed invalidation and lost runtime coverage", async () => {
+  let watcher: FSWatcher | undefined;
+  const createWatcher = (
+    path: string,
+    options: { recursive: false },
+    listener: WatchListener<string>,
+  ) => {
+    watcher = watch(path, options, listener);
+    return watcher;
+  };
+  const changed = vi.fn();
+  const error = vi.fn();
+  stop = await watchDirectory(root, changed, error, createWatcher);
+  if (!watcher) throw new Error("No watcher");
+  watcher.emit("change", "rename", null);
+  expect(changed).toHaveBeenCalledWith([]);
+  watcher.emit("error", new Error("coverage lost"));
+  expect(error).toHaveBeenCalledWith("coverage lost");
+  changed.mockClear();
+  watcher.emit("change", "rename", "late.txt");
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(changed).not.toHaveBeenCalled();
 });

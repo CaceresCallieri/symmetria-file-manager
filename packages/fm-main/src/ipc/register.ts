@@ -428,12 +428,13 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
       const held = resourcesFor(from);
       return serialise(from, request.subscriptionId, async () => {
         await held.watches.get(request.subscriptionId)?.();
-        const stop = await watch(request.path, (changed: ChangedEntry[]) => {
-          from.send(CHANNELS.changed, {
-            subscriptionId: request.subscriptionId,
-            changed,
-          });
-        });
+        const stop = await watch(
+          request.path,
+          (changed: ChangedEntry[]) => {
+            from.send(CHANNELS.changed, { subscriptionId: request.subscriptionId, changed });
+          },
+          (error) => from.send(CHANNELS.changed, { subscriptionId: request.subscriptionId, error }),
+        );
         held.watches.set(request.subscriptionId, stop);
         return success(null);
       });

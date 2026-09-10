@@ -94,7 +94,9 @@ export function FolderGroup({
       ) : (
         <p className="folder-status">{group.status}</p>
       )}
-      {group.status === "Excluded by scope" || group.status === "Depth limit reached" ? (
+      {group.status === "Excluded by scope" ||
+      group.status === "Depth limit reached" ||
+      group.status === "Not loaded" ? (
         <button type="button" className="folder-load" onClick={() => onInclude(group.path)}>
           Load this folder
         </button>

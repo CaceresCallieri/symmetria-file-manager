@@ -45,10 +45,24 @@ function Overview({
     >
       <header className="overview-toolbar">
         <strong>Folder overview</strong>
-        <span>{model.loading ? "Loading…" : `${model.inspected} entries inspected`}</span>
+        <span>{statusText(model)}</span>
+        {model.coverage?.size ? (
+          <button type="button" aria-label="Refresh overview" onClick={model.refresh}>
+            Retry
+          </button>
+        ) : null}
         <details>
-          <summary>Scope</summary>
+          <summary>{model.coverage?.size ? "Scope · Live updates unavailable" : "Scope"}</summary>
           <div className="overview-popover">
+            {model.coverage?.size ? (
+              <p>
+                Coverage degraded in {model.coverage.size} folders.{" "}
+                {[...model.coverage.values()][0]}
+              </p>
+            ) : null}
+            <button type="button" aria-label="Refresh snapshot" onClick={model.refresh}>
+              Refresh
+            </button>
             <p>Depth 4 · 5,000 entries · 128 directories</p>
             <p>Excluded: {EXCLUSIONS.join(", ")}</p>
           </div>
@@ -76,4 +90,11 @@ export function OverviewLayer({
   return root === null ? null : (
     <Overview key={root} root={root} model={model} onClose={onClose} port={port} />
   );
+}
+
+function statusText(model: ReturnType<typeof useOverview>): string {
+  if (model.paused) return "Live updates paused";
+  if (model.refreshing) return "Refreshing…";
+  if (model.loading) return "Loading…";
+  return `${model.inspected} entries inspected`;
 }
