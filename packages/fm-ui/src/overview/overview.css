@@ -25,6 +25,15 @@
 .overview-toolbar summary {
   white-space: nowrap;
 }
+.overview-toolbar > details {
+  /* A nonshrinking coverage label pushed Close outside narrow windows. */
+  flex-shrink: 1;
+  min-width: 56px;
+}
+.overview-scope summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .overview-toolbar details[open] {
   background: var(--card);
   z-index: 2;
@@ -102,7 +111,7 @@
   position: absolute;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: default;
 }
 .folder-group header {

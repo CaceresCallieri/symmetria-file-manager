@@ -66,6 +66,7 @@ function OverviewToolbar({
   readonly onClose: () => void;
   readonly children: ReactNode;
 }) {
+  const scopeLabel = model.coverage?.size ? "Scope · Live updates unavailable" : "Scope";
   return (
     <header className="overview-toolbar">
       <strong>Folder overview</strong>
@@ -75,8 +76,8 @@ function OverviewToolbar({
           Retry
         </button>
       ) : null}
-      <details>
-        <summary>{model.coverage?.size ? "Scope · Live updates unavailable" : "Scope"}</summary>
+      <details className="overview-scope">
+        <summary title={scopeLabel}>{scopeLabel}</summary>
         <div className="overview-popover">
           {model.coverage?.size ? (
             <p>
