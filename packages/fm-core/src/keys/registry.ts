@@ -392,6 +392,7 @@ export const OVERVIEW_ONLY: readonly Binding[] = [
   overviewBinding("zoom-in", ["+", "="], "Symbol", "Zoom in"),
   overviewBinding("zoom-out", ["-"], "Symbol", "Zoom out"),
   overviewBinding("reset", ["0"], "", "Reset zoom"),
+  overviewBinding("toggle-minimap", ["m"], "Alt", "Toggle minimap"),
   overviewBinding("fit", ["f"], "", "Fit loaded graph"),
   overviewBinding("toggle", [" "], "", "Toggle folder"),
   overviewBinding("search", ["/"], "Symbol", "Search loaded paths"),

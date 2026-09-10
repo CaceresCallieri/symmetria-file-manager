@@ -1,5 +1,7 @@
 import type { OverviewCommand } from "@symmetria/fm-core/overview/navigation";
 export function OverviewControls({
+  minimapVisible,
+  onToggleMinimap,
   zoom,
   run,
   selected,
@@ -7,6 +9,8 @@ export function OverviewControls({
   onFocus,
   onRearrange,
 }: {
+  readonly minimapVisible: boolean;
+  readonly onToggleMinimap: (() => void) | undefined;
   readonly zoom: number;
   readonly run: (command: OverviewCommand) => void;
   readonly selected: string;
@@ -33,6 +37,16 @@ export function OverviewControls({
         <summary>Details</summary>
         <div className="overview-popover">
           <p>{selected}</p>
+          <button
+            type="button"
+            aria-label="Toggle minimap"
+            aria-pressed={minimapVisible}
+            title="Toggle minimap (Alt+M)"
+            disabled={!onToggleMinimap}
+            onClick={onToggleMinimap}
+          >
+            Minimap · Alt+M
+          </button>
           {canFocus ? (
             <button type="button" onClick={onFocus}>
               Focus here

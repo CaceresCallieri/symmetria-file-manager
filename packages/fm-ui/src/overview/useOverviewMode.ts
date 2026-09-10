@@ -21,7 +21,12 @@ export function useOverviewMode(
       if (handler.current === next) handler.current = () => undefined;
     };
   }, []);
-  const command = (name: OverviewCommand) => handler.current(name);
+  const [minimapVisible, setMinimapVisible] = useState(true);
+  const toggleMinimap = () => setMinimapVisible((visible) => !visible);
+  const command = (name: OverviewCommand) => {
+    if (name === "toggle-minimap") toggleMinimap();
+    else handler.current(name);
+  };
   const [root, setRoot] = useState<string | null>(null);
   const model = useOverview(root, showHidden);
   const close = useCallback(() => setRoot(null), []);
@@ -35,6 +40,8 @@ export function useOverviewMode(
   );
   const view: ViewKind = root === null ? "miller" : "overview";
   return {
+    minimapVisible,
+    toggleMinimap,
     root,
     model,
     close,

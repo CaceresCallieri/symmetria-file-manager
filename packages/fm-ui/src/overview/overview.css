@@ -211,3 +211,39 @@
 .overview-help {
   z-index: 30;
 }
+
+.overview-graph-frame {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+}
+.overview-minimap {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+  background: var(--background);
+  box-shadow: 0 0 0 1px var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.minimap-geometry > rect {
+  fill: var(--muted-foreground);
+  fill-opacity: 0.45;
+}
+.minimap-geometry path {
+  stroke: var(--muted-foreground);
+  stroke-opacity: 0.5;
+  stroke-width: 0.5px;
+  vector-effect: non-scaling-stroke;
+}
+.minimap-viewport {
+  fill: var(--foreground);
+  fill-opacity: 0.08;
+  stroke: var(--foreground);
+  stroke-width: 1;
+}
+.minimap-outside {
+  fill: var(--foreground);
+}

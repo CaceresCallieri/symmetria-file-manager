@@ -3,6 +3,21 @@ import { matchKey } from "../src/keys/keyEvent.ts";
 import { bindingsFor } from "../src/keys/registry.ts";
 
 const plain = { ctrl: false, alt: false, meta: false, shift: false };
+it("reserves Alt+M for the overview without accepting other modifiers", () => {
+  const binding = bindingsFor("overview").find((row) => row.id === "overview.toggle-minimap");
+  expect(binding).toBeDefined();
+  if (!binding) throw new Error("missing minimap binding");
+  expect(matchKey(binding, { ...plain, key: "m", alt: true })).toBe(true);
+  for (const modifiers of [
+    plain,
+    { ...plain, alt: true, ctrl: true },
+    { ...plain, alt: true, shift: true },
+    { ...plain, meta: true },
+  ]) {
+    expect(matchKey(binding, { ...modifiers, key: "m" })).toBe(false);
+  }
+  expect(bindingsFor("miller").some((row) => row.id === binding.id)).toBe(false);
+});
 it("accepts generated symbols but rejects deliberate Ctrl and Meta combinations", () => {
   for (const key of ["/", "?", "+", "=", "-"]) {
     const binding = bindingsFor("overview").find((row) => row.keys.includes(key));

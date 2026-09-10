@@ -12,11 +12,15 @@ function Overview({
   model,
   onClose,
   port,
+  minimapVisible,
+  onToggleMinimap,
 }: {
   readonly root: string;
   readonly model: ReturnType<typeof useOverview>;
   readonly onClose: () => void;
   readonly port: OverviewPort;
+  readonly minimapVisible: boolean;
+  readonly onToggleMinimap: () => void;
 }) {
   const panel = useRef<HTMLDivElement>(null);
   useDialogFocus(panel);
@@ -48,6 +52,8 @@ function Overview({
         root={root}
         model={model}
         port={port}
+        minimapVisible={minimapVisible}
+        onToggleMinimap={onToggleMinimap}
         renderToolbar={(controls) => (
           <OverviewToolbar model={model} onClose={onClose}>
             {controls}
@@ -108,14 +114,26 @@ export function OverviewLayer({
   model,
   onClose,
   port,
+  minimapVisible,
+  onToggleMinimap,
 }: {
   readonly root: string | null;
   readonly model: ReturnType<typeof useOverview>;
   readonly onClose: () => void;
   readonly port: OverviewPort;
+  readonly minimapVisible: boolean;
+  readonly onToggleMinimap: () => void;
 }) {
   return root === null ? null : (
-    <Overview key={root} root={root} model={model} onClose={onClose} port={port} />
+    <Overview
+      key={root}
+      root={root}
+      model={model}
+      onClose={onClose}
+      port={port}
+      minimapVisible={minimapVisible}
+      onToggleMinimap={onToggleMinimap}
+    />
   );
 }
 

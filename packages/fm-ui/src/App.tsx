@@ -334,6 +334,8 @@ export function App(props: AppProps = {}) {
         model={overview.model}
         onClose={overview.close}
         port={overview.port}
+        minimapVisible={overview.minimapVisible}
+        onToggleMinimap={overview.toggleMinimap}
       />
       <Overlays
         modes={modes}

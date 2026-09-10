@@ -12,7 +12,8 @@ export type OverviewCommand =
   | "toggle"
   | "search"
   | "help"
-  | "reveal";
+  | "reveal"
+  | "toggle-minimap";
 export function moveSelection(
   folders: ReadonlyMap<string, OverviewFolder>,
   root: string,
