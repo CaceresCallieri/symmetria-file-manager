@@ -38,9 +38,15 @@
   background: var(--card);
   z-index: 2;
 }
-.overview-toolbar > strong,
 .overview-toolbar button {
   flex-shrink: 0;
+  white-space: nowrap;
+}
+/* Keep actions visible when Retry and the minimap toggle share a narrow toolbar. */
+.overview-toolbar > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .overview-camera-controls {
@@ -218,15 +224,23 @@
   position: relative;
   display: flex;
 }
-.overview-minimap {
+.overview-minimap-surface {
   position: absolute;
   top: 16px;
   right: 16px;
   z-index: 1;
-  background: var(--background);
-  box-shadow: 0 0 0 1px var(--border);
+  background: var(--glass-surface);
+  box-shadow:
+    0 0 0 1px var(--glass-border),
+    inset 0 1px var(--glass-highlight);
   border-radius: var(--radius-sm);
   overflow: hidden;
+}
+@supports (backdrop-filter: blur(16px)) {
+  .overview-minimap-surface {
+    background: var(--glass-background);
+    backdrop-filter: blur(16px) saturate(1.08);
+  }
 }
 .minimap-geometry > rect {
   fill: var(--muted-foreground);
@@ -249,6 +263,7 @@
 }
 
 .overview-minimap {
+  display: block;
   touch-action: none;
   user-select: none;
   cursor: crosshair;
@@ -258,4 +273,19 @@
 }
 .minimap-viewport:active {
   cursor: grabbing;
+}
+
+.overview .overview-minimap-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  color: var(--muted-foreground);
+}
+.overview-minimap-toggle:hover,
+.overview-minimap-toggle[aria-pressed="true"] {
+  color: var(--foreground);
+  background: var(--accent);
 }

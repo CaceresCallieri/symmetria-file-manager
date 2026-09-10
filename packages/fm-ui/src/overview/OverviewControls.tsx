@@ -1,4 +1,6 @@
 import type { OverviewCommand } from "@symmetria/fm-core/overview/navigation";
+import { Map as MapIcon } from "lucide-react";
+
 export function OverviewControls({
   minimapVisible,
   onToggleMinimap,
@@ -33,20 +35,21 @@ export function OverviewControls({
       <button type="button" onClick={onRearrange}>
         Rearrange
       </button>
+      <button
+        type="button"
+        className="overview-minimap-toggle"
+        aria-label="Toggle minimap"
+        aria-pressed={minimapVisible}
+        title="Toggle minimap (Alt+M)"
+        disabled={!onToggleMinimap}
+        onClick={onToggleMinimap}
+      >
+        <MapIcon size={14} aria-hidden="true" />
+      </button>
       <details>
         <summary>Details</summary>
         <div className="overview-popover">
           <p>{selected}</p>
-          <button
-            type="button"
-            aria-label="Toggle minimap"
-            aria-pressed={minimapVisible}
-            title="Toggle minimap (Alt+M)"
-            disabled={!onToggleMinimap}
-            onClick={onToggleMinimap}
-          >
-            Minimap · Alt+M
-          </button>
           {canFocus ? (
             <button type="button" onClick={onFocus}>
               Focus here

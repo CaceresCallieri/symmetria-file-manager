@@ -147,8 +147,8 @@ it("does not add reads, watches, or full cards when toggled", async () => {
 });
 it("exposes visibility state without making graph primitives focusable", async () => {
   await open();
-  screen.getByText("Details").closest("details")?.setAttribute("open", "");
   const toggle = screen.getByRole("button", { name: "Toggle minimap" });
+  expect(toggle.closest("details")).toBeNull();
   expect(toggle.getAttribute("aria-pressed")).toBe("true");
   expect(map().querySelectorAll("button,[tabindex]")).toHaveLength(0);
   fireEvent.click(toggle);

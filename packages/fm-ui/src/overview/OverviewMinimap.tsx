@@ -77,33 +77,35 @@ export function OverviewMinimap({
   if (!visible || !projection) return null;
   const indicator = projectMinimapViewport(windowBox, projection);
   return (
-    <svg
-      {...pointer}
-      className="overview-minimap"
-      role="img"
-      aria-label="Folder overview minimap"
-      width={projection.width}
-      height={projection.height}
-      viewBox={`0 0 ${projection.width} ${projection.height}`}
-    >
-      <title>Folder overview minimap</title>
-      <g
-        transform={`translate(${projection.offset.x} ${projection.offset.y}) scale(${projection.scale})`}
+    <div className="overview-minimap-surface">
+      <svg
+        {...pointer}
+        className="overview-minimap"
+        role="img"
+        aria-label="Folder overview minimap"
+        width={projection.width}
+        height={projection.height}
+        viewBox={`0 0 ${projection.width} ${projection.height}`}
       >
-        <MinimapGeometry shown={shown} bounds={bounds} />
-      </g>
-      <rect
-        data-minimap-viewport=""
-        className="minimap-viewport"
-        x={indicator.x}
-        y={indicator.y}
-        width={indicator.width}
-        height={indicator.height}
-      />
-      {indicator.outside ? (
-        <circle className="minimap-outside" cx={indicator.x} cy={indicator.y} r={3} />
-      ) : null}
-    </svg>
+        <title>Folder overview minimap</title>
+        <g
+          transform={`translate(${projection.offset.x} ${projection.offset.y}) scale(${projection.scale})`}
+        >
+          <MinimapGeometry shown={shown} bounds={bounds} />
+        </g>
+        <rect
+          data-minimap-viewport=""
+          className="minimap-viewport"
+          x={indicator.x}
+          y={indicator.y}
+          width={indicator.width}
+          height={indicator.height}
+        />
+        {indicator.outside ? (
+          <circle className="minimap-outside" cx={indicator.x} cy={indicator.y} r={3} />
+        ) : null}
+      </svg>
+    </div>
   );
 }
 
