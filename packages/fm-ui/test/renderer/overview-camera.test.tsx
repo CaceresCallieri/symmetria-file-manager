@@ -103,3 +103,106 @@ it("clamps keyboard pan to geometry with screen padding despite a larger browser
   act(() => vi.advanceTimersByTime(200));
   expect(viewport.scrollTop).toBe(0);
 });
+
+it.each([0.1, 1, 2])(
+  "clamps minimap targets like keyboard pan at zoom %s and nonzero origin",
+  (zoom) => {
+    vi.useFakeTimers();
+    const viewport = document.createElement("div");
+    Object.defineProperties(viewport, {
+      clientWidth: { value: 800 },
+      clientHeight: { value: 600 },
+    });
+    const { result } = renderHook(() =>
+      useGraphCamera({
+        viewport: { current: viewport },
+        extent: { current: null },
+        selected: "/root",
+        zoom,
+        setZoom: () => undefined,
+        origin: { x: 37, y: 29 },
+        setOrigin: () => undefined,
+        bounds: { width: 10000, height: 12000 },
+      }),
+    );
+    act(() => result.current.moveTo({ x: 1e6, y: 1e6 }, false));
+    expect(viewport.scrollLeft).toBeCloseTo((10000 - 24) * zoom + 37 + 24 - 800);
+    expect(viewport.scrollTop).toBeCloseTo((12000 - 24) * zoom + 29 + 24 - 600);
+    act(() => result.current.moveTo({ x: -1e6, y: -1e6 }, false));
+    expect(viewport.scrollLeft).toBe(0);
+    expect(viewport.scrollTop).toBe(0);
+  },
+);
+it("replaces pending animation with an immediate minimap camera target", () => {
+  vi.useFakeTimers();
+  const viewport = document.createElement("div");
+  Object.defineProperties(viewport, { clientWidth: { value: 800 }, clientHeight: { value: 600 } });
+  const { result } = renderHook(() =>
+    useGraphCamera({
+      viewport: { current: viewport },
+      extent: { current: null },
+      selected: "/root",
+      zoom: 1,
+      setZoom: () => undefined,
+      origin: { x: 0, y: 0 },
+      setOrigin: () => undefined,
+      bounds: { width: 10000, height: 12000 },
+    }),
+  );
+  act(() => result.current.pan("down", 1));
+  act(() => vi.advanceTimersByTime(30));
+  act(() => result.current.moveTo({ x: 300, y: 400 }, false));
+  expect(viewport.scrollTop).toBe(400);
+  act(() => vi.advanceTimersByTime(200));
+  expect(viewport.scrollTop).toBe(400);
+});
+
+it("does not let stale minimap cleanup cancel a newer keyboard target", () => {
+  vi.useFakeTimers();
+  const viewport = document.createElement("div");
+  Object.defineProperties(viewport, { clientWidth: { value: 800 }, clientHeight: { value: 600 } });
+  const { result } = renderHook(() =>
+    useGraphCamera({
+      viewport: { current: viewport },
+      extent: { current: null },
+      selected: "/root",
+      zoom: 1,
+      setZoom: () => undefined,
+      origin: { x: 0, y: 0 },
+      setOrigin: () => undefined,
+      bounds: { width: 10000, height: 12000 },
+    }),
+  );
+  let cancelMap: (() => void) | undefined;
+  act(() => {
+    cancelMap = result.current.moveTo({ x: 0, y: 2000 }, true);
+  });
+  act(() => result.current.pan("down", 1));
+  act(() => cancelMap?.());
+  act(() => vi.advanceTimersByTime(200));
+  expect(viewport.scrollTop).toBe(2600);
+});
+it("re-clamps a pending map target when graph bounds grow", () => {
+  vi.useFakeTimers();
+  const viewport = document.createElement("div");
+  Object.defineProperties(viewport, { clientWidth: { value: 800 }, clientHeight: { value: 600 } });
+  const { result, rerender } = renderHook(
+    ({ height }) =>
+      useGraphCamera({
+        viewport: { current: viewport },
+        extent: { current: null },
+        selected: "/root",
+        zoom: 1,
+        setZoom: () => undefined,
+        origin: { x: 0, y: 0 },
+        setOrigin: () => undefined,
+        bounds: { width: 10000, height },
+      }),
+    { initialProps: { height: 1000 } },
+  );
+  act(() => result.current.moveTo({ x: 0, y: 2000 }, true));
+  act(() => vi.advanceTimersByTime(30));
+  rerender({ height: 3000 });
+  act(() => vi.advanceTimersByTime(200));
+  expect(viewport.scrollTop).toBe(2000);
+});

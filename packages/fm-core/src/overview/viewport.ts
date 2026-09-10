@@ -17,13 +17,11 @@ export function panTarget(
 ): Point {
   const dx = direction === "left" ? -viewport.width : direction === "right" ? viewport.width : 0;
   const dy = direction === "up" ? -viewport.height : direction === "down" ? viewport.height : 0;
-  return {
-    x: Math.max(0, Math.min(Math.max(0, bounds.width - viewport.width), current.x + dx * fraction)),
-    y: Math.max(
-      0,
-      Math.min(Math.max(0, bounds.height - viewport.height), current.y + dy * fraction),
-    ),
-  };
+  return clampScroll(
+    { x: current.x + dx * fraction, y: current.y + dy * fraction },
+    viewport,
+    bounds,
+  );
 }
 export function zoomScroll(scroll: Point, anchor: Point, from: number, to: number): Point {
   return {
@@ -71,5 +69,18 @@ export function projectMinimapViewport(
     width: (right - left) * scale,
     height: (bottom - top) * scale,
     outside: right <= left || bottom <= top,
+  };
+}
+
+export function clampScroll(point: Point, viewport: Size, bounds: Size): Point {
+  return {
+    x: Math.max(0, Math.min(Math.max(0, bounds.width - viewport.width), point.x)),
+    y: Math.max(0, Math.min(Math.max(0, bounds.height - viewport.height), point.y)),
+  };
+}
+export function minimapWorldPoint(point: Point, projection: MinimapProjection): Point {
+  return {
+    x: (point.x - projection.offset.x) / projection.scale,
+    y: (point.y - projection.offset.y) / projection.scale,
   };
 }

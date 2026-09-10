@@ -240,3 +240,187 @@ it("tracks the actual camera after keyboard pan", async () => {
   fireEvent.scroll(screen.getByTestId("connected-groups"));
   assertProjection();
 });
+
+function interactiveGraph() {
+  viewportWidth = 800;
+  viewportHeight = 600;
+  const snapshot = model();
+  const names = Array.from({ length: 60 }, (_, i) => `folder${i}`);
+  snapshot.folders.set("/root", {
+    path: "/root",
+    depth: 0,
+    status: "Loaded",
+    entries: names.map(leaf),
+  });
+  for (const name of names)
+    snapshot.folders.set(`/root/${name}`, {
+      path: `/root/${name}`,
+      depth: 1,
+      status: "Loaded",
+      entries: [],
+    });
+  const view = render(
+    <div role="dialog" tabIndex={-1}>
+      <ConnectedGroups root="/root" model={snapshot} />
+    </div>,
+  );
+  const svg = map();
+  svg.getBoundingClientRect = () =>
+    new DOMRect(10, 20, Number(svg.getAttribute("width")), Number(svg.getAttribute("height")));
+  const captured = new Set<number>();
+  Object.assign(svg, {
+    setPointerCapture: (id: number) => captured.add(id),
+    hasPointerCapture: (id: number) => captured.has(id),
+    releasePointerCapture: (id: number) => captured.delete(id),
+  });
+  return { ...view, svg, viewport: screen.getByTestId("connected-groups"), snapshot, captured };
+}
+const primary = { button: 0, pointerId: 7, isPrimary: true };
+function mapPoint(svg: HTMLElement, fraction: number) {
+  return {
+    clientX: 10 + Number(svg.getAttribute("width")) / 2,
+    clientY: 20 + Number(svg.getAttribute("height")) * fraction,
+  };
+}
+it("recenters from a minimap press without changing selection or zoom", () => {
+  vi.useFakeTimers();
+  const { svg, viewport } = interactiveGraph();
+  const selected = viewport.dataset.selected;
+  fireEvent.pointerDown(svg, { ...primary, ...mapPoint(svg, 0.75) });
+  act(() => vi.advanceTimersByTime(200));
+  expect(viewport.scrollTop).toBeGreaterThan(1000);
+  expect(viewport.dataset.selected).toBe(selected);
+  expect(viewport.dataset.zoom).toBe("1");
+});
+it("drags the viewport rectangle immediately without a grab jump", () => {
+  const { svg, viewport, captured } = interactiveGraph();
+  const indicator = svg.querySelector("[data-minimap-viewport]");
+  if (!indicator) throw new Error("missing indicator");
+  const clientX = 10 + Number(indicator.getAttribute("x")) + 2;
+  const clientY = 20 + Number(indicator.getAttribute("y")) + 2;
+  fireEvent.pointerDown(indicator, { ...primary, clientX, clientY });
+  expect(captured.has(7)).toBe(true);
+  expect(viewport.scrollTop).toBe(0);
+  fireEvent.pointerMove(svg, { ...primary, clientX, clientY: clientY + 20 });
+  expect(viewport.scrollTop).toBeGreaterThan(500);
+  const canvas = viewport.querySelector<HTMLElement>(".overview-canvas");
+  if (!canvas) throw new Error("missing canvas");
+  const scale = (Number(svg.getAttribute("height")) - 16) / Number.parseFloat(canvas.style.height);
+  expect(viewport.scrollTop).toBeCloseTo(20 / scale, 8);
+});
+it.each(["pointerCancel", "lostPointerCapture"] as const)(
+  "stops minimap movement after %s",
+  (eventName) => {
+    const { svg, viewport } = interactiveGraph();
+    const indicator = svg.querySelector("[data-minimap-viewport]");
+    if (!indicator) throw new Error("missing indicator");
+    const point = {
+      clientX: 10 + Number(indicator.getAttribute("x")) + 2,
+      clientY: 20 + Number(indicator.getAttribute("y")) + 2,
+    };
+    fireEvent.pointerDown(indicator, { ...primary, ...point });
+    fireEvent.pointerMove(svg, { ...primary, ...point, clientY: point.clientY + 20 });
+    expect(viewport.scrollTop).toBeGreaterThan(0);
+    fireEvent[eventName](svg, primary);
+    const stopped = viewport.scrollTop;
+    fireEvent.pointerMove(svg, { ...primary, ...point, clientY: point.clientY + 40 });
+    expect(viewport.scrollTop).toBe(stopped);
+  },
+);
+it("returns focus to the dialog and blocks wheel input over the map", () => {
+  vi.useFakeTimers();
+  const { svg } = interactiveGraph();
+  fireEvent.pointerDown(svg, { ...primary, ...mapPoint(svg, 0.75) });
+  fireEvent.pointerUp(svg, primary);
+  expect(document.activeElement).toBe(screen.getByRole("dialog"));
+  expect(fireEvent.wheel(svg, { deltaY: 100, cancelable: true })).toBe(false);
+});
+it("cancels active minimap navigation when hidden or resized", () => {
+  vi.useFakeTimers();
+  const { svg, viewport, rerender, snapshot } = interactiveGraph();
+  fireEvent.pointerDown(svg, { ...primary, ...mapPoint(svg, 0.75) });
+  act(() => vi.advanceTimersByTime(40));
+  expect(viewport.scrollTop).toBeGreaterThan(0);
+  rerender(
+    <div role="dialog" tabIndex={-1}>
+      <ConnectedGroups root="/root" model={snapshot} minimapVisible={false} />
+    </div>,
+  );
+  const stopped = viewport.scrollTop;
+  act(() => vi.advanceTimersByTime(200));
+  expect(viewport.scrollTop).toBe(stopped);
+});
+it.each([640, 800, 1440])("keeps navigation aligned at viewport width %s", (width) => {
+  vi.useFakeTimers();
+  const { svg, viewport } = interactiveGraph();
+  viewportWidth = width;
+  act(() => {
+    for (const callback of resizeCallbacks) callback();
+  });
+  fireEvent.pointerDown(svg, { ...primary, ...mapPoint(svg, 0.75) });
+  act(() => vi.advanceTimersByTime(200));
+  expect(viewport.scrollTop).toBeGreaterThan(1000);
+  fireEvent.scroll(viewport);
+  assertProjection();
+});
+it("pans the minimap without requesting more filesystem data", async () => {
+  const log = await open();
+  const svg = map();
+  const before = log.overviewReads.mock.calls.length;
+  svg.getBoundingClientRect = () =>
+    new DOMRect(10, 20, Number(svg.getAttribute("width")), Number(svg.getAttribute("height")));
+  Object.assign(svg, {
+    setPointerCapture: vi.fn(),
+    hasPointerCapture: () => false,
+    releasePointerCapture: vi.fn(),
+  });
+  vi.useFakeTimers();
+  const viewport = screen.getByTestId("connected-groups");
+  const old = viewport.scrollLeft;
+  fireEvent.pointerDown(svg, {
+    ...primary,
+    clientX: 10 + Number(svg.getAttribute("width")) - 10,
+    clientY: 50,
+  });
+  act(() => vi.advanceTimersByTime(200));
+  expect(viewport.scrollLeft).not.toBe(old);
+  expect(log.overviewReads.mock.calls.length).toBe(before);
+});
+
+it("keeps dragging when refreshed group objects retain the same geometry", () => {
+  const { svg, viewport, rerender, snapshot, captured } = interactiveGraph();
+  const indicator = svg.querySelector("[data-minimap-viewport]");
+  if (!indicator) throw new Error("missing indicator");
+  const point = {
+    clientX: 10 + Number(indicator.getAttribute("x")) + 2,
+    clientY: 20 + Number(indicator.getAttribute("y")) + 2,
+  };
+  fireEvent.pointerDown(indicator, { ...primary, ...point });
+  fireEvent.pointerMove(svg, { ...primary, ...point, clientY: point.clientY + 10 });
+  const before = viewport.scrollTop;
+  rerender(
+    <div role="dialog" tabIndex={-1}>
+      <ConnectedGroups root="/root" model={{ ...snapshot, folders: new Map(snapshot.folders) }} />
+    </div>,
+  );
+  expect(captured.has(7)).toBe(true);
+  fireEvent.pointerMove(svg, { ...primary, ...point, clientY: point.clientY + 30 });
+  expect(viewport.scrollTop).toBeGreaterThan(before);
+});
+it("finishes a recenter animation when newly measured graph bounds change", () => {
+  vi.useFakeTimers();
+  const { svg, viewport, rerender, snapshot } = interactiveGraph();
+  fireEvent.pointerDown(svg, { ...primary, ...mapPoint(svg, 0.75) });
+  fireEvent.pointerUp(svg, primary);
+  act(() => vi.advanceTimersByTime(40));
+  const before = viewport.scrollTop;
+  const changed = { ...snapshot, folders: new Map(snapshot.folders) };
+  changed.folders.set("/root/new", { path: "/root/new", depth: 1, status: "Loaded", entries: [] });
+  rerender(
+    <div role="dialog" tabIndex={-1}>
+      <ConnectedGroups root="/root" model={changed} />
+    </div>,
+  );
+  act(() => vi.advanceTimersByTime(200));
+  expect(viewport.scrollTop).toBeGreaterThan(before);
+});

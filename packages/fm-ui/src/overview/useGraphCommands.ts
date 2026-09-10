@@ -94,6 +94,7 @@ export function useGraphCommands(options: GraphCommandOptions) {
   useEffect(() => options.port?.connect(run));
   return {
     run,
+    moveTo: camera.moveTo,
     cancel,
     toggle,
     select: (path: string) => {

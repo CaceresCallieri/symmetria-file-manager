@@ -1,8 +1,13 @@
 import type { Direction } from "@symmetria/fm-core/overview/navigation";
 import type { Size } from "@symmetria/fm-core/overview/viewport";
-import { type Point, panTarget, zoomScroll } from "@symmetria/fm-core/overview/viewport";
+import {
+  clampScroll,
+  type Point,
+  panTarget,
+  zoomScroll,
+} from "@symmetria/fm-core/overview/viewport";
 import type { RefObject } from "react";
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 export interface GraphCameraOptions {
   viewport: RefObject<HTMLDivElement | null>;
   extent: RefObject<HTMLDivElement | null>;
@@ -30,6 +35,7 @@ export function selectedElement(node: HTMLElement, selected: string): HTMLElemen
 export function useGraphCamera(options: GraphCameraOptions) {
   const { viewport, extent, selected, zoom, setZoom, origin, setOrigin, bounds } = options;
   const pending = useRef<Point | null>(null);
+  const minimapTarget = useRef<{ point: Point } | null>(null);
   const read = () => ({
     x: viewport.current?.scrollLeft ?? 0,
     y: viewport.current?.scrollTop ?? 0,
@@ -41,7 +47,10 @@ export function useGraphCamera(options: GraphCameraOptions) {
         node.scrollLeft = point.x;
         node.scrollTop = point.y;
       }
-      if (pending.current?.x === point.x && pending.current.y === point.y) pending.current = null;
+      if (pending.current?.x === point.x && pending.current.y === point.y) {
+        pending.current = null;
+        minimapTarget.current = null;
+      }
     },
     [viewport],
   );
@@ -50,10 +59,11 @@ export function useGraphCamera(options: GraphCameraOptions) {
     write,
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
   );
-  const cancel = () => {
+  const cancel = useCallback(() => {
     animate.cancel();
     pending.current = null;
-  };
+    minimapTarget.current = null;
+  }, [animate]);
   const zoomTarget = useRef<{ point: Point; zoom: number; origin: Point } | null>(null);
   const changeZoom = (next: number) => {
     cancel();
@@ -107,18 +117,49 @@ export function useGraphCamera(options: GraphCameraOptions) {
     write(target.point);
     zoomTarget.current = null;
   }, [zoom, origin, viewport, extent, write]);
+  const scrollBounds = useMemo(
+    () => ({
+      width: (bounds.width - 24) * zoom + origin.x + 24,
+      height: (bounds.height - 24) * zoom + origin.y + 24,
+    }),
+    [bounds, zoom, origin],
+  );
+  const moveTo = (point: Point, animated: boolean) => {
+    cancel();
+    const node = viewport.current;
+    if (!node) return;
+    const intent = { point };
+    const target = minimapScroll(point, zoom, origin, node, scrollBounds);
+    if (animated) {
+      minimapTarget.current = intent;
+      pending.current = target;
+      animate(target);
+    } else write(target);
+    return () => {
+      if (minimapTarget.current === intent) cancel();
+    };
+  };
+  useLayoutEffect(() => {
+    const node = viewport.current;
+    const intent = minimapTarget.current;
+    if (!node || !intent) return;
+    const target = minimapScroll(intent.point, zoom, origin, node, scrollBounds);
+    if (target.x === pending.current?.x && target.y === pending.current.y) return;
+    // Re-clamp a pending edge click when newly mounted cards change graph bounds.
+    pending.current = target;
+    animate(target);
+  }, [viewport, zoom, origin, scrollBounds, animate]);
+
   const pan = (direction: Direction, fraction: number) => {
     const node = viewport.current;
     if (!node) return;
+    minimapTarget.current = null;
     const target = panTarget(
       pending.current ?? read(),
       { width: node.clientWidth, height: node.clientHeight },
       direction,
       fraction,
-      {
-        width: (bounds.width - 24) * zoom + origin.x + 24,
-        height: (bounds.height - 24) * zoom + origin.y + 24,
-      },
+      scrollBounds,
     );
     pending.current = target;
     animate(target);
@@ -144,5 +185,19 @@ export function useGraphCamera(options: GraphCameraOptions) {
     }
     write({ x: 0, y: 0 });
   };
-  return { cancel, changeZoom, pan, fit };
+  return { cancel, changeZoom, pan, fit, moveTo };
+}
+
+function minimapScroll(
+  point: Point,
+  zoom: number,
+  origin: Point,
+  node: HTMLDivElement,
+  bounds: Size,
+): Point {
+  return clampScroll(
+    { x: point.x * zoom + origin.x, y: point.y * zoom + origin.y },
+    { width: node.clientWidth, height: node.clientHeight },
+    bounds,
+  );
 }

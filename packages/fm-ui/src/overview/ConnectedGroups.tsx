@@ -158,6 +158,8 @@ export function ConnectedGroups({
           bounds={bounds}
           windowBox={windowBox}
           viewportSize={scroll}
+          onNavigate={commands.moveTo}
+          onCancel={commands.cancel}
         />
       </div>
     </>
