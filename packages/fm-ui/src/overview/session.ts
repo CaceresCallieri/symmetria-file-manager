@@ -1,4 +1,4 @@
-import type { OverviewEntry } from "@symmetria/fm-core/overview/contract";
+import type { OverviewFolder } from "@symmetria/fm-core/overview/model";
 import { joinPath } from "@symmetria/fm-core/pane";
 import { cancelOverview, readOverview } from "../bridge.ts";
 export const EXCLUSIONS = [
@@ -12,12 +12,6 @@ export const EXCLUSIONS = [
   ".venv",
   "__pycache__",
 ] as const;
-export interface OverviewFolder {
-  readonly path: string;
-  readonly depth: number;
-  readonly entries: readonly OverviewEntry[];
-  readonly status: string;
-}
 export interface OverviewSnapshot {
   readonly folders: ReadonlyMap<string, OverviewFolder>;
   readonly loading: boolean;

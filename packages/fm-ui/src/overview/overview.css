@@ -26,26 +26,137 @@
 .overview-toolbar button {
   margin-left: auto;
 }
-.overview-content {
+.overview-camera-controls {
+  position: absolute;
+  top: 0;
+  right: 100px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.overview button {
+  font: inherit;
+  color: var(--foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.overview button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.overview-toolbar > span {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.overview-popover {
+  position: absolute;
+  top: 20px;
+  padding: 10px;
+  width: 300px;
+  overflow-wrap: anywhere;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  z-index: 30;
+}
+.connected-groups {
   flex: 1;
   overflow: auto;
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  gap: 12px;
-  padding: 12px;
+  position: relative;
+  cursor: grab;
 }
-.overview-content section {
-  width: 240px;
+.overview-canvas {
+  position: relative;
+  transform-origin: 0 0;
+}
+.overview-links {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.overview-edge {
+  fill: var(--muted-foreground);
+  stroke: var(--border);
+}
+.overview-edge path {
+  fill: none;
+}
+.overview-edge.active {
+  stroke: var(--primary);
+  fill: var(--primary);
+}
+.folder-group {
+  position: absolute;
   background: var(--card);
-  padding: 8px;
   border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: default;
+}
+.folder-group header {
+  display: flex;
+  align-items: flex-start;
+  padding: 4px 6px 0;
+  gap: 4px;
+}
+.folder-group .folder-group-name {
+  flex: 1;
+  text-align: left;
+  border: 0;
+  background: var(--card);
+  font-weight: 600;
   overflow-wrap: anywhere;
+  min-width: 0;
 }
-.overview-content h2 {
-  font-size: 13px;
-  margin: 0;
-}
-.overview-content small {
+.folder-ancestors {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: left;
+  padding: 0 8px 5px;
+  font-size: 10px;
   color: var(--muted-foreground);
+}
+.folder-entries {
+  display: grid;
+}
+.folder-group .overview-row {
+  display: flex;
+  gap: 5px;
+  width: 100%;
+  min-height: 24px;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  padding: 3px 8px;
+  background: var(--card);
+}
+.overview-row span:last-child {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.folder-group [data-selected="true"] {
+  background: var(--accent);
+  color: var(--foreground);
+}
+.folder-status {
+  margin: 4px 8px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.folder-load {
+  margin: 4px 8px;
+}
+
+.overview-popover p {
+  margin: 0 0 8px;
+}
+
+.overview-camera-controls details {
+  position: relative;
+}
+.overview-camera-controls .overview-popover {
+  right: 0;
+  max-width: calc(100vw - 24px);
 }

@@ -42,6 +42,8 @@
     "./preview/archive/tar": "./src/preview/archive/tar.ts",
     "./preview/archive/listing": "./src/preview/archive/listing.ts",
     "./listingOptions": "./src/listingOptions.ts",
-    "./overview/contract": "./src/overview/contract.ts"
+    "./overview/contract": "./src/overview/contract.ts",
+    "./overview/layout": "./src/overview/layout.ts",
+    "./overview/model": "./src/overview/model.ts"
   }
 }
