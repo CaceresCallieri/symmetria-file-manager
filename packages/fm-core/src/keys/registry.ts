@@ -396,6 +396,8 @@ export const OVERVIEW_ONLY: readonly Binding[] = [
   overviewBinding("fit", ["f"], "", "Fit loaded graph"),
   overviewBinding("toggle", [" "], "", "Toggle folder"),
   overviewBinding("search", ["/"], "Symbol", "Search loaded paths"),
+  overviewBinding("search-next", ["n"], "", "Next search result"),
+  overviewBinding("search-previous", ["n"], "Shift", "Previous search result"),
   overviewBinding("help", ["?"], "Symbol", "Overview help"),
   overviewBinding("reveal", ["enter"], "", "Reveal in Miller"),
   {

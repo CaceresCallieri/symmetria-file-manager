@@ -22,14 +22,26 @@ export interface GraphCameraOptions {
 import { useCameraAnimation } from "./useOverviewCamera.ts";
 
 export function selectedElement(node: HTMLElement, selected: string): HTMLElement | undefined {
-  const row = [...node.querySelectorAll<HTMLElement>("[data-entry]")].find(
+  const rows = [...node.querySelectorAll<HTMLElement>("[data-entry]")].filter(
     (element) => element.dataset.entry === selected,
   );
-  if (row) return row;
+  const header = [...node.querySelectorAll<HTMLElement>("[data-group]")]
+    .find((element) => element.dataset.group === selected)
+    ?.querySelector<HTMLElement>("[data-basename]");
+  const candidates = header ? [...rows, header] : rows;
+  const viewport = node.getBoundingClientRect();
   return (
-    [...node.querySelectorAll<HTMLElement>("[data-group]")]
-      .find((element) => element.dataset.group === selected)
-      ?.querySelector<HTMLElement>("[data-basename]") ?? undefined
+    candidates.find((element) => {
+      const box = element.getBoundingClientRect();
+      return (
+        box.width > 0 &&
+        box.height > 0 &&
+        box.right > viewport.left &&
+        box.left < viewport.right &&
+        box.bottom > viewport.top &&
+        box.top < viewport.bottom
+      );
+    }) ?? candidates[0]
   );
 }
 export function useGraphCamera(options: GraphCameraOptions) {
@@ -185,7 +197,15 @@ export function useGraphCamera(options: GraphCameraOptions) {
     }
     write({ x: 0, y: 0 });
   };
-  return { cancel, changeZoom, pan, fit, moveTo };
+  const restore = (point: Point) => {
+    cancel();
+    const node = viewport.current;
+    if (node)
+      write(
+        clampScroll(point, { width: node.clientWidth, height: node.clientHeight }, scrollBounds),
+      );
+  };
+  return { cancel, changeZoom, pan, fit, moveTo, restore };
 }
 
 function minimapScroll(

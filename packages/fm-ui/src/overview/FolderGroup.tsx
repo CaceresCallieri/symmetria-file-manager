@@ -6,6 +6,7 @@ import { FileIcon } from "../components/FileIcon.tsx";
 export function FolderGroup({
   group,
   selected,
+  matches,
   collapsed,
   onSelect,
   onToggle,
@@ -14,6 +15,7 @@ export function FolderGroup({
 }: {
   readonly group: GraphGroup;
   readonly selected: string;
+  readonly matches?: ReadonlySet<string>;
   readonly collapsed: boolean;
   readonly onSelect: (path: string) => void;
   readonly onToggle: (path: string) => void;
@@ -49,6 +51,7 @@ export function FolderGroup({
           className="folder-group-name"
           data-basename
           data-selected={selected === group.path}
+          data-search-match={matches?.has(group.path) ?? false}
           onClick={() => onSelect(group.path)}
         >
           <FileIcon name={basename(group.path)} kind="directory" />
@@ -77,6 +80,7 @@ export function FolderGroup({
                 className="overview-row"
                 data-entry={joinPath(group.path, entry.name)}
                 data-selected={selected === joinPath(group.path, entry.name)}
+                data-search-match={matches?.has(joinPath(group.path, entry.name)) ?? false}
                 key={entry.name}
                 onClick={() => onSelect(joinPath(group.path, entry.name))}
               >

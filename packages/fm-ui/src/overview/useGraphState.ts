@@ -1,6 +1,6 @@
 import type { GraphGroup } from "@symmetria/fm-core/overview/layout";
-import type { OverviewFolder } from "@symmetria/fm-core/overview/model";
-import { joinPath, parentOf } from "@symmetria/fm-core/pane";
+import { type OverviewFolder, overviewPaths } from "@symmetria/fm-core/overview/model";
+import { parentOf } from "@symmetria/fm-core/pane";
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { OverviewModel } from "./useOverview.ts";
 
@@ -9,11 +9,7 @@ function survivingSelection(
   root: string,
   selected: string,
 ): string {
-  const paths = new Set<string>([root]);
-  for (const folder of folders.values()) {
-    paths.add(folder.path);
-    for (const entry of folder.entries) paths.add(joinPath(folder.path, entry.name));
-  }
+  const paths = overviewPaths(root, folders);
   let path = selected;
   while (!paths.has(path) && path !== parentOf(path)) path = parentOf(path);
   return paths.has(path) ? path : root;

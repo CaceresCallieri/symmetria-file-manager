@@ -11,6 +11,8 @@ export type OverviewCommand =
   | "fit"
   | "toggle"
   | "search"
+  | "search-next"
+  | "search-previous"
   | "help"
   | "reveal"
   | "toggle-minimap";

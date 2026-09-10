@@ -27,6 +27,7 @@ import { useGraphScene } from "./useGraphScene.ts";
 import { useGraphState, useRememberGraph } from "./useGraphState.ts";
 import type { useOverview } from "./useOverview.ts";
 import type { OverviewPort } from "./useOverviewMode.ts";
+import { useOverviewSearch } from "./useOverviewSearch.ts";
 export function ConnectedGroups({
   root,
   model,
@@ -47,7 +48,6 @@ export function ConnectedGroups({
   const state = useGraphState(root, model);
   const { collapsed, setCollapsed, selected, setSelected, zoom, setZoom, origin, setOrigin } =
     state;
-  const [searchOpen, setSearchOpen] = useState(false);
   const [scroll, sample] = useViewportSample(viewport, extent, state.initial?.scroll);
   const { groups, boxes, onMeasure, rearrange } = useGraphScene(
     model.folders,
@@ -74,7 +74,17 @@ export function ConnectedGroups({
     extent,
     bounds,
     port,
-    search: () => setSearchOpen(true),
+    search: () => search.open(),
+    searchNext: () => search.goNext(),
+    searchPrevious: () => search.goPrevious(),
+  });
+  const search = useOverviewSearch({
+    root,
+    folders: model.folders,
+    selected,
+    viewport,
+    select: commands.select,
+    restore: commands.restore,
   });
   const backgroundDrag = useBackgroundDrag(commands.cancel, sample);
   const controls = (
@@ -91,16 +101,7 @@ export function ConnectedGroups({
   );
   return (
     <>
-      {searchOpen ? (
-        <OverviewSearch
-          model={model}
-          onChoose={commands.select}
-          onClose={() => {
-            setSearchOpen(false);
-            viewport.current?.closest<HTMLElement>('[role="dialog"]')?.focus();
-          }}
-        />
-      ) : null}
+      <OverviewSearch search={search} />
       {renderToolbar(controls)}
       <div className="overview-graph-frame">
         <div
@@ -142,6 +143,7 @@ export function ConnectedGroups({
                   key={group.path}
                   group={group}
                   selected={selected}
+                  matches={search.matches}
                   collapsed={collapsed.has(group.path)}
                   onSelect={commands.select}
                   onToggle={commands.toggle}
@@ -153,6 +155,8 @@ export function ConnectedGroups({
           </div>
         </div>
         <OverviewMinimap
+          matches={search.matches}
+          selected={selected}
           visible={minimapVisible}
           shown={shown}
           bounds={bounds}

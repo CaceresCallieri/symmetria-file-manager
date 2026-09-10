@@ -64,7 +64,7 @@ it("gives search and help Escape precedence over an open Details popover", async
   expect(details?.hasAttribute("open")).toBe(true);
   expect(screen.getByRole("dialog", { name: "Folder overview" })).toBeTruthy();
 });
-it("ignores composition and cycles search backwards without dispatching file operations", async () => {
+it("ignores composition and navigates confirmed search backwards without dispatching file operations", async () => {
   const log = await open();
   const graph = screen.getByTestId("connected-groups");
   fireEvent.keyDown(window, { key: "l", isComposing: true });
@@ -72,11 +72,15 @@ it("ignores composition and cycles search backwards without dispatching file ope
   fireEvent.keyDown(window, { key: "/", shiftKey: true });
   const input = await screen.findByRole("textbox", { name: "Search loaded paths" });
   fireEvent.change(input, { target: { value: "/home/jc/projects/" } });
-  fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
-  expect(graph.dataset.selected).toBe("/home/jc/projects/beta.md");
-  fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
-  expect(graph.dataset.selected).toBe("/home/jc/projects/alpha");
   fireEvent.keyDown(input, { key: "d" });
+  fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+  expect(screen.getByRole("textbox", { name: "Search loaded paths" })).toBe(input);
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(graph.dataset.selected).toBe("/home/jc/projects/alpha");
+  fireEvent.keyDown(window, { key: "N", shiftKey: true });
+  expect(graph.dataset.selected).toBe("/home/jc/projects/beta.md");
+  fireEvent.keyDown(window, { key: "N", shiftKey: true });
+  expect(graph.dataset.selected).toBe("/home/jc/projects/alpha");
   expect(log.ops).toEqual([]);
 });
 it("moves hidden descendant selection to a pointer-collapsed folder", async () => {
@@ -85,7 +89,6 @@ it("moves hidden descendant selection to a pointer-collapsed folder", async () =
   const input = await screen.findByRole("textbox", { name: "Search loaded paths" });
   fireEvent.change(input, { target: { value: "beta.md" } });
   fireEvent.keyDown(input, { key: "Enter" });
-  fireEvent.keyDown(input, { key: "Escape" });
   fireEvent.click(screen.getByRole("button", { name: "Collapse projects" }));
   expect(screen.getByTestId("connected-groups").dataset.selected).toBe("/home/jc/projects");
   fireEvent.keyDown(window, { key: " " });

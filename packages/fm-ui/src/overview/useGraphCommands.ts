@@ -4,7 +4,8 @@ import {
   moveSelection,
   type OverviewCommand,
 } from "@symmetria/fm-core/overview/navigation";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import type { Point } from "@symmetria/fm-core/overview/viewport";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { type GraphCameraOptions, selectedElement, useGraphCamera } from "./useGraphCamera.ts";
 import type { useOverview } from "./useOverview.ts";
 import type { OverviewPort } from "./useOverviewMode.ts";
@@ -17,27 +18,43 @@ interface GraphCommandOptions extends GraphCameraOptions {
   setCollapsed: (value: Set<string>) => void;
   port: OverviewPort | undefined;
   search: () => void;
+  searchNext: () => void;
+  searchPrevious: () => void;
 }
 export function useGraphCommands(options: GraphCommandOptions) {
   const { viewport, selected, zoom, model, root, collapsed, setCollapsed, setSelected } = options;
   const pendingChild = useRef<string | null>(null);
   const camera = useGraphCamera(options);
   const { cancel, changeZoom, pan, fit } = camera;
-  const previousSelection = useRef(selected);
+  const [request, setRequest] = useState<{ path: string; restore?: Point } | null>(null);
+  const applied = useRef<typeof request>(null);
+  const choose = (path: string) => {
+    setSelected(path);
+    setRequest({ path });
+  };
   useLayoutEffect(() => {
-    if (previousSelection.current === selected) return;
-    previousSelection.current = selected;
     const node = viewport.current;
-    if (node)
-      selectedElement(node, selected)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-  }, [selected, viewport]);
+    if (!request || applied.current === request || selected !== request.path || !node) return;
+    applied.current = request;
+    if (request.restore) {
+      camera.restore(request.restore);
+    } else {
+      selectedElement(node, selected)?.scrollIntoView?.({
+        block: "nearest",
+        inline: "nearest",
+        behavior: "instant",
+      });
+    }
+  });
   useEffect(() => {
     const path = pendingChild.current;
     if (path === null) return;
     const folder = model.folders.get(path);
     if (!folder || folder.status === "Loading" || folder.status === "Queued") return;
     pendingChild.current = null;
-    setSelected(moveSelection(model.folders, root, path, "right"));
+    const next = moveSelection(model.folders, root, path, "right");
+    setSelected(next);
+    setRequest({ path: next });
   }, [model.folders, root, setSelected]);
   const expand = (path: string) => {
     const next = new Set(collapsed);
@@ -56,7 +73,7 @@ export function useGraphCommands(options: GraphCommandOptions) {
         return;
       }
     }
-    setSelected(moveSelection(model.folders, root, selected, direction));
+    choose(moveSelection(model.folders, root, selected, direction));
   };
   const toggle = (path: string) => {
     const folder = model.folders.get(path);
@@ -68,7 +85,7 @@ export function useGraphCommands(options: GraphCommandOptions) {
       if (unopened) model.include(path);
     } else {
       next.add(path);
-      if (isAncestorPath(path, selected)) setSelected(path);
+      if (isAncestorPath(path, selected)) choose(path);
     }
     setCollapsed(next);
   };
@@ -79,6 +96,8 @@ export function useGraphCommands(options: GraphCommandOptions) {
     ["fit", fit],
     ["toggle", () => toggle(selected)],
     ["search", options.search],
+    ["search-next", options.searchNext],
+    ["search-previous", options.searchPrevious],
     ["reveal", () => options.port?.reveal(selected)],
   ]);
   const run = (command: OverviewCommand) => {
@@ -97,11 +116,18 @@ export function useGraphCommands(options: GraphCommandOptions) {
     moveTo: camera.moveTo,
     cancel,
     toggle,
-    select: (path: string) => {
+    restore: (path: string, point: Point) => {
       cancel();
       pendingChild.current = null;
       expand(path);
       setSelected(path);
+      setRequest({ path, restore: point });
+    },
+    select: (path: string) => {
+      cancel();
+      pendingChild.current = null;
+      expand(path);
+      choose(path);
     },
   };
 }

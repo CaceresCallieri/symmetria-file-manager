@@ -43,7 +43,8 @@
   white-space: nowrap;
 }
 /* Keep actions visible when Retry and the minimap toggle share a narrow toolbar. */
-.overview-toolbar > strong {
+.overview-toolbar > strong,
+.overview-search-query {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -197,22 +198,49 @@
 }
 .overview-search {
   position: absolute;
-  top: 32px;
-  left: 8px;
-  right: 8px;
+  bottom: 16px;
+  left: var(--toolbar-inset);
+  max-width: calc(100% - 32px);
   z-index: 25;
-  background: var(--popover);
-  padding: 6px;
   display: flex;
-  gap: 8px;
   align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--popover);
+  box-shadow: 0 0 0 1px var(--border);
+  font-size: 12px;
 }
-.overview-search input {
-  flex: 1;
+.overview-search .search {
+  min-width: 0;
+  width: min(520px, calc(100vw - 90px));
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.overview-search .search__field {
+  min-width: 40px;
+}
+.overview-search-count {
+  white-space: nowrap;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.folder-group [data-search-match="true"] {
+  background: var(--search-match);
   color: var(--foreground);
-  background: var(--background);
-  border: 1px solid var(--border);
-  padding: 4px;
+}
+.folder-group [data-selected="true"] {
+  background: var(--accent);
+}
+.minimap-search-matches circle {
+  fill: var(--muted-foreground);
+}
+.minimap-search-matches [data-current="true"] {
+  fill: var(--foreground);
+  stroke: var(--background);
+  stroke-width: 1;
 }
 .overview-help {
   z-index: 30;

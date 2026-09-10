@@ -206,3 +206,22 @@ it("re-clamps a pending map target when graph bounds grow", () => {
   act(() => vi.advanceTimersByTime(200));
   expect(viewport.scrollTop).toBe(2000);
 });
+
+it("clamps restored search offsets when the graph shrinks", () => {
+  const viewport = document.createElement("div");
+  Object.defineProperties(viewport, { clientWidth: { value: 800 }, clientHeight: { value: 600 } });
+  const { result } = renderHook(() =>
+    useGraphCamera({
+      viewport: { current: viewport },
+      extent: { current: null },
+      selected: "/root",
+      zoom: 1,
+      setZoom: () => undefined,
+      origin: { x: 0, y: 0 },
+      setOrigin: () => undefined,
+      bounds: { width: 900, height: 650 },
+    }),
+  );
+  act(() => result.current.restore({ x: 200, y: 300 }));
+  expect([viewport.scrollLeft, viewport.scrollTop]).toEqual([100, 50]);
+});

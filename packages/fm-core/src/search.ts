@@ -26,12 +26,20 @@ import type { FsEntry } from "./entry.ts";
  * otherwise be the same state, and the second one lights the whole column up.
  */
 export function computeMatches(entries: readonly FsEntry[], query: string): number[] {
+  return computeTextMatches(entries, query, (entry) => entry.name);
+}
+
+/** Match host-provided text without requiring filesystem metadata. */
+export function computeTextMatches<T>(
+  entries: readonly T[],
+  query: string,
+  textOf: (entry: T) => string,
+): number[] {
   const needle = query.trim().toLowerCase();
   if (needle === "") return [];
-
   const found: number[] = [];
   entries.forEach((entry, index) => {
-    if (entry.name.toLowerCase().includes(needle)) found.push(index);
+    if (textOf(entry).toLowerCase().includes(needle)) found.push(index);
   });
   return found;
 }
@@ -43,7 +51,7 @@ export function computeMatches(entries: readonly FsEntry[], query: string): numb
  * turns one into the other. `-1` means "not on a match yet", which is where a
  * fresh search starts and where an empty match list stays.
  */
-export function nextMatch(matches: readonly number[], position: number): number {
+export function nextMatch<T>(matches: readonly T[], position: number): number {
   if (matches.length === 0) return -1;
   // From "not on a match", forward means the first one.
   if (position < 0) return 0;
@@ -51,7 +59,7 @@ export function nextMatch(matches: readonly number[], position: number): number 
 }
 
 /** The previous position in the match list, wrapping. */
-export function previousMatch(matches: readonly number[], position: number): number {
+export function previousMatch<T>(matches: readonly T[], position: number): number {
   if (matches.length === 0) return -1;
   // From "not on a match", backward means the LAST one — the same wrap a
   // reverse step makes from the first. Handled explicitly rather than left to

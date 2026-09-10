@@ -12,11 +12,13 @@ import {
   type PointerEvent,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
 import { OverviewLinks } from "./OverviewLinks.tsx";
+import { useMinimapMatches } from "./useOverviewSearch.ts";
 
 const MinimapGeometry = memo(function MinimapGeometry({
   shown,
@@ -50,7 +52,11 @@ const MinimapGeometry = memo(function MinimapGeometry({
   );
 });
 
+const NO_MATCHES: ReadonlySet<string> = new Set();
+
 export function OverviewMinimap({
+  matches = NO_MATCHES,
+  selected = "",
   visible,
   shown,
   bounds,
@@ -59,6 +65,8 @@ export function OverviewMinimap({
   onNavigate,
   onCancel,
 }: {
+  readonly matches?: ReadonlySet<string>;
+  readonly selected?: string;
   readonly shown: readonly GraphGroup[];
   readonly bounds: Box;
   readonly windowBox: Box;
@@ -67,6 +75,11 @@ export function OverviewMinimap({
   readonly onNavigate: (point: Point, animated: boolean) => (() => void) | undefined;
   readonly onCancel: () => void;
 }) {
+  const descriptionId = useId();
+  const counts = useMinimapMatches(shown, matches, selected);
+  const description = [...counts]
+    .map(([path, result]) => `${path}: ${result.count}${result.current ? " (current result)" : ""}`)
+    .join("; ");
   const { width, height } = viewportSize;
   const { width: graphWidth, height: graphHeight } = bounds;
   const projection = useMemo(
@@ -83,15 +96,42 @@ export function OverviewMinimap({
         className="overview-minimap"
         role="img"
         aria-label="Folder overview minimap"
+        aria-describedby={descriptionId}
         width={projection.width}
         height={projection.height}
         viewBox={`0 0 ${projection.width} ${projection.height}`}
       >
         <title>Folder overview minimap</title>
+        <desc id={descriptionId}>
+          {matches.size} matching paths in {counts.size} groups. {description}
+        </desc>
         <g
           transform={`translate(${projection.offset.x} ${projection.offset.y}) scale(${projection.scale})`}
         >
           <MinimapGeometry shown={shown} bounds={bounds} />
+        </g>
+        <g className="minimap-search-matches" pointerEvents="none">
+          {shown.flatMap((group) => {
+            const result = counts.get(group.path);
+            return result
+              ? [
+                  <circle
+                    key={group.path}
+                    data-minimap-match-group={group.path}
+                    data-minimap-matches={result.count}
+                    data-current={result.current}
+                    cx={projection.offset.x + (group.x + group.width / 2) * projection.scale}
+                    cy={projection.offset.y + (group.y + group.height / 2) * projection.scale}
+                    r={result.current ? 3 : 2}
+                  >
+                    <title>
+                      {group.path}: {result.count} matching paths
+                      {result.current ? ", current result" : ""}
+                    </title>
+                  </circle>,
+                ]
+              : [];
+          })}
         </g>
         <rect
           data-minimap-viewport=""

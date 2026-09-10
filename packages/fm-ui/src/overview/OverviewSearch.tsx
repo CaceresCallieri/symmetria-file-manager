@@ -1,61 +1,43 @@
-import { joinPath } from "@symmetria/fm-core/pane";
-import { useEffect, useRef, useState } from "react";
-import type { useOverview } from "./useOverview.ts";
+import { SearchField } from "../components/SearchField.tsx";
+import type { useOverviewSearch } from "./useOverviewSearch.ts";
+
 export function OverviewSearch({
-  model,
-  onChoose,
-  onClose,
+  search,
 }: {
-  readonly model: ReturnType<typeof useOverview>;
-  readonly onChoose: (path: string) => void;
-  readonly onClose: () => void;
+  readonly search: ReturnType<typeof useOverviewSearch>;
 }) {
-  const [query, setQuery] = useState("");
-  const input = useRef<HTMLInputElement>(null);
-  const position = useRef(-1);
-  useEffect(() => input.current?.focus(), []);
-  const paths = [
-    ...new Set(
-      [...model.folders.values()].flatMap((folder) => [
-        folder.path,
-        ...folder.entries.map((entry) => joinPath(folder.path, entry.name)),
-      ]),
-    ),
-  ]
-    .filter((path) => path.toLowerCase().includes(query.toLowerCase()))
-    .sort();
+  if (!search.active && search.query === "") return null;
+  const count = (
+    <span role="status" aria-label="Search results" className="overview-search-count">
+      {search.position} / {search.matchCount} · loaded paths
+    </span>
+  );
   return (
-    <div className="overview-search">
-      <input
-        ref={input}
-        aria-label="Search loaded paths"
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          position.current = -1;
-        }}
-        onKeyDown={(event) => {
-          event.stopPropagation();
-          if (event.nativeEvent.isComposing) return;
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onClose();
-          }
-          if (event.key === "Enter" && paths.length) {
-            event.preventDefault();
-            position.current =
-              ((position.current < 0 && event.shiftKey ? 0 : position.current) +
-                (event.shiftKey ? -1 : 1) +
-                paths.length) %
-              paths.length;
-            const path = paths[position.current];
-            if (path) onChoose(path);
-          }
-        }}
-      />
-      <span>{paths.length} matches in loaded paths</span>
-      <button type="button" onClick={onClose}>
-        Close search
+    <div className="overview-search" data-editing={search.active}>
+      {search.active ? (
+        <SearchField
+          query={search.query}
+          matchCount={search.matchCount}
+          label="Search loaded paths"
+          count={count}
+          onChange={search.setQuery}
+          onConfirm={search.confirm}
+          onCancel={search.cancel}
+        />
+      ) : (
+        <>
+          <span className="overview-search-query" title={search.query}>
+            /{search.query}
+          </span>
+          {count}
+        </>
+      )}
+      <button
+        type="button"
+        onClick={search.active ? search.cancel : search.clear}
+        aria-label={search.active ? "Cancel search" : "Clear search"}
+      >
+        ×
       </button>
     </div>
   );
