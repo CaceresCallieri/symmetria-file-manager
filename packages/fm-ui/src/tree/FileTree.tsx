@@ -82,7 +82,12 @@ export function FileTree({
     port,
     motion.cancel,
   );
+  const interrupt = () => {
+    record.pendingReveal = null;
+    motion.cancel();
+  };
   const command = (name: TreeCommand) => {
+    record.pendingReveal = null;
     if (name === "search") {
       motion.cancel();
       search.open();
@@ -127,6 +132,7 @@ export function FileTree({
         labelId={labelId}
         onMiller={onMiller}
         preset={(value) => {
+          interrupt();
           reset();
           state.preset(value);
         }}
@@ -154,8 +160,8 @@ export function FileTree({
           data-root={root}
           data-row-count={rows.length}
           onScroll={motion.onScroll}
-          onWheel={motion.cancel}
-          onPointerDown={motion.cancel}
+          onWheel={interrupt}
+          onPointerDown={interrupt}
         >
           <div
             className="tree-canvas"
@@ -178,7 +184,10 @@ export function FileTree({
                     viewport?.focus({ preventScroll: true });
                   }}
                   activate={() => activate(item.index)}
-                  toggle={() => toggle(row.path)}
+                  toggle={() => {
+                    interrupt();
+                    toggle(row.path);
+                  }}
                   include={() => model.include(row.path)}
                 />
               ) : null;

@@ -34,11 +34,13 @@ it("keeps a collapsed selected folder and the custom checkpoint through Miller r
   await openTree();
   fireEvent.click(treeRow("/home/jc/src"));
   treeKey("h");
-  treeKey("e", true);
+  treeKey("Escape");
+  expect(screen.queryByRole("tree")).toBeNull();
   treeKey("e", true);
   await waitFor(() => expect(treeRow("/home/jc/src").getAttribute("aria-expanded")).toBe("false"));
   fireEvent.click(screen.getByRole("button", { name: "Expand project" }));
-  treeKey("e", true);
+  treeKey("Escape");
+  expect(screen.queryByRole("tree")).toBeNull();
   treeKey("e", true);
   expect(
     screen.getByRole<HTMLButtonElement>("button", { name: "Restore my expansion" }).disabled,
@@ -64,26 +66,17 @@ it("brings an initial offscreen Miller selection into the tree viewport", async 
   expect(tree.scrollTop).toBeGreaterThan(2000);
 });
 
-it("returns to a pending same-parent Miller reveal before its listing finishes", async () => {
+it("closes without requesting a Miller reveal and restores the tree cursor", async () => {
   const log = await openTree();
   fireEvent.click(treeRow("/home/jc/notes.txt"));
-  const original = log.list.getMockImplementation();
-  let finish: (() => void) | undefined;
-  log.list.mockImplementationOnce(
-    (request) =>
-      new Promise((resolve) => {
-        finish = () => {
-          if (original) void original(request).then(resolve);
-        };
-      }),
-  );
-  treeKey("e", true);
+  const reads = log.list.mock.calls.length;
+  treeKey("Escape");
+  expect(screen.queryByRole("tree")).toBeNull();
+  expect(log.list).toHaveBeenCalledTimes(reads);
   treeKey("e", true);
   await waitFor(() =>
     expect(treeRow("/home/jc/notes.txt").getAttribute("aria-selected")).toBe("true"),
   );
-  await act(async () => finish?.());
-  expect(treeRow("/home/jc/notes.txt").getAttribute("aria-selected")).toBe("true");
 });
 
 it("cancels animated paging when Left selects an offscreen parent", async () => {

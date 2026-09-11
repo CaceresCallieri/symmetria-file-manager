@@ -9,10 +9,10 @@ async function open() {
   installBridge();
   render(<App startPath="/home/jc" />);
   await waitFor(() => expect(namesIn("column-current")).toContain("projects"));
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   return screen.findByRole("dialog", { name: "Folder overview" });
 }
-it("opens the current Miller directory with Shift+O", async () => {
+it("opens the current Miller directory with Ctrl+O", async () => {
   const panel = await open();
   expect(panel.getAttribute("data-root")).toBe("/home/jc");
 });
@@ -35,7 +35,7 @@ it("labels a truncated directory as a partial subset", async () => {
     })),
   });
   render(<App startPath="/home/jc" />);
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   expect(await screen.findByText(/partial sorted subset/i)).toBeTruthy();
 });
 it("cancels only overview request IDs on close", async () => {
@@ -46,7 +46,7 @@ it("cancels only overview request IDs on close", async () => {
     overview: vi.fn(() => new Promise(() => undefined)),
   });
   render(<App startPath="/home/jc" />);
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   await screen.findByRole("dialog", { name: "Folder overview" });
   fireEvent.keyDown(window, { key: "Escape" });
   expect(cancel).toHaveBeenCalledWith({ streamId: expect.stringMatching(/^overview:/) });
@@ -71,7 +71,7 @@ it("does not offer or activate the overview in a picker", async () => {
       }}
     />,
   );
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   expect(screen.queryByRole("dialog", { name: "Folder overview" })).toBeNull();
   // The normal browse entry point must exist, so an absent feature cannot pass this spec.
   cleanup();

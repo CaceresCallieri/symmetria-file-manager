@@ -48,7 +48,7 @@ async function open() {
   if (!bridge) throw new Error("missing bridge");
   const overviewReads = vi.spyOn(bridge, "overview");
   render(<App startPath="/home/jc" />);
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   await screen.findByTestId("connected-groups");
   await waitFor(() => expect(screen.queryByText("Loading…")).toBeNull());
   return { ...log, overviewReads };
@@ -87,7 +87,7 @@ it("remembers visibility through close, reopen, and a focused root", async () =>
   expect(map()).toBeTruthy();
   fireEvent.keyDown(window, { key: "m", altKey: true });
   fireEvent.keyDown(window, { key: "Escape" });
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   await screen.findByTestId("connected-groups");
   expect(screen.queryByRole("img", { name: "Folder overview minimap" })).toBeNull();
   fireEvent.keyDown(window, { key: "l" });

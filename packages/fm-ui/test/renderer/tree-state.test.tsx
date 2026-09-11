@@ -68,33 +68,34 @@ it("anchors a surviving path across an insertion and retains a manually collapse
   expect(log.open).not.toHaveBeenCalled();
 });
 
-it("round trips selected paths through Miller while retaining the original tree root", async () => {
+it("restores Miller on Escape and retains the tree cursor on reentry", async () => {
   await openTree();
   fireEvent.click(treeRow("/home/jc/src/beta.ts"));
-  control("e");
-  await waitFor(() => expect(screen.getByTestId("path-bar").textContent).toContain("src"));
+  treeKey("Escape");
+  expect(screen.queryByRole("tree")).toBeNull();
+  expect(screen.getByTestId("path-bar").textContent).not.toContain("src");
   control("e");
   const tree = await screen.findByRole("tree");
   expect(tree.dataset.root).toBe("/home/jc");
   await waitFor(() =>
     expect(treeRow("/home/jc/src/beta.ts").getAttribute("aria-selected")).toBe("true"),
   );
-  control("e");
+  treeKey("Escape");
   treeKey("h");
   control("e");
-  expect((await screen.findByRole("tree")).dataset.root).toBe("/home/jc");
+  expect((await screen.findByRole("tree")).dataset.root).toBe("/home");
 });
 
 it("returns from tree-origin overview and reveals into tree without host activation", async () => {
   const log = await openTree();
   fireEvent.click(treeRow("/home/jc/src"));
   treeKey("h");
-  shift("O");
+  control("o");
   const overview = await screen.findByRole("dialog", { name: "Folder overview" });
   expect(overview.dataset.root).toBe("/home/jc");
   treeKey("Escape");
   expect(treeRow("/home/jc/src").getAttribute("aria-expanded")).toBe("false");
-  shift("O");
+  control("o");
   await screen.findByRole("dialog", { name: "Folder overview" });
   const file = document.querySelector<HTMLElement>('[data-entry="/home/jc/src/beta.ts"]');
   if (!file) throw new Error("Missing overview file target");

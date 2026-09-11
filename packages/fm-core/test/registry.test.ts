@@ -148,6 +148,7 @@ describe("view scoping", () => {
     expect(CORE).toHaveLength(28);
     // The connected overview adds one binding to the ported table.
     expect(MILLER_ONLY).toHaveLength(21);
-    expect(TREE_ONLY).toHaveLength(9);
+    // Tree adds a mode close binding on Escape.
+    expect(TREE_ONLY).toHaveLength(10);
   });
 });

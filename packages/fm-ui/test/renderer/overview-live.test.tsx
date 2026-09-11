@@ -9,7 +9,7 @@ async function open() {
   const log = installBridge();
   const reads = vi.spyOn(window.symmetriaFm!, "overview");
   render(<App startPath="/home/jc" />);
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   await screen.findByText("beta.md");
   await waitFor(() => expect(screen.queryByText("Loading…")).toBeNull());
   return { log, reads };
@@ -40,7 +40,7 @@ it("paints cached rows before a deferred revalidation completes", async () => {
   await open();
   fireEvent.keyDown(window, { key: "Escape" });
   Object.assign(window.symmetriaFm!, { overview: () => new Promise(() => undefined) });
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   expect(screen.getByText("beta.md")).toBeTruthy();
   expect(screen.getByText(/Refreshing/)).toBeTruthy();
 });
@@ -53,7 +53,7 @@ it("shows failed watch coverage and an explicit refresh action", async () => {
     }),
   });
   render(<App startPath="/home/jc" />);
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   await screen.findByText(/Live updates unavailable/);
   expect(screen.getByRole("button", { name: "Refresh overview" })).toBeTruthy();
 });
@@ -81,7 +81,7 @@ it("restores the cached camera before revalidation returns", async () => {
   fireEvent.scroll(viewport);
   fireEvent.keyDown(window, { key: "Escape" });
   Object.assign(window.symmetriaFm ?? {}, { overview: () => new Promise(() => undefined) });
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   const restored = screen.getByTestId("connected-groups");
   expect(restored.scrollLeft).toBe(140);
   expect(restored.scrollTop).toBe(90);
@@ -96,14 +96,14 @@ it("Refresh retries an unreadable cached branch after permissions recover", asyn
     error: { code: "scan_failed", message: "EACCES" },
   });
   render(<App startPath="/home/jc" />);
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   await screen.findByText("Unreadable: EACCES");
   read.mockImplementation(original);
   fireEvent.click(screen.getByRole("button", { name: "Refresh snapshot", hidden: true }));
   await screen.findByText("beta.md");
   fireEvent.keyDown(window, { key: "Escape" });
   read.mockResolvedValue({ ok: false, error: { code: "scan_failed", message: "EACCES" } });
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   await waitFor(() => expect(screen.getAllByText("Unreadable: EACCES").length).toBeGreaterThan(1));
   read.mockImplementation(original);
   log.addEntry("/home/jc/projects", "recovered.txt");

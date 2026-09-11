@@ -203,6 +203,7 @@ export interface KeyActions {
 
 /** What a binding is handed. */
 export interface KeyContext {
+  readonly tree?: { close(): void };
   readonly overview?: {
     toggle(): void;
     command?(name: OverviewCommand): void;
@@ -218,7 +219,7 @@ export interface KeyContext {
  *
  * `when()` gates EXECUTION only. A false `when()` reports "not consumed" so the
  * key falls through to whatever handles it next — that is what preserves the
- * `n`/`N` guards and lets Escape propagate out of the tree. It does NOT hide the
+ * `n`/`N` guards. It does NOT hide the
  * row from the help sheet; view scoping is by membership in `CORE`,
  * `MILLER_ONLY` or `TREE_ONLY`.
  */

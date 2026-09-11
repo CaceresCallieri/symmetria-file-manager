@@ -37,4 +37,12 @@ The represented counts exclude the synthetic root row. Inspected counts can exce
 
 Build the committed branch with pnpm install --frozen-lockfile and pnpm --filter @symmetria/fm-app build, then start it with a separate SYMMETRIA_FM_SOCKET. No daily service needs a restart.
 
-Use Ctrl+E to enter the tree. Check / search through collapsed folders, Enter to confirm, n/N to cycle, and Clear search to remove temporary expansion. Use s and type a filename prefix, then its inline label. Check the native font baseline, dimmed suffix, cancellation on scrolling, and the 150-key navigation behavior at the laptop's display scale. These server measurements do not replace that display-specific evaluation.
+Use Ctrl+E to enter the tree and Escape to return to Miller without moving its selection. Ctrl+E inside the tree keeps it open. Check / search through collapsed folders, Enter to confirm, n/N to cycle, and Clear search to remove temporary expansion. Use s and type a filename prefix, then its inline label. Check the native font baseline, dimmed suffix, cancellation on scrolling, and the 150-key navigation behavior at the laptop's display scale. These server measurements do not replace that display-specific evaluation.
+
+## Tree navigation during discovery
+
+The tree now reads directories at depths zero through five automatically. It represents depth-six directories with a depth-limit status. Include can read a boundary directory. Overview still reads depths zero through seven. The shared directory session keys its cache by automatic depth, so an overview visit does not change the tree's scope. Entry, directory, watch and concurrency budgets remain unchanged.
+
+The fixture measurements above describe the earlier depth-eight tree build. They are not new measurements for the depth-six tree.
+
+An initial Miller selection remains pending until discovery settles, unless the user navigates, searches, starts flash, scrolls with the wheel, or changes expansion. These actions cancel the pending reveal. Discovery cannot reapply the initial Miller selection afterward. When discovery interrupts page animation, the tree settles on the selected path at its new row position.

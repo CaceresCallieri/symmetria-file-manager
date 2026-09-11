@@ -32,7 +32,9 @@ it("supports the complete structural keyboard table without leaving the root", a
   expect(selected()?.dataset.path).toBe("/home/jc/src");
   expect(fireEvent.keyDown(screen.getByRole("tree"), { key: "Tab" })).toBe(true);
   treeKey("Escape");
-  expect(screen.getByRole("tree")).toBeTruthy();
+  expect(screen.queryByRole("tree")).toBeNull();
+  treeKey("e", true);
+  await screen.findByRole("tree");
   fireEvent.keyDown(window, { key: "H", shiftKey: true });
   await waitFor(() => expect(treeRow("/home/jc/.hidden")).toBeTruthy());
   const reads = log.overview.mock.calls.length;

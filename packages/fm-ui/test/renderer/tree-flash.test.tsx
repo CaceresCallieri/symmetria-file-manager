@@ -87,7 +87,9 @@ it("does not label horizontally clipped names and cancels on view shortcuts", as
   treeKey("n");
   treeKey("o");
   expect(document.querySelectorAll("[data-flash-label]")).toHaveLength(0);
-  treeKey("e", true);
-  expect(screen.queryByRole("tree")).toBeNull();
+  treeKey("Escape");
+  expect(screen.getByRole("tree")).toBeTruthy();
   expect(screen.queryByRole("status", { name: "Flash navigation" })).toBeNull();
+  treeKey("Escape");
+  expect(screen.queryByRole("tree")).toBeNull();
 });

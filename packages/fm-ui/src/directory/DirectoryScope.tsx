@@ -24,8 +24,8 @@ export function DirectoryScope({ model }: { model: OverviewModel }) {
           Refresh
         </button>
         <p>
-          Depth {OVERVIEW_LIMITS.automaticDepth} · 5,000 entries · {OVERVIEW_LIMITS.directoryReads}{" "}
-          directories
+          Depth {model.automaticDepth ?? OVERVIEW_LIMITS.automaticDepth} · 5,000 entries ·{" "}
+          {OVERVIEW_LIMITS.directoryReads} directories
         </p>
         <p>At most 1,000 entries per directory. Counts describe inspected contents.</p>
         <p>Excluded: {EXCLUSIONS.join(", ")}</p>

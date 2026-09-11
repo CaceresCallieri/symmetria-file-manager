@@ -10,8 +10,6 @@ export function BrowsingView({
   tree,
   model,
   onOpen,
-  toggleView,
-  pickerActive,
   matches,
   preview,
   onActivate,
@@ -21,8 +19,6 @@ export function BrowsingView({
   tree: ReturnType<typeof useTreeMode>;
   model: OverviewModel;
   onOpen(path: string): void;
-  toggleView(): void;
-  pickerActive: boolean;
   matches: ReadonlySet<number>;
   preview: NonNullable<MillerColumnsProps["preview"]>;
   onActivate(index: number): void;
@@ -37,18 +33,13 @@ export function BrowsingView({
         model={model}
         port={tree.port}
         onOpen={onOpen}
-        onMiller={toggleView}
+        onMiller={tree.close}
       />
     );
   return (
     <>
       <div className="view-control">
         <PathBar path={tabs.pane.path} onNavigate={tabs.navigate} />
-        {!pickerActive ? (
-          <button type="button" aria-label="Show file tree" onClick={toggleView}>
-            Tree · Ctrl+E
-          </button>
-        ) : null}
       </div>
       <MillerColumns
         path={tabs.pane.path}

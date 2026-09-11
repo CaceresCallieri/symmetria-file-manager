@@ -315,7 +315,7 @@ export const CORE: readonly Binding[] = [
     keys: ["e"],
     mods: "Ctrl",
     keycap: "⌃e",
-    label: "Toggle Miller / tree view",
+    label: "Open file tree",
     when: (ctx) => !ctx.state.picker.active,
     icon: "account_tree",
     group: "View",
@@ -415,8 +415,8 @@ export const OVERVIEW_ONLY: readonly Binding[] = [
   {
     id: "overview.toggle",
     keys: ["o"],
-    mods: "Shift",
-    keycap: "Shift+O",
+    mods: "Ctrl",
+    keycap: "Ctrl+O",
     label: "Close overview",
     icon: "close",
     group: "View",
@@ -427,8 +427,8 @@ export const MILLER_ONLY: readonly Binding[] = [
   {
     id: "miller.overview",
     keys: ["o"],
-    mods: "Shift",
-    keycap: "Shift+O",
+    mods: "Ctrl",
+    keycap: "Ctrl+O",
     label: "Folder overview",
     icon: "account_tree",
     group: "View",
@@ -492,9 +492,8 @@ export const MILLER_ONLY: readonly Binding[] = [
     run: (ctx) => ctx.actions.jumpDirectoryFileBoundary(),
   },
   {
-    // Swallowing a stray Escape is Miller-only ON PURPOSE. The tree has no such
-    // row so Escape propagates to the host's close-window handling, which is
-    // what an embedded sidebar needs.
+    // Miller consumes a stray Escape. Project modes close through their own
+    // binding, without propagating Escape to the host window handler.
     id: "miller.escapeSwallow",
     keys: ["escape"],
     mods: "",
@@ -666,13 +665,18 @@ export const MILLER_ONLY: readonly Binding[] = [
 
 // ── TREE_ONLY ───────────────────────────────────────────────────────────────
 
-/**
- * Ported now, unreachable until the tree view exists.
- *
- * Porting them with the rest keeps one table rather than two, and means the
- * collision and help-metadata tests cover them from the start.
- */
+/** Tree mode bindings share the dispatch and help registry with overview. */
 export const TREE_ONLY: readonly Binding[] = [
+  {
+    id: "tree.close",
+    keys: ["escape"],
+    mods: "",
+    keycap: "Esc",
+    label: "Close file tree",
+    icon: "close",
+    group: "View",
+    run: (ctx) => ctx.tree?.close(),
+  },
   {
     id: "tree.first",
     keys: ["home"],
@@ -797,6 +801,7 @@ const TREE_MILLER = new Set([
   "miller.tabNextCtrl",
 ]);
 const TREE_SUPPORTED = new Set([
+  "tree.close",
   "tree.collapseOrParent",
   "tree.expandOrActivate",
   "tree.toggleExpand",

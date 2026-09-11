@@ -47,7 +47,7 @@ async function open() {
   await waitFor(() =>
     expect(screen.getByTestId("column-current").textContent).toContain("projects"),
   );
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   await screen.findByTestId("connected-groups");
   await waitFor(() => expect(screen.queryByText("Loading…")).toBeNull());
   return { ...log, reads };
@@ -217,7 +217,7 @@ it("resets captured targets when the overview closes", async () => {
   await open();
   await flash("beta");
   fireEvent.click(screen.getByRole("button", { name: "Close · Esc" }));
-  key("O");
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   await screen.findByTestId("connected-groups");
   expect(screen.queryByRole("status", { name: "Flash navigation" })).toBeNull();
   key("s");

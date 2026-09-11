@@ -40,10 +40,14 @@ export function useTreeState(root: string, model: OverviewModel, record: TreeRec
           ),
     [baseRows, root, model.folders, collapsed, temporaryPath],
   );
-  const select = (path: string) =>
+  const select = (path: string) => {
+    // Initial reveals survive discovery insertions only until the user acts.
+    // Keeping one after navigation reapplied the Miller cursor on every batch.
+    record.pendingReveal = null;
     setShape((previous) =>
       previous.selected === path ? previous : { ...previous, selected: path },
     );
+  };
   const reveal = (path: string) => {
     record.pendingReveal = path;
     setShape((previous) =>

@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { useCameraAnimation } from "../overview/useOverviewCamera.ts";
 import type { TreeRow } from "./model.ts";
-import { type TreeRecord, visibleFallback } from "./state.ts";
+import { type TreeAnchor, type TreeRecord, visibleFallback } from "./state.ts";
 
 const TREE_ROW_HEIGHT = 24;
 type Point = { x: number; y: number };
@@ -43,9 +43,10 @@ export function useTreeNavigation(
     if (!viewport) return;
     const oldRows = previousRows.current;
     if (oldRows === rows) return;
+    const followCursor = shouldFollowCursor(pending.current !== null, selected, oldRows, viewport);
     cancel();
     const anchor = record.anchor;
-    if (loading && anchor && !rows.some((row) => row.path === anchor.path)) return;
+    if (awaitingAnchor(anchor, rows, loading)) return;
     previousRows.current = rows;
     if (anchor) {
       const path = visibleFallback(anchor.path, rows, oldRows);
@@ -54,12 +55,19 @@ export function useTreeNavigation(
         y: rows.findIndex((row) => row.path === path) * TREE_ROW_HEIGHT + anchor.offset,
       });
     }
+    // Discovery changes row indices. Keep a previously visible cursor visible,
+    // and finish interrupted paging at its path. Preserve manual scrolling when
+    // the cursor was already outside the viewport before the discovery batch.
+    if (followCursor) {
+      const index = rows.findIndex((row) => row.path === selected);
+      write(visiblePoint(read(), index, viewport.clientHeight, rows.length));
+    }
     if (!loading && !rows.some((row) => row.path === selected)) {
       const fallback = visibleFallback(selected, rows, oldRows);
       previousSelected.current = fallback;
       select(fallback);
     }
-  }, [rows, viewport, selected, select, loading, record, cancel, write]);
+  }, [rows, viewport, selected, select, loading, record, cancel, write, read]);
   useLayoutEffect(() => {
     const requested = record.pendingReveal;
     // Discovery can insert rows above an already represented target. Keep the
@@ -163,4 +171,23 @@ function visiblePoint(point: Point, index: number, height: number, count: number
   const top = Math.max(0, index) * TREE_ROW_HEIGHT;
   const y = Math.min(Math.max(point.y, top + TREE_ROW_HEIGHT - height), top);
   return { x: point.x, y: Math.max(0, Math.min(y, count * TREE_ROW_HEIGHT - height)) };
+}
+
+function awaitingAnchor(anchor: TreeAnchor | null, rows: readonly TreeRow[], loading: boolean) {
+  return loading && anchor !== null && !rows.some((row) => row.path === anchor.path);
+}
+
+function shouldFollowCursor(
+  paging: boolean,
+  selected: string,
+  rows: readonly TreeRow[],
+  viewport: HTMLElement,
+) {
+  if (paging) return true;
+  const index = rows.findIndex((row) => row.path === selected);
+  if (index < 0) return false;
+  const top = index * TREE_ROW_HEIGHT;
+  return (
+    top >= viewport.scrollTop && top + TREE_ROW_HEIGHT <= viewport.scrollTop + viewport.clientHeight
+  );
 }

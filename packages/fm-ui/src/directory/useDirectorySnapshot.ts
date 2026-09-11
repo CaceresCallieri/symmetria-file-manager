@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { OverviewCache } from "../overview/cache.ts";
+import { OVERVIEW_LIMITS } from "../overview/limits.ts";
 import { EXCLUSIONS, OverviewSession, type OverviewSnapshot } from "../overview/session.ts";
 
 const EMPTY: OverviewSnapshot = { folders: new Map(), loading: true, inspected: 0 };
-export function useDirectorySnapshot(root: string | null, showHidden: boolean) {
+export function useDirectorySnapshot(
+  root: string | null,
+  showHidden: boolean,
+  automaticDepth: number = OVERVIEW_LIMITS.automaticDepth,
+) {
   const cache = useRef(new OverviewCache());
-  const key = JSON.stringify([root, showHidden, EXCLUSIONS]);
+  const key = JSON.stringify([root, showHidden, EXCLUSIONS, automaticDepth]);
   const [result, setResult] = useState({ key: "", snapshot: EMPTY, refreshing: false });
   const [paused, setPaused] = useState(document.visibilityState === "hidden");
   const active = useRef<{ stop(): void; include(path: string): void } | null>(null);
@@ -30,13 +35,14 @@ export function useDirectorySnapshot(root: string | null, showHidden: boolean) {
         setResult({ key, snapshot: next, refreshing: seed !== undefined && next.loading });
       },
       seed,
+      automaticDepth,
     );
     active.current = {
       stop: () => session.stop(),
       include: (path: string) => session.include(path),
     };
     session.start();
-  }, [root, showHidden, key, paused]);
+  }, [root, showHidden, key, paused, automaticDepth]);
   useEffect(() => {
     start();
     return () => {
@@ -46,6 +52,7 @@ export function useDirectorySnapshot(root: string | null, showHidden: boolean) {
   }, [start]);
   return {
     ...snapshot,
+    automaticDepth,
     paused,
     refreshing: result.key === key ? result.refreshing : cached !== undefined,
     cache: cache.current,

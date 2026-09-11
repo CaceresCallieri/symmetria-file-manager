@@ -61,9 +61,9 @@ it("returns keyboard ownership to Miller and overview after tree search", async 
   await openTree();
   const input = await search("beta");
   fireEvent.keyDown(input, { key: "Enter" });
-  treeKey("e", true);
+  treeKey("Escape");
   expect(screen.queryByRole("status", { name: "Search results" })).toBeNull();
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   await screen.findByRole("dialog", { name: "Folder overview" });
   await search("beta");
   expect(screen.getByRole("textbox", { name: "Search loaded paths" })).toBeTruthy();

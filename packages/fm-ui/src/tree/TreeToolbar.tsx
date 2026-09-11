@@ -37,7 +37,7 @@ export function TreeToolbar({
       </details>
       <DirectoryScope model={model} />
       <button type="button" onClick={onMiller}>
-        Miller · Ctrl+E
+        Miller · Esc
       </button>
       <button type="button" onClick={model.refresh}>
         Refresh

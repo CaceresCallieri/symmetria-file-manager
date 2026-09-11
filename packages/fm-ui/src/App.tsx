@@ -250,7 +250,7 @@ export function App(props: AppProps = {}) {
     previewing.toggleAudio,
   );
 
-  const { toggleView, context } = browsingContext(
+  const context = browsingContext(
     picker.state.active,
     search,
     modes,
@@ -297,8 +297,6 @@ export function App(props: AppProps = {}) {
           tree={tree}
           model={overview.treeModel}
           onOpen={props.onOpenFile ?? ops.openAbsolute}
-          toggleView={toggleView}
-          pickerActive={picker.state.active}
           matches={search.matches}
           preview={previewing.pane}
           onActivate={(index) => activateAt(tabs, ops, index)}
@@ -385,7 +383,7 @@ function browsingContext(
     search.cancel();
     modes.reset();
     tree.cancel();
-    tree.toggle();
+    tree.open();
   };
   const base: KeyContext = {
     view: overview.view,
@@ -399,7 +397,7 @@ function browsingContext(
       },
     },
   };
-  return { toggleView, context: treeKeyContext(base, tree, overview.model) };
+  return treeKeyContext(base, tree, overview.model);
 }
 
 function useProjectViews(tabs: Tabs) {

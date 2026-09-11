@@ -59,8 +59,7 @@
   gap: 6px;
 }
 .overview button,
-.file-tree button,
-.view-control button {
+.file-tree button {
   font: inherit;
   color: var(--foreground);
   background: var(--card);
@@ -69,8 +68,7 @@
   cursor: pointer;
 }
 .overview button:focus-visible,
-.file-tree button:focus-visible,
-.view-control button:focus-visible {
+.file-tree button:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 1px;
 }

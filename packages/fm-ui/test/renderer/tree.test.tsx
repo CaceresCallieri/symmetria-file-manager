@@ -6,12 +6,15 @@ import { installTreeBridge, openTree, treeEntry, treeKey, treeRow } from "./tree
 
 afterEach(cleanup);
 
-it("opens the current directory from both the visible view control and Ctrl+E", async () => {
+it("opens the current directory with Ctrl+E without a Miller toolbar button", async () => {
   installTreeBridge();
   render(<App startPath="/home/jc" />);
-  fireEvent.click(screen.getByRole("button", { name: "Show file tree" }));
+  expect(screen.queryByRole("button", { name: "Show file tree" })).toBeNull();
+  treeKey("e", true);
   expect((await screen.findByRole("tree")).dataset.root).toBe("/home/jc");
   treeKey("e", true);
+  expect(screen.getByRole("tree")).toBeTruthy();
+  treeKey("Escape");
   expect(screen.queryByRole("tree")).toBeNull();
   treeKey("e", true);
   expect((await screen.findByRole("tree")).dataset.root).toBe("/home/jc");
@@ -114,4 +117,36 @@ it("blocks unsupported tree actions and keeps picker windows in Miller", async (
   treeKey("e", true);
   expect(screen.queryByRole("tree")).toBeNull();
   expect(screen.queryByRole("button", { name: "Show file tree" })).toBeNull();
+});
+
+it("uses a shallower tree snapshot and preserves it across a deeper overview visit", async () => {
+  const log = installTreeBridge();
+  let path = "/home/jc";
+  for (let depth = 0; depth < 10; depth++) {
+    log.entries.set(path, [treeEntry("nested", "directory")]);
+    path += "/nested";
+  }
+  render(<App startPath="/home/jc" />);
+  treeKey("e", true);
+  const boundary = `/home/jc${"/nested".repeat(6)}`;
+  await waitFor(() => expect(treeRow(boundary).textContent).toContain("Depth limit reached"));
+  expect(log.overview.mock.calls.some(([request]) => request.path === boundary)).toBe(false);
+  expect(document.querySelector(".file-tree .overview-popover")?.textContent).toContain("Depth 6");
+  const treeRows = screen.getByRole("tree").dataset.rowCount;
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
+  await screen.findByRole("dialog", { name: "Folder overview" });
+  await waitFor(() =>
+    expect(log.overview.mock.calls.some(([request]) => request.path === boundary)).toBe(true),
+  );
+  expect(document.querySelector('.file-tree [role="tree"]')?.getAttribute("data-row-count")).toBe(
+    treeRows,
+  );
+  treeKey("Escape");
+  await waitFor(() => expect(treeRow(boundary).textContent).toContain("Depth limit reached"));
+  expect(screen.getByRole("tree").dataset.rowCount).toBe(treeRows);
+  // An explicit branch read remains available at the shallower boundary.
+  fireEvent.click(within(treeRow(boundary)).getByRole("button", { name: "Include nested" }));
+  await waitFor(() =>
+    expect(treeRow(`${boundary}/nested`).textContent).toContain("Depth limit reached"),
+  );
 });

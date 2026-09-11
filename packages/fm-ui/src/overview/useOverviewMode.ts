@@ -2,6 +2,7 @@ import type { ViewKind } from "@symmetria/fm-core/keys/types";
 import type { OverviewCommand } from "@symmetria/fm-core/overview/navigation";
 import { useCallback, useRef, useState } from "react";
 import { type FlashPort, useFlashPort } from "../flash/useFlashPort.ts";
+import { OVERVIEW_LIMITS, TREE_AUTOMATIC_DEPTH } from "./limits.ts";
 import { type OverviewModel, useOverview } from "./useOverview.ts";
 import { type TreeOriginHost, useOverviewNavigation } from "./useOverviewNavigation.ts";
 export interface OverviewPort {
@@ -35,7 +36,11 @@ export function useOverviewMode(
   };
   const navigation = useOverviewNavigation({ path, treeRoot, tree, reveal, navigate });
   const { root, close } = navigation;
-  const model = useOverview(root ?? treeRoot, showHidden);
+  const model = useOverview(
+    root ?? treeRoot,
+    showHidden,
+    root === null ? TREE_AUTOMATIC_DEPTH : OVERVIEW_LIMITS.automaticDepth,
+  );
   const treeModel = usePreservedTreeModel(root, treeRoot, model);
   const openExternal = useCallback(
     (next: string) => {
@@ -71,5 +76,5 @@ export function useOverviewMode(
 function usePreservedTreeModel(root: string | null, treeRoot: string | null, model: OverviewModel) {
   const preserved = useRef(model);
   if (root === null && treeRoot !== null) preserved.current = model;
-  return root !== null && root !== treeRoot ? preserved.current : model;
+  return root !== null ? preserved.current : model;
 }

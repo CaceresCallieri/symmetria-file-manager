@@ -28,7 +28,7 @@ it("leaves native control activation available without activating the selected f
   const reads = log.overview.mock.calls.length;
   fireEvent.click(refresh);
   await waitFor(() => expect(log.overview.mock.calls.length).toBeGreaterThan(reads));
-  const miller = screen.getByRole("button", { name: "Miller · Ctrl+E" });
+  const miller = screen.getByRole("button", { name: "Miller · Esc" });
   miller.focus();
   expect(fireEvent.keyDown(miller, { key: " " })).toBe(true);
   fireEvent.click(miller);
@@ -129,7 +129,7 @@ it("anchors Scope to the toolbar and gives compact tree controls the shared dark
     expect(getComputedStyle(toolbar).position).toBe("relative");
     expect(getComputedStyle(popup).top).toBe("100%");
     expect(getComputedStyle(popup).right).toBe("16px");
-    const button = screen.getByRole("button", { name: "Miller · Ctrl+E" });
+    const button = screen.getByRole("button", { name: "Miller · Esc" });
     expect(button.closest(".tree-toolbar")).not.toBeNull();
     expect(getComputedStyle(button).backgroundColor).toBe("rgb(18, 18, 18)");
   } finally {

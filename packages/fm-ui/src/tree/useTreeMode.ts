@@ -66,18 +66,14 @@ export function useTreeMode(tabs: Tabs) {
   const change = (key: string, value: TreeTab) =>
     setViews((previous) => new Map(previous).set(key, value));
   const close = () => {
+    handler.current?.cancel();
     if (tab) change(id, { ...tab, active: false });
   };
-  const toggle = () => {
-    if (root !== null) {
-      const path = entry?.path ?? root;
-      if (path === root) tabs.navigate(root);
-      else tabs.reveal(path);
-      change(id, { root, active: false, generation: tabs.navigationGeneration() });
-      return;
-    }
-    const nextRoot = tab?.generation === tabs.navigationGeneration() ? tab.root : tabs.pane.path;
-    prepareTreeReturn(tabs, cache.get(id, nextRoot, tabs.showHidden), nextRoot);
+  const open = () => {
+    if (root !== null) return;
+    const returning = tab?.generation === tabs.navigationGeneration();
+    const nextRoot = returning ? tab.root : tabs.pane.path;
+    if (!returning) prepareTreeReturn(tabs, cache.get(id, nextRoot, tabs.showHidden), nextRoot);
     change(id, { root: nextRoot, active: true, generation: tabs.navigationGeneration() });
   };
   const external = (path: string) => {
@@ -104,7 +100,7 @@ export function useTreeMode(tabs: Tabs) {
     newTab: () => tabs.open(root ?? tabs.pane.path),
     toggleHidden: tabs.toggleHidden,
     close,
-    toggle,
+    open,
     external,
     reveal: (path: string) => handler.current?.reveal(path),
     cancel: () => handler.current?.cancel(),
@@ -121,6 +117,7 @@ export function treeKeyContext(
   return {
     ...context,
     view: "tree",
+    tree: { close: tree.close },
     state: {
       ...context.state,
       cursorEntry: tree.entry,
