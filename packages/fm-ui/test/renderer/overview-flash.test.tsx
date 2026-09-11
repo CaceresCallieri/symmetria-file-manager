@@ -2,9 +2,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "../../src/App.tsx";
+import { mockTextRanges } from "./flash-text-geometry.ts";
 import { installBridge } from "./support.ts";
 
 beforeEach(() => {
+  mockTextRanges();
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(568);
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
@@ -15,15 +17,16 @@ beforeEach(() => {
     if (this.matches(".overview-minimap-surface")) return new DOMRect(700, 48, 84, 160);
     const row = this.closest<HTMLElement>("[data-entry]");
     const path = row?.dataset.entry;
-    const rows: Record<string, number[]> = {
-      "/home/jc/notes.txt": [50, 100, 140, 24],
-      "/home/jc/todo.txt": [1200, 130, 140, 24],
-      "/home/jc/projects": [50, 150, 140, 24],
-      "/home/jc/projects/beta.md": [300, 230, 140, 24],
-      "/home/jc/projects/alpha": [300, 200, 140, 24],
-      "/home/jc/many": [710, 80, 70, 24],
-    };
-    if (path && rows[path]) return new DOMRect(...rows[path]);
+    const rows = new Map([
+      ["/home/jc/notes.txt", [50, 100, 140, 24]],
+      ["/home/jc/todo.txt", [1200, 130, 140, 24]],
+      ["/home/jc/projects", [50, 150, 140, 24]],
+      ["/home/jc/projects/beta.md", [300, 230, 140, 24]],
+      ["/home/jc/projects/alpha", [300, 200, 140, 24]],
+      ["/home/jc/many", [710, 80, 70, 24]],
+    ]);
+    const coordinates = rows.get(path ?? "");
+    if (coordinates) return new DOMRect(...coordinates);
     const header =
       this.closest<HTMLElement>("[data-basename]")?.closest<HTMLElement>("[data-group]");
     if (header?.dataset.group === "/home/jc/projects") return new DOMRect(300, 170, 140, 24);
@@ -220,5 +223,33 @@ it("resets captured targets when the overview closes", async () => {
   key("s");
   expect(screen.getByRole("status", { name: "Flash navigation" }).textContent).not.toContain(
     "beta",
+  );
+});
+
+it("puts the jump label after the matched glyphs and restores normal presentation on exit", async () => {
+  await open();
+  await flash("be");
+  const label = labels().find((node) => node.dataset.flashPath === "/home/jc/projects/beta.md");
+  expect(label?.style.left).toBe("316px");
+  expect(label?.style.fontSize).toBe("14px");
+  expect(label?.style.lineHeight).toBe("24px");
+  expect(document.querySelector(".overview-flash-match")?.textContent).toBe("be");
+  expect(document.querySelector(".overview-graph-frame")?.getAttribute("data-flash-mode")).toBe(
+    "true",
+  );
+  expect(document.querySelector<HTMLElement>(".overview-flash-match")?.style.width).toBe("16px");
+  key("t");
+  expect(labels()[0]?.style.left).toBe("324px");
+  key("Escape");
+  expect(document.querySelector(".overview-flash-match")).toBeNull();
+  expect(document.querySelector(".overview-graph-frame")?.getAttribute("data-flash-mode")).toBe(
+    "false",
+  );
+});
+it("shows an empty-result instruction when there are no matching names", async () => {
+  await open();
+  await flash("zz");
+  expect(screen.getByRole("status", { name: "Flash navigation" }).textContent).toContain(
+    "No matching names",
   );
 });

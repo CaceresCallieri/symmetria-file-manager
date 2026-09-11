@@ -40,7 +40,7 @@ export function useOverviewFlash(options: FlashOptions) {
     [session],
   );
   const labels = useMemo(
-    () => (session ? positionFlashLabels(session.scene, result.matches) : []),
+    () => (session ? positionFlashLabels(session.scene, result.matches, session.query) : []),
     [session, result],
   );
   const resolved = resolveVisibleLabels(result, labels !== null);
@@ -161,7 +161,11 @@ function useFlashInvalidation(
   useEffect(() => {
     if (!active) return;
     const outside = (event: Event) => {
-      if (!viewport.current?.closest('[role="dialog"]')?.contains(event.target as Node)) cancel();
+      if (
+        !(event.target instanceof Node) ||
+        !viewport.current?.closest('[role="dialog"]')?.contains(event.target)
+      )
+        cancel();
     };
     window.addEventListener("resize", cancel);
     document.addEventListener("focusin", outside);

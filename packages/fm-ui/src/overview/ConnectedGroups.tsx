@@ -120,7 +120,7 @@ export function ConnectedGroups({
     <>
       {renderSearch(search, flash.active)}
       {renderToolbar(controls)}
-      <div className="overview-graph-frame">
+      <div className="overview-graph-frame" data-flash-mode={flash.active}>
         <OverviewGraphViewport
           viewport={viewport}
           extent={extent}

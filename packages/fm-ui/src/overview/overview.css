@@ -326,13 +326,10 @@
 }
 .overview-flash-label {
   position: absolute;
-  height: 18px;
-  padding: 0 4px;
   box-sizing: border-box;
   border-radius: 3px;
   background: var(--foreground);
   color: var(--background);
-  font: 600 12px / 18px monospace;
   white-space: nowrap;
 }
 .overview-flash-prefix {
@@ -360,4 +357,36 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Keep the matched query bright and fade the structure with Qt flash timing. */
+.overview-graph-frame .overview-row,
+.overview-graph-frame .folder-group-name,
+.overview-graph-frame .folder-ancestors,
+.overview-graph-frame .overview-links {
+  transition: opacity 400ms cubic-bezier(0.2, 0, 0, 1);
+}
+[data-flash-mode="true"] .overview-row[data-search-match="false"],
+[data-flash-mode="true"] .folder-group-name[data-search-match="false"],
+[data-flash-mode="true"] .folder-ancestors,
+[data-flash-mode="true"] .overview-links {
+  opacity: 0.25;
+}
+.overview-flash-match {
+  position: absolute;
+  color: var(--foreground);
+  white-space: pre;
+}
+@media (prefers-reduced-motion: reduce) {
+  .overview-graph-frame .overview-row,
+  .overview-graph-frame .folder-group-name,
+  .overview-graph-frame .folder-ancestors,
+  .overview-graph-frame .overview-links {
+    transition: none;
+  }
+}
+
+[data-flash-mode="true"] .overview-row[data-search-match="true"] > span:last-child,
+[data-flash-mode="true"] .folder-group-name[data-search-match="true"] > span:last-child {
+  opacity: 0.25;
 }
