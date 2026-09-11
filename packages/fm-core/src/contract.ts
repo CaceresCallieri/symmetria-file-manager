@@ -300,6 +300,7 @@ export interface TransferProgress {
  * the channels whose whole answer is "it worked".
  */
 export type IpcReply =
+  | Result<import("./overview/contract.ts").OverviewReply>
   | Result<ListReply>
   | Result<ReadTextReply>
   | Result<DescribeReply>
@@ -714,6 +715,7 @@ export const decodeListBatch: Decoder<ListBatch> = (raw) => {
 /** What a watched directory reports. The changed paths are not needed yet. */
 export interface ChangedEvent {
   readonly subscriptionId: string;
+  readonly error?: string;
 }
 
 export const decodeChangedEvent: Decoder<ChangedEvent> = (raw) => {
@@ -723,7 +725,11 @@ export const decodeChangedEvent: Decoder<ChangedEvent> = (raw) => {
   if (subscriptionId === null) {
     return failure("invalid_reply", "event.subscriptionId must be a string");
   }
-  return success({ subscriptionId });
+  if (raw["error"] === undefined) return success({ subscriptionId });
+  const error = stringField(raw, "error");
+  return error === null
+    ? failure("invalid_reply", "event.error must be a string")
+    : success({ subscriptionId, error });
 };
 
 /**

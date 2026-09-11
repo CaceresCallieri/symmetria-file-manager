@@ -41,5 +41,7 @@ export function modsOf(event: KeyEvent): Mods | null {
 export function matchKey(binding: Binding, event: KeyEvent): boolean {
   if (!binding.keys.includes(normaliseKey(event.key))) return false;
   if (binding.mods === "*") return true;
+  if (binding.mods === "Symbol")
+    return !event.meta && ((!event.ctrl && !event.alt) || event.altGraph === true);
   return modsOf(event) === binding.mods;
 }

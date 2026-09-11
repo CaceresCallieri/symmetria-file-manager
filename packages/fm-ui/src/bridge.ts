@@ -1,6 +1,7 @@
 import type { Bookmark } from "@symmetria/fm-core/bookmarks";
 import { BRIDGE_KEY, type Bridge, type Unsubscribe } from "@symmetria/fm-core/bridge";
 import {
+  type ChangedEvent,
   type ClipboardRequest,
   type CreateRequest,
   type DescribeReply,
@@ -28,6 +29,7 @@ import {
   type TransferRequest,
 } from "@symmetria/fm-core/contract";
 import type { ListingOptions } from "@symmetria/fm-core/listingOptions";
+import { decodeOverviewReply, type OverviewReply } from "@symmetria/fm-core/overview/contract";
 
 /**
  * The renderer's side of the bridge: untyped in, typed out.
@@ -111,7 +113,7 @@ export async function listDirectory(
  * filter ON: `decodeChangedEvent` existed and had no consumer, which is usually
  * the sign that a message is being taken on faith.
  */
-const subscribers = new Map<string, () => void>();
+const subscribers = new Map<string, (event: ChangedEvent) => void>();
 let listening: Unsubscribe | null = null;
 
 function deliver(raw: unknown): void {
@@ -120,7 +122,7 @@ function deliver(raw: unknown): void {
   // event nobody can attribute is how the fan-out came back.
   if (isFailure(event)) return;
 
-  subscribers.get(event.value.subscriptionId)?.();
+  subscribers.get(event.value.subscriptionId)?.(event.value);
 }
 
 /**
@@ -201,10 +203,13 @@ export async function readFileText(path: string, maxBytes: number): Promise<Resu
 export async function watchDirectory(
   path: string,
   subscriptionId: string,
-  onChanged: () => void,
-): Promise<Unsubscribe> {
+  onChanged: (event: ChangedEvent) => void,
+): Promise<() => Promise<void>> {
   const bridge = getBridge();
-  if (bridge === null) return () => undefined;
+  if (bridge === null) {
+    onChanged({ subscriptionId, error: MISSING_BRIDGE });
+    return async () => undefined;
+  }
 
   subscribers.set(subscriptionId, onChanged);
   listening ??= bridge.onChanged(deliver);
@@ -217,19 +222,22 @@ export async function watchDirectory(
     }
   };
 
-  const started = await bridge.watch({ path, subscriptionId });
+  const started = await bridge
+    .watch({ path, subscriptionId })
+    .catch(() => failure("watch_failed", "Watch setup failed"));
 
   // A watch that failed to start still left a subscriber registered, so the
   // teardown runs either way. Half-cleaning up is how a callback outlives the
   // tab that owns it.
   if (isFailure(started)) {
+    onChanged({ subscriptionId, error: started.error.message });
     release();
-    return () => undefined;
+    return async () => undefined;
   }
 
-  return () => {
+  return async () => {
     release();
-    void bridge.unwatch({ subscriptionId });
+    await bridge.unwatch({ subscriptionId }).catch(() => undefined);
   };
 }
 
@@ -434,4 +442,22 @@ export async function writeBookmarks(
     bookmarks: [...bookmarks].map(([letter, bookmark]) => ({ letter, bookmark })),
   });
   return isFailure(reply) ? reply : success(null);
+}
+
+export async function readOverview(
+  path: string,
+  requestId: string,
+  limit: number,
+): Promise<Result<OverviewReply>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("scan_failed", MISSING_BRIDGE);
+  try {
+    const reply = await bridge.overview({ path, requestId, limit });
+    return isFailure(reply) ? reply : decodeOverviewReply(reply.value);
+  } catch (cause) {
+    return failure("scan_failed", String(cause));
+  }
+}
+export function cancelOverview(requestId: string): void {
+  void getBridge()?.cancel({ streamId: requestId });
 }

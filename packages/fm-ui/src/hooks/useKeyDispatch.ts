@@ -1,5 +1,6 @@
 import { type CascadeMode, handleKey, type KeyOutcome } from "@symmetria/fm-core/keys/cascade";
-import type { KeyContext } from "@symmetria/fm-core/keys/types";
+import { matchBinding } from "@symmetria/fm-core/keys/dispatch";
+import type { KeyContext, KeyEvent } from "@symmetria/fm-core/keys/types";
 import { useEffect, useRef } from "react";
 
 /**
@@ -23,7 +24,7 @@ export interface KeyDispatchOptions {
   readonly mode: CascadeMode;
   readonly context: KeyContext;
   /** Called for a key the flash handler owns. */
-  onFlashKey?: (event: KeyboardEvent) => void;
+  onFlashKey?: (event: KeyboardEvent) => boolean;
 }
 
 export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions): void {
@@ -37,6 +38,7 @@ export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.defaultPrevented) return;
       const { mode: currentMode, context: ctx, onFlashKey: flash } = latest.current;
 
       // Focus wins over everything, and it is decided by the DOM rather than by
@@ -46,24 +48,15 @@ export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions
         textInputFocused: currentMode.textInputFocused || targetIsTextInput(event.target),
       };
 
-      const outcome: KeyOutcome = handleKey(
-        {
-          key: event.key,
-          ctrl: event.ctrlKey,
-          shift: event.shiftKey,
-          alt: event.altKey,
-          meta: event.metaKey,
-        },
-        effective,
-        ctx,
-      );
-
-      if (outcome.kind === "flash") {
-        flash?.(event);
-        event.preventDefault();
-        return;
-      }
-
+      const key = {
+        key: event.key,
+        ctrl: event.ctrlKey,
+        shift: event.shiftKey,
+        alt: event.altKey,
+        meta: event.metaKey,
+        altGraph: event.getModifierState("AltGraph"),
+      };
+      const outcome = routeKey(event, key, effective, ctx, flash);
       // `notOurs` and `unhandled` are the two that must NOT be swallowed: one
       // belongs to a text field, the other to whatever handles it next.
       if (outcome.kind === "notOurs" || outcome.kind === "unhandled") return;
@@ -74,4 +67,18 @@ export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+}
+
+function routeKey(
+  event: KeyboardEvent,
+  key: KeyEvent,
+  mode: CascadeMode,
+  context: KeyContext,
+  flash: KeyDispatchOptions["onFlashKey"],
+): KeyOutcome {
+  if (event.repeat && !mode.flashActive && matchBinding(key, context)?.id === "overview.flash")
+    return { kind: "unhandled" };
+  const outcome = handleKey(key, mode, context);
+  if (outcome.kind !== "flash" || flash?.(event) !== false) return outcome;
+  return handleKey(key, { ...mode, flashActive: false }, context);
 }

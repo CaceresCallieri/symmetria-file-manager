@@ -116,7 +116,13 @@ function permissiveState(): KeyState {
 
 function contextWith(state: Partial<KeyState>, view: ViewKind = "miller"): KeyContext & Recorder {
   const { calls, actions } = recorder();
-  return { view, state: { ...permissiveState(), ...state }, actions, calls };
+  return {
+    view,
+    state: { ...permissiveState(), ...state },
+    actions,
+    calls,
+    overview: { toggle: () => calls.push("overview.toggle"), command: (name) => calls.push(name) },
+  };
 }
 
 function press(key: string, mods: Mods = ""): KeyEvent {
@@ -147,7 +153,7 @@ function stateFor(binding: Binding): Partial<KeyState> {
 }
 
 describe("every binding routes to its own action", () => {
-  it.each(["miller", "tree"] as const)("in the %s view", (view) => {
+  it.each(["miller", "tree", "overview"] as const)("in the %s view", (view) => {
     for (const binding of bindingsFor(view)) {
       const key = binding.keys[0];
       expect(key, binding.id).toBeDefined();

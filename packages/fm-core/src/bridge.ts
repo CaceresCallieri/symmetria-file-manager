@@ -16,6 +16,7 @@ export interface Bridge {
   /** Identifies which build produced this bridge. */
   readonly version: string;
   /** List a directory. Failures arrive as values, never as thrown errors. */
+  overview(request: unknown): Promise<Result<unknown>>;
   list(request: unknown): Promise<Result<unknown>>;
   /** Start watching a directory for changes. */
   watch(request: unknown): Promise<Result<unknown>>;

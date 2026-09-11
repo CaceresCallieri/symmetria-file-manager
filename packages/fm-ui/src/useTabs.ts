@@ -139,6 +139,7 @@ export interface Tabs {
   enter(): void;
   leave(): void;
   navigate(path: string): void;
+  reveal(path: string): void;
   toggleMark(): void;
   clearMarks(): void;
 
@@ -195,9 +196,24 @@ function nameOf(path: string): string {
 }
 
 /** What a tab needs remembered about its own reads. */
+interface PendingReveal {
+  readonly path: string;
+  readonly name: string;
+  readonly generation: number;
+}
+function revealMatches(
+  focus: PendingReveal | undefined,
+  path: string,
+  generation: number | undefined,
+): boolean {
+  return focus === undefined || (focus.path === path && focus.generation === generation);
+}
+
 interface DirectoryLoader {
   /** Read one tab's directory and put the result in its pane. */
   loadTab(id: string, path: string): void;
+  prepareReveal(id: string, path: string, name: string): void;
+  invalidate(id: string | undefined): void;
   /** Forget everything remembered about a tab, when it closes. */
   release(id: string): void;
   /**
@@ -244,6 +260,20 @@ function useDirectoryLoader(
   // top of a fast read of the directory the user is now in. The Qt version
   // solved the same race with a generation counter, for the same reason.
   const generation = useRef(new Map<string, number>());
+  const pendingReveal = useRef(new Map<string, PendingReveal>());
+  const navigationGeneration = useRef(new Map<string, number>());
+  const revealFailures = useRef(new Set<string>());
+  const invalidate = useCallback((id: string | undefined, force = false) => {
+    // Invalidating every navigation cancelled an initial listing on repeated
+    // Left at root, where no path change starts a replacement. Only a pending
+    // reveal needs synchronous cancellation; prepareReveal forces a new generation.
+    if (id === undefined) return;
+    revealFailures.current.delete(id);
+    if (!force && !pendingReveal.current.has(id)) return;
+    navigationGeneration.current.set(id, (navigationGeneration.current.get(id) ?? 0) + 1);
+    generation.current.set(id, (generation.current.get(id) ?? 0) + 1);
+    pendingReveal.current.delete(id);
+  }, []);
 
   /**
    * The last path each tab actually managed to list.
@@ -307,11 +337,36 @@ function useDirectoryLoader(
     [reportError, setState],
   );
 
+  const failedRead = useCallback(
+    (id: string, path: string, message: string, isReveal: boolean) => {
+      if (isReveal) revealFailures.current.add(id);
+      // A failed same-parent reveal must retain the valid pane, cursor and marks.
+      if (isReveal && lastGood.current.get(id) === path) reportError(id, message);
+      else failed(id, path, message);
+    },
+    [failed, reportError],
+  );
+
+  const clearSuccessfulReadError = useCallback(
+    (id: string) => {
+      // Recovery and watch refreshes must retain the failure that caused them.
+      if (reverting.current.delete(id)) return;
+      if (revealFailures.current.has(id)) return;
+      reportError(id, null);
+    },
+    [reportError],
+  );
+
   const loadTab = useCallback(
     (id: string, path: string) => {
+      // An old directory watch can fire before navigation replaces it. It must
+      // not consume or supersede the pending reveal for the new parent.
+      const pending = pendingReveal.current.get(id);
+      if (pending && pending.path !== path) return;
       const mine = (generation.current.get(id) ?? 0) + 1;
       generation.current.set(id, mine);
 
+      const focus = pendingReveal.current.get(id);
       const asked = optionsRef.current;
       listedUnder.current.set(id, asked);
 
@@ -319,21 +374,31 @@ function useDirectoryLoader(
         if (generation.current.get(id) !== mine) return;
 
         if (isFailure(reply)) {
-          failed(id, path, reply.error.message);
+          pendingReveal.current.delete(id);
+          failedRead(id, path, reply.error.message, focus !== undefined);
           return;
         }
 
-        // A revert's own load must NOT clear the message that caused it. Any
-        // other successful load may: it means the user went somewhere real.
-        const recovering = reverting.current.delete(id);
-        if (!recovering) reportError(id, null);
+        if (!revealMatches(focus, path, navigationGeneration.current.get(id))) return;
+        if (pendingReveal.current.get(id) === focus) pendingReveal.current.delete(id);
+        const focusIndex = focus
+          ? reply.value.entries.findIndex((entry) => entry.name === focus.name)
+          : -1;
+        if (focus && focusIndex < 0) {
+          failedRead(id, path, `Entry no longer exists: ${focus.name}`, true);
+          return;
+        }
+        clearSuccessfulReadError(id);
         lastGood.current.set(id, path);
         setState((previous) =>
-          updatePaneById(previous, id, (p) => setEntries(p, reply.value.entries)),
+          updatePaneById(previous, id, (p) => {
+            const next = setEntries(p, reply.value.entries);
+            return focusIndex < 0 ? next : moveCursor(next, focusIndex - next.cursorIndex);
+          }),
         );
       });
     },
-    [failed, optionsRef, reportError, setState],
+    [failedRead, optionsRef, clearSuccessfulReadError, setState],
   );
 
   // Four maps keyed by tab id, and none of them was pruned — so every tab a
@@ -342,6 +407,9 @@ function useDirectoryLoader(
   // slot this way, and these are the same kind of thing.
   const release = useCallback((id: string) => {
     generation.current.delete(id);
+    navigationGeneration.current.delete(id);
+    revealFailures.current.delete(id);
+    pendingReveal.current.delete(id);
     lastGood.current.delete(id);
     reverting.current.delete(id);
     listedUnder.current.delete(id);
@@ -349,7 +417,20 @@ function useDirectoryLoader(
 
   const listedOptionsFor = useCallback((id: string) => listedUnder.current.get(id), []);
 
-  return { loadTab, release, listedOptionsFor };
+  return {
+    loadTab,
+    invalidate,
+    release,
+    listedOptionsFor,
+    prepareReveal: (id: string, path: string, name: string) => {
+      invalidate(id, true);
+      pendingReveal.current.set(id, {
+        path,
+        name,
+        generation: navigationGeneration.current.get(id) ?? 0,
+      });
+    },
+  };
 }
 
 /**
@@ -462,7 +543,7 @@ export function useTabs(initialPath: string): Tabs {
   // so what it depends on and what it uses are the same thing.
   const topology = state.tabs.map((tab) => `${tab.id}${FIELD}${tab.pane.path}`).join(RECORD);
 
-  const { loadTab, release, listedOptionsFor } = useDirectoryLoader(
+  const { loadTab, release, listedOptionsFor, prepareReveal, invalidate } = useDirectoryLoader(
     optionsRef,
     setState,
     reportError,
@@ -521,9 +602,13 @@ export function useTabs(initialPath: string): Tabs {
   }, []);
 
   /** A deliberate move to another directory, which the trail remembers. */
-  const goTo = useCallback((change: (p: PaneState) => PaneState) => {
-    setState((previous) => navigateActivePane(previous, change));
-  }, []);
+  const goTo = useCallback(
+    (change: (p: PaneState) => PaneState) => {
+      invalidate(activeId);
+      setState((previous) => navigateActivePane(previous, change));
+    },
+    [activeId, invalidate],
+  );
 
   const close = useCallback(
     (index?: number) => {
@@ -577,8 +662,14 @@ export function useTabs(initialPath: string): Tabs {
     error: errorFor(activeId),
     loading,
 
-    historyBack: () => setState((previous) => stepActiveHistory(previous, "back")),
-    historyForward: () => setState((previous) => stepActiveHistory(previous, "forward")),
+    historyBack: () => {
+      invalidate(activeId);
+      setState((previous) => stepActiveHistory(previous, "back"));
+    },
+    historyForward: () => {
+      invalidate(activeId);
+      setState((previous) => stepActiveHistory(previous, "forward"));
+    },
 
     // The next value is computed here and not inside a state updater. React
     // may call an updater more than once and at a time of its choosing, so a
@@ -592,6 +683,21 @@ export function useTabs(initialPath: string): Tabs {
     enter: () => goTo(enterDirectory),
     leave: () => goTo(leaveDirectory),
     navigate: (path) => goTo((p) => ({ ...p, path, entries: [], cursorIndex: 0 })),
+    reveal: (path) => {
+      if (activeId === undefined) return;
+      const parent = parentOf(path);
+      prepareReveal(activeId, parent, nameOf(path));
+      if (parent === pane.path) loadTab(activeId, parent);
+      else
+        setState((previous) =>
+          navigateActivePane(previous, (p) => ({
+            ...p,
+            path: parent,
+            entries: [],
+            cursorIndex: 0,
+          })),
+        );
+    },
     toggleMark: () => changeActive(toggleSelection),
     clearMarks: () => changeActive(clearSelection),
 
@@ -600,7 +706,10 @@ export function useTabs(initialPath: string): Tabs {
     // callback only because effects in this file depend on it. Its ONE
     // subscriber holds it through a ref instead, so the identity never
     // matters; see the note in App.
-    openAt: (path) => setState((previous) => openOrActivateTab(previous, path)),
+    openAt: (path) => {
+      invalidate(activeId);
+      setState((previous) => openOrActivateTab(previous, path));
+    },
     close,
     // None of these touches the errors, and that is the fix rather than an
     // omission. Clearing on a switch was tried: it hid the stale message and

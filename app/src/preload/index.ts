@@ -23,6 +23,7 @@ function listen(channel: string, listener: (payload: unknown) => void): Unsubscr
 
 const bridge: Bridge = {
   version: process.versions.electron ?? "unknown",
+  overview: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.overview, request),
   list: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.list, request),
   watch: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.watch, request),
   unwatch: (request) => ipcRenderer.invoke(REQUEST_CHANNELS.unwatch, request),

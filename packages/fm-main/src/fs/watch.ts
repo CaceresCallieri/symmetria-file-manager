@@ -1,4 +1,4 @@
-import { type FSWatcher, watch } from "node:fs";
+import { type FSWatcher, type WatchListener, watch } from "node:fs";
 import { lstat, realpath } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -58,6 +58,12 @@ const COALESCE_MS = 20;
 export async function watchDirectory(
   path: string,
   onChange: (changed: ChangedEntry[]) => void,
+  onError: (message: string) => void = () => undefined,
+  createWatcher: (
+    path: string,
+    options: { recursive: false },
+    listener: WatchListener<string>,
+  ) => FSWatcher = watch,
 ): Promise<StopWatching> {
   // Canonicalise once. A directory reached through a symlink is watched at its
   // real location, so the names the watcher reports and the paths it stats
@@ -66,13 +72,14 @@ export async function watchDirectory(
   const root = await realpath(path).catch(() => path);
 
   let released = false;
+  let failed = false;
   const pending = new Set<string>();
   const inFlight = new Set<Promise<void>>();
   let timer: NodeJS.Timeout | null = null;
 
   const flush = () => {
     timer = null;
-    if (released || pending.size === 0) return;
+    if (released || failed || pending.size === 0) return;
 
     const names = [...pending];
     pending.clear();
@@ -82,7 +89,7 @@ export async function watchDirectory(
         // The read started before `stop()` and settled after it. Without this
         // check a closed tab still receives an update for a watcher its owner
         // believes is dead.
-        if (!released) onChange(changed);
+        if (!released && !failed) onChange(changed);
       })
       .catch(() => undefined);
 
@@ -90,20 +97,28 @@ export async function watchDirectory(
     void work.finally(() => inFlight.delete(work));
   };
 
-  const watcher: FSWatcher = watch(root, { recursive: false }, (_event, name) => {
+  const watcher: FSWatcher = createWatcher(root, { recursive: false }, (_event, name) => {
     // `filename` is documented as possibly null. An event with no name says
     // something changed but not what, and a rescan of the whole directory is
     // the honest response — which is what the consumer does with any batch.
-    if (released || name === null) return;
+    if (released || failed) return;
+    if (name === null) {
+      onChange([]);
+      return;
+    }
 
     pending.add(name);
     timer ??= setTimeout(flush, COALESCE_MS);
   });
 
-  // A watch on a directory that is deleted while watched emits an error rather
-  // than throwing. Swallowing it keeps the process alive; the consumer learns
-  // the directory is gone from its next listing.
-  watcher.on("error", () => undefined);
+  // Report lost coverage instead of leaving a consumer with a silent stale view.
+  watcher.on("error", (error: Error) => {
+    if (released || failed) return;
+    failed = true;
+    if (timer !== null) clearTimeout(timer);
+    watcher.close();
+    onError(error.message);
+  });
 
   return async () => {
     if (released) return;

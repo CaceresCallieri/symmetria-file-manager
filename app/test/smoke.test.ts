@@ -134,7 +134,7 @@ describe("the application boots", () => {
     // run, and this assertion then reads a stale build and passes against code
     // that is no longer there. It did exactly that for three phases.
     expect(report.bridgeKeys).toBe(
-      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,clipboard,create,describe,frecent,hideWindow,list,listingRead,listingWrite,onChanged,onListBatch,onOpenPath,onTransferProgress,open,pickerCancel,pickerConfirm,previewUrl,readText,rename,transfer,trash,unwatch,version,watch",
+      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,clipboard,create,describe,frecent,hideWindow,list,listingRead,listingWrite,onChanged,onListBatch,onOpenPath,onTransferProgress,open,overview,pickerCancel,pickerConfirm,previewUrl,readText,rename,transfer,trash,unwatch,version,watch",
     );
   });
 

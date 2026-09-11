@@ -41,6 +41,12 @@
     "./preview/archive/zip": "./src/preview/archive/zip.ts",
     "./preview/archive/tar": "./src/preview/archive/tar.ts",
     "./preview/archive/listing": "./src/preview/archive/listing.ts",
-    "./listingOptions": "./src/listingOptions.ts"
+    "./listingOptions": "./src/listingOptions.ts",
+    "./overview/contract": "./src/overview/contract.ts",
+    "./overview/layout": "./src/overview/layout.ts",
+    "./overview/model": "./src/overview/model.ts",
+    "./overview/navigation": "./src/overview/navigation.ts",
+    "./overview/viewport": "./src/overview/viewport.ts",
+    "./flash": "./src/flash.ts"
   }
 }

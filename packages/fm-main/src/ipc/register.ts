@@ -33,9 +33,11 @@ import type { EntrySummary, FsEntry } from "@symmetria/fm-core/entry";
 import { filterEntries } from "@symmetria/fm-core/filter";
 import { resolveListingOptions } from "@symmetria/fm-core/listingOptions";
 import { resolveMimeType } from "@symmetria/fm-core/mime";
+import { decodeOverviewRequest } from "@symmetria/fm-core/overview/contract";
 import { sortEntries } from "@symmetria/fm-core/sort";
 import { defaultBookmarksPath, readOrSeedBookmarks, saveBookmarks } from "../bookmarks.ts";
 import { mimeTables } from "../fs/mimeTables.ts";
+import { readOverviewDirectory } from "../fs/overview.ts";
 import { kindOf, scanDirectory } from "../fs/scan.ts";
 import { type ChangedEntry, type StopWatching, watchDirectory } from "../fs/watch.ts";
 import {
@@ -197,6 +199,7 @@ export type PreviewUrlFor = (token: string) => string;
 export interface Dependencies {
   previewUrlFor: PreviewUrlFor;
   scanDirectory?: typeof scanDirectory;
+  readOverviewDirectory?: typeof readOverviewDirectory;
   watchDirectory?: typeof watchDirectory;
 }
 
@@ -227,6 +230,7 @@ const BATCH = 500;
 export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
   const previewUrlFor = deps.previewUrlFor;
   const scan = deps.scanDirectory ?? scanDirectory;
+  const readOverview = deps.readOverviewDirectory ?? readOverviewDirectory;
   const watch = deps.watchDirectory ?? watchDirectory;
 
   /**
@@ -330,14 +334,43 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
     return next;
   }
 
+  function claimRequest(from: SenderHandle, id: string): AbortController | null {
+    const held = resourcesFor(from);
+    if (held.streams.has(id)) return null;
+    const controller = new AbortController();
+    held.streams.set(id, controller);
+    return controller;
+  }
+  function releaseRequest(from: SenderHandle, id: string, controller: AbortController): void {
+    const held = windows.get(from);
+    if (held?.streams.get(id) === controller) held.streams.delete(id);
+    pruneIfIdle(from);
+  }
+
+  ipc.handle(
+    CHANNELS.overview,
+    guard(decodeOverviewRequest, "scan_failed", async (request, from) => {
+      const controller = claimRequest(from, request.requestId);
+      if (controller === null) return failure("invalid_request", "request ID already active");
+      try {
+        const reply = await readOverview(request.path, request.limit, controller.signal);
+        if (controller.signal.aborted) return failure("cancelled", "overview cancelled");
+        return success(reply);
+      } catch (cause) {
+        if (controller.signal.aborted) return failure("cancelled", "overview cancelled");
+        throw cause;
+      } finally {
+        releaseRequest(from, request.requestId, controller);
+      }
+    }),
+  );
+
   ipc.handle(
     CHANNELS.list,
     guard(decodeListRequest, "scan_failed", async (request, from): Promise<Result<ListReply>> => {
-      const held = resourcesFor(from);
-      const controller = new AbortController();
-      // The caller names the stream when it wants to be able to cancel it.
       const streamId = request.streamId ?? `s${nextStream++}`;
-      held.streams.set(streamId, controller);
+      const controller = claimRequest(from, streamId);
+      if (controller === null) return failure("invalid_request", "request ID already active");
 
       try {
         const raw = await scan(request.path, { signal: controller.signal });
@@ -357,8 +390,7 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
         if (controller.signal.aborted) return failure("cancelled", "the scan was cancelled");
         return failure("scan_failed", cause instanceof Error ? cause.message : String(cause));
       } finally {
-        held.streams.delete(streamId);
-        pruneIfIdle(from);
+        releaseRequest(from, streamId, controller);
       }
     }),
   );
@@ -396,12 +428,13 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
       const held = resourcesFor(from);
       return serialise(from, request.subscriptionId, async () => {
         await held.watches.get(request.subscriptionId)?.();
-        const stop = await watch(request.path, (changed: ChangedEntry[]) => {
-          from.send(CHANNELS.changed, {
-            subscriptionId: request.subscriptionId,
-            changed,
-          });
-        });
+        const stop = await watch(
+          request.path,
+          (changed: ChangedEntry[]) => {
+            from.send(CHANNELS.changed, { subscriptionId: request.subscriptionId, changed });
+          },
+          (error) => from.send(CHANNELS.changed, { subscriptionId: request.subscriptionId, error }),
+        );
         held.watches.set(request.subscriptionId, stop);
         return success(null);
       });

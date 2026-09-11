@@ -1,9 +1,11 @@
-import { useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 
 export interface SearchFieldProps {
   readonly query: string;
   /** How many rows the query currently matches, for the count beside it. */
   readonly matchCount: number;
+  readonly label?: string;
+  readonly count?: ReactNode;
   onChange(query: string): void;
   onConfirm(): void;
   onCancel(): void;
@@ -29,6 +31,8 @@ export function SearchField({
   onChange,
   onConfirm,
   onCancel,
+  label = "Search this directory",
+  count,
 }: SearchFieldProps) {
   const field = useRef<HTMLInputElement | null>(null);
 
@@ -50,10 +54,12 @@ export function SearchField({
         // meant to point at.
         autoComplete="off"
         spellCheck={false}
-        aria-label="Search this directory"
+        aria-label={label}
         value={query}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.nativeEvent.isComposing) return;
           if (event.key === "Enter") {
             event.preventDefault();
             onConfirm();
@@ -66,11 +72,12 @@ export function SearchField({
       />
       {/* Silent when nothing has been typed: "0 matches" for an empty query
           reads as a failed search rather than as one not yet made. */}
-      {query.trim() === "" ? null : (
-        <span className="search__count" data-testid="search-count">
-          {matchCount === 0 ? "no matches" : `${matchCount} match${matchCount === 1 ? "" : "es"}`}
-        </span>
-      )}
+      {count ??
+        (query.trim() === "" ? null : (
+          <span className="search__count" data-testid="search-count">
+            {matchCount === 0 ? "no matches" : `${matchCount} match${matchCount === 1 ? "" : "es"}`}
+          </span>
+        ))}
     </div>
   );
 }
