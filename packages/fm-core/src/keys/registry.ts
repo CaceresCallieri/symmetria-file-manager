@@ -674,6 +674,47 @@ export const MILLER_ONLY: readonly Binding[] = [
  */
 export const TREE_ONLY: readonly Binding[] = [
   {
+    id: "tree.first",
+    keys: ["home"],
+    mods: "",
+    keycap: "Home",
+    label: "First row",
+    icon: "vertical_align_top",
+    group: "Navigation",
+    run: (ctx) => ctx.actions.jumpToTop(),
+  },
+  {
+    id: "tree.last",
+    keys: ["end"],
+    mods: "",
+    keycap: "End",
+    label: "Last row",
+    icon: "vertical_align_bottom",
+    group: "Navigation",
+    run: (ctx) => ctx.actions.jumpToBottom(),
+  },
+  {
+    id: "tree.pageDown",
+    keys: ["pagedown"],
+    mods: "",
+    keycap: "PgDn",
+    label: "Page down",
+    icon: "keyboard_double_arrow_down",
+    group: "Navigation",
+    run: (ctx) => ctx.actions.treePageDown(),
+  },
+  {
+    id: "tree.pageUp",
+    keys: ["pageup"],
+    mods: "",
+    keycap: "PgUp",
+    label: "Page up",
+    icon: "keyboard_double_arrow_up",
+    group: "Navigation",
+    run: (ctx) => ctx.actions.treePageUp(),
+  },
+
+  {
     id: "tree.collapseOrParent",
     keys: ["h", "arrowleft"],
     mods: "",
@@ -688,7 +729,7 @@ export const TREE_ONLY: readonly Binding[] = [
     keys: ["l", "arrowright"],
     mods: "",
     keycap: "l  →",
-    label: "Expand / open",
+    label: "Expand / first child",
     icon: "chevron_right",
     group: "Navigation",
     run: (ctx) => ctx.actions.treeExpandOrActivate(),
@@ -714,16 +755,6 @@ export const TREE_ONLY: readonly Binding[] = [
     run: (ctx) => ctx.actions.treeToggleHidden(),
   },
   {
-    id: "tree.toggleGitignore",
-    keys: ["."],
-    mods: "*",
-    keycap: ".",
-    label: "Toggle .gitignore filter",
-    icon: "rule",
-    group: "View",
-    run: (ctx) => ctx.actions.treeToggleGitignore(),
-  },
-  {
     id: "tree.refreshAll",
     keys: ["r"],
     mods: "Shift",
@@ -740,11 +771,37 @@ function isHtml(ctx: KeyContext): boolean {
   return mime === "text/html" || mime === "application/xhtml+xml";
 }
 
-const TREE_SHARED = new Set(["nav.down", "nav.up", "nav.activate", "view.toggle", "help.open"]);
+const TREE_SHARED = new Set([
+  "nav.down",
+  "nav.up",
+  "nav.activate",
+  "nav.bottom",
+  "nav.halfDown",
+  "nav.halfUp",
+  "chord.go",
+  "view.toggle",
+  "help.open",
+]);
+const TREE_MILLER = new Set([
+  "miller.overview",
+  "miller.toggleHidden",
+  "miller.tabNew",
+  "miller.tabClose",
+  "miller.tabPrev",
+  "miller.tabNext",
+  "miller.tabPrevCtrl",
+  "miller.tabNextCtrl",
+]);
 const TREE_SUPPORTED = new Set([
   "tree.collapseOrParent",
   "tree.expandOrActivate",
   "tree.toggleExpand",
+  "tree.toggleHidden",
+  "tree.refreshAll",
+  "tree.first",
+  "tree.last",
+  "tree.pageDown",
+  "tree.pageUp",
 ]);
 
 export function bindingsFor(view: ViewKind): readonly Binding[] {
@@ -752,6 +809,7 @@ export function bindingsFor(view: ViewKind): readonly Binding[] {
   if (view === "tree")
     return [
       ...CORE.filter((binding) => TREE_SHARED.has(binding.id)),
+      ...MILLER_ONLY.filter((binding) => TREE_MILLER.has(binding.id)),
       ...TREE_ONLY.filter((binding) => TREE_SUPPORTED.has(binding.id)),
     ];
   return [...CORE, ...MILLER_ONLY];

@@ -259,7 +259,8 @@ export function useKeyActions(
       treeExpandOrActivate: soon("The tree view"),
       treeToggleExpand: soon("The tree view"),
       treeToggleHidden: soon("The tree view"),
-      treeToggleGitignore: soon("The tree view"),
+      treePageDown: () => undefined,
+      treePageUp: () => undefined,
       treeRefresh: soon("The tree view"),
     };
   }, [tabs, ops, search, bookmarks, home, picker, toggleAudioPlayback]);

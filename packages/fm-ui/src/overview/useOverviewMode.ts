@@ -1,7 +1,8 @@
 import type { ViewKind } from "@symmetria/fm-core/keys/types";
 import type { OverviewCommand } from "@symmetria/fm-core/overview/navigation";
 import { useCallback, useRef, useState } from "react";
-import { useOverview } from "./useOverview.ts";
+import { type OverviewModel, useOverview } from "./useOverview.ts";
+import { type TreeOriginHost, useOverviewNavigation } from "./useOverviewNavigation.ts";
 export interface OverviewPort {
   readonly flash?: {
     connect(handler: (event: KeyboardEvent) => boolean): () => void;
@@ -18,6 +19,7 @@ export function useOverviewMode(
   reveal: (path: string) => void,
   navigate: (path: string) => void,
   treeRoot: string | null = null,
+  tree?: TreeOriginHost,
 ) {
   const handler = useRef<(command: OverviewCommand) => void>(() => undefined);
   const connect = useCallback((next: (command: OverviewCommand) => void) => {
@@ -40,16 +42,16 @@ export function useOverviewMode(
     if (name === "toggle-minimap") toggleMinimap();
     else handler.current(name);
   };
-  const [root, setRoot] = useState<string | null>(null);
+  const navigation = useOverviewNavigation({ path, treeRoot, tree, reveal, navigate });
+  const { root, close } = navigation;
   const model = useOverview(root ?? treeRoot, showHidden);
-  const close = useCallback(() => setRoot(null), []);
-  const toggle = () => setRoot((current) => (current === null ? path : null));
+  const treeModel = usePreservedTreeModel(root, treeRoot, model);
   const openExternal = useCallback(
     (next: string) => {
-      setRoot(null);
+      close();
       openAt(next);
     },
-    [openAt],
+    [openAt, close],
   );
   const view: ViewKind = root === null ? "miller" : "overview";
   return {
@@ -59,20 +61,24 @@ export function useOverviewMode(
     toggleMinimap,
     root,
     model,
+    treeModel,
+    revealDestination: navigation.revealDestination,
     close,
-    toggle,
+    toggle: navigation.toggle,
     openExternal,
     view,
     command,
     port: {
       flash: { connect: connectFlash, setActive: setFlashActive },
       connect,
-      reveal: (selected: string) => {
-        setRoot(null);
-        if (selected === root) navigate(selected);
-        else reveal(selected);
-      },
-      focus: (selected: string) => setRoot(selected),
+      reveal: navigation.reveal,
+      focus: navigation.focus,
     },
   };
+}
+
+function usePreservedTreeModel(root: string | null, treeRoot: string | null, model: OverviewModel) {
+  const preserved = useRef(model);
+  if (root === null && treeRoot !== null) preserved.current = model;
+  return root !== null && root !== treeRoot ? preserved.current : model;
 }

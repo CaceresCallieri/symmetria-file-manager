@@ -120,3 +120,19 @@
 .file-tree .tree-include {
   flex-shrink: 0;
 }
+
+.tree-expansion-menu {
+  position: absolute;
+  top: 100%;
+  right: 16px;
+  z-index: 30;
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.tree-toolbar button:disabled {
+  opacity: 0.45;
+}

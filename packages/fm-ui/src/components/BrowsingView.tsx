@@ -28,11 +28,12 @@ export function BrowsingView({
   onActivate(index: number): void;
   onLeaveTo(name: string): void;
 }) {
-  if (tree.root !== null)
+  if (tree.root !== null && tree.record !== null)
     return (
       <FileTree
-        key={tree.root}
+        key={tree.key}
         root={tree.root}
+        record={tree.record}
         model={model}
         port={tree.port}
         onOpen={onOpen}

@@ -23,6 +23,7 @@ import {
   useState,
 } from "react";
 import { hideWindow, listDirectory, watchDirectory } from "./bridge.ts";
+import { useNavigationGenerations } from "./hooks/useNavigationGenerations.ts";
 import {
   activateTab,
   activePane,
@@ -143,7 +144,9 @@ export interface Tabs {
   toggleMark(): void;
   clearMarks(): void;
 
-  open(): void;
+  open(path?: string): void;
+  navigationGeneration(): number;
+  pendingRevealPath(): string | null;
   /**
    * Show a path, reusing a tab already on it.
    *
@@ -226,6 +229,7 @@ interface DirectoryLoader {
    * shape is meaningless. This is stable, so it is an ordinary dependency.
    */
   listedOptionsFor(id: string): ListingOptions | undefined;
+  pendingPath(id: string | undefined): string | null;
 }
 
 /**
@@ -422,6 +426,10 @@ function useDirectoryLoader(
     invalidate,
     release,
     listedOptionsFor,
+    pendingPath: (id) => {
+      const target = pendingReveal.current.get(id ?? "");
+      return target ? `${target.path === "/" ? "" : target.path}/${target.name}` : null;
+    },
     prepareReveal: (id: string, path: string, name: string) => {
       invalidate(id, true);
       pendingReveal.current.set(id, {
@@ -500,9 +508,13 @@ function useWatchReconciler(topology: string, loadTab: (id: string, path: string
  */
 export function useTabs(initialPath: string): Tabs {
   const [state, setState] = useState<TabsState>(() => createTabs(initialPath));
-  const [parentEntries, setParentEntries] = useState<readonly FsEntry[]>([]);
+  const activeId = state.tabs[state.activeIndex]?.id;
+  const {
+    current: navigationGeneration,
+    note: noteNavigation,
+    release: releaseNavigation,
+  } = useNavigationGenerations(activeId);
   const { errorFor, reportError } = useTabErrors();
-  const [loading, setLoading] = useState(true);
   const stored = useListingOptions();
   const options = stored.options;
 
@@ -543,14 +555,196 @@ export function useTabs(initialPath: string): Tabs {
   // so what it depends on and what it uses are the same thing.
   const topology = state.tabs.map((tab) => `${tab.id}${FIELD}${tab.pane.path}`).join(RECORD);
 
-  const { loadTab, release, listedOptionsFor, prepareReveal, invalidate } = useDirectoryLoader(
-    optionsRef,
-    setState,
-    reportError,
-  );
+  const { loadTab, release, listedOptionsFor, prepareReveal, invalidate, pendingPath } =
+    useDirectoryLoader(optionsRef, setState, reportError);
 
   useWatchReconciler(topology, loadTab);
 
+  const { parentEntries, loading } = useParentEntries(activePath, options);
+
+  /**
+   * Bring the visible tab's listing up to date with the current options.
+   *
+   * One rule covers two situations that look different and are not: the order
+   * changed while this tab was on screen, and the user switched to a tab that
+   * was in the background when it changed. Both are "what is in front of me was
+   * listed under different options", and both are answered by re-listing it.
+   */
+  useEffect(() => {
+    if (activeId === undefined) return;
+
+    const under = listedOptionsFor(activeId);
+    // Never listed at all is the reconciler's job, not this one. Claiming it
+    // here would start a second read of the same directory on every open.
+    if (under === undefined || sameOptions(under, options)) return;
+
+    loadTab(activeId, activePath);
+  }, [activeId, activePath, options, loadTab, listedOptionsFor]);
+
+  /** A cursor move or a selection change: the pane changes, the trail does not. */
+  const changeActive = useCallback((change: (p: PaneState) => PaneState) => {
+    setState((previous) => updateActivePane(previous, change));
+  }, []);
+
+  /** A deliberate move to another directory, which the trail remembers. */
+  const goTo = useCallback(
+    (change: (p: PaneState) => PaneState) => {
+      noteNavigation(activeId);
+      invalidate(activeId);
+      setState((previous) => navigateActivePane(previous, change));
+    },
+    [activeId, invalidate, noteNavigation],
+  );
+
+  const close = useCallback(
+    (index?: number) => {
+      setState((previous) => {
+        // Release the per-tab bookkeeping with the tab. The errors map is
+        // keyed by tab id too, so it goes the same way — otherwise a closed
+        // tab's failure outlives it for the life of the window.
+        const closing = previous.tabs[index ?? previous.activeIndex]?.id;
+        if (closing !== undefined) {
+          releaseNavigation(closing);
+          release(closing);
+          reportError(closing, null);
+        }
+
+        const next = closeTab(previous, index ?? previous.activeIndex);
+        if (next !== null) return next;
+
+        // The last tab is gone, so the window is put away — NOT closed.
+        //
+        // This used to call `window.close()`, and verification found what that
+        // costs. Page code closing the window DESTROYS it, and does so without
+        // ever raising the window's own `close` event (measured on Electron
+        // 41), so the main process cannot intercept it: every tab, cursor and
+        // scroll position went, and the daemon then answered every `open` with
+        // success while having no window to open anything in.
+        //
+        // The collection is deliberately left untouched. "Close the last tab"
+        // in a resident one-window application means "put the file manager
+        // away", and coming back to an empty window would be a worse answer
+        // than coming back to where you were.
+        void hideWindow();
+        return previous;
+      });
+    },
+    [release, reportError, releaseNavigation],
+  );
+
+  return {
+    navigationGeneration,
+    pendingRevealPath: pendingPath.bind(null, activeId),
+    pane,
+    parentEntries,
+    parentCursorName: nameOf(activePath),
+    views: state.tabs.map((tab) => ({
+      id: tab.id,
+      path: tab.pane.path,
+      name: nameOf(tab.pane.path),
+    })),
+    activeIndex: state.activeIndex,
+    showBar: showTabBar(state),
+    sort: options.sort,
+    reverse: options.reverse,
+    showHidden: options.showHidden,
+    error: errorFor(activeId),
+    loading,
+
+    historyBack: () => {
+      noteNavigation(activeId);
+      invalidate(activeId);
+      setState((previous) => stepActiveHistory(previous, "back"));
+    },
+    historyForward: () => {
+      noteNavigation(activeId);
+      invalidate(activeId);
+      setState((previous) => stepActiveHistory(previous, "forward"));
+    },
+
+    // The next value is computed here and not inside a state updater. React
+    // may call an updater more than once and at a time of its choosing, so a
+    // write started from inside one is a side effect with no guarantee about
+    // how often it runs — which is exactly what it must not be.
+    setSort: (sort, reverse) => stored.set({ ...options, sort, reverse }),
+    toggleHidden: () => stored.set({ ...options, showHidden: !options.showHidden }),
+
+    moveBy: (delta) => changeActive((p) => moveCursor(p, delta)),
+    moveTo: (index) => changeActive((p) => moveCursor(p, index - p.cursorIndex)),
+    enter: () => goTo(enterDirectory),
+    leave: () => goTo(leaveDirectory),
+    navigate: (path) => goTo((p) => ({ ...p, path, entries: [], cursorIndex: 0 })),
+    reveal: (path) =>
+      revealInTab(path, activeId, pane.path, {
+        noteNavigation,
+        prepareReveal,
+        loadTab,
+        setState,
+      }),
+    toggleMark: () => changeActive(toggleSelection),
+    clearMarks: () => changeActive(clearSelection),
+
+    open: (path) => appendTab(setState, activePath, path),
+    // A fresh arrow, like every other action here except `close` — which is a
+    // callback only because effects in this file depend on it. Its ONE
+    // subscriber holds it through a ref instead, so the identity never
+    // matters; see the note in App.
+    openAt: (path) => {
+      noteNavigation(activeId);
+      invalidate(activeId);
+      setState((previous) => openOrActivateTab(previous, path));
+    },
+    close,
+    // None of these touches the errors, and that is the fix rather than an
+    // omission. Clearing on a switch was tried: it hid the stale message and
+    // ALSO wiped the live one, so coming back to an unreadable directory showed
+    // "0 entries" with nothing to say why — returning to a tab that already has
+    // a recorded listing does not re-attempt the read. The map is keyed by tab,
+    // so switching shows the right message with no clearing at all.
+    goNext: () => setState(nextTab),
+    goPrevious: () => setState(previousTab),
+    activate: (index) => setState((previous) => activateTab(previous, index)),
+  };
+}
+
+function appendTab(
+  setState: Dispatch<SetStateAction<TabsState>>,
+  currentPath: string,
+  requestedPath?: string,
+) {
+  setState((previous) => openTab(previous, requestedPath ?? currentPath));
+}
+
+function revealInTab(
+  path: string,
+  id: string | undefined,
+  currentPath: string,
+  actions: {
+    noteNavigation(id: string | undefined): void;
+    prepareReveal: DirectoryLoader["prepareReveal"];
+    loadTab: DirectoryLoader["loadTab"];
+    setState: Dispatch<SetStateAction<TabsState>>;
+  },
+) {
+  actions.noteNavigation(id);
+  if (id === undefined) return;
+  const parent = parentOf(path);
+  actions.prepareReveal(id, parent, nameOf(path));
+  if (parent === currentPath) actions.loadTab(id, parent);
+  else
+    actions.setState((previous) =>
+      navigateActivePane(previous, (pane) => ({
+        ...pane,
+        path: parent,
+        entries: [],
+        cursorIndex: 0,
+      })),
+    );
+}
+
+function useParentEntries(activePath: string, options: ListingOptions) {
+  const [parentEntries, setParentEntries] = useState<readonly FsEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   // The parent column belongs to the active tab only: no background tab shows
   // one, so reading it for all of them would be work nobody sees.
   useEffect(() => {
@@ -576,149 +770,5 @@ export function useTabs(initialPath: string): Tabs {
     // is more confusing than either order on its own.
   }, [activePath, options]);
 
-  /**
-   * Bring the visible tab's listing up to date with the current options.
-   *
-   * One rule covers two situations that look different and are not: the order
-   * changed while this tab was on screen, and the user switched to a tab that
-   * was in the background when it changed. Both are "what is in front of me was
-   * listed under different options", and both are answered by re-listing it.
-   */
-  const activeId = state.tabs[state.activeIndex]?.id;
-  useEffect(() => {
-    if (activeId === undefined) return;
-
-    const under = listedOptionsFor(activeId);
-    // Never listed at all is the reconciler's job, not this one. Claiming it
-    // here would start a second read of the same directory on every open.
-    if (under === undefined || sameOptions(under, options)) return;
-
-    loadTab(activeId, activePath);
-  }, [activeId, activePath, options, loadTab, listedOptionsFor]);
-
-  /** A cursor move or a selection change: the pane changes, the trail does not. */
-  const changeActive = useCallback((change: (p: PaneState) => PaneState) => {
-    setState((previous) => updateActivePane(previous, change));
-  }, []);
-
-  /** A deliberate move to another directory, which the trail remembers. */
-  const goTo = useCallback(
-    (change: (p: PaneState) => PaneState) => {
-      invalidate(activeId);
-      setState((previous) => navigateActivePane(previous, change));
-    },
-    [activeId, invalidate],
-  );
-
-  const close = useCallback(
-    (index?: number) => {
-      setState((previous) => {
-        // Release the per-tab bookkeeping with the tab. The errors map is
-        // keyed by tab id too, so it goes the same way — otherwise a closed
-        // tab's failure outlives it for the life of the window.
-        const closing = previous.tabs[index ?? previous.activeIndex]?.id;
-        if (closing !== undefined) {
-          release(closing);
-          reportError(closing, null);
-        }
-
-        const next = closeTab(previous, index ?? previous.activeIndex);
-        if (next !== null) return next;
-
-        // The last tab is gone, so the window is put away — NOT closed.
-        //
-        // This used to call `window.close()`, and verification found what that
-        // costs. Page code closing the window DESTROYS it, and does so without
-        // ever raising the window's own `close` event (measured on Electron
-        // 41), so the main process cannot intercept it: every tab, cursor and
-        // scroll position went, and the daemon then answered every `open` with
-        // success while having no window to open anything in.
-        //
-        // The collection is deliberately left untouched. "Close the last tab"
-        // in a resident one-window application means "put the file manager
-        // away", and coming back to an empty window would be a worse answer
-        // than coming back to where you were.
-        void hideWindow();
-        return previous;
-      });
-    },
-    [release, reportError],
-  );
-
-  return {
-    pane,
-    parentEntries,
-    parentCursorName: nameOf(activePath),
-    views: state.tabs.map((tab) => ({
-      id: tab.id,
-      path: tab.pane.path,
-      name: nameOf(tab.pane.path),
-    })),
-    activeIndex: state.activeIndex,
-    showBar: showTabBar(state),
-    sort: options.sort,
-    reverse: options.reverse,
-    showHidden: options.showHidden,
-    error: errorFor(activeId),
-    loading,
-
-    historyBack: () => {
-      invalidate(activeId);
-      setState((previous) => stepActiveHistory(previous, "back"));
-    },
-    historyForward: () => {
-      invalidate(activeId);
-      setState((previous) => stepActiveHistory(previous, "forward"));
-    },
-
-    // The next value is computed here and not inside a state updater. React
-    // may call an updater more than once and at a time of its choosing, so a
-    // write started from inside one is a side effect with no guarantee about
-    // how often it runs — which is exactly what it must not be.
-    setSort: (sort, reverse) => stored.set({ ...options, sort, reverse }),
-    toggleHidden: () => stored.set({ ...options, showHidden: !options.showHidden }),
-
-    moveBy: (delta) => changeActive((p) => moveCursor(p, delta)),
-    moveTo: (index) => changeActive((p) => moveCursor(p, index - p.cursorIndex)),
-    enter: () => goTo(enterDirectory),
-    leave: () => goTo(leaveDirectory),
-    navigate: (path) => goTo((p) => ({ ...p, path, entries: [], cursorIndex: 0 })),
-    reveal: (path) => {
-      if (activeId === undefined) return;
-      const parent = parentOf(path);
-      prepareReveal(activeId, parent, nameOf(path));
-      if (parent === pane.path) loadTab(activeId, parent);
-      else
-        setState((previous) =>
-          navigateActivePane(previous, (p) => ({
-            ...p,
-            path: parent,
-            entries: [],
-            cursorIndex: 0,
-          })),
-        );
-    },
-    toggleMark: () => changeActive(toggleSelection),
-    clearMarks: () => changeActive(clearSelection),
-
-    open: () => setState((previous) => openTab(previous, activePath)),
-    // A fresh arrow, like every other action here except `close` — which is a
-    // callback only because effects in this file depend on it. Its ONE
-    // subscriber holds it through a ref instead, so the identity never
-    // matters; see the note in App.
-    openAt: (path) => {
-      invalidate(activeId);
-      setState((previous) => openOrActivateTab(previous, path));
-    },
-    close,
-    // None of these touches the errors, and that is the fix rather than an
-    // omission. Clearing on a switch was tried: it hid the stale message and
-    // ALSO wiped the live one, so coming back to an unreadable directory showed
-    // "0 entries" with nothing to say why — returning to a tab that already has
-    // a recorded listing does not re-attempt the read. The map is keyed by tab,
-    // so switching shows the right message with no clearing at all.
-    goNext: () => setState(nextTab),
-    goPrevious: () => setState(previousTab),
-    activate: (index) => setState((previous) => activateTab(previous, index)),
-  };
+  return { parentEntries, loading };
 }

@@ -78,7 +78,7 @@ function routeKey(
 ): KeyOutcome {
   // Tree toolbar controls retain native activation. Otherwise Enter on Include
   // opened the selected file and prevented the focused button's default action.
-  if (nativeTreeActivation(event, context, mode)) return { kind: "notOurs" };
+  if (nativeControlActivation(event, context, mode)) return { kind: "notOurs" };
   if (event.repeat && !mode.flashActive && matchBinding(key, context)?.id === "overview.flash")
     return { kind: "unhandled" };
   const outcome = handleKey(key, mode, context);
@@ -86,11 +86,15 @@ function routeKey(
   return handleKey(key, { ...mode, flashActive: false }, context);
 }
 
-function nativeTreeActivation(event: KeyboardEvent, context: KeyContext, mode: CascadeMode) {
-  if (context.view !== "tree" || mode.modalOpen || mode.flashActive || mode.chordPrefix)
-    return false;
+function nativeControlActivation(event: KeyboardEvent, context: KeyContext, mode: CascadeMode) {
+  if (mode.modalOpen || mode.flashActive || mode.chordPrefix) return false;
   if (!isPlainActivation(event)) return false;
-  return event.target instanceof Element && event.target.closest("button, summary") !== null;
+  if (!(event.target instanceof Element)) return false;
+  const selector =
+    context.view === "tree"
+      ? "button, summary"
+      : ".overview-toolbar button, .overview-toolbar summary";
+  return event.target.closest(selector) !== null;
 }
 
 function isPlainActivation(event: KeyboardEvent) {

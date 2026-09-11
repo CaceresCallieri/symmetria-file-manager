@@ -196,13 +196,18 @@ export interface KeyActions {
   treeExpandOrActivate(): void;
   treeToggleExpand(): void;
   treeToggleHidden(): void;
-  treeToggleGitignore(): void;
+  treePageDown(): void;
+  treePageUp(): void;
   treeRefresh(): void;
 }
 
 /** What a binding is handed. */
 export interface KeyContext {
-  readonly overview?: { toggle(): void; command?(name: OverviewCommand): void };
+  readonly overview?: {
+    toggle(): void;
+    command?(name: OverviewCommand): void;
+    revealDestination?: string;
+  };
   readonly view: ViewKind;
   readonly state: KeyState;
   readonly actions: KeyActions;

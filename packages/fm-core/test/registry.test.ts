@@ -130,7 +130,9 @@ describe("view scoping", () => {
         "tree.expandOrActivate",
       ]),
     );
-    expect(tree.every((binding) => [...CORE, ...TREE_ONLY].includes(binding))).toBe(true);
+    expect(tree.every((binding) => [...CORE, ...TREE_ONLY, ...MILLER_ONLY].includes(binding))).toBe(
+      true,
+    );
     expect(
       tree.some((binding) =>
         ["File", "Clipboard", "Selection", "History", "Tools"].includes(binding.group),
@@ -146,6 +148,6 @@ describe("view scoping", () => {
     expect(CORE).toHaveLength(28);
     // The connected overview adds one binding to the ported table.
     expect(MILLER_ONLY).toHaveLength(21);
-    expect(TREE_ONLY).toHaveLength(6);
+    expect(TREE_ONLY).toHaveLength(9);
   });
 });

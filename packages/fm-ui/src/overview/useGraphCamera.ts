@@ -66,11 +66,7 @@ export function useGraphCamera(options: GraphCameraOptions) {
     },
     [viewport],
   );
-  const animate = useCameraAnimation(
-    read,
-    write,
-    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
-  );
+  const animate = useCameraAnimation(read, write);
   const cancel = useCallback(() => {
     animate.cancel();
     pending.current = null;

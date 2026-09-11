@@ -90,7 +90,8 @@ function recorder(): Recorder {
     treeExpandOrActivate: log("treeExpandOrActivate"),
     treeToggleExpand: log("treeToggleExpand"),
     treeToggleHidden: log("treeToggleHidden"),
-    treeToggleGitignore: log("treeToggleGitignore"),
+    treePageDown: log("treePageDown"),
+    treePageUp: log("treePageUp"),
     treeRefresh: log("treeRefresh"),
   };
 

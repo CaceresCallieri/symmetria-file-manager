@@ -38,11 +38,24 @@ export function installTreeBridge(extra: readonly OverviewEntry[] = []) {
         }
       : { ok: false, error: { code: "scan_failed", message: "permission denied" } };
   });
+  const originalList = window.symmetriaFm?.list;
+  const list = vi.fn(async (request: { path: string }) => {
+    const found = entries.get(request.path);
+    if (!found && originalList) return originalList(request);
+    return {
+      ok: true,
+      value: {
+        entries: (found ?? []).map((entry) => ({ ...entry, size: 0, modifiedMs: 0 })),
+        total: found?.length ?? 0,
+        streamId: null,
+      },
+    };
+  });
   const open = vi.fn(async () => ({ ok: true, value: null }));
   const trash = vi.fn(async () => ({ ok: true, value: null }));
   const clipboard = vi.fn(async () => ({ ok: true, value: null }));
-  Object.assign(window.symmetriaFm ?? {}, { overview, open, trash, clipboard });
-  return { ...log, overview, open, trash, clipboard, entries };
+  Object.assign(window.symmetriaFm ?? {}, { overview, list, open, trash, clipboard });
+  return { ...log, overview, list, open, trash, clipboard, entries };
 }
 
 export function treeKey(key: string, ctrlKey = false) {

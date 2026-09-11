@@ -154,6 +154,10 @@ export function resolveChord(prefix: string, event: KeyEvent, ctx: KeyContext): 
 }
 
 function executeChord(prefix: string, key: string, ctx: KeyContext): void {
+  if (ctx.view === "tree") {
+    if (prefix === "g" && key === "g") ctx.actions.jumpToTop();
+    return;
+  }
   if (prefix === "g") resolveGoChord(key, ctx);
   else if (prefix === "c") resolveCopyChord(key, ctx);
   else if (prefix === ",") resolveSortChord(key, ctx);

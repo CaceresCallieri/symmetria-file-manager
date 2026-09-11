@@ -14,7 +14,7 @@ import {
   type PickerWindowRequest,
   pickerFromSearch,
 } from "@symmetria/fm-core/windowUrl";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { BrowsingView } from "./components/BrowsingView.tsx";
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
@@ -206,15 +206,7 @@ function searchFieldProps(search: Search) {
 export function App(props: AppProps = {}) {
   const tabs = useTabs(initialPath(props.startPath));
   const home = homePath(props.homePath);
-  const tree = useTreeMode();
-  const overview = useOverviewMode(
-    tabs.pane.path,
-    tabs.showHidden,
-    tabs.openAt,
-    tabs.reveal,
-    tabs.navigate,
-    tree.root,
-  );
+  const { tree, overview } = useProjectViews(tabs);
   // Memoised because `pickerFromSearch` PARSES the URL: a fresh object each
   // render would defeat every memo inside `usePicker`, and through it the whole
   // key action table. The URL cannot change for this window's lifetime.
@@ -233,8 +225,10 @@ export function App(props: AppProps = {}) {
   // `useTabs` owns the tab collection, while composing an external event source
   // onto it is this component's job.
   useExternalOpen((path) => {
-    tree.close();
-    overview.openExternal(path);
+    search.cancel();
+    modes.reset();
+    overview.close();
+    tree.external(path);
   });
 
   // The preview is resolved BEFORE the key actions, not after, because one of
@@ -256,19 +250,16 @@ export function App(props: AppProps = {}) {
     previewing.toggleAudio,
   );
 
-  const toggleView = () => {
-    if (picker.state.active) return;
-    search.cancel();
-    modes.reset();
-    tree.toggle(tabs.pane.path);
-  };
-  const baseContext: KeyContext = {
-    view: overview.view,
-    state,
-    actions: { ...actions, toggleViewMode: toggleView },
+  const { toggleView, context } = browsingContext(
+    picker.state.active,
+    search,
+    modes,
+    tree,
     overview,
-  };
-  const context = treeKeyContext(baseContext, tree);
+    state,
+    actions,
+  );
+  useBrowsingTransitions(tree.id, modes.reset, search.cancel, tree.cancel);
 
   const mode = useMemo<CascadeMode>(
     () => cascadeModeFor(modes, ops.modal.kind, search.active, overview.flashActive),
@@ -299,7 +290,7 @@ export function App(props: AppProps = {}) {
         <BrowsingView
           tabs={tabs}
           tree={tree}
-          model={overview.model}
+          model={overview.treeModel}
           onOpen={props.onOpenFile ?? ops.openAbsolute}
           toggleView={toggleView}
           pickerActive={picker.state.active}
@@ -311,7 +302,7 @@ export function App(props: AppProps = {}) {
         <WhichKeyOverlay
           prefix={modes.chordPrefix}
           cursorIsImage={state.cursorEntry?.isImage === true}
-          bookmarks={bookmarks.byLetter}
+          bookmarks={browsingBookmarks(context, bookmarks.byLetter)}
         />
         {/* One bar, and nothing above it that comes and goes. The search field
           and the transient line were rows of their own here, so opening a
@@ -358,4 +349,64 @@ export function App(props: AppProps = {}) {
       />
     </>
   );
+}
+
+function useBrowsingTransitions(id: string, ...reset: (() => void)[]) {
+  const latest = useRef(reset);
+  latest.current = reset;
+  const previous = useRef(id);
+  useEffect(() => {
+    if (previous.current === id) return;
+    previous.current = id;
+    for (const clear of latest.current) clear();
+  }, [id]);
+}
+
+function browsingBookmarks(context: KeyContext, bookmarks: ReadonlyMap<string, Bookmark>) {
+  return context.view === "tree" ? new Map<string, Bookmark>() : bookmarks;
+}
+
+function browsingContext(
+  pickerActive: boolean,
+  search: Search,
+  modes: KeyWiring["modes"],
+  tree: ReturnType<typeof useTreeMode>,
+  overview: ReturnType<typeof useOverviewMode>,
+  state: KeyContext["state"],
+  actions: KeyContext["actions"],
+) {
+  const toggleView = () => {
+    if (pickerActive) return;
+    search.cancel();
+    modes.reset();
+    tree.cancel();
+    tree.toggle();
+  };
+  const base: KeyContext = {
+    view: overview.view,
+    state,
+    actions: { ...actions, toggleViewMode: toggleView },
+    overview: {
+      ...overview,
+      toggle: () => {
+        tree.cancel();
+        overview.toggle();
+      },
+    },
+  };
+  return { toggleView, context: treeKeyContext(base, tree, overview.model) };
+}
+
+function useProjectViews(tabs: Tabs) {
+  const tree = useTreeMode(tabs);
+  const overview = useOverviewMode(
+    tabs.pane.path,
+    tabs.showHidden,
+    tabs.openAt,
+    tabs.reveal,
+    tabs.navigate,
+    tree.root,
+    { tab: tree.id, reveal: tree.reveal, exit: tree.close },
+  );
+  return { tree, overview };
 }
