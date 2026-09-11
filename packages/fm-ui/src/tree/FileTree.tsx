@@ -14,6 +14,7 @@ import { useTreeController } from "./useTreeController.ts";
 import { useTreeInteractions } from "./useTreeInteractions.ts";
 import type { TreeCommand, TreePort } from "./useTreeMode.ts";
 import { useTreeNavigation } from "./useTreeNavigation.ts";
+import { useTreeReveal } from "./useTreeReveal.ts";
 import { useTreeState } from "./useTreeState.ts";
 import { useTreeWidth } from "./useTreeWidth.ts";
 import "./tree.css";
@@ -64,7 +65,15 @@ export function FileTree({
   });
   // The virtualizer initializes native scroll during its layout effect. Restoring
   // before that effect reset both saved anchors and initial reveals to zero.
-  const motion = useTreeNavigation(viewport, rows, selected, record, model.loading, setSelected);
+  const resolvingReveal = useTreeReveal(record.pendingReveal, model);
+  const motion = useTreeNavigation(
+    viewport,
+    rows,
+    selected,
+    record,
+    model.loading || resolvingReveal,
+    setSelected,
+  );
   const activate = (index: number) => {
     const row = rows[index];
     if (!row) return;

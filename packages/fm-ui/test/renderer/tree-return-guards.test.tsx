@@ -146,3 +146,42 @@ it("finishes an initial reveal after discovery inserts rows above its target", (
   expect(top + 24).toBeLessThanOrEqual(tree.scrollTop + tree.clientHeight);
   expect(record.pendingReveal).toBeNull();
 });
+
+it("defers a cached anchor until its row returns after snapshot eviction", () => {
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(240);
+  const root = "/root";
+  const record = new TreeStateCache().get("tab", root, false);
+  record.shape.selected = "/root/z149";
+  record.anchor = { path: "/root/z140", offset: 0, left: 0 };
+  record.restoreAnchor = true;
+  const props = {
+    root,
+    record,
+    port: { connect: () => () => {}, select: () => {} },
+    onOpen: () => {},
+    onMiller: () => {},
+  };
+  const initial = {
+    folders: new Map<string, OverviewFolder>(),
+    loading: true,
+    inspected: 0,
+    include: () => {},
+  };
+  const { rerender } = render(<FileTree {...props} model={initial} />);
+  expect(record.anchor?.path).toBe("/root/z140");
+  const folders = new Map<string, OverviewFolder>([
+    [
+      root,
+      {
+        path: root,
+        depth: 0,
+        status: "Loaded",
+        entries: Array.from({ length: 150 }, (_, i) => treeEntry(`z${String(i).padStart(3, "0")}`)),
+      },
+    ],
+  ]);
+  rerender(<FileTree {...props} model={{ ...initial, folders, loading: false }} />);
+  const tree = screen.getByRole("tree");
+  expect(tree.scrollTop).toBe(141 * 24);
+  expect(treeRow("/root/z149").getAttribute("aria-selected")).toBe("true");
+});

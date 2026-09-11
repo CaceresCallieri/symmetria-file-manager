@@ -32,6 +32,7 @@ function loadingTree(selected: string) {
       },
     ],
   ]);
+  folders.set("/root/a", { path: "/root/a", depth: 1, status: "Depth limit reached", entries: [] });
   let controller: TreeController | undefined;
   const props = {
     root,
@@ -46,17 +47,20 @@ function loadingTree(selected: string) {
       select: () => {},
     },
   };
-  const model = { folders, loading: true, inspected: 51, include: () => {} };
+  const include = vi.fn();
+  const model = { folders, loading: true, inspected: 51, include };
   const { rerender } = render(<FileTree {...props} model={model} />);
   return {
     record,
+    include,
+    reveal: (path: string) => act(() => controller?.reveal(path)),
     command: (name: Parameters<TreeController["command"]>[0]) =>
       act(() => controller?.command(name)),
-    publish: (loading: boolean, count = 1) => {
+    publish: (loading: boolean, count = 1, status = "Loaded") => {
       folders.set("/root/a", {
         path: "/root/a",
         depth: 1,
-        status: "Loaded",
+        status,
         entries: Array.from({ length: count }, (_, i) => treeEntry(`new${i}`)),
       });
       rerender(<FileTree {...props} model={{ ...model, folders: new Map(folders), loading }} />);
@@ -113,3 +117,30 @@ it("keeps a visible cursor in view when a large discovery batch inserts earlier 
   expect(top).toBeGreaterThanOrEqual(tree.scrollTop);
   expect(top + 24).toBeLessThanOrEqual(tree.scrollTop + tree.clientHeight);
 });
+
+it("does not reapply a deep reveal after the user moves during its ancestor read", () => {
+  const fixture = loadingTree("/root/a");
+  fixture.reveal("/root/a/new0");
+  expect(fixture.include).toHaveBeenCalledWith("/root/a");
+  fixture.command("down");
+  const selected = screen.getByRole("tree").querySelector<HTMLElement>('[aria-selected="true"]')
+    ?.dataset.path;
+  fixture.publish(false);
+  expect(
+    screen.getByRole("tree").querySelector<HTMLElement>('[aria-selected="true"]')?.dataset.path,
+  ).toBe(selected);
+  expect(fixture.record.pendingReveal).toBeNull();
+});
+
+it.each(["Traversal budget reached", "Unreadable: permission denied"])(
+  "ends an explicit reveal when the ancestor reports %s",
+  (status) => {
+    const fixture = loadingTree("/root/a");
+    fixture.reveal("/root/a/new0");
+    fixture.include.mockClear();
+    fixture.publish(false, 0, status);
+    expect(fixture.include).not.toHaveBeenCalled();
+    expect(fixture.record.pendingReveal).toBeNull();
+    expect(treeRow("/root/a").getAttribute("aria-selected")).toBe("true");
+  },
+);

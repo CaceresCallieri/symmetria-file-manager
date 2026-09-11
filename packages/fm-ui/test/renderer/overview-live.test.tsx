@@ -5,9 +5,14 @@ import { App } from "../../src/App.tsx";
 import { installBridge } from "./support.ts";
 
 afterEach(cleanup);
+function installedBridge() {
+  const bridge = window.symmetriaFm;
+  if (!bridge) throw new Error("Missing fixture bridge");
+  return bridge;
+}
 async function open() {
   const log = installBridge();
-  const reads = vi.spyOn(window.symmetriaFm!, "overview");
+  const reads = vi.spyOn(installedBridge(), "overview");
   render(<App startPath="/home/jc" />);
   fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   await screen.findByText("beta.md");
@@ -19,16 +24,14 @@ it("refreshes only a changed loaded branch and releases overview watches on clos
   const watch = log.watched.find(
     (id) => id.startsWith("overview:") && id.endsWith(":/home/jc/projects"),
   );
-  expect(watch).toBeTruthy();
   reads.mockClear();
   log.addEntry("/home/jc/projects", "fresh.txt");
-  act(() => log.emitChange(watch!));
+  if (!watch) throw new Error("Missing projects overview watch");
+  act(() => log.emitChange(watch));
   // The hidden Miller preview can show this name before the debounced overview read.
   // Observe the overview itself so the watch assertion cannot race that preview.
   await within(screen.getByRole("dialog", { name: "Folder overview" })).findByText("fresh.txt");
-  expect(reads.mock.calls.map(([ask]) => (ask as { path: string }).path)).toEqual([
-    "/home/jc/projects",
-  ]);
+  expect(reads.mock.calls).toEqual([[expect.objectContaining({ path: "/home/jc/projects" })]]);
   fireEvent.keyDown(window, { key: "Escape" });
   await waitFor(() =>
     expect(log.unwatched).toEqual(
@@ -39,14 +42,14 @@ it("refreshes only a changed loaded branch and releases overview watches on clos
 it("paints cached rows before a deferred revalidation completes", async () => {
   await open();
   fireEvent.keyDown(window, { key: "Escape" });
-  Object.assign(window.symmetriaFm!, { overview: () => new Promise(() => undefined) });
+  Object.assign(installedBridge(), { overview: () => new Promise(() => undefined) });
   fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   expect(screen.getByText("beta.md")).toBeTruthy();
   expect(screen.getByText(/Refreshing/)).toBeTruthy();
 });
 it("shows failed watch coverage and an explicit refresh action", async () => {
   installBridge();
-  Object.assign(window.symmetriaFm!, {
+  Object.assign(installedBridge(), {
     watch: async () => ({
       ok: false,
       error: { code: "watch_failed", message: "watch unavailable" },
@@ -68,7 +71,8 @@ it("moves a deleted selection to the nearest surviving parent", async () => {
   const watch = log.watched.find(
     (id) => id.startsWith("overview:") && id.endsWith(":/home/jc/projects"),
   );
-  act(() => log.emitChange(watch!));
+  if (!watch) throw new Error("Missing projects overview watch");
+  act(() => log.emitChange(watch));
   await waitFor(() =>
     expect(screen.getByTestId("connected-groups").dataset.selected).toBe("/home/jc/projects"),
   );

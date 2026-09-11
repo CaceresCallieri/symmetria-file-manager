@@ -110,12 +110,6 @@
   flex-shrink: 0;
   white-space: nowrap;
 }
-.tree-scope {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .tree-coverage,
 .file-tree .tree-include {
   flex-shrink: 0;

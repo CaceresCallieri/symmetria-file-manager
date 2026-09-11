@@ -44,6 +44,8 @@
 }
 /* Keep actions visible when Retry and the minimap toggle share a narrow toolbar. */
 .overview-toolbar > strong,
+.overview-toolbar > span,
+.tree-scope,
 .overview-search-query {
   min-width: 0;
   overflow: hidden;
@@ -73,10 +75,6 @@
   outline-offset: 1px;
 }
 .overview-toolbar > span {
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-size: 11px;
   color: var(--muted-foreground);
 }

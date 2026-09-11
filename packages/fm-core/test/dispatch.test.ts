@@ -99,7 +99,7 @@ function recorder(): Recorder {
 }
 
 /** A state in which as many conditional rows as possible are live. */
-function permissiveState(): KeyState {
+function permissiveState(): KeyState & { cursorEntry: NonNullable<KeyState["cursorEntry"]> } {
   return {
     selectedCount: 1,
     searchActive: false,
@@ -241,7 +241,7 @@ describe("Ctrl+R precedence, which two rows share", () => {
 
   it("falls through on a file that is not HTML", () => {
     const ctx = contextWith({
-      cursorEntry: { ...permissiveState().cursorEntry, mimeType: "text/plain" } as never,
+      cursorEntry: { ...permissiveState().cursorEntry, mimeType: "text/plain" },
     });
 
     expect(dispatch(press("r", "Ctrl"), ctx)).toBe(false);
@@ -328,7 +328,7 @@ describe("chords", () => {
 
   it("refuses to copy the bytes of something that is not an image", () => {
     const notImage = contextWith({
-      cursorEntry: { ...permissiveState().cursorEntry, isImage: false } as never,
+      cursorEntry: { ...permissiveState().cursorEntry, isImage: false },
     });
 
     resolveChord("c", press("i"), notImage);
@@ -342,7 +342,7 @@ describe("chords", () => {
       cursorEntry: {
         ...permissiveState().cursorEntry,
         mimeType: "application/octet-stream",
-      } as never,
+      },
     });
 
     resolveChord("c", press("i"), disguised);

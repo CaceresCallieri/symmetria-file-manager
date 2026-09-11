@@ -92,6 +92,9 @@ export function useTreeNavigation(
   useLayoutEffect(() => {
     if (!viewport || !record.restoreAnchor) return;
     const anchor = record.anchor;
+    // Reopening after snapshot eviction initially represents only the root.
+    // Restoring its fallback here discarded the saved anchor before discovery.
+    if (awaitingAnchor(anchor, rows, loading)) return;
     if (anchor)
       write({
         x: anchor.left,
@@ -105,7 +108,7 @@ export function useTreeNavigation(
       });
     previousSelected.current = selected;
     record.restoreAnchor = false;
-  }, [viewport, rows, record, selected, write]);
+  }, [viewport, rows, record, selected, write, loading]);
   useLayoutEffect(() => {
     if (previousSelected.current === selected) return;
     previousSelected.current = selected;

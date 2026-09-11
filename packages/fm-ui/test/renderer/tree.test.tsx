@@ -150,3 +150,27 @@ it("uses a shallower tree snapshot and preserves it across a deeper overview vis
     expect(treeRow(`${boundary}/nested`).textContent).toContain("Depth limit reached"),
   );
 });
+
+it("reveals an overview file below the tree depth limit without activating it", async () => {
+  const log = installTreeBridge();
+  let path = "/home/jc";
+  for (let depth = 0; depth < 7; depth++) {
+    log.entries.set(path, [treeEntry("nested", "directory")]);
+    path += "/nested";
+  }
+  log.entries.set(path, [treeEntry("deep.txt")]);
+  const target = `${path}/deep.txt`;
+  render(<App startPath="/home/jc" />);
+  treeKey("e", true);
+  await waitFor(() => expect(screen.getByRole("tree").dataset.rowCount).toBe("7"));
+  treeKey("o", true);
+  const overview = await screen.findByRole("dialog", { name: "Folder overview" });
+  await waitFor(() => expect(within(overview).queryByText("Loading…")).toBeNull());
+  treeKey("/");
+  const input = within(overview).getByRole("textbox", { name: "Search loaded paths" });
+  fireEvent.change(input, { target: { value: "deep.txt" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  treeKey("Enter");
+  await waitFor(() => expect(treeRow(target).getAttribute("aria-selected")).toBe("true"));
+  expect(log.open).not.toHaveBeenCalled();
+});
