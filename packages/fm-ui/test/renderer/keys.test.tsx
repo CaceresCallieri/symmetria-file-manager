@@ -136,15 +136,25 @@ describe("operations that later phases build", () => {
     // yet. A key that silently does nothing reads as a bug; one that says why
     // reads as a roadmap.
     //
-    // `f` is the fuzzy finder, still unbuilt. `d` used to stand here and now
-    // opens the trash dialog for real — an operation graduating out of this
-    // test is the point of the test, not a break in it.
+    // `Ctrl+E` is the tree view, still unbuilt. Two keys have already stood
+    // here and moved on: `d` now opens the trash dialog, and `f` now opens the
+    // finder. An operation graduating out of this test is the point of the
+    // test, not a break in it.
+    await openedAtHome();
+
+    fireEvent.keyDown(window, { key: "e", ctrlKey: true });
+
+    const message = await screen.findByTestId("pane-message");
+    expect(message.textContent).toMatch(/tree view/i);
+  });
+
+  it("opens the finder for an operation that now exists", async () => {
+    // The graduation, asserted rather than merely described above.
     await openedAtHome();
 
     fireEvent.keyDown(window, { key: "f" });
 
-    const message = await screen.findByTestId("pane-message");
-    expect(message.textContent).toMatch(/fuzzy finder/i);
+    expect(await screen.findByTestId("finder")).toBeDefined();
   });
 
   it("opens the trash dialog for an operation that now exists", async () => {

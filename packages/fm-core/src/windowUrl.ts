@@ -149,10 +149,14 @@ export function pickerFromSearch(search: string): PickerWindowRequest | null {
   }
 
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+  // SAFETY: proven a non-null, non-array object on the line above, and both
+  // fields are declared optional and `unknown` — so this claims only that the
+  // keys may be read, and the checks below establish what they hold.
   const { fifo, options } = parsed as { fifo?: unknown; options?: unknown };
   if (!isText(fifo)) return null;
   if (typeof options !== "object" || options === null || Array.isArray(options)) return null;
 
+  // SAFETY: proven a non-null, non-array object on the line above.
   const o = options as Record<string, unknown>;
   if (!isText(o.title) || !isText(o.acceptLabel) || !isText(o.suggestedName)) return null;
   if (!isText(o.currentFolder)) return null;

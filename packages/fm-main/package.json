@@ -25,9 +25,11 @@
     "./ops/clipboard": "./src/ops/clipboard.ts",
     "./ops/zoxide": "./src/ops/zoxide.ts",
     "./listingOptions": "./src/listingOptions.ts",
-    "./jsonStore": "./src/jsonStore.ts"
+    "./jsonStore": "./src/jsonStore.ts",
+    "./search": "./src/search.ts"
   },
   "dependencies": {
+    "@symmetria/fm-search": "workspace:*",
     "@symmetria/fm-core": "workspace:*"
   },
   "devDependencies": {

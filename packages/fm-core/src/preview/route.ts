@@ -155,6 +155,69 @@ const LANGUAGES: ReadonlyMap<string, string> = new Map([
   ["nix", "nix"],
 ]);
 
+/** A file with a second presentation, beside its source. */
+export type RenderableAs = "markdown" | "html";
+
+/**
+ * Extensions that carry a rendered form.
+ *
+ * Separate from `LANGUAGES` above even though both are keyed on an extension,
+ * because they answer different questions and drift apart the moment a third
+ * renderable format arrives: `LANGUAGES` says how to COLOUR the source, and
+ * this says whether there is anything to show instead of the source.
+ */
+const RENDERABLE_EXTENSIONS: ReadonlyMap<string, RenderableAs> = new Map([
+  ["md", "markdown"],
+  ["markdown", "markdown"],
+  ["html", "html"],
+  ["xhtml", "html"],
+]);
+
+/** Types that carry a rendered form, for a file whose name does not say. */
+const RENDERABLE_TYPES: ReadonlyMap<string, RenderableAs> = new Map([
+  ["text/markdown", "markdown"],
+  ["text/html", "html"],
+  ["application/xhtml+xml", "html"],
+]);
+
+/**
+ * Whether this file can be shown rendered, and as what.
+ *
+ * **Deliberately not a member of `PreviewRoute` and not an argument to
+ * `routePreview`.** The route union is a decision tree over what KIND of thing
+ * a file is; whether that kind has a second presentation is a separate fact,
+ * and folding it in would make every consumer test a discriminant before
+ * reading a field only some members carry. Adding the MODE as an argument
+ * would be worse still: the router is shared precisely because it holds no
+ * interface state.
+ *
+ * **One function, two callers**, and that is the point of it existing at all.
+ * The preview hook calls it because it holds the name and the resolved type;
+ * the keybinding table calls it from a `when()` gate because a cursor entry
+ * holds both as well. The alternative — a MIME list in each — is the shape
+ * that cost the previous cycle a release, when the panel's hand-written table
+ * and the system database disagreed about compressed tarballs while every test
+ * passed.
+ *
+ * The name decides first and the type is the fallback. A `.md` served as
+ * `text/plain` is still markdown, because the user chose the name and the
+ * database guessed; a README with no extension is still markdown when the
+ * database says so, because there the name says nothing at all.
+ */
+export function renderableAs(name: string, mime: string | null): RenderableAs | null {
+  const lower = name.toLowerCase();
+
+  // `dot > 0`, matching `languageFor`: a leading dot makes a NAME, not an
+  // extension, so a file called exactly `.md` is a dotfile and not markdown.
+  const dot = lower.lastIndexOf(".");
+  if (dot > 0) {
+    const byExtension = RENDERABLE_EXTENSIONS.get(lower.slice(dot + 1));
+    if (byExtension !== undefined) return byExtension;
+  }
+
+  return mime === null ? null : (RENDERABLE_TYPES.get(mime) ?? null);
+}
+
 /**
  * Files that carry a language but no extension.
  *

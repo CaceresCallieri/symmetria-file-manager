@@ -613,10 +613,15 @@ to acquire the index for the new root (§7). Because the index map is keyed by
 directory with an idle timeout (adopted correction 4), drilling into and back
 out of a directory hits a warm index the second time.
 
-**Frecency is written on confirm, never on drill.** `recordOpen` fires with the
-absolute path and the query that produced the row
-(`fm/qml/…/FuzzyFinderPopup.qml:299`, `fm/plugin/…/fuzzyfinder.cpp:491-507`).
-A drill is not an open, so it teaches nothing.
+**The ranking record is written on confirm, never on drill.** `recordOpen`
+fires with the absolute path and the query that produced the row (see
+`FuzzyFinder::recordOpen` and its QML call site). A drill is not an open, so it
+teaches nothing.
+
+⚠ It writes fff's **query tracker**, not frecency. This document said frecency;
+that was wrong. The record is keyed on the index root plus the query, so the
+learning is per-`(root, query)` and is not shared with a host indexing a
+different root. See `20-spike-search-topology.md` §2.1.
 
 ### 4.5 Content mode
 
@@ -1287,7 +1292,11 @@ export interface SearchBridge {
   /** Content search. STREAMING. Returns a handle that owns one child process. */
   startContentSearch(req: ContentSearchRequest): Promise<ContentSearchHandle>;
 
-  /** Frecency write. Fire and forget; never awaited on the confirm path. */
+  /**
+   * Query-tracker write, NOT a frecency write — the frecency writer is not
+   * exported by the shipped library. Fire and forget; never awaited on the
+   * confirm path.
+   */
   recordOpen(req: { readonly absolutePath: string; readonly query: string }): void;
 
   /** Index phase push, so the status line can move from "indexing" to

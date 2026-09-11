@@ -1,4 +1,5 @@
 import type { Direction, OverviewCommand } from "../overview/navigation.ts";
+import { renderableAs } from "../preview/route.ts";
 import type { Binding, HelpGroup, KeyContext, ViewKind } from "./types.ts";
 
 /**
@@ -563,15 +564,17 @@ export const MILLER_ONLY: readonly Binding[] = [
     // Gated to HTML so Ctrl+R falls through on anything else — and so it never
     // clashes with `op.pickerSaveEdit`, which is also Ctrl+R, is gated on save
     // mode, and sits earlier in CORE so it wins inside a save picker.
-    id: "miller.htmlRender",
+    id: "miller.renderToggle",
     keys: ["r"],
     mods: "Ctrl",
     keycap: "⌃r",
-    label: "Render HTML preview",
-    icon: "html",
+    // Read verbatim by the help sheet. It said "Render HTML preview" while HTML
+    // was the only rendered view; markdown has one now, and the key is one key.
+    label: "Rendered view / source",
+    icon: "article",
     group: "View",
-    when: (ctx) => isHtml(ctx),
-    run: (ctx) => ctx.actions.toggleHtmlRender(),
+    when: (ctx) => isRenderable(ctx),
+    run: (ctx) => ctx.actions.toggleDocumentRender(),
   },
 
   // Search and jump
@@ -734,9 +737,18 @@ export const TREE_ONLY: readonly Binding[] = [
   },
 ];
 
-function isHtml(ctx: KeyContext): boolean {
-  const mime = ctx.state.cursorEntry?.mimeType ?? "";
-  return mime === "text/html" || mime === "application/xhtml+xml";
+/**
+ * Does the entry under the cursor have a rendered form?
+ *
+ * **`renderableAs` and not a list of MIME strings here.** The panel asks the
+ * same function about the same question, so the two cannot disagree about
+ * which files qualify. A second list is the shape that cost the previous cycle
+ * a release, when the renderer's hand-written MIME table and the system
+ * database disagreed about compressed tarballs while every test passed.
+ */
+function isRenderable(ctx: KeyContext): boolean {
+  const entry = ctx.state.cursorEntry;
+  return entry !== null && renderableAs(entry.name, entry.mimeType) !== null;
 }
 
 export function bindingsFor(view: ViewKind): readonly Binding[] {

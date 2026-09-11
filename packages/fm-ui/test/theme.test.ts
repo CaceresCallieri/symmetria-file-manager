@@ -1,6 +1,10 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-
+import {
+  FOREIGN_DOCUMENT_STYLE,
+  FOREIGN_DOCUMENT_TOKENS,
+  SCROLLBAR_RULES,
+} from "@symmetria/fm-core/scrollbar";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -16,6 +20,14 @@ import { describe, expect, it } from "vitest";
 
 const RENDERER = join(import.meta.dirname, "..", "src");
 const TOKENS = join(RENDERER, "theme", "tokens.css");
+/**
+ * The finder ships its own stylesheet, and it is in scope here.
+ *
+ * It moved out of this package when its components did, and a rule that is not
+ * scanned is a rule that may carry a colour literal. The invariant is about the
+ * PANEL AS RENDERED, not about one directory — so the check follows the CSS.
+ */
+const FINDER_CSS = join(import.meta.dirname, "..", "..", "fm-search", "src", "ui", "finder.css");
 
 /** Hex, `rgb()`, `hsl()` and `oklch()` — every way to write a colour. */
 const COLOUR = /#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(|\boklch\(|\bcolor-mix\(/;
@@ -61,7 +73,10 @@ describe("colour inheritance", () => {
   });
 
   it("lets icons take the surrounding colour rather than carrying their own", async () => {
-    const sheet = await readFile(join(RENDERER, "styles.css"), "utf8");
+    // The rule moved with its component into the finder's package. This test
+    // did not move: the property it pins is about how the PANEL renders, and
+    // the panel imports that stylesheet.
+    const sheet = await readFile(FINDER_CSS, "utf8");
     const rule = /\.file-icon \{[^}]*\}/.exec(sheet)?.[0] ?? "";
 
     expect(rule).toContain("currentcolor");
@@ -78,7 +93,7 @@ describe("the palette", () => {
   it("has no colour literal in any stylesheet but the token file", async () => {
     // The generated syntax theme is the other exemption: it IS a palette, and
     // it is regenerated from the KDE theme the Qt build reads.
-    const sheets = (await sourceFiles(RENDERER, /\.css$/)).filter(
+    const sheets = [...(await sourceFiles(RENDERER, /\.css$/)), FINDER_CSS].filter(
       (file) => !file.endsWith("syntax-wine.css"),
     );
 
@@ -100,6 +115,33 @@ describe("the palette", () => {
     expect([...used].filter((token) => !declared.has(token))).toEqual([]);
   });
 });
+
+/**
+ * Every `selector { … }` block in a sheet, as sorted declaration lists.
+ *
+ * Sorted and whitespace-flattened so the comparison is about what the rules
+ * SAY, not about how either copy is laid out. Comments come out first: the
+ * panel's copy explains itself inside its rule bodies and the served copy does
+ * not, and that difference is not a drift.
+ */
+function rulesIn(css: string): Map<string, string[]> {
+  const rules = new Map<string, string[]>();
+
+  for (const match of css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const declarations = (match[2] ?? "")
+      .split(";")
+      .map((one) => one.trim().replace(/\s+/g, " "))
+      .filter((one) => one !== "")
+      .sort();
+    rules.set((match[1] ?? "").trim(), declarations);
+  }
+  return rules;
+}
+
+/** The value `tokens.css` declares for one custom property. */
+function declaredValue(tokens: string, name: string): string | undefined {
+  return new RegExp(`^\\s*${name}:\\s*([^;]+);`, "m").exec(tokens)?.[1]?.trim();
+}
 
 /**
  * The scrollbars.
@@ -143,10 +185,12 @@ describe("the scrollbar", () => {
     expect(thumb).toMatch(/border-radius:/);
   });
 
-  it("leaves the track transparent, so the surface shows through the lane", async () => {
+  it("leaves the panel's track transparent, so the surface shows through the lane", async () => {
     const track = /::-webkit-scrollbar-track\s*\{[^}]*\}/.exec(await sheet())?.[0] ?? "";
+    const tokens = await readFile(TOKENS, "utf8");
 
-    expect(track).toContain("transparent");
+    expect(track).toContain("var(--scrollbar-track)");
+    expect(declaredValue(tokens, "--scrollbar-track")).toBe("transparent");
   });
 
   it("draws no arrow buttons at the ends", async () => {
@@ -173,6 +217,75 @@ describe("the scrollbar", () => {
 
     expect(selectors.length).toBeGreaterThan(0);
     expect(selectors.every((prefix) => prefix === "" || prefix === "*")).toBe(true);
+  });
+
+  /**
+   * One definition, two documents.
+   *
+   * A previewed HTML file is a second document with its own cascade — it
+   * cannot see one declaration of `styles.css` — so the main process appends
+   * `SCROLLBAR_RULES` to every HTML document it serves. The rules therefore
+   * exist twice, and these are what stop the copies drifting into two
+   * scrollbars that merely resemble each other.
+   */
+  it("says exactly what the main process serves to a framed document", async () => {
+    const shared = rulesIn(SCROLLBAR_RULES);
+    const panel = rulesIn(await sheet());
+
+    // Every rule, not a sample: a declaration added to one copy alone is the
+    // whole failure being guarded against.
+    expect(shared.size).toBe(6);
+    for (const [selector, declarations] of shared) {
+      expect({ selector, declarations: panel.get(selector) }).toEqual({ selector, declarations });
+    }
+  });
+
+  it("gives a framed document every one of the panel's own values but one", async () => {
+    // A page carries no `tokens.css`, so the served copy has to declare the
+    // values itself. Four of the five are the panel's exactly — the two
+    // lengths and both thumb colours — which is what makes the lane in a
+    // preview the same object as the lane in the file list rather than one
+    // that resembles it.
+    const tokens = await readFile(TOKENS, "utf8");
+    const foreign = rulesIn(FOREIGN_DOCUMENT_TOKENS).get(":root") ?? [];
+
+    for (const name of [
+      "--scrollbar-width",
+      "--radius-sm",
+      "--scrollbar-thumb",
+      "--scrollbar-thumb-hover",
+    ]) {
+      expect(foreign).toContain(`${name}: ${declaredValue(tokens, name)}`);
+    }
+  });
+
+  it("paints that document's track solid, because transparent cannot work there", async () => {
+    // THE finding this arrangement exists for, and the edit a future reader
+    // will be tempted to make. Measured against Chromium 41: once a track
+    // carries author styles, a framed document composites it against the
+    // FRAME's own white base rather than against the page. A previewed page
+    // cannot paint that area — a background on its `body` and a background on
+    // its `html` were both tried, and both left a white stripe down a dark
+    // page, which is worse than the default scrollbar it replaced.
+    //
+    // Solid, and specifically the panel's own base: that known substrate is
+    // what lets the four values above be the panel's rather than a second set
+    // chosen to survive an unknown background.
+    const tokens = await readFile(TOKENS, "utf8");
+    const foreign = rulesIn(FOREIGN_DOCUMENT_TOKENS).get(":root") ?? [];
+
+    expect(foreign).not.toContain("--scrollbar-track: transparent");
+    expect(foreign).toContain(`--scrollbar-track: ${declaredValue(tokens, "--background")}`);
+  });
+
+  it("travels as one style element, tokens first", async () => {
+    // Order matters inside the served text: the rules read the tokens, and a
+    // `var()` with no declaration drops its whole declaration silently.
+    expect(FOREIGN_DOCUMENT_STYLE.startsWith("<style>")).toBe(true);
+    expect(FOREIGN_DOCUMENT_STYLE.endsWith("</style>")).toBe(true);
+    expect(FOREIGN_DOCUMENT_STYLE.indexOf(":root")).toBeLessThan(
+      FOREIGN_DOCUMENT_STYLE.indexOf("::-webkit-scrollbar"),
+    );
   });
 });
 
@@ -311,5 +424,50 @@ describe("the status bar's height", () => {
     expect(pathBarRule).toBeDefined();
     expect(bodyOf(pathBarRule ?? "")).not.toContain("height:");
     expect(bodyOf(pathBarRule ?? "")).not.toContain("overflow:");
+  });
+});
+
+describe("the file finder's split", () => {
+  it("drives the list's share from one declared token", async () => {
+    // The user asked for sixty/forty and asked to try fifty/fifty. That second
+    // experiment has to be ONE number, which is only true while the rule reads
+    // a token rather than a literal.
+    const tokens = await readFile(TOKENS, "utf8");
+    const styles = await readFile(FINDER_CSS, "utf8");
+    expect(tokens).toMatch(/--finder-list-share:\s*0\.6\b/);
+    // The gap is subtracted before the share is taken. Declared as a plain
+    // percentage the list got its cut of the WHOLE body and the gap came out of
+    // the panel alone, which measured 61.5:38.5 in a real window against a
+    // token that said sixty/forty.
+    expect(styles).toContain("calc((100% - var(--finder-gap)) * var(--finder-list-share))");
+  });
+
+  it("lets the list shrink below its content, so a long path elides", async () => {
+    // A flex item's default minimum is its content, so without `min-width: 0` a
+    // single very long path would push the list past its share and starve it —
+    // the exact failure Qt worked around by pinning its information panel to
+    // 360px with a hard maximum. The ratio is only safe with this line.
+    const styles = await readFile(FINDER_CSS, "utf8");
+    const rule = styles.slice(styles.indexOf(".finder__list {"));
+    expect(rule.slice(0, rule.indexOf("}"))).toContain("min-width: 0");
+  });
+
+  it("cancels the shared list's top margin, so the two panes align", async () => {
+    // `.overlay__list` is shared with the zoxide popup and carries
+    // `margin: 8px 0 0`, which is right where the list follows the field
+    // directly. In the finder the body owns that gap, so the inherited margin
+    // both doubles it and drops the list 8px below the panel beside it — two
+    // flex siblings under `align-items: stretch`, only one of which moved.
+    const styles = await readFile(FINDER_CSS, "utf8");
+    const rule = styles.slice(styles.indexOf(".finder__list {"));
+    expect(rule.slice(0, rule.indexOf("}"))).toContain("margin-top: 0");
+  });
+
+  it("declares both overlay widths as tokens, narrow and answered", async () => {
+    // Paired with the two above so a token file that declared nothing could not
+    // satisfy this suite by accident.
+    const tokens = await readFile(TOKENS, "utf8");
+    expect(tokens).toContain("--finder-width:");
+    expect(tokens).toContain("--finder-width-wide:");
   });
 });

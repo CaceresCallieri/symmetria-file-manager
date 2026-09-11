@@ -70,11 +70,15 @@ describe("loadListingOptions", () => {
   });
 
   it("returns what a valid file said", async () => {
+    // Three fields on disk, four in the answer. This is a file the PREVIOUS
+    // cycle wrote, and the loader filling the key it never heard of is the
+    // whole of what backward compatibility means here.
     await writeFile(path, '{"sort":"size","reverse":false,"showHidden":true}', "utf8");
     await expect(loadListingOptions(path)).resolves.toEqual({
       sort: "size",
       reverse: false,
       showHidden: true,
+      renderDocuments: true,
     });
   });
 
@@ -84,6 +88,10 @@ describe("loadListingOptions", () => {
       sort: "size",
       reverse: DEFAULT_LISTING_OPTIONS.reverse,
       showHidden: true,
+      // A literal, not `DEFAULT_LISTING_OPTIONS.renderDocuments`: comparing a
+      // field against the default it is filled from makes the assertion
+      // co-vary with the thing it is checking.
+      renderDocuments: true,
     });
   });
 });
@@ -97,7 +105,12 @@ describe("saveListingOptions", () => {
   });
 
   it("round-trips through the loader", async () => {
-    const options = { sort: "natural", reverse: false, showHidden: true } as const;
+    const options = {
+      sort: "natural",
+      reverse: false,
+      showHidden: true,
+      renderDocuments: false,
+    } as const;
     await saveListingOptions(path, options);
 
     await expect(loadListingOptions(path)).resolves.toEqual(options);

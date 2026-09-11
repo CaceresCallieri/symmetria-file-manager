@@ -25,16 +25,25 @@ describe("the default", () => {
       sort: "modified",
       reverse: true,
       showHidden: false,
+      renderDocuments: true,
     });
   });
 });
 
 describe("decodeListingOptions", () => {
   it("takes a whole, valid object as it stands", () => {
-    expect(decodeListingOptions({ sort: "size", reverse: false, showHidden: true })).toEqual({
+    expect(
+      decodeListingOptions({
+        sort: "size",
+        reverse: false,
+        showHidden: true,
+        renderDocuments: false,
+      }),
+    ).toEqual({
       sort: "size",
       reverse: false,
       showHidden: true,
+      renderDocuments: false,
     });
   });
 
@@ -57,6 +66,45 @@ describe("decodeListingOptions", () => {
     expect(decoded.showHidden).toBe(DEFAULT_LISTING_OPTIONS.showHidden);
   });
 
+  it("defaults a missing renderDocuments to on, keeping every stored field", () => {
+    // A `listing.json` written before this key existed. Rendering is the
+    // default, so an old file must come back with it on — and must not lose
+    // the three settings the user did choose.
+    const decoded = decodeListingOptions({ sort: "size", reverse: false, showHidden: true });
+
+    expect(decoded).toEqual({
+      sort: "size",
+      reverse: false,
+      showHidden: true,
+      renderDocuments: true,
+    });
+  });
+
+  it("repairs a corrupt renderDocuments alone", () => {
+    const decoded = decodeListingOptions({
+      sort: "natural",
+      reverse: true,
+      showHidden: true,
+      renderDocuments: "yes",
+    });
+
+    // Pinned as `true` rather than as `DEFAULT_LISTING_OPTIONS.renderDocuments`.
+    // Comparing against the default makes the assertion co-vary with the thing
+    // it is checking: before the field existed BOTH sides were `undefined` and
+    // the test passed while asserting nothing.
+    expect(decoded.renderDocuments).toBe(true);
+    expect(decoded.sort).toBe("natural");
+    expect(decoded.reverse).toBe(true);
+    expect(decoded.showHidden).toBe(true);
+  });
+
+  it("keeps a stored renderDocuments of false", () => {
+    // The one that matters: rendering OFF is the only value the user can set
+    // by hand, and a decoder that silently forced it back on would make the
+    // whole setting look like it worked and forget every restart.
+    expect(decodeListingOptions({ renderDocuments: false }).renderDocuments).toBe(false);
+  });
+
   it.each([
     ["null", null],
     ["an array", []],
@@ -68,7 +116,12 @@ describe("decodeListingOptions", () => {
 });
 
 describe("resolveListingOptions", () => {
-  const stored: ListingOptions = { sort: "alphabetical", reverse: false, showHidden: true };
+  const stored: ListingOptions = {
+    sort: "alphabetical",
+    reverse: false,
+    showHidden: true,
+    renderDocuments: false,
+  };
 
   it.each([
     ["no file at all — a first run", null, DEFAULT_LISTING_OPTIONS],

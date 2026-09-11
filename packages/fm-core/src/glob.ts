@@ -27,6 +27,7 @@ export function globToRegExp(pattern: string, caseSensitive = false): RegExp {
   let source = "^";
 
   for (let i = 0; i < pattern.length; i++) {
+    // SAFETY: `i < pattern.length` is the loop condition.
     const char = pattern[i] as string;
 
     if (char === "*") {

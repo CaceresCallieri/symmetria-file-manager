@@ -1,8 +1,8 @@
 import type { GraphGroup, Measurement } from "@symmetria/fm-core/overview/layout";
 import { basename } from "@symmetria/fm-core/overview/model";
 import { joinPath, parentOf } from "@symmetria/fm-core/pane";
+import { FileIcon } from "@symmetria/fm-search/ui";
 import { useLayoutEffect, useRef } from "react";
-import { FileIcon } from "../components/FileIcon.tsx";
 export function FolderGroup({
   group,
   selected,

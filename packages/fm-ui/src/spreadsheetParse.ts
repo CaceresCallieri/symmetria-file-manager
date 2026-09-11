@@ -152,6 +152,8 @@ export function readWorkbook(bytes: Uint8Array, wanted: number): ParsedWorkbook 
     if (sheetNames.length === 0) return { kind: "unreadable" };
 
     const activeSheet = wanted >= 0 && wanted < sheetNames.length ? wanted : 0;
+    // SAFETY: `sheetNames` is non-empty (the guard above returned otherwise)
+    // and `activeSheet` is either an index proven in range or 0.
     const name = sheetNames[activeSheet] as string;
 
     const book = XLSX.read(bytes, {

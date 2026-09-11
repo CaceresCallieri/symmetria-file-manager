@@ -1,13 +1,12 @@
+import { humanSize } from "@symmetria/fm-core/format";
 import type { ArchiveListing } from "@symmetria/fm-core/preview/archive/listing";
 import type { ArchiveCompression, ArchiveFormat } from "@symmetria/fm-core/preview/route";
+import { FileIcon } from "@symmetria/fm-search/ui";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useState } from "react";
-
 import type { ArchiveRequest, ArchiveResponse } from "../../archive.worker.ts";
 import { lazyWorker } from "../../lazyWorker.ts";
-import { FileIcon } from "../FileIcon.tsx";
 import { INITIAL_RECT, observeWithFallback } from "../virtualize.ts";
-import { humanSize } from "./humanSize.ts";
 import { usePreviewUrl } from "./previewUrl.ts";
 
 export interface ArchivePreviewProps {

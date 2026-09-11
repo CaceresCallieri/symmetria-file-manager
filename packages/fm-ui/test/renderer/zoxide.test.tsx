@@ -197,3 +197,28 @@ describe("when zoxide is not there", () => {
     expect(screen.getByTestId("zoxide").textContent).toMatch(/not installed/i);
   });
 });
+
+describe("the movement keys the overlay list shares", () => {
+  it("moves the highlight with Ctrl+J and Ctrl+K as well as with the arrows", async () => {
+    // Gained when the keyboard logic was extracted into `useOverlayList` so
+    // that this dialog and the file finder cannot drift apart on it. Asserted
+    // HERE because a change made for the finder's sake would otherwise be free
+    // to take these bindings away from this one and break nothing visible.
+    await opened();
+    await zoxideOpen();
+
+    fireEvent.keyDown(screen.getByTestId("zoxide-query"), { key: "j", ctrlKey: true });
+    await waitFor(() => {
+      const active = screen.getByTestId("zoxide").querySelector('[data-active="true"]');
+      expect(active?.textContent).toContain("/home/jc/work/sales/bambin");
+    });
+
+    // Paired with the move down, so a handler that ignored both keys could not
+    // pass by leaving the highlight where it started.
+    fireEvent.keyDown(screen.getByTestId("zoxide-query"), { key: "k", ctrlKey: true });
+    await waitFor(() => {
+      const active = screen.getByTestId("zoxide").querySelector('[data-active="true"]');
+      expect(active?.textContent).not.toContain("/home/jc/work/sales/bambin");
+    });
+  });
+});

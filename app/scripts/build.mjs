@@ -37,6 +37,30 @@ await esbuild({
 });
 
 /**
+ * The search worker, beside the main bundle.
+ *
+ * Its own bundle rather than part of the main one, because it is the entry of
+ * a SEPARATE process: `utilityProcess.fork` is handed this file's path, and a
+ * path into the main bundle would start a second copy of the whole
+ * application. `search.ts` resolves it as `searchWorker.js` next to itself, so
+ * the name here and the join there move together.
+ *
+ * The native engine stays external for the same reason `electron` does — a
+ * `.node` binary cannot be bundled into JavaScript.
+ */
+await esbuild({
+  entryPoints: [`${appDir}/../packages/fm-search/src/main/worker-entry-electron.ts`],
+  outfile: `${out}/main/searchWorker.js`,
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  target: "node24",
+  external: [...EXTERNAL, "@ff-labs/fff-node"],
+  sourcemap: true,
+  logLevel: "info",
+});
+
+/**
  * The preload, as CommonJS with a `.cjs` extension.
  *
  * This is not a style choice. A preload script is loaded by Electron outside

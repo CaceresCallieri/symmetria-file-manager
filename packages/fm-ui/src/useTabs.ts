@@ -5,10 +5,12 @@ import type { ListingOptions } from "@symmetria/fm-core/listingOptions";
 import {
   clearSelection,
   enterDirectory,
+  goToPath,
   leaveDirectory,
   moveCursor,
   type PaneState,
   parentOf,
+  rememberCursorAt,
   setEntries,
   toggleSelection,
 } from "@symmetria/fm-core/pane";
@@ -19,6 +21,7 @@ import {
   type SetStateAction,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -102,9 +105,26 @@ function useTabErrors(): TabErrors {
  * exactly what that comment predicted. `ListOptions` is now this same type.
  */
 
+/**
+ * The fields that decide what a listing CONTAINS, as one comparable value.
+ *
+ * **`renderDocuments` is deliberately absent, and this is the only place that
+ * omission is stated.** It lives in the same store as the other three and
+ * decides how a file is DRAWN in the preview column, not which entries a
+ * listing holds. Anything that re-reads a directory when it changes is doing a
+ * disk read for a key that has nothing to do with the directory — and in the
+ * parent column that read is visible as a flicker.
+ *
+ * Both consumers below go through here rather than each naming the three
+ * fields, so a fourth field that DOES affect a listing is added in one place.
+ */
+function listingIdentity(options: ListingOptions): string {
+  return `${options.sort}|${options.reverse}|${options.showHidden}`;
+}
+
 /** Whether two option sets would produce the same listing. */
 function sameOptions(a: ListingOptions, b: ListingOptions): boolean {
-  return a.sort === b.sort && a.reverse === b.reverse && a.showHidden === b.showHidden;
+  return listingIdentity(a) === listingIdentity(b);
 }
 
 /** What the tab bar draws. */
@@ -125,11 +145,14 @@ export interface Tabs {
   readonly sort: SortMode;
   readonly reverse: boolean;
   readonly showHidden: boolean;
+  /** Whether a file with a rendered form shows it, or shows its source. */
+  readonly renderDocuments: boolean;
   readonly error: string | null;
   readonly loading: boolean;
 
   setSort(sort: SortMode, reverse: boolean): void;
   toggleHidden(): void;
+  toggleRenderDocuments(): void;
 
   historyBack(): void;
   historyForward(): void;
@@ -140,6 +163,23 @@ export interface Tabs {
   leave(): void;
   navigate(path: string): void;
   reveal(path: string): void;
+  /**
+   * Go to a path AND land the cursor on a named entry there.
+   *
+   * Distinct from `navigate`, which lands at the top. Its caller is a flash
+   * jump into another column: the user pressed a label drawn on a specific
+   * row, so arriving anywhere else would be arriving somewhere they did not
+   * point at.
+   *
+   * **A destination equal to the pane's own path lands nowhere.** `goToPath`
+   * returns the pane by reference for that case — deliberately, see its own
+   * comment — so nothing re-lists and the recorded name is never consumed. No
+   * caller can reach it today: a previewed directory is always a strict
+   * subdirectory, and the parent column is empty at the root, so it offers no
+   * label to press. A future caller that could reach it must move the cursor
+   * itself rather than expect this to.
+   */
+  navigateTo(path: string, name: string): void;
   toggleMark(): void;
   clearMarks(): void;
 
@@ -498,11 +538,70 @@ function useWatchReconciler(topology: string, loadTab: (id: string, path: string
  * taking the new. Both are handled by one reconciler keyed on tab identity, so
  * neither depends on a caller remembering to clean up.
  */
+/** What the parent column draws, and whether it is still arriving. */
+interface ParentColumn {
+  readonly parentEntries: readonly FsEntry[];
+  readonly loading: boolean;
+}
+
+/**
+ * The parent column's entries, and whether its listing is still arriving.
+ *
+ * Its own hook because it is a self-contained lifecycle — one listing, one
+ * loading flag, and nothing else in `useTabs` reads either — and because
+ * `useTabs` is measured as one function by the complexity gate and had reached
+ * its bound. The same pressure produced `useDirectoryLoader` above,
+ * `useTabErrors` beside it, and `usePicker` next door.
+ *
+ * The parent column belongs to the ACTIVE tab only: no background tab shows
+ * one, so reading it for all of them would be work nobody sees.
+ */
+function useParentColumn(activePath: string, options: ListingOptions): ParentColumn {
+  const [parentEntries, setParentEntries] = useState<readonly FsEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  /**
+   * The stored order, narrowed to the fields a listing actually depends on.
+   *
+   * Memoised on those fields alone, so its identity does not change when the
+   * render mode does — which is what stops this column re-reading the directory
+   * for a key that changes nothing about the directory. See `listingIdentity`
+   * for the same omission, stated once.
+   */
+  const forListing = useMemo(
+    () => ({ sort: options.sort, reverse: options.reverse, showHidden: options.showHidden }),
+    [options.sort, options.reverse, options.showHidden],
+  );
+
+  useEffect(() => {
+    const parentPath = parentOf(activePath);
+    if (parentPath === activePath) {
+      setParentEntries([]);
+      return;
+    }
+
+    let current = true;
+    setLoading(true);
+    void listDirectory(parentPath, forListing).then((reply) => {
+      if (!current) return;
+      setLoading(false);
+      setParentEntries(isFailure(reply) ? [] : reply.value.entries);
+    });
+
+    return () => {
+      current = false;
+    };
+    // A listing like any other, so it re-reads when the ORDER does — without
+    // that the two columns would disagree, which is more confusing than either
+    // order on its own.
+  }, [activePath, forListing]);
+
+  return { parentEntries, loading };
+}
+
 export function useTabs(initialPath: string): Tabs {
   const [state, setState] = useState<TabsState>(() => createTabs(initialPath));
-  const [parentEntries, setParentEntries] = useState<readonly FsEntry[]>([]);
   const { errorFor, reportError } = useTabErrors();
-  const [loading, setLoading] = useState(true);
   const stored = useListingOptions();
   const options = stored.options;
 
@@ -551,30 +650,7 @@ export function useTabs(initialPath: string): Tabs {
 
   useWatchReconciler(topology, loadTab);
 
-  // The parent column belongs to the active tab only: no background tab shows
-  // one, so reading it for all of them would be work nobody sees.
-  useEffect(() => {
-    const parentPath = parentOf(activePath);
-    if (parentPath === activePath) {
-      setParentEntries([]);
-      return;
-    }
-
-    let current = true;
-    setLoading(true);
-    void listDirectory(parentPath, options).then((reply) => {
-      if (!current) return;
-      setLoading(false);
-      setParentEntries(isFailure(reply) ? [] : reply.value.entries);
-    });
-
-    return () => {
-      current = false;
-    };
-    // The parent column is a listing like any other, so it re-reads when the
-    // order does. Without `options` here the two columns would disagree, which
-    // is more confusing than either order on its own.
-  }, [activePath, options]);
+  const { parentEntries, loading } = useParentColumn(activePath, options);
 
   /**
    * Bring the visible tab's listing up to date with the current options.
@@ -659,6 +735,7 @@ export function useTabs(initialPath: string): Tabs {
     sort: options.sort,
     reverse: options.reverse,
     showHidden: options.showHidden,
+    renderDocuments: options.renderDocuments,
     error: errorFor(activeId),
     loading,
 
@@ -677,12 +754,13 @@ export function useTabs(initialPath: string): Tabs {
     // how often it runs — which is exactly what it must not be.
     setSort: (sort, reverse) => stored.set({ ...options, sort, reverse }),
     toggleHidden: () => stored.set({ ...options, showHidden: !options.showHidden }),
+    toggleRenderDocuments: () =>
+      stored.set({ ...options, renderDocuments: !options.renderDocuments }),
 
     moveBy: (delta) => changeActive((p) => moveCursor(p, delta)),
     moveTo: (index) => changeActive((p) => moveCursor(p, index - p.cursorIndex)),
     enter: () => goTo(enterDirectory),
     leave: () => goTo(leaveDirectory),
-    navigate: (path) => goTo((p) => ({ ...p, path, entries: [], cursorIndex: 0 })),
     reveal: (path) => {
       if (activeId === undefined) return;
       const parent = parentOf(path);
@@ -698,6 +776,10 @@ export function useTabs(initialPath: string): Tabs {
           })),
         );
     },
+    navigate: (path) => goTo((p) => goToPath(p, path)),
+    // Recorded BEFORE the move, and into the destination's own key, so the
+    // listing that arrives restores from it. See `rememberCursorAt`.
+    navigateTo: (path, name) => goTo((p) => goToPath(rememberCursorAt(p, path, name), path)),
     toggleMark: () => changeActive(toggleSelection),
     clearMarks: () => changeActive(clearSelection),
 

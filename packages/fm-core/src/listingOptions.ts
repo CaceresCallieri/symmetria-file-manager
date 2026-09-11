@@ -14,6 +14,16 @@ export interface ListingOptions {
   /** Newest, largest or last first. Reverses the mode rather than replacing it. */
   readonly reverse: boolean;
   readonly showHidden: boolean;
+  /**
+   * Whether a markdown or HTML file previews rendered, or as its source.
+   *
+   * A view preference and not a listing one, which is why the name says what
+   * it does rather than borrowing the file's. It lives here anyway: it
+   * persists for exactly the same reason `showHidden` does, and a second store
+   * for one boolean would mean a second channel pair, a second hook and a
+   * second write chain.
+   */
+  readonly renderDocuments: boolean;
 }
 
 /**
@@ -27,6 +37,11 @@ export const DEFAULT_LISTING_OPTIONS: ListingOptions = {
   sort: "modified",
   reverse: true,
   showHidden: false,
+  // Rendering is the default and the key is the escape hatch. This inverts the
+  // Qt build, where source was the default and `Ctrl+R` opted in — its reason
+  // was the cost of starting a browser engine per file, which is not a cost
+  // here.
+  renderDocuments: true,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -54,6 +69,10 @@ export function decodeListingOptions(raw: unknown): ListingOptions {
       typeof raw["showHidden"] === "boolean"
         ? raw["showHidden"]
         : DEFAULT_LISTING_OPTIONS.showHidden,
+    renderDocuments:
+      typeof raw["renderDocuments"] === "boolean"
+        ? raw["renderDocuments"]
+        : DEFAULT_LISTING_OPTIONS.renderDocuments,
   };
 }
 

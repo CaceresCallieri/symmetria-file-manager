@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../../src/App.tsx";
+import { PreviewPane } from "../../src/components/preview/PreviewPane.tsx";
 import { PREVIEW_DEBOUNCE_MS } from "../../src/usePreview.ts";
 import { type BridgeLog, cursorIn, installBridge, namesIn } from "./support.ts";
 
@@ -115,18 +116,58 @@ describe("the preview column", () => {
     expect(shown.textContent).toContain("second line");
   });
 
-  it("routes a known language to the code branch", async () => {
+  it("renders a markdown file as a document rather than as its source", async () => {
+    // AMENDED. This test used to assert `beta.md` reached the code branch with
+    // `language: markdown`, which was the truth until rendering became the
+    // default. It is kept pointed at the same file because it is the only
+    // end-to-end proof that the wiring holds through the real application —
+    // the router's answer, the describe reply's name and type, the pane's
+    // choice — rather than through a component rendered on its own.
     await opened();
     fireEvent.keyDown(window, { key: "l" });
     await waitFor(() => expect(namesIn("column-current")).toContain("beta.md"));
     fireEvent.keyDown(window, { key: "j" });
     await waitFor(() => expect(cursorIn("column-current")).toContain("beta.md"));
 
+    const shown = await screen.findByTestId("preview-markdown");
+    // A heading element, not the two characters "# ".
+    expect(within(shown).getByRole("heading", { name: "beta" })).toBeDefined();
+    expect(shown.textContent).not.toContain("# beta");
+  });
+
+  it("routes a renderable HTML file to the framed page, not to its source", async () => {
+    // The pane's own switch, driven directly. The three ways to show text —
+    // rendered markdown, a framed page, highlighted source — are chosen in one
+    // place, and this pins that an `html` answer reaches the frame.
+    render(
+      <PreviewPane
+        route={{ kind: "code", language: "xml" }}
+        path="/home/jc/page.html"
+        size={0}
+        renderAs="html"
+      />,
+    );
+
+    expect(await screen.findByTestId("preview-html")).toBeDefined();
+    expect(screen.queryByTestId("preview-code")).toBeNull();
+  });
+
+  it("still shows a file with no rendered form as highlighted source", async () => {
+    // The other half of the amendment above. Driven through the pane rather
+    // than through navigation, because adding a source file to the fixture
+    // tree would shift every index the rest of the suite counts `j` presses
+    // against.
+    render(
+      <PreviewPane
+        route={{ kind: "code", language: "rust" }}
+        path="/home/jc/notes.txt"
+        size={0}
+        renderAs={null}
+      />,
+    );
+
     const shown = await screen.findByTestId("preview-code");
-    expect(shown.dataset["language"]).toBe("markdown");
-    // No `Worker` in this environment, so the file renders as plain text —
-    // which is the required behaviour, not a shortcoming of the test.
-    expect(shown.textContent).toContain("# beta");
+    expect(shown.dataset["language"]).toBe("rust");
   });
 
   it("names the column by what the router chose", async () => {

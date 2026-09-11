@@ -1,6 +1,6 @@
 import type { Dirent } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { decodeBookmarks } from "@symmetria/fm-core/bookmarks";
 import {
   type Decoder,
@@ -13,9 +13,13 @@ import {
   decodeListingOptionsWriteRequest,
   decodeListRequest,
   decodeOpenRequest,
+  decodePreviewDirectoryUrlRequest,
   decodePreviewUrlRequest,
   decodeReadTextRequest,
   decodeRenameRequest,
+  decodeSearchDirectoryRequest,
+  decodeSearchQueryRequest,
+  decodeSearchRecordRequest,
   decodeTransferRequest,
   decodeTrashRequest,
   decodeUnwatchRequest,
@@ -48,7 +52,8 @@ import {
 import { copyImage, copyText } from "../ops/clipboard.ts";
 import { operations } from "../ops/index.ts";
 import { frecentDirectories } from "../ops/zoxide.ts";
-import { authorisePreview } from "../previewTokens.ts";
+import { authorisePreview, authorisePreviewDirectory } from "../previewTokens.ts";
+import { searchPool } from "../search.ts";
 import { CHANNELS, REQUEST_CHANNELS } from "./channels.ts";
 
 /**
@@ -570,6 +575,20 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
   );
 
   ipc.handle(
+    CHANNELS.previewDirectoryUrl,
+    guard(decodePreviewDirectoryUrlRequest, "read_failed", async (request) => {
+      // Stat first, for the same reason `previewUrl` does: a path that cannot
+      // be read fails here rather than as a document whose images silently do
+      // not appear.
+      await stat(request.path);
+      // The PARENT, taken here and never accepted from the renderer. A caller
+      // naming its own root is the one shape that would let a bug in the panel
+      // grant more than the document it is showing.
+      return success({ url: previewUrlFor(authorisePreviewDirectory(dirname(request.path))) });
+    }),
+  );
+
+  ipc.handle(
     CHANNELS.transfer,
     guard(decodeTransferRequest, "write_failed", async (request, from) => {
       const outcome = await operations.transfer(request, (done, total) => {
@@ -610,6 +629,49 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
     CHANNELS.trash,
     guard(decodeTrashRequest, "write_failed", async (request) => {
       await operations.trash(request.paths);
+      return success(null);
+    }),
+  );
+
+  ipc.handle(
+    CHANNELS.searchStart,
+    guard(decodeSearchDirectoryRequest, "read_failed", async (request) => {
+      // Waited on, not fired and forgotten. The pool spawns on first ask and
+      // reuses afterwards, so a second start for the same directory is cheap
+      // and a caller does not have to track whether it already opened one —
+      // but an index that fails to open has to be reported HERE. Returning
+      // success and letting the first query discover it turns "this directory
+      // could not be indexed" into a finder that shows nothing and says
+      // nothing.
+      await searchPool().start(request.directory);
+      return success(null);
+    }),
+  );
+
+  ipc.handle(
+    CHANNELS.searchQuery,
+    guard(decodeSearchQueryRequest, "read_failed", async (request) => {
+      const reply = await searchPool().search(request.directory, request.query);
+      return success(reply);
+    }),
+  );
+
+  ipc.handle(
+    CHANNELS.searchRecord,
+    guard(decodeSearchRecordRequest, "write_failed", async (request) => {
+      // Fire and forget, deliberately. The engine's tracker write has no
+      // outcome a user could act on, and making the overlay wait for it would
+      // put a statistic on the path between pressing Enter and the file
+      // opening. Silent when the index is already gone.
+      searchPool().record(request.directory, request.query, request.chosenPath);
+      return success(null);
+    }),
+  );
+
+  ipc.handle(
+    CHANNELS.searchRelease,
+    guard(decodeSearchDirectoryRequest, "read_failed", async (request) => {
+      searchPool().release(request.directory);
       return success(null);
     }),
   );

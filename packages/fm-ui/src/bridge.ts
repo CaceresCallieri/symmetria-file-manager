@@ -61,13 +61,35 @@ function getBridge(): Bridge | null {
 }
 
 /**
- * What a listing request carries, which is exactly a stored listing order.
+ * What a listing request carries: the stored order, narrowed to what it uses.
  *
- * An alias rather than a third declaration of the same three fields. It was one,
- * and `useTabs` aliased it a fourth time — so a field added to the stored
- * preference would have compiled everywhere and been sent nowhere.
+ * DERIVED from `ListingOptions` rather than declared again. It was declared
+ * again once, and `useTabs` aliased it a fourth time — so a field added to the
+ * stored preference would have compiled everywhere and been sent nowhere.
+ *
+ * The narrowing arrived with `renderDocuments`, which lives in the same store
+ * and decides how a file is DRAWN rather than what a listing contains. Naming
+ * the three in the type is what lets a caller memoise exactly the fields a
+ * listing depends on — without that, an effect re-reading a directory when the
+ * order changes also re-reads it when the render mode does, and the parent
+ * column flickers for a key that has nothing to do with it.
+ *
+ * ── What this type does NOT guarantee ───────────────────────────────────────
+ * Review asked, and the honest answer is worth writing down: it documents which
+ * fields a listing consumes; it does not make the compiler enforce that they
+ * stay in step. `listDirectory` below builds its payload by naming each field
+ * rather than by spreading, so a fourth field that DID affect a listing would
+ * have to be added by hand in three places, none of which the type connects:
+ *
+ *   1. this type,
+ *   2. the payload literal in `listDirectory` below,
+ *   3. `listingIdentity` and the `forListing` memo in `useTabs.ts`.
+ *
+ * A field added to `ListingOptions` and nowhere else compiles everywhere and is
+ * sent nowhere — the hazard the original comment named, still present, now
+ * merely visible. Anyone adding one should start from this list.
  */
-export type ListOptions = ListingOptions;
+export type ListOptions = Pick<ListingOptions, "sort" | "reverse" | "showHidden">;
 
 const MISSING_BRIDGE = "the preload bridge is not present; this build is incomplete";
 
@@ -155,6 +177,32 @@ export async function previewUrl(path: string): Promise<Result<string>> {
   const reply = await bridge.previewUrl({ path });
   if (isFailure(reply)) return reply;
 
+  const decoded = decodePreviewUrlReply(reply.value);
+  return isFailure(decoded) ? decoded : { ok: true, value: decoded.value.url };
+}
+
+/**
+ * The URL a previewed file's own directory is served under.
+ *
+ * What comes back is a PREFIX: append a slash and a relative path to reach a
+ * neighbour. Every such path is checked for containment in the main process,
+ * against the real location on disk, so a symbolic link cannot climb out of
+ * the document's directory.
+ *
+ * Separate from `previewUrl` because the grant behind it is a different thing.
+ * That one makes one file loadable and narrows nothing; this one names a root
+ * and refuses everything outside it, which is what makes it safe to point at
+ * a stranger's document.
+ */
+export async function previewDirectoryUrl(path: string): Promise<Result<string>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("read_failed", MISSING_BRIDGE);
+
+  const reply = await bridge.previewDirectoryUrl({ path });
+  if (isFailure(reply)) return reply;
+
+  // The same reply shape as `previewUrl`, and deliberately the same decoder: a
+  // URL is a URL, and a second one would be a second thing to keep in step.
   const decoded = decodePreviewUrlReply(reply.value);
   return isFailure(decoded) ? decoded : { ok: true, value: decoded.value.url };
 }

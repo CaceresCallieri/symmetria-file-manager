@@ -7,12 +7,15 @@ import {
   clearSelection,
   createPane,
   cursorEntry,
+  didNavigate,
   enterDirectory,
   entryAt,
+  goToPath,
   isDirectoryEntry,
   leaveDirectory,
   moveCursor,
   type PaneState,
+  rememberCursorAt,
   setEntries,
   toggleSelection,
 } from "../src/pane.ts";
@@ -22,6 +25,14 @@ function entry(name: string, kind: FsEntry["kind"] = "file"): FsEntry {
 }
 
 const listing = [entry("src", "directory"), entry("a.txt"), entry("b.txt"), entry("c.txt")];
+
+/** A pane at `path` already holding the named entries. */
+function withEntries(pane: PaneState, names: readonly string[]): PaneState {
+  return setEntries(
+    pane,
+    names.map((name) => entry(name)),
+  );
+}
 
 describe("the cursor", () => {
   it("starts on the first entry", () => {
@@ -123,6 +134,54 @@ describe("entering and leaving", () => {
     const back = setEntries(leaveDirectory(inside), listing);
 
     expect(cursorEntry(back)?.name).toBe("src");
+  });
+});
+
+describe("jumping to a path named outright", () => {
+  it("goes there and empties the listing, ready for the one that arrives", () => {
+    const pane = setEntries(createPane("/home/jc"), listing);
+    const jumped = goToPath(pane, "/home/jc/Downloads");
+
+    expect(jumped.path).toBe("/home/jc/Downloads");
+    expect(jumped.entries).toEqual([]);
+    expect(jumped.cursorIndex).toBe(0);
+  });
+
+  it("returns the very same pane when the jump goes nowhere", () => {
+    // BY REFERENCE, which is the whole of the fix. Emptying a pane and
+    // re-listing it are separate mechanisms joined only by the path changing,
+    // so a jump that clears the entries without moving leaves a column that
+    // nothing will ever fill: `gd` inside Downloads read "0 entries" against a
+    // directory full of files, and only leaving and coming back repaired it.
+    const pane = setEntries(createPane("/home/jc"), listing);
+
+    expect(goToPath(pane, "/home/jc")).toBe(pane);
+  });
+
+  it("makes that refusal visible through didNavigate, like the other two", () => {
+    const pane = setEntries(createPane("/home/jc"), listing);
+
+    expect(didNavigate(pane, goToPath(pane, "/home/jc"))).toBe(false);
+    expect(didNavigate(pane, goToPath(pane, "/home/jc/projects"))).toBe(true);
+  });
+
+  it("does not carry a selection to the destination", () => {
+    // The same rule entering and leaving obey, and for the same reason. A jump
+    // reached it late: it was the one location change that never became a named
+    // transition, so it never inherited any of the rules the others share.
+    const marked = toggleSelection(setEntries(createPane("/tmp"), [entry("a.txt")]));
+    expect(marked.selection.size).toBe(1);
+
+    expect(goToPath(marked, "/tmp/sub").selection.size).toBe(0);
+  });
+
+  it("keeps the cursor memory, so returning restores the cursor", () => {
+    let pane = setEntries(createPane("/home/jc"), listing);
+    pane = moveCursor(pane, 2); // b.txt
+    const away = setEntries(goToPath(pane, "/tmp"), [entry("x")]);
+    const back = setEntries(goToPath(away, "/home/jc"), listing);
+
+    expect(cursorEntry(back)?.name).toBe("b.txt");
   });
 });
 
@@ -307,5 +366,44 @@ describe("the directory / file boundary", () => {
     // cursor when the first non-directory happened to be one of them.
     const pane = setEntries(createPane("/tmp"), [entry("d", "directory"), entry("sock", "other")]);
     expect(boundaryIndex(pane)).toBe(1);
+  });
+});
+
+describe("remembering a cursor for somewhere else", () => {
+  it("lands on the remembered name when the pane later goes there", () => {
+    const pane = withEntries(createPane("/home/jc"), ["alpha", "beta", "gamma"]);
+
+    const armed = rememberCursorAt(pane, "/home/jc/projects", "beta");
+    const arrived = setEntries(goToPath(armed, "/home/jc/projects"), [
+      entry("one"),
+      entry("beta"),
+      entry("three"),
+    ]);
+
+    expect(arrived.cursorIndex).toBe(1);
+  });
+
+  it("leaves the cursor remembered for the pane's own directory alone", () => {
+    // A flash jump records the DESTINATION's cursor and then moves. The Qt
+    // build had to warn that the two writes must happen in a particular order,
+    // because both went into one cache under different keys; recording for a
+    // named path rather than for "here" removes the hazard rather than
+    // documenting it.
+    const here = moveCursor(withEntries(createPane("/home/jc"), ["a", "b", "c"]), 2);
+    expect(here.cursorMemory.get("/home/jc")).toBe("c");
+
+    const armed = rememberCursorAt(here, "/home", "other");
+
+    expect(armed.cursorMemory.get("/home/jc")).toBe("c");
+    expect(armed.cursorMemory.get("/home")).toBe("other");
+  });
+
+  it("returns a new pane rather than writing into the one it was given", () => {
+    const pane = withEntries(createPane("/home/jc"), ["a"]);
+
+    const armed = rememberCursorAt(pane, "/elsewhere", "x");
+
+    expect(armed).not.toBe(pane);
+    expect(pane.cursorMemory.has("/elsewhere")).toBe(false);
   });
 });
