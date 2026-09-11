@@ -65,7 +65,8 @@ export function HelpOverlay({ context, bookmarks, onClose }: HelpOverlayProps) {
             (binding) =>
               binding.group === group &&
               // Never advertise a key the picker has taken away.
-              !isSuppressedInPicker(binding, context),
+              !isSuppressedInPicker(binding, context) &&
+              (binding.when?.(context) ?? true),
           );
           if (rows.length === 0) return null;
 
@@ -82,7 +83,7 @@ export function HelpOverlay({ context, bookmarks, onClose }: HelpOverlayProps) {
           );
         })}
 
-        {context.view !== "overview" ? (
+        {context.view === "miller" ? (
           <>
             <section data-testid="help-group-Chords">
               <h3>Chords</h3>

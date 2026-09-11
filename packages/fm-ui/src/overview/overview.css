@@ -58,7 +58,9 @@
   align-items: center;
   gap: 6px;
 }
-.overview button {
+.overview button,
+.file-tree button,
+.view-control button {
   font: inherit;
   color: var(--foreground);
   background: var(--card);
@@ -66,7 +68,9 @@
   border-radius: 3px;
   cursor: pointer;
 }
-.overview button:focus-visible {
+.overview button:focus-visible,
+.file-tree button:focus-visible,
+.view-control button:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 1px;
 }
@@ -388,4 +392,21 @@
 
 [data-flash-mode="true"] [data-search-match="true"] > .overview-name {
   opacity: 0.25;
+}
+
+.overview-toolbar,
+.tree-toolbar {
+  position: relative;
+}
+/* Anchoring to the summary clipped Scope on narrow windows. The toolbar is
+   the containing block so both views keep the popup inside their bounds. */
+.overview-toolbar > .overview-scope,
+.tree-toolbar > .overview-scope {
+  position: static;
+}
+.overview-scope > .overview-popover {
+  top: 100%;
+  right: 16px;
+  width: min(300px, calc(100vw - 48px));
+  box-sizing: border-box;
 }

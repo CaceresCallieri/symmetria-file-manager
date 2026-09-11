@@ -76,9 +76,26 @@ function routeKey(
   context: KeyContext,
   flash: KeyDispatchOptions["onFlashKey"],
 ): KeyOutcome {
+  // Tree toolbar controls retain native activation. Otherwise Enter on Include
+  // opened the selected file and prevented the focused button's default action.
+  if (nativeTreeActivation(event, context, mode)) return { kind: "notOurs" };
   if (event.repeat && !mode.flashActive && matchBinding(key, context)?.id === "overview.flash")
     return { kind: "unhandled" };
   const outcome = handleKey(key, mode, context);
   if (outcome.kind !== "flash" || flash?.(event) !== false) return outcome;
   return handleKey(key, { ...mode, flashActive: false }, context);
+}
+
+function nativeTreeActivation(event: KeyboardEvent, context: KeyContext, mode: CascadeMode) {
+  if (context.view !== "tree" || mode.modalOpen || mode.flashActive || mode.chordPrefix)
+    return false;
+  if (!isPlainActivation(event)) return false;
+  return event.target instanceof Element && event.target.closest("button, summary") !== null;
+}
+
+function isPlainActivation(event: KeyboardEvent) {
+  return (
+    ![event.ctrlKey, event.altKey, event.metaKey, event.shiftKey].some(Boolean) &&
+    ["Enter", " "].includes(event.key)
+  );
 }

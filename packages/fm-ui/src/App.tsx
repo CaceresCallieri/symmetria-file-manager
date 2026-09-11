@@ -15,10 +15,9 @@ import {
   pickerFromSearch,
 } from "@symmetria/fm-core/windowUrl";
 import { useMemo } from "react";
+import { BrowsingView } from "./components/BrowsingView.tsx";
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
-import { MillerColumns } from "./components/MillerColumns.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
-import { PathBar } from "./components/PathBar.tsx";
 import { StatusBar } from "./components/StatusBar.tsx";
 import { TabBar } from "./components/TabBar.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
@@ -26,13 +25,15 @@ import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
 import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { OverviewLayer } from "./overview/Overview.tsx";
 import { useOverviewMode } from "./overview/useOverviewMode.ts";
+import { treeDirectoryError, treeSummary } from "./tree/TreeSummary.tsx";
+import { treeKeyContext, useTreeMode } from "./tree/useTreeMode.ts";
 import { useBookmarks } from "./useBookmarks.ts";
 import { useExternalOpen } from "./useExternalOpen.ts";
 import { type FileOps, useFileOps } from "./useFileOps.ts";
 import { type KeyWiring, useKeyActions } from "./useKeyActions.ts";
 import { usePicker } from "./usePicker.ts";
 import { type Preview, usePreviewPane } from "./usePreview.ts";
-import { useSearch } from "./useSearch.ts";
+import { type Search, useSearch } from "./useSearch.ts";
 import { type Tabs, useTabs } from "./useTabs.ts";
 
 /**
@@ -81,6 +82,7 @@ function cursorImageMimeOf(preview: Preview, cursorPath: string | null): string 
 }
 
 export interface AppProps {
+  readonly onOpenFile?: (path: string) => void;
   /** Overridden by tests, which must not depend on the real location. */
   readonly startPath?: string;
   /** Overridden by tests, for the same reason. */
@@ -190,15 +192,28 @@ function Overlays({
   return null;
 }
 
+function searchFieldProps(search: Search) {
+  if (!search.active) return null;
+  return {
+    query: search.query,
+    matchCount: search.matchCount,
+    onChange: search.setQuery,
+    onConfirm: search.confirm,
+    onCancel: search.cancel,
+  };
+}
+
 export function App(props: AppProps = {}) {
   const tabs = useTabs(initialPath(props.startPath));
   const home = homePath(props.homePath);
+  const tree = useTreeMode();
   const overview = useOverviewMode(
     tabs.pane.path,
     tabs.showHidden,
     tabs.openAt,
     tabs.reveal,
     tabs.navigate,
+    tree.root,
   );
   // Memoised because `pickerFromSearch` PARSES the URL: a fresh object each
   // render would defeat every memo inside `usePicker`, and through it the whole
@@ -217,7 +232,10 @@ export function App(props: AppProps = {}) {
   // Wired here rather than inside `useTabs`, and the placement is the point:
   // `useTabs` owns the tab collection, while composing an external event source
   // onto it is this component's job.
-  useExternalOpen(overview.openExternal);
+  useExternalOpen((path) => {
+    tree.close();
+    overview.openExternal(path);
+  });
 
   // The preview is resolved BEFORE the key actions, not after, because one of
   // those actions needs its answer: the copy chord's image row asks whether the
@@ -238,12 +256,19 @@ export function App(props: AppProps = {}) {
     previewing.toggleAudio,
   );
 
-  const context = useMemo<KeyContext>(
-    // Miller is the only view that exists. The tree rows are ported and
-    // unreachable until it does, which is deliberate — see the registry.
-    () => ({ view: overview.view, state, actions, overview }),
-    [state, actions, overview],
-  );
+  const toggleView = () => {
+    if (picker.state.active) return;
+    search.cancel();
+    modes.reset();
+    tree.toggle(tabs.pane.path);
+  };
+  const baseContext: KeyContext = {
+    view: overview.view,
+    state,
+    actions: { ...actions, toggleViewMode: toggleView },
+    overview,
+  };
+  const context = treeKeyContext(baseContext, tree);
 
   const mode = useMemo<CascadeMode>(
     () => cascadeModeFor(modes, ops.modal.kind, search.active, overview.flashActive),
@@ -271,19 +296,17 @@ export function App(props: AppProps = {}) {
           onActivate={tabs.activate}
           onClose={tabs.close}
         />
-        <PathBar path={tabs.pane.path} onNavigate={tabs.navigate} />
-        <MillerColumns
-          path={tabs.pane.path}
-          parentEntries={tabs.parentEntries}
-          entries={tabs.pane.entries}
-          cursorIndex={tabs.pane.cursorIndex}
-          parentCursorName={tabs.parentCursorName}
-          selection={tabs.pane.selection}
+        <BrowsingView
+          tabs={tabs}
+          tree={tree}
+          model={overview.model}
+          onOpen={props.onOpenFile ?? ops.openAbsolute}
+          toggleView={toggleView}
+          pickerActive={picker.state.active}
           matches={search.matches}
-          onSelect={tabs.moveTo}
+          preview={previewing.pane}
           onActivate={(index) => activateAt(tabs, ops, index)}
           onLeaveTo={leaveTo}
-          preview={previewing.pane}
         />
         <WhichKeyOverlay
           prefix={modes.chordPrefix}
@@ -295,25 +318,16 @@ export function App(props: AppProps = {}) {
           search pushed the columns down and a copy starting pushed them up.
           Both now live inside the bar, which has a fixed height. */}
         <StatusBar
+          summary={treeSummary(tree.root, overview.model, tabs.showHidden)}
           picker={picker.chrome}
           entryCount={tabs.pane.entries.length}
           selectedCount={state.selectedCount}
           sort={tabs.sort}
           reverse={tabs.reverse}
           showHidden={tabs.showHidden}
-          search={
-            search.active
-              ? {
-                  query: search.query,
-                  matchCount: search.matchCount,
-                  onChange: search.setQuery,
-                  onConfirm: search.confirm,
-                  onCancel: search.cancel,
-                }
-              : null
-          }
+          search={searchFieldProps(search)}
           transient={{
-            error: tabs.error,
+            error: treeDirectoryError(tree.root, tabs.error),
             message: ops.message ?? modes.message,
             progress: ops.progress,
             onCancelTransfer: ops.cancelRunningTransfer,

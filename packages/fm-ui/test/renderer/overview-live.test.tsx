@@ -1,5 +1,5 @@
 /** @vitest-environment happy-dom */
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { App } from "../../src/App.tsx";
 import { installBridge } from "./support.ts";
@@ -23,7 +23,9 @@ it("refreshes only a changed loaded branch and releases overview watches on clos
   reads.mockClear();
   log.addEntry("/home/jc/projects", "fresh.txt");
   act(() => log.emitChange(watch!));
-  await screen.findByText("fresh.txt");
+  // The hidden Miller preview can show this name before the debounced overview read.
+  // Observe the overview itself so the watch assertion cannot race that preview.
+  await within(screen.getByRole("dialog", { name: "Folder overview" })).findByText("fresh.txt");
   expect(reads.mock.calls.map(([ask]) => (ask as { path: string }).path)).toEqual([
     "/home/jc/projects",
   ]);

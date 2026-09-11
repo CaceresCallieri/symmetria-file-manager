@@ -33,6 +33,7 @@ interface KeyModes {
   closeHelp(): void;
   closeZoxide(): void;
   clearMessage(): void;
+  reset(): void;
 }
 
 export interface KeyWiring {
@@ -304,6 +305,12 @@ export function useKeyActions(
       closeHelp: () => setHelpOpen(false),
       closeZoxide: () => setZoxideOpen(false),
       clearMessage: () => setMessage(null),
+      reset: () => {
+        setChordPrefix("");
+        setBookmarkSubMode(null);
+        setHelpOpen(false);
+        setZoxideOpen(false);
+      },
     }),
     [chordPrefix, bookmarkSubMode, helpOpen, zoxideOpen, message],
   );

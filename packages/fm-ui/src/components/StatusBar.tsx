@@ -1,10 +1,12 @@
 import type { SortMode } from "@symmetria/fm-core/sort";
+import type { ReactNode } from "react";
 
 import type { PickerChrome } from "../usePicker.ts";
 import { SearchField, type SearchFieldProps } from "./SearchField.tsx";
 import { type TransientLineProps, transientLine } from "./transientLine.tsx";
 
 export interface StatusBarProps {
+  readonly summary?: ReactNode;
   /**
    * The dialog chrome, or null in the browse window.
    *
@@ -58,6 +60,7 @@ export function StatusBar({
   showHidden,
   search,
   transient,
+  summary,
 }: StatusBarProps) {
   return (
     <footer data-testid="status-bar" className="status-bar">
@@ -92,6 +95,7 @@ export function StatusBar({
             reverse={reverse}
             showHidden={showHidden}
             transient={transient}
+            summary={summary}
           />
           {picker === null ? null : (
             <button
@@ -128,9 +132,11 @@ function Body({
   reverse,
   showHidden,
   transient,
+  summary,
 }: Omit<StatusBarProps, "picker" | "search">) {
   const transientContent = transientLine(transient);
   if (transientContent !== null) return transientContent;
+  if (summary != null) return summary;
 
   return (
     <>

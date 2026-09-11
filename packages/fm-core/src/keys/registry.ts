@@ -316,6 +316,7 @@ export const CORE: readonly Binding[] = [
     mods: "Ctrl",
     keycap: "⌃e",
     label: "Toggle Miller / tree view",
+    when: (ctx) => !ctx.state.picker.active,
     icon: "account_tree",
     group: "View",
     run: (ctx) => ctx.actions.toggleViewMode(),
@@ -739,9 +740,21 @@ function isHtml(ctx: KeyContext): boolean {
   return mime === "text/html" || mime === "application/xhtml+xml";
 }
 
+const TREE_SHARED = new Set(["nav.down", "nav.up", "nav.activate", "view.toggle", "help.open"]);
+const TREE_SUPPORTED = new Set([
+  "tree.collapseOrParent",
+  "tree.expandOrActivate",
+  "tree.toggleExpand",
+]);
+
 export function bindingsFor(view: ViewKind): readonly Binding[] {
   if (view === "overview") return OVERVIEW_ONLY;
-  return [...CORE, ...(view === "tree" ? TREE_ONLY : MILLER_ONLY)];
+  if (view === "tree")
+    return [
+      ...CORE.filter((binding) => TREE_SHARED.has(binding.id)),
+      ...TREE_ONLY.filter((binding) => TREE_SUPPORTED.has(binding.id)),
+    ];
+  return [...CORE, ...MILLER_ONLY];
 }
 
 /**

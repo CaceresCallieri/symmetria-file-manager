@@ -17,6 +17,7 @@ export function useOverviewMode(
   openAt: (path: string) => void,
   reveal: (path: string) => void,
   navigate: (path: string) => void,
+  treeRoot: string | null = null,
 ) {
   const handler = useRef<(command: OverviewCommand) => void>(() => undefined);
   const connect = useCallback((next: (command: OverviewCommand) => void) => {
@@ -40,7 +41,7 @@ export function useOverviewMode(
     else handler.current(name);
   };
   const [root, setRoot] = useState<string | null>(null);
-  const model = useOverview(root, showHidden);
+  const model = useOverview(root ?? treeRoot, showHidden);
   const close = useCallback(() => setRoot(null), []);
   const toggle = () => setRoot((current) => (current === null ? path : null));
   const openExternal = useCallback(
