@@ -2,8 +2,12 @@ import type { SortMode } from "@symmetria/fm-core/sort";
 import type { ReactNode } from "react";
 
 import type { PickerChrome } from "../usePicker.ts";
+
 import { SearchField, type SearchFieldProps } from "./SearchField.tsx";
 import { type TransientLineProps, transientLine } from "./transientLine.tsx";
+
+/** Which of a renderable file's two views the preview is currently drawing. */
+export type RenderMode = "rendered" | "source";
 
 export interface StatusBarProps {
   readonly summary?: ReactNode;
@@ -20,8 +24,24 @@ export interface StatusBarProps {
   readonly sort: SortMode;
   readonly reverse: boolean;
   readonly showHidden: boolean;
+  /**
+   * Which view the preview is showing, or null when the file has no second one.
+   *
+   * Null for a spreadsheet, an image, a source file — most of what a cursor
+   * passes over. So the indicator is absent almost always, which is what makes
+   * it worth reading when it is there.
+   */
+  readonly renderMode?: RenderMode | null;
   /** The search field, when one is open. Null closes it. */
   readonly search: SearchFieldProps | null;
+  /**
+   * The running flash session, or null.
+   *
+   * It has no field of its own — the query is read from the raw key stream —
+   * so this bar is the only place it is visible at all. Above the transient
+   * line and below the search field in precedence, which is the Qt order.
+   */
+  readonly flash?: { readonly query: string } | null;
   /** A failure, a running transfer, or what just happened. */
   readonly transient: TransientLineProps;
 }
@@ -42,10 +62,12 @@ export interface StatusBarProps {
  * layout engine, so what is checked is the cause rather than the pixels.
  *
  * ── Precedence, highest first ───────────────────────────────────────────────
- * The search field, because the user is typing into it. Then a failure, which
- * is the one they must act on. Then a transfer, which is running. Then a
- * message. Then the counts. The middle three are `transientLine`'s own order and
- * its comment says why; this file does not repeat it.
+ * The search field, because the user is typing into it. Then a running flash
+ * session, which is also the user typing and has no field of its own. Then a
+ * failure, which is the one they must act on. Then a transfer, which is
+ * running. Then a message. Then the counts. The last three are
+ * `transientLine`'s own order and its comment says why; this file does not
+ * repeat it.
  *
  * The dialog chrome is a separate axis from the mode: Accept, Cancel and the
  * save-name field show whenever this is a dialog UNLESS search has the bar.
@@ -58,7 +80,9 @@ export function StatusBar({
   sort,
   reverse,
   showHidden,
+  renderMode = null,
   search,
+  flash = null,
   transient,
   summary,
 }: StatusBarProps) {
@@ -88,12 +112,14 @@ export function StatusBar({
               onChange={(event) => picker.setSaveName(event.target.value)}
             />
           ) : null}
-          <Body
+          <BarContent
             entryCount={entryCount}
             selectedCount={selectedCount}
             sort={sort}
             reverse={reverse}
             showHidden={showHidden}
+            renderMode={renderMode}
+            flash={flash}
             transient={transient}
             summary={summary}
           />
@@ -116,6 +142,24 @@ export function StatusBar({
 }
 
 /**
+ * What the bar is showing, once the search field has declined it.
+ *
+ * A component rather than a ternary inside `StatusBar`, because the complexity
+ * gate scores a component as one function and this bar already carries the
+ * dialog chrome's branches.
+ */
+function BarContent({ flash, ...body }: Omit<StatusBarProps, "picker" | "search">) {
+  if (flash === null || flash === undefined) return <Body {...body} />;
+
+  return (
+    <span data-testid="status-flash" className="status-bar__flash">
+      <kbd>s</kbd>
+      {flash.query}
+    </span>
+  );
+}
+
+/**
  * What is in this pane, or what just happened to it.
  *
  * The transient line REPLACES the counts rather than sitting beside them, which
@@ -131,9 +175,10 @@ function Body({
   sort,
   reverse,
   showHidden,
+  renderMode,
   transient,
   summary,
-}: Omit<StatusBarProps, "picker" | "search">) {
+}: Omit<StatusBarProps, "picker" | "search" | "flash">) {
   const transientContent = transientLine(transient);
   if (transientContent !== null) return transientContent;
   if (summary != null) return summary;
@@ -148,6 +193,12 @@ function Body({
         sort: {sort} {reverse ? "↓" : "↑"}
       </span>
       {showHidden ? <span>hidden shown</span> : null}
+      {renderMode === null || renderMode === undefined ? null : (
+        <span className="status-bar__render" data-testid="status-render-mode">
+          <kbd>⌃r</kbd>
+          {renderMode}
+        </span>
+      )}
     </>
   );
 }

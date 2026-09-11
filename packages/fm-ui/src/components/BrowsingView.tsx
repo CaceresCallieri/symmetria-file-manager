@@ -12,6 +12,9 @@ export function BrowsingView({
   onOpen,
   matches,
   preview,
+  flashLabels,
+  flashActive,
+  onVisibleRange,
   onActivate,
   onLeaveTo,
 }: {
@@ -21,6 +24,9 @@ export function BrowsingView({
   onOpen(path: string): void;
   matches: ReadonlySet<number>;
   preview: NonNullable<MillerColumnsProps["preview"]>;
+  flashLabels: NonNullable<MillerColumnsProps["flashLabels"]>;
+  flashActive: boolean;
+  onVisibleRange: NonNullable<MillerColumnsProps["onVisibleRange"]>;
   onActivate(index: number): void;
   onLeaveTo(name: string): void;
 }) {
@@ -53,6 +59,9 @@ export function BrowsingView({
         onActivate={onActivate}
         onLeaveTo={onLeaveTo}
         preview={preview}
+        flashLabels={flashLabels}
+        flashActive={flashActive}
+        onVisibleRange={onVisibleRange}
       />
     </>
   );

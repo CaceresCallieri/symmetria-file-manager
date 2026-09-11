@@ -27,6 +27,15 @@ export const REQUEST_CHANNELS = {
   describe: "symmetria-fm:describe",
   /** Make one file loadable by the renderer, and name the URL. */
   previewUrl: "symmetria-fm:preview-url",
+  /**
+   * Make a previewed file's own directory loadable, and name the URL it roots.
+   *
+   * For a rendered document reaching its own images and stylesheet. Separate
+   * from `previewUrl` because the grant it issues is a different, stronger
+   * thing: that one names one file and narrows nothing, this one names a root
+   * and refuses everything outside it.
+   */
+  previewDirectoryUrl: "symmetria-fm:preview-directory-url",
   /** Copy or move entries into a directory. */
   transfer: "symmetria-fm:transfer",
   /** Abandon a running transfer. */
@@ -39,6 +48,27 @@ export const REQUEST_CHANNELS = {
   trash: "symmetria-fm:trash",
   /** The directories zoxide records this user going to. */
   frecent: "symmetria-fm:frecent",
+  /**
+   * Open a search index over a directory.
+   *
+   * Four channels rather than one, because an index has a LIFETIME. Folding
+   * "open" into "search" would make the first keystroke of every session pay
+   * for a full scan with no way to say so, and would leave nothing able to say
+   * when the index is no longer wanted.
+   */
+  searchStart: "symmetria-fm:search-start",
+  /** Search an open index. */
+  searchQuery: "symmetria-fm:search-query",
+  /**
+   * Attribute a chosen file to the query that found it.
+   *
+   * Its own channel rather than a flag on the search, because it happens once
+   * per session at the moment the overlay closes, and folding it into the
+   * query would make every keystroke carry a field only the last one uses.
+   */
+  searchRecord: "symmetria-fm:search-record",
+  /** Release an index now, rather than waiting for it to go idle. */
+  searchRelease: "symmetria-fm:search-release",
   /** Put text or an image on the system clipboard. */
   clipboard: "symmetria-fm:clipboard",
   /** Hand an entry to whatever the desktop says opens it. */

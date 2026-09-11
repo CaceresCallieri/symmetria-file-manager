@@ -61,6 +61,11 @@ export async function frecentDirectories(): Promise<FrecentResult> {
 
 /** Turn a spawn failure into something worth putting on screen. */
 function explain(cause: unknown): string {
+  // SAFETY: asserts only that the value MIGHT carry these keys — every field is
+  // optional, the type admits null, and the read is optionally chained — so a
+  // cause of any shape at all reads as `undefined` and falls through to the
+  // generic message below. Nothing here is trusted; the assertion buys the
+  // property read, not a contract.
   const code = (cause as { code?: unknown } | null)?.code;
 
   // The one a user can act on, and the one an empty list is otherwise
@@ -72,6 +77,7 @@ function explain(cause: unknown): string {
   // the kill: `killed: true` with `signal: "SIGTERM"` and a null code. Without
   // this the user got Node's raw "Command failed: zoxide query --list --score",
   // which does not say that the actual problem was a hang.
+  // SAFETY: same optional-and-chained read as `code` above.
   if ((cause as { killed?: boolean } | null)?.killed === true) return "zoxide did not answer";
 
   // The output cap. Its own code, and worth naming for the same reason as the

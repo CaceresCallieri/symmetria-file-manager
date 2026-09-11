@@ -235,12 +235,17 @@ Confirming a file navigates to `Paths.parentDir(fullPath)` and emits
 `windowState.fuzzyFinderNavigated(name)` **before** `navigate()` — a documented,
 load-bearing ordering (`FuzzyFinderPopup.qml:319-325`).
 
-**Frecency writes.** Real. `recordOpen(selectedIndex, searchInput.text)` fires on
-every confirm (`FuzzyFinderPopup.qml:299`), before `closeModal()` wipes the
-model. The C++ side reads the absolute path synchronously then does a
-fire-and-forget `fff_track_query` on a worker (`fuzzyfinder.cpp:491-507`). The
-DB lives at `SYMMETRIA_FM_FRECENCY_DIR` or
-`GenericDataLocation + "/symmetria/fff"` (`fuzzyfinder.cpp:83-89`).
+**Ranking writes.** Real, but they are **query-tracker** writes rather than
+frecency writes — this section said frecency and was wrong.
+`recordOpen(selectedIndex, searchInput.text)` fires on every confirm (see the
+call site in `FuzzyFinderPopup.qml`), before `closeModal()` wipes the model. The
+C++ side reads the absolute path synchronously then does a fire-and-forget
+`fff_track_query` on a worker (see `FuzzyFinder::recordOpen`). What that writes
+is one record per `(index root, query)` pair holding the selected file and an
+open count; a later matching query adds `open_count × comboBoostMultiplier` to
+the score. The frecency writer is not exported by the shipped library at all.
+See `20-spike-search-topology.md` §2.1. Both databases live at
+`SYMMETRIA_FM_FRECENCY_DIR` or `GenericDataLocation + "/symmetria/fff"`.
 
 **Index lifecycle.** A **process-wide singleton** engine (`FffEngine`,
 `fuzzyfinder.cpp:105-202`), because LMDB refuses a second open of one frecency
@@ -302,7 +307,7 @@ with 5 000 matches reads "200 results" with nothing marking the cap.
 | 14 | Directories in results | **No** — `kind: "file"`, filtered twice | Yes, mixed search, trailing slash trimmed for display | **File manager** |
 | 15 | Directory drill inside the popup | N/A | **No** — confirming a directory closes the popup | **Neither.** A real gap on both sides |
 | 16 | Empty query | Frecency-ordered browse, deliberate | Frecency-ordered browse, deliberate | **Tie.** Both got this right |
-| 17 | Frecency writes | **None** — no `frecencyDbPath` passed, `trackQuery` never called | `recordOpen` → `fff_track_query` on every confirm, absolute path | **File manager.** Mesura Code's ranking never learns |
+| 17 | Ranking writes | **None** — no `frecencyDbPath` passed, `trackQuery` never called | `recordOpen` → `fff_track_query` on every confirm, writing the **query tracker** (not frecency — see `20-spike-search-topology.md` §2.1) | **File manager.** Mesura Code's ranking never learns anything; ours learns a per-`(root, query)` open count |
 | 18 | Keyboard | Arrow keys + Enter + Escape, via Base UI `Autocomplete` | Arrow keys + `Ctrl+J`/`Ctrl+K` + Enter + Escape | **File manager** by a nose (the vim pair). Both lack page-scroll keys |
 | 19 | Preview scroll from the finder | N/A | **No** — the info pane installs no key handler | **Neither** |
 | 20 | Error surface | `error` string from the RPC, shown in the empty state (`ProjectFilePicker.tsx:46`) | `error` property, rendered under the list in `palette.error` | **Tie** |

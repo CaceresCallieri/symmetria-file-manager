@@ -1,3 +1,4 @@
+import { goToPath } from "@symmetria/fm-core/pane";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -159,15 +160,66 @@ describe("updating one tab", () => {
   });
 });
 
-/** Move the active pane to a path, the way a deliberate navigation does. */
+/**
+ * Move the active pane to a path, the way a deliberate navigation does.
+ *
+ * Through `goToPath` and not a transition written out here: a helper with its
+ * own copy of the shape would keep passing after the real one changed, which is
+ * exactly how the same-path defect below stayed invisible at this level.
+ */
 function goTo(state: TabsState, path: string): TabsState {
-  return navigateActivePane(state, (pane) => ({ ...pane, path, entries: [], cursorIndex: 0 }));
+  return navigateActivePane(state, (pane) => goToPath(pane, path));
 }
 
 /** Where the active tab is. */
 function at(state: TabsState): string {
   return activePane(state)?.path ?? "";
 }
+
+describe("a navigation that goes nowhere", () => {
+  it("changes nothing at all, rather than emptying the pane it is already in", () => {
+    // The state must come back BY REFERENCE. Anything else is a render whose
+    // only effect is to blank a column that nothing will re-list — the watch
+    // reconciler starts a read when the PATH changes, and this one did not.
+    let state = createTabs("/a");
+    state = goTo(state, "/b");
+
+    expect(goTo(state, "/b")).toBe(state);
+  });
+
+  it("does not spend a history step on it", () => {
+    // A jump that recorded itself would put `/b` on the back stack while still
+    // standing in `/b`, and the next back press would go nowhere too.
+    let state = createTabs("/a");
+    state = goTo(state, "/b");
+    state = goTo(state, "/b");
+
+    state = stepActiveHistory(state, "back");
+    expect(at(state)).toBe("/a");
+  });
+
+  it("refuses a revert to the path the pane is already on", () => {
+    // The retreat after a failed listing was the last transition writing the
+    // pane out by hand. Its guard lived in the caller, so this state was
+    // unreachable only for as long as that one call site stayed correct.
+    let state = createTabs("/a");
+    state = goTo(state, "/b");
+
+    expect(revertPaneById(state, "tab-0", "/b")).toBe(state);
+  });
+
+  it("refuses a trail step that names the directory the pane is in", () => {
+    // Not reachable through the trail the pane builds for itself, which never
+    // records a move that did not move. It is pinned because the step used to
+    // write the pane out by hand: whatever the trail said, the pane obeyed, and
+    // one wrong entry would have emptied the column with no way back.
+    let state = createTabs("/a");
+    state = goTo(state, "/b");
+    state = updateActivePane(state, (pane) => ({ ...pane, path: "/a" }));
+
+    expect(stepActiveHistory(state, "back")).toBe(state);
+  });
+});
 
 /**
  * A navigation that fails, and what it must leave behind.

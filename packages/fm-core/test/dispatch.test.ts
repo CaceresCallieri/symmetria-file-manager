@@ -6,6 +6,7 @@ import { dispatch, isSuppressedInPicker, matchBinding } from "../src/keys/dispat
 import { bindingsFor, CORE, MILLER_ONLY } from "../src/keys/registry.ts";
 import type {
   Binding,
+  CursorEntry,
   KeyActions,
   KeyContext,
   KeyEvent,
@@ -77,7 +78,7 @@ function recorder(): Recorder {
     showMessage: log("showMessage"),
     toggleViewMode: log("toggleViewMode"),
     toggleHidden: log("toggleHidden"),
-    toggleHtmlRender: log("toggleHtmlRender"),
+    toggleDocumentRender: log("toggleDocumentRender"),
     openContextMenu: log("openContextMenu"),
     openCopyingPath: log("openCopyingPath"),
     tabNew: log("tabNew"),
@@ -144,7 +145,7 @@ function press(key: string, mods: Mods = ""): KeyEvent {
  * permissive default.
  */
 function stateFor(binding: Binding): Partial<KeyState> {
-  // Ctrl+R is shared with `miller.htmlRender`; save mode is what makes the
+  // Ctrl+R is shared with `miller.renderToggle`; save mode is what makes the
   // picker row win, and it sits earlier in CORE.
   if (binding.id === "op.pickerSaveEdit") {
     return { picker: { ...permissiveState().picker, saveMode: true } };
@@ -224,6 +225,11 @@ describe("a false condition does not consume", () => {
   });
 });
 
+/** A cursor entry differing from the fixture only in name and type. */
+function entryOn(name: string, mimeType: string): CursorEntry {
+  return { name, path: `/tmp/${name}`, isDirectory: false, isImage: false, mimeType };
+}
+
 describe("Ctrl+R precedence, which two rows share", () => {
   it("edits the save name inside a save picker", () => {
     const ctx = contextWith({ picker: { ...permissiveState().picker, saveMode: true } });
@@ -232,17 +238,35 @@ describe("Ctrl+R precedence, which two rows share", () => {
     expect(ctx.calls).toEqual(["editSaveName"]);
   });
 
-  it("renders the HTML preview outside one", () => {
-    const ctx = contextWith({});
+  it.each([
+    ["an HTML file", "page.html", "text/html"],
+    ["an XHTML file", "page.xhtml", "application/xhtml+xml"],
+    ["a markdown file", "NOTES.md", "text/markdown"],
+    ["a markdown file the database calls plain text", "NOTES.md", "text/plain"],
+    ["a README the NAME says nothing about", "README", "text/markdown"],
+  ])("toggles the rendered view for %s, outside one", (_why, name, mimeType) => {
+    const ctx = contextWith({ cursorEntry: entryOn(name, mimeType) });
 
     dispatch(press("r", "Ctrl"), ctx);
-    expect(ctx.calls).toEqual(["toggleHtmlRender"]);
+    expect(ctx.calls).toEqual(["toggleDocumentRender"]);
   });
 
-  it("falls through on a file that is not HTML", () => {
-    const ctx = contextWith({
-      cursorEntry: { ...permissiveState().cursorEntry, mimeType: "text/plain" },
-    });
+  it.each([
+    ["a plain text file", "notes.txt", "text/plain"],
+    ["a source file", "route.ts", "text/x-typescript"],
+    ["an image", "photo.png", "image/png"],
+  ])("falls through on %s, so the key reaches whatever handles it next", (_why, name, mimeType) => {
+    // A `when()` that is false does NOT consume its key. That is what lets two
+    // rows share Ctrl+R at all, and what keeps the key available to anything
+    // bound to it later.
+    const ctx = contextWith({ cursorEntry: entryOn(name, mimeType) });
+
+    expect(dispatch(press("r", "Ctrl"), ctx)).toBe(false);
+    expect(ctx.calls).toEqual([]);
+  });
+
+  it("falls through with no entry under the cursor at all", () => {
+    const ctx = contextWith({ cursorEntry: null });
 
     expect(dispatch(press("r", "Ctrl"), ctx)).toBe(false);
   });

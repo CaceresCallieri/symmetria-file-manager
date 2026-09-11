@@ -41,6 +41,22 @@ describe("App, wired to a bridge", () => {
     expect(log.listed).toContain("/home");
   });
 
+  it("draws each row's file-type icon", async () => {
+    // The pane's own rows had NO icon assertion anywhere: deleting `<FileIcon>`
+    // from `FileRow` left the whole panel suite green. The component now ships
+    // from another package, so a broken import here would be silent too.
+    render(<App startPath="/home/jc" />);
+    await waitFor(() => expect(namesIn("column-current")).toContain("notes.txt"));
+
+    const drawn = screen
+      .getAllByTestId("row")
+      .map((element) => element.querySelector("[data-icon]")?.getAttribute("data-icon"));
+    expect(drawn).not.toContain(undefined);
+    // A concrete token as well as "something drew", so a component that always
+    // answered `default` could not pass.
+    expect(drawn).toContain("text");
+  });
+
   it("shows the location as breadcrumbs and the count in the status bar", async () => {
     render(<App startPath="/home/jc" />);
 

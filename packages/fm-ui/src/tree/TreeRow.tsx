@@ -1,4 +1,4 @@
-import { FileIcon } from "../components/FileIcon.tsx";
+import { FileIcon } from "@symmetria/fm-search/ui";
 import { isTreeDirectory, type TreeRow as TreeRowModel, treeItemId } from "./model.ts";
 
 export function TreeRow({

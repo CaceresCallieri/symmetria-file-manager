@@ -29,9 +29,11 @@ interface KeyModes {
   readonly bookmarkSubMode: BookmarkSubMode | null;
   readonly helpOpen: boolean;
   readonly zoxideOpen: boolean;
+  readonly finderOpen: boolean;
   readonly message: string | null;
   closeHelp(): void;
   closeZoxide(): void;
+  closeFinder(): void;
   clearMessage(): void;
   reset(): void;
 }
@@ -127,11 +129,22 @@ export function useKeyActions(
    * and can therefore tell when the request stops applying.
    */
   toggleAudioPlayback: () => void,
+  /**
+   * Begin a flash session.
+   *
+   * Supplied by the caller rather than built here, like the two above: the
+   * session needs the listing, the cursor and the pane, and this hook holds
+   * none of them. Passed as the bare function rather than the whole hook so its
+   * identity is stable — the hook's own object changes on every keystroke of a
+   * running session, and the whole action table would be rebuilt with it.
+   */
+  startFlash: () => void,
 ): KeyWiring {
   const [chordPrefix, setChordPrefix] = useState("");
   const [bookmarkSubMode, setBookmarkSubMode] = useState<BookmarkSubMode | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [zoxideOpen, setZoxideOpen] = useState(false);
+  const [finderOpen, setFinderOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const actions = useMemo<KeyActions>(() => {
@@ -183,8 +196,8 @@ export function useKeyActions(
       startSearch: () => search.open(),
       nextMatch: () => search.goNext(),
       previousMatch: () => search.goPrevious(),
-      startFlash: soon("Flash jump"),
-      openFuzzyFinder: soon("The fuzzy finder"),
+      startFlash,
+      openFuzzyFinder: () => setFinderOpen(true),
       openZoxide: () => setZoxideOpen(true),
 
       // Chords resolve for real; what they resolve TO may not exist yet.
@@ -226,7 +239,7 @@ export function useKeyActions(
 
       toggleViewMode: soon("The tree view"),
       toggleHidden: () => tabs.toggleHidden(),
-      toggleHtmlRender: soon("The HTML preview"),
+      toggleDocumentRender: () => tabs.toggleRenderDocuments(),
       openContextMenu: soon("The context menu"),
       openCopyingPath: () => {
         // **The same hole as plain Enter, one key over.** Review found it right
@@ -263,7 +276,7 @@ export function useKeyActions(
       treePageUp: () => undefined,
       treeRefresh: soon("The tree view"),
     };
-  }, [tabs, ops, search, bookmarks, home, picker, toggleAudioPlayback]);
+  }, [tabs, ops, search, bookmarks, home, picker, toggleAudioPlayback, startFlash]);
 
   const state = useMemo<KeyState>(() => {
     const entry = tabs.pane.entries[tabs.pane.cursorIndex];
@@ -302,18 +315,21 @@ export function useKeyActions(
       bookmarkSubMode,
       helpOpen,
       zoxideOpen,
+      finderOpen,
       message,
       closeHelp: () => setHelpOpen(false),
       closeZoxide: () => setZoxideOpen(false),
+      closeFinder: () => setFinderOpen(false),
       clearMessage: () => setMessage(null),
       reset: () => {
         setChordPrefix("");
         setBookmarkSubMode(null);
         setHelpOpen(false);
         setZoxideOpen(false);
+        setFinderOpen(false);
       },
     }),
-    [chordPrefix, bookmarkSubMode, helpOpen, zoxideOpen, message],
+    [chordPrefix, bookmarkSubMode, helpOpen, zoxideOpen, finderOpen, message],
   );
 
   return { actions, modes, state };

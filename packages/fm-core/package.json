@@ -25,6 +25,8 @@
     "./pane": "./src/pane.ts",
     "./windowUrl": "./src/windowUrl.ts",
     "./zoxide": "./src/zoxide.ts",
+    "./flash/labels": "./src/flash/labels.ts",
+    "./flash/session": "./src/flash/session.ts",
     "./keys/types": "./src/keys/types.ts",
     "./keys/registry": "./src/keys/registry.ts",
     "./keys/dispatch": "./src/keys/dispatch.ts",
@@ -47,6 +49,8 @@
     "./overview/model": "./src/overview/model.ts",
     "./overview/navigation": "./src/overview/navigation.ts",
     "./overview/viewport": "./src/overview/viewport.ts",
-    "./flash": "./src/flash.ts"
+    "./flash": "./src/flash.ts",
+    "./scrollbar": "./src/scrollbar.ts",
+    "./format": "./src/format.ts"
   }
 }

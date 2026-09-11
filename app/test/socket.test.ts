@@ -1,4 +1,5 @@
 import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -173,5 +174,58 @@ describe("carrying a command", () => {
 
     expect(reply.ok).toBe(false);
     await claim.value.close();
+  });
+});
+
+/**
+ * A peer that answers with whatever it is told to, so the reply reader can be
+ * driven past the shapes this application's own server produces.
+ *
+ * Raw `net` rather than `claimSocket`, precisely because `claimSocket` is what
+ * guarantees the well-formed shape — a test that went through it could only
+ * ever exercise the happy path.
+ */
+async function peerAnswering(path: string, line: string): Promise<Server> {
+  const server = createServer((connection) => {
+    connection.on("data", () => {
+      connection.write(`${line}\n`);
+      connection.end();
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(path, resolve));
+  return server;
+}
+
+describe("reading the daemon's answer", () => {
+  // `JSON.parse` accepts `null`, `123` and `"ok"` without throwing, so a reply
+  // that parsed was once handed straight back — and a caller reading `.ok` off
+  // `null` throws a TypeError far from the cause. A truncated line is exactly
+  // how that arrives.
+  it.each([
+    ["null", "a bare null"],
+    ["123", "a number"],
+    ['"ok"', "a string"],
+    ["{}", "an object with no verdict"],
+    ['{"ok":"yes"}', "a verdict that is not a boolean"],
+  ])("calls %s malformed rather than passing it on (%s)", async (line) => {
+    const path = join(dir, "peer.sock");
+    const server = await peerAnswering(path, line);
+
+    const reply = await sendCommand(path, { cmd: "open", path: "/tmp" });
+
+    expect(reply).toEqual({ ok: false, error: "malformed reply" });
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  // Paired with the cases above, so a reader that called everything malformed
+  // could not pass this file.
+  it("passes a well-formed answer through, error and all", async () => {
+    const path = join(dir, "peer.sock");
+    const server = await peerAnswering(path, '{"ok":false,"error":"no such path"}');
+
+    const reply = await sendCommand(path, { cmd: "open", path: "/tmp" });
+
+    expect(reply).toEqual({ ok: false, error: "no such path" });
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 });

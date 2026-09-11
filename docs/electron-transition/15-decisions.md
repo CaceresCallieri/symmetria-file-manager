@@ -111,8 +111,10 @@ share a *store*, not a *ranking*. Do not describe it as shared learning.
 
 ### Two documentation defects this uncovered
 
-Both name frecency where the code writes the query tracker. Fix when the rewrite
-touches them:
+Each named frecency where the code writes the query tracker. **All are now
+fixed**, along with a third copy in this dossier at
+`04-fuzzy-finder-module.md` and the API-contract comment in
+`21-search-surface-spec.md`:
 
 - The frecency claim in `CLAUDE.md`.
 - The comment at `plugin/src/Symmetria/FileManager/Models/fuzzyfinder.cpp:497`.

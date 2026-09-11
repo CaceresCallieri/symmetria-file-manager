@@ -26,10 +26,20 @@ export interface Bridge {
   readText(request: unknown): Promise<Result<unknown>>;
   /** Abandon an in-flight listing. */
   cancel(request: unknown): Promise<Result<unknown>>;
+  /** Open a search index over a directory. */
+  searchStart(request: unknown): Promise<Result<unknown>>;
+  /** Search an open index. */
+  searchQuery(request: unknown): Promise<Result<unknown>>;
+  /** Attribute a chosen file to the query that found it. */
+  searchRecord(request: unknown): Promise<Result<unknown>>;
+  /** Release a search index. */
+  searchRelease(request: unknown): Promise<Result<unknown>>;
   /** Everything the preview router needs about one entry. */
   describe(request: unknown): Promise<Result<unknown>>;
   /** Make one file loadable by the renderer, and name the URL. */
   previewUrl(request: unknown): Promise<Result<unknown>>;
+  /** Make a file's own directory loadable, and name the URL it roots. */
+  previewDirectoryUrl(request: unknown): Promise<Result<unknown>>;
   /** Copy or move entries into a directory. */
   transfer(request: unknown): Promise<Result<unknown>>;
   /** Abandon a running transfer. */

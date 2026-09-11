@@ -9,7 +9,7 @@
  * is uniquely bad at and this file is careful about — that a click does not
  * take the keyboard with it.
  */
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { App } from "../../src/App.tsx";
@@ -98,6 +98,23 @@ describe("clicking in the parent column", () => {
     fireEvent.click(rowNamed("column-parent", "empty"));
 
     await waitFor(() => expect(screen.getByTestId("crumb-current").textContent).toBe("empty"));
+  });
+
+  it("keeps the listing when the click lands on the directory we are already in", async () => {
+    // The parent column always shows the current directory among the siblings,
+    // and highlights it — so it is the most obvious row in that column to click
+    // and the one most likely to be clicked by accident. It is a jump to where
+    // we already are, and a jump like that used to empty the column for good.
+    render(<App startPath="/home/jc/projects" />);
+    await waitFor(() => expect(namesIn("column-current")).toContain("beta.md"));
+    const before = [...log.listed];
+
+    fireEvent.click(rowNamed("column-parent", "projects"));
+
+    await act(async () => undefined);
+    expect(namesIn("column-current")).toContain("beta.md");
+    expect(screen.getByTestId("crumb-current").textContent).toBe("projects");
+    expect(log.listed).toEqual(before);
   });
 
   it("leaves a file in that column inert, because it is not a destination", async () => {

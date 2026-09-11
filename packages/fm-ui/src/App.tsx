@@ -14,12 +14,16 @@ import {
   type PickerWindowRequest,
   pickerFromSearch,
 } from "@symmetria/fm-core/windowUrl";
+import { FinderOverlay } from "@symmetria/fm-search/ui";
 import { useEffect, useMemo, useRef } from "react";
 import { BrowsingView } from "./components/BrowsingView.tsx";
+import { FinderPreview } from "./components/FinderPreview.tsx";
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
-import { StatusBar } from "./components/StatusBar.tsx";
+import type { SearchFieldProps } from "./components/SearchField.tsx";
+import { type RenderMode, StatusBar } from "./components/StatusBar.tsx";
 import { TabBar } from "./components/TabBar.tsx";
+import type { TransientLineProps } from "./components/transientLine.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
 import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
 import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
@@ -30,6 +34,7 @@ import { treeKeyContext, useTreeMode } from "./tree/useTreeMode.ts";
 import { useBookmarks } from "./useBookmarks.ts";
 import { useExternalOpen } from "./useExternalOpen.ts";
 import { type FileOps, useFileOps } from "./useFileOps.ts";
+import { type FlashHost, type PreviewedDirectory, useFlash } from "./useFlash.ts";
 import { type KeyWiring, useKeyActions } from "./useKeyActions.ts";
 import { usePicker } from "./usePicker.ts";
 import { type Preview, usePreviewPane } from "./usePreview.ts";
@@ -81,6 +86,100 @@ function cursorImageMimeOf(preview: Preview, cursorPath: string | null): string 
   return preview.route.kind === "image" ? preview.route.mime : null;
 }
 
+/**
+ * Which view the preview is showing, or null when this file has no second one.
+ *
+ * Guarded on the described path for the same reason the image chord above is:
+ * the preview is debounced by 150 ms, so just after a cursor move the route
+ * still describes the previous entry — and an indicator that lags the cursor by
+ * a beat is worse than none, because it says something definite and wrong.
+ */
+function renderModeOf(
+  preview: Preview,
+  cursorPath: string | null,
+  renderDocuments: boolean,
+): RenderMode | null {
+  if (preview.path !== cursorPath || preview.renderAs === null) return null;
+  return renderDocuments ? "rendered" : "source";
+}
+
+/**
+ * The search field's props, or null when no search is open.
+ *
+ * A module-level function for the same reason `cursorImageMimeOf` and
+ * `renderModeOf` above are: `App` is scored as one function and every
+ * conditional inside its JSX counts against the same bound.
+ */
+function searchChromeOf(search: Search): SearchFieldProps | null {
+  if (!search.active) return null;
+  return {
+    query: search.query,
+    matchCount: search.matchCount,
+    onChange: search.setQuery,
+    onConfirm: search.confirm,
+    onCancel: search.cancel,
+  };
+}
+
+/**
+ * A failure, a running transfer, or what just happened — whichever there is.
+ *
+ * The precedence between them belongs to `transientLine`; this only decides
+ * which message there is to show, since two sources can offer one.
+ */
+function transientOf(
+  tabs: Tabs,
+  ops: FileOps,
+  modes: KeyWiring["modes"],
+  treeRoot: string | null,
+): TransientLineProps {
+  return {
+    error: treeDirectoryError(treeRoot, tabs.error),
+    message: ops.message ?? modes.message,
+    progress: ops.progress,
+    onCancelTransfer: ops.cancelRunningTransfer,
+  };
+}
+
+/**
+ * The previewed directory a flash session may label, or null.
+ *
+ * Guarded on the described path for the same reason the two functions above
+ * are: the preview is debounced by 150 ms, so just after a cursor move the
+ * route still describes the PREVIOUS entry — and a label that navigates
+ * somewhere the cursor has already left is the worst kind of wrong, because
+ * it does something rather than nothing.
+ */
+function previewDirectoryOf(
+  preview: Preview,
+  cursorPath: string | null,
+): PreviewedDirectory | null {
+  if (preview.path === null || preview.path !== cursorPath) return null;
+  if (preview.route.kind !== "directory") return null;
+  return { path: preview.path, entries: preview.route.entries };
+}
+
+/**
+ * What a flash session sees: three columns and two ways to move.
+ *
+ * A plain function rather than a hook, and it is rebuilt on every render on
+ * purpose — `useFlash` keys its own memos on the LISTINGS rather than on this
+ * object, so a fresh wrapper costs nothing and there is no dependency array
+ * here to fall out of step.
+ */
+function flashHostFor(tabs: Tabs, preview: Preview, cursorPath: string | null): FlashHost {
+  return {
+    entries: tabs.pane.entries,
+    cursorIndex: tabs.pane.cursorIndex,
+    path: tabs.pane.path,
+    parentEntries: tabs.parentEntries,
+    parentPath: parentOf(tabs.pane.path),
+    previewDirectory: previewDirectoryOf(preview, cursorPath),
+    moveTo: tabs.moveTo,
+    navigateTo: tabs.navigateTo,
+  };
+}
+
 export interface AppProps {
   readonly onOpenFile?: (path: string) => void;
   /** Overridden by tests, which must not depend on the real location. */
@@ -123,9 +222,12 @@ function cascadeModeFor(
     // share it, so two can never be open at once. The zoxide list joins the
     // same gate — it is a dialog with a text field, and two of those open at
     // once would each think the keyboard was theirs.
-    modalOpen: modes.helpOpen || modes.zoxideOpen || opsModalKind !== "none",
+    modalOpen: modes.helpOpen || modes.zoxideOpen || modes.finderOpen || opsModalKind !== "none",
     bookmarkSubMode: modes.bookmarkSubMode,
     chordPrefix: modes.chordPrefix,
+    // Flash jump is a text-input mode with no input to focus: it reads the raw
+    // key stream, so saying so here is the ONLY thing that stops `j` from
+    // moving the cursor while a session is narrowing.
     flashActive,
     // The seam the cascade documented and nothing used until now. The field is
     // a real `<input>`, so `useKeyDispatch` would report this anyway from the
@@ -168,13 +270,39 @@ function Overlays({
   modes,
   context,
   bookmarks,
+  directory,
+  renderDocuments,
   onNavigate,
+  onReveal,
 }: {
   readonly modes: KeyWiring["modes"];
   readonly context: KeyContext;
   readonly bookmarks: ReadonlyMap<string, Bookmark>;
+  /** The tree the finder searches: whatever the active pane is showing. */
+  readonly directory: string;
+  /** Passed through to the finder's preview, as the pane's own preview gets it. */
+  readonly renderDocuments: boolean;
   onNavigate(path: string): void;
+  onReveal(path: string): void;
 }) {
+  if (modes.finderOpen) {
+    return (
+      <FinderOverlay
+        directory={directory}
+        renderPreview={(path) => <FinderPreview path={path} renderDocuments={renderDocuments} />}
+        onChoose={(path, isDir) => {
+          modes.closeFinder();
+          // A directory is ENTERED and a file is REVEALED. The overlay reports
+          // which it handed back rather than leaving the caller to read the
+          // engine's trailing separator, which is a convention a caller can get
+          // wrong exactly once.
+          if (isDir) onNavigate(path);
+          else onReveal(path);
+        }}
+        onClose={modes.closeFinder}
+      />
+    );
+  }
   if (modes.zoxideOpen) {
     return (
       <ZoxidePopup
@@ -190,17 +318,6 @@ function Overlays({
     return <HelpOverlay context={context} bookmarks={bookmarks} onClose={modes.closeHelp} />;
   }
   return null;
-}
-
-function searchFieldProps(search: Search) {
-  if (!search.active) return null;
-  return {
-    query: search.query,
-    matchCount: search.matchCount,
-    onChange: search.setQuery,
-    onConfirm: search.confirm,
-    onCancel: search.cancel,
-  };
 }
 
 export function App(props: AppProps = {}) {
@@ -227,6 +344,7 @@ export function App(props: AppProps = {}) {
   useExternalOpen((path) => {
     search.cancel();
     modes.reset();
+    millerFlash.clear();
     overview.close();
     tree.external(path);
   });
@@ -237,7 +355,9 @@ export function App(props: AppProps = {}) {
   // path, which comes straight from the pane — so there is no cycle, only an
   // order.
   const cursorPath = cursorPathOf(tabs.pane);
-  const previewing = usePreviewPane(cursorPath);
+  const previewing = usePreviewPane(cursorPath, tabs.renderDocuments);
+  // After the preview, because a session may label the directory it shows.
+  const millerFlash = useFlash(flashHostFor(tabs, previewing.preview, cursorPath));
 
   const { actions, modes, state } = useKeyActions(
     tabs,
@@ -248,6 +368,7 @@ export function App(props: AppProps = {}) {
     cursorImageMimeOf(previewing.preview, cursorPath),
     picker,
     previewing.toggleAudio,
+    millerFlash.start,
   );
 
   const context = browsingContext(
@@ -259,9 +380,10 @@ export function App(props: AppProps = {}) {
     state,
     actions,
   );
-  useBrowsingTransitions(tree.id, modes.reset, search.cancel, tree.cancel);
+  useBrowsingTransitions(tree.id, modes.reset, search.cancel, tree.cancel, millerFlash.clear);
+  useBrowsingTransitions(context.view, millerFlash.clear);
 
-  const flash = browsingFlash(context, tree, overview);
+  const flash = browsingFlash(context, tree, overview, millerFlash);
   const mode = useMemo<CascadeMode>(
     () => cascadeModeFor(modes, ops.modal.kind, search.active, flash.active),
     [modes, ops.modal.kind, search.active, flash.active],
@@ -299,6 +421,9 @@ export function App(props: AppProps = {}) {
           onOpen={props.onOpenFile ?? ops.openAbsolute}
           matches={search.matches}
           preview={previewing.pane}
+          flashLabels={millerFlash.labels}
+          flashActive={millerFlash.active}
+          onVisibleRange={millerFlash.reportVisibleRange}
           onActivate={(index) => activateAt(tabs, ops, index)}
           onLeaveTo={leaveTo}
         />
@@ -319,13 +444,10 @@ export function App(props: AppProps = {}) {
           sort={tabs.sort}
           reverse={tabs.reverse}
           showHidden={tabs.showHidden}
-          search={searchFieldProps(search)}
-          transient={{
-            error: treeDirectoryError(tree.root, tabs.error),
-            message: ops.message ?? modes.message,
-            progress: ops.progress,
-            onCancelTransfer: ops.cancelRunningTransfer,
-          }}
+          renderMode={renderModeOf(previewing.preview, cursorPath, tabs.renderDocuments)}
+          search={searchChromeOf(search)}
+          flash={flash.chrome}
+          transient={transientOf(tabs, ops, modes, tree.root)}
         />
         <OpsModals
           modal={ops.modal}
@@ -348,7 +470,10 @@ export function App(props: AppProps = {}) {
         modes={modes}
         context={context}
         bookmarks={bookmarks.byLetter}
+        directory={tabs.pane.path}
+        renderDocuments={tabs.renderDocuments}
         onNavigate={tabs.navigate}
+        onReveal={tabs.reveal}
       />
     </>
   );
@@ -418,8 +543,11 @@ function browsingFlash(
   context: KeyContext,
   tree: ReturnType<typeof useTreeMode>,
   overview: ReturnType<typeof useOverviewMode>,
+  miller: ReturnType<typeof useFlash>,
 ) {
-  return context.view === "tree"
-    ? { active: tree.flashActive, onKey: tree.onFlashKey }
-    : { active: overview.flashActive, onKey: overview.onFlashKey };
+  if (context.view === "tree")
+    return { active: tree.flashActive, onKey: tree.onFlashKey, chrome: null };
+  if (context.view === "overview")
+    return { active: overview.flashActive, onKey: overview.onFlashKey, chrome: null };
+  return miller;
 }
