@@ -233,11 +233,13 @@ it("puts the jump label after the matched glyphs and restores normal presentatio
   expect(label?.style.left).toBe("316px");
   expect(label?.style.fontSize).toBe("14px");
   expect(label?.style.lineHeight).toBe("24px");
-  expect(document.querySelector(".overview-flash-match")?.textContent).toBe("be");
+  expect(document.querySelector(".overview-flash-match")?.textContent).toBe("beta.md");
   expect(document.querySelector(".overview-graph-frame")?.getAttribute("data-flash-mode")).toBe(
     "true",
   );
-  expect(document.querySelector<HTMLElement>(".overview-flash-match")?.style.width).toBe("16px");
+  expect(document.querySelector<HTMLElement>(".overview-flash-match")?.style.clipPath).toBe(
+    'path("M 0 0 H 16 V 24 H 0 Z")',
+  );
   key("t");
   expect(labels()[0]?.style.left).toBe("324px");
   key("Escape");

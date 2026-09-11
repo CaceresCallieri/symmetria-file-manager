@@ -14,6 +14,7 @@ import {
   useState,
 } from "react";
 import { type FlashScene, positionFlashLabels, readFlashScene } from "./flashTargets.ts";
+import { measureFlashMatches } from "./flashTextGeometry.ts";
 import type { OverviewPort } from "./useOverviewMode.ts";
 
 interface FlashSession {
@@ -35,13 +36,19 @@ export function useOverviewFlash(options: FlashOptions) {
   const { viewport, generation, port } = options;
   const [session, setSession] = useState<FlashSession | null>(null);
   const cancel = useCallback(() => setSession(null), []);
+  const scene = session?.scene;
+  const query = session?.query ?? "";
   const result = useMemo(
-    () => computeFlash(session?.query ?? "", session?.scene.targets ?? EMPTY_TARGETS),
-    [session],
+    () => computeFlash(query, scene?.targets ?? EMPTY_TARGETS),
+    [query, scene],
+  );
+  const queries = useMemo(
+    () => (scene ? measureFlashMatches(scene, result.matches, query) : []),
+    [scene, result, query],
   );
   const labels = useMemo(
-    () => (session ? positionFlashLabels(session.scene, result.matches, session.query) : []),
-    [session, result],
+    () => (scene ? positionFlashLabels(scene, result.matches, queries) : []),
+    [scene, result, queries],
   );
   const resolved = resolveVisibleLabels(result, labels !== null);
   const latest = useRef({ options, session, resolved });
@@ -60,6 +67,7 @@ export function useOverviewFlash(options: FlashOptions) {
     empty: session?.scene.targets.length === 0,
     needsRefinement: resolved.needsRefinement,
     labels: labels ?? [],
+    queries,
     matches: useMemo(() => new Set(result.matches.map((match) => match.path)), [result]),
     cancel,
     open: () => {

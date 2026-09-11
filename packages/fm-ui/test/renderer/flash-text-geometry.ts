@@ -14,6 +14,10 @@ export function mockTextRanges(widthOf: (character: string) => number = () => 8)
     width: [...label].reduce((sum, character) => sum + widthOf(character), 0) * zoom + 4 * zoom,
     padding: 2 * zoom,
   }));
+  vi.spyOn(Range.prototype, "getClientRects").mockImplementation(function (this: Range) {
+    const rectangles = [this.getBoundingClientRect()];
+    return Object.assign(rectangles, { item: (index: number) => rectangles[index] ?? null });
+  });
   vi.spyOn(Range.prototype, "getBoundingClientRect").mockImplementation(function (this: Range) {
     const rect = this.startContainer.parentElement?.getBoundingClientRect() ?? new DOMRect();
     const text = this.startContainer.textContent ?? "";

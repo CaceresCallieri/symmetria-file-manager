@@ -55,7 +55,7 @@ export function FolderGroup({
           onClick={() => onSelect(group.path)}
         >
           <FileIcon name={basename(group.path)} kind="directory" />
-          <span>{basename(group.path)}</span>
+          <span className="overview-name">{basename(group.path)}</span>
         </button>
         <button
           type="button"
@@ -86,7 +86,7 @@ export function FolderGroup({
               >
                 <FileIcon name={entry.name} kind={entry.kind} />
                 {entry.isSymlink ? <span aria-hidden="true">↗</span> : null}
-                <span>{entry.name}</span>
+                <span className="overview-name">{entry.name}</span>
               </button>
             ))}
           </div>

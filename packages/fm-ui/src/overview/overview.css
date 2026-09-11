@@ -375,7 +375,7 @@
 .overview-flash-match {
   position: absolute;
   color: var(--foreground);
-  white-space: pre;
+  transform-origin: 0 0;
 }
 @media (prefers-reduced-motion: reduce) {
   .overview-graph-frame .overview-row,
@@ -386,7 +386,6 @@
   }
 }
 
-[data-flash-mode="true"] .overview-row[data-search-match="true"] > span:last-child,
-[data-flash-mode="true"] .folder-group-name[data-search-match="true"] > span:last-child {
+[data-flash-mode="true"] [data-search-match="true"] > .overview-name {
   opacity: 0.25;
 }

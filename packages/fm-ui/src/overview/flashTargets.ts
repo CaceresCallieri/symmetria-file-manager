@@ -1,5 +1,6 @@
 import type { FlashMatch, FlashTarget } from "@symmetria/fm-core/flash";
 import { basename } from "@symmetria/fm-core/overview/model";
+import type { measureFlashMatches } from "./flashTextGeometry.ts";
 import { measureFlashTypography } from "./flashTypography.ts";
 
 export interface FlashAnchor extends FlashTarget {
@@ -17,6 +18,7 @@ interface Rectangle {
 export const FLASH_STATUS_LAYOUT = { inset: 12, width: 460, height: 48 };
 export interface FlashScene {
   readonly zoom: number;
+  readonly typographyCache: Map<string, { width: number; height: number }>;
   readonly occluders: readonly Rectangle[];
   readonly names: ReadonlyMap<string, HTMLElement>;
   readonly targets: readonly FlashAnchor[];
@@ -63,7 +65,7 @@ export function readFlashScene(viewport: HTMLElement): FlashScene {
   const names = new Map<string, HTMLElement>();
   const buttons = viewport.querySelectorAll<HTMLElement>("[data-entry], [data-basename]");
   for (const button of buttons) {
-    const name = button.querySelector<HTMLElement>("span:last-child");
+    const name = button.querySelector<HTMLElement>(".overview-name");
     if (!name) continue;
     const rect = name.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0 || !overlaps(rect, clip) || covered(rect, occluders))
@@ -85,6 +87,7 @@ export function readFlashScene(viewport: HTMLElement): FlashScene {
   );
   return {
     zoom: Number(viewport.dataset.zoom ?? 1),
+    typographyCache: new Map(),
     targets,
     names,
     occluders,
@@ -110,29 +113,27 @@ export interface FlashLabel {
   readonly y: number;
   readonly width: number;
   readonly typography: ReturnType<typeof measureFlashTypography>;
-  readonly match: { x: number; y: number; width: number; height: number; text: string };
 }
 /** If badges cannot fit without ambiguity, keep the query available for refinement. */
 export function positionFlashLabels(
   scene: FlashScene,
   matches: readonly FlashMatch[],
-  query: string,
+  queries: ReturnType<typeof measureFlashMatches>,
 ): FlashLabel[] | null {
-  const anchors = new Map(scene.targets.map((target) => [target.path, target]));
+  const geometry = new Map(queries.map((query) => [query.path, query]));
   const labels: FlashLabel[] = [];
   for (const match of matches) {
     if (!match.label) return null;
-    const anchor = anchors.get(match.path);
-    if (!anchor) return null;
-    const name = scene.names.get(match.path);
-    if (!name) return null;
-    const matched = matchedTextRect(name, query);
+    const matched = geometry.get(match.path);
     if (!matched) return null;
-    const { rect: range, text, lineOffset } = matched;
-    const typography = measureFlashTypography(name, match.label, scene.zoom);
+    const typography = measureFlashTypography(
+      matched.font,
+      match.label,
+      scene.zoom,
+      scene.typographyCache,
+    );
     const { width, height } = typography;
-    const top = anchor.top + lineOffset;
-    const left = range.right;
+    const { top, left } = matched.endpoint;
     if (
       !labelFits(
         { left, right: left + width, top, bottom: top + height },
@@ -149,13 +150,6 @@ export function positionFlashLabels(
       y: top - scene.top,
       width,
       typography,
-      match: {
-        x: range.left - scene.left,
-        y: top - scene.top,
-        width: range.width,
-        height,
-        text,
-      },
     });
   }
   return labels;
@@ -185,26 +179,4 @@ function labelFits(box: Rectangle, scene: FlashScene, labels: readonly FlashLabe
       bottom: label.y + scene.top + label.typography.height,
     }),
   );
-}
-
-/** Measure the matched glyphs in the real font, including the current graph scale. */
-function matchedTextRect(name: HTMLElement, query: string) {
-  const text = name?.firstChild;
-  if (!text || text.nodeType !== Node.TEXT_NODE || !query) return null;
-  const content = text.textContent ?? "";
-  const start = content.toLowerCase().indexOf(query.toLowerCase());
-  if (start < 0) return null;
-  const range = document.createRange();
-  range.setStart(text, start);
-  range.setEnd(text, Math.min(content.length, start + query.length));
-  const rect = range.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) return null;
-  range.setStart(text, 0);
-  range.setEnd(text, Math.min(content.length, 1));
-  const firstLine = range.getBoundingClientRect();
-  return {
-    rect,
-    text: content.slice(start, start + query.length),
-    lineOffset: rect.top - firstLine.top,
-  };
 }

@@ -2,9 +2,10 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   type FlashScene,
-  positionFlashLabels,
+  positionFlashLabels as placeLabels,
   readFlashScene,
 } from "../../src/overview/flashTargets.ts";
+import { measureFlashMatches } from "../../src/overview/flashTextGeometry.ts";
 import { mockTextRanges } from "./flash-text-geometry.ts";
 
 beforeEach(() => mockTextRanges((character) => (character === "l" ? 4 : 9)));
@@ -12,9 +13,11 @@ afterEach(() => vi.restoreAllMocks());
 function scene(occluders: FlashScene["occluders"] = []): FlashScene {
   const name = document.createElement("span");
   name.textContent = "pull";
+  name.className = "overview-name";
   vi.spyOn(name, "getBoundingClientRect").mockReturnValue(new DOMRect(100, 100, 26, 24));
   return {
     zoom: 1,
+    typographyCache: new Map(),
     left: 0,
     top: 0,
     right: 800,
@@ -25,12 +28,21 @@ function scene(occluders: FlashScene["occluders"] = []): FlashScene {
     targets: [{ path: "/pull", name: "pull", left: 100, right: 126, top: 100, bottom: 124 }],
   };
 }
+function positionFlashLabels(
+  captured: FlashScene,
+  matches: Parameters<typeof placeLabels>[1],
+  query: string,
+) {
+  return placeLabels(captured, matches, measureFlashMatches(captured, matches, query));
+}
 const match = { path: "/pull", name: "pull", label: "s" };
 it("places labels over the suffix after the actual matched glyphs", () => {
   const captured = scene();
   const labels = positionFlashLabels(captured, [match], "pu");
   expect(labels?.[0]?.x).toBe(118);
-  expect(labels?.[0]?.match).toEqual({ x: 100, y: 100, width: 18, height: 24, text: "pu" });
+  expect(measureFlashMatches(captured, [match], "pu")[0]?.clipPath).toBe(
+    'path("M 0 0 H 18 V 24 H 0 Z")',
+  );
   expect(positionFlashLabels(captured, [match], "ul")?.[0]?.x).toBe(122);
   expect(positionFlashLabels(captured, [match], "pull")?.[0]?.x).toBe(126);
 });
@@ -56,6 +68,7 @@ it("excludes only open popovers when capturing visible names", () => {
   row.dataset.entry = "/pull";
   const name = document.createElement("span");
   name.textContent = "pull";
+  name.className = "overview-name";
   row.append(name);
   viewport.append(row);
   const details = document.createElement("details");
@@ -78,6 +91,46 @@ it("scales jump typography with the graph and preserves the matched filename cas
   name.textContent = "Pull";
   const label = positionFlashLabels({ ...captured, zoom: 2 }, [match], "pu")?.[0];
   expect(label?.typography).toMatchObject({ fontSize: "28px", lineHeight: "48px", height: 48 });
-  expect(label?.match.text).toBe("Pu");
-  expect(label?.y).toBe(label?.match.y);
+  expect(measureFlashMatches(captured, [match], "pu")[0]?.text).toBe("Pull");
+  expect(label?.y).toBe(100);
+});
+
+it.each([
+  ["İabc", "ab", 127],
+  ["İİa", "a", 127],
+])("maps normalized offsets to original glyphs for %s", (filename, query, endpoint) => {
+  const captured = scene();
+  const name = captured.names.get("/pull");
+  if (!name) throw new Error("Missing fixture name");
+  name.textContent = filename;
+  const queries = measureFlashMatches(captured, [match], query);
+  expect(queries[0]?.endpoint.left).toBe(endpoint);
+  expect(positionFlashLabels(captured, [match], query)?.[0]?.x).toBe(endpoint);
+});
+it("keeps query geometry when a label is obstructed", () => {
+  const captured = scene([{ left: 117, right: 140, top: 95, bottom: 130 }]);
+  const queries = measureFlashMatches(captured, [match], "pu");
+  expect(queries).toHaveLength(1);
+  expect(placeLabels(captured, [match], queries)).toBeNull();
+});
+it("clips wrapped matches to each line and places the label on the last line", () => {
+  const captured = scene();
+  const name = captured.names.get("/pull");
+  if (!name) throw new Error("Missing fixture name");
+  name.textContent = "abcd";
+  vi.spyOn(Range.prototype, "getClientRects").mockImplementation(() => {
+    const rectangles = [new DOMRect(109, 100, 9, 24), new DOMRect(100, 124, 9, 24)];
+    return Object.assign(rectangles, { item: (index: number) => rectangles[index] ?? null });
+  });
+  vi.spyOn(Range.prototype, "getBoundingClientRect").mockImplementation(function (this: Range) {
+    return new DOMRect(
+      100 + (this.startOffset % 2) * 9,
+      100 + Math.floor(this.startOffset / 2) * 24,
+      9,
+      24,
+    );
+  });
+  const queries = measureFlashMatches(captured, [match], "bc");
+  expect(queries[0]?.clipPath).toBe('path("M 9 0 H 18 V 24 H 9 Z M 0 24 H 9 V 48 H 0 Z")');
+  expect(placeLabels(captured, [match], queries)?.[0]).toMatchObject({ x: 109, y: 124 });
 });
