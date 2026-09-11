@@ -77,7 +77,14 @@ No compilation needed — just restart the service:
 ```bash
 systemctl --user restart symmetria-fm
 ```
-The service's `ExecStartPre` automatically clears the QML cache before each start.
+Qt's QML disk cache at `~/.cache/Symmetria/symmetria-fm/qmlcache/` **persists across
+restarts** — the unit has no `ExecStartPre` clearing it (an earlier version of this
+document claimed it did; that was never true of the standalone host's unit). Qt
+invalidates a `.qmlc` entry itself when the source `.qml` is newer, so an edit is
+picked up without any manual purge. Delete the directory only to test a genuinely
+cold compile. Keeping it is what holds the first window's panel load at ~0.2 s
+(measured offscreen: ~0.25 s cached vs ~0.30 s with `QML_DISABLE_DISK_CACHE=1`,
+against a ~0.05 s bare-process baseline).
 
 ### QML Linting
 
@@ -286,6 +293,25 @@ If the plugin is not installed, Symmetria Shell's wallpaper picker and file dial
 - `symmetria-fm.service` — headless systemd user service, `ExecStart=/usr/bin/symmetria-fm`, `Restart=always`. The binary owns a `QLocalServer` at `$XDG_RUNTIME_DIR/symmetria-fm.sock`.
 - `portal/symmetria_portal.py` — XDG Desktop Portal backend for system file dialogs.
 - Communication: Portal → `symmetria-fm-cli createPicker '<json>'` → QLocalSocket → daemon → QML picker window → FIFO → Portal → D-Bus response.
+
+**The daemon is periodically absent, and every client MUST tolerate that.** It
+exits when its last window closes (deliberate — `main.cpp` documents why) and
+removes its socket file, so between that exit and the `Restart=always` respawn
+there is a window in which a connect fails INSTANTLY with `ServerNotFoundError`
+— a connect *timeout* never helps, because no connect is in flight to wait on.
+`symmetria-fm-cli` therefore retries for 5 s and asks systemd to start the unit
+if the socket stays absent (`connectWithRetry` in `cli.cpp`), and `RestartSec` is
+200 ms rather than seconds. Both were needed: at `RestartSec=2` a `Super+E` press
+right after closing the last window did nothing at all, silently, because a
+compositor `exec` bind discards the CLI's stderr. `StartLimitIntervalSec=0` is
+part of the same fix — with an exit-per-close daemon, a burst of open/close
+cycles is a burst of *starts*, and hitting systemd's default limit parks the
+unit in `failed` permanently.
+
+**Two copies of the unit file exist and only one is live.** The repo's
+`symmetria-fm.service` is the source; `~/.dotfiles/.config/systemd/user/symmetria-fm.service`
+is what stow symlinks into `~/.config/systemd/user`, so that is the one systemd
+reads. Editing only the repo copy changes nothing at runtime.
 
 **The app ID is a three-way contract** — `host/standalone/main.cpp`'s
 `setDesktopFileName()` value == the installed `.desktop` basename == that file's
