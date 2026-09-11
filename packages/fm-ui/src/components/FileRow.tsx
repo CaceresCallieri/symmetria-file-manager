@@ -1,6 +1,7 @@
 import type { FsEntry } from "@symmetria/fm-core/entry";
 
-import { FileIcon } from "./FileIcon.tsx";
+import { FileIcon } from "@symmetria/fm-search/ui";
+import { FlashName, type FlashRowLabel } from "./FlashName.tsx";
 
 export interface FileRowProps {
   readonly entry: FsEntry;
@@ -15,6 +16,17 @@ export interface FileRowProps {
    * attribute and its own class rather than one shared highlight.
    */
   readonly isMatch?: boolean;
+  /**
+   * This row's flash label, or null when a session is running and it has none.
+   *
+   * A fourth state, and independent again: a flash match may also be the
+   * cursor, a mark and a search match. `flashActive` is separate because a row
+   * with no label has to know whether that is because nothing is running or
+   * because it did not match — the two look completely different.
+   */
+  readonly flash?: FlashRowLabel | null;
+  /** True while a session is running, whether or not this row matched. */
+  readonly flashActive?: boolean;
   /** A single click. Absent means the row is not clickable at all. */
   readonly onSelect?: () => void;
   /** A double click. Absent means a double click does nothing beyond selecting. */
@@ -52,15 +64,58 @@ export interface FileRowProps {
  * the container taking focus has to be reconciled with the document handler.
  * **Recorded as follow-up work rather than done here.**
  */
+/** The independent states one row can be in at once. */
+interface RowStates {
+  readonly isCursor: boolean;
+  readonly isMarked: boolean;
+  readonly isMatch: boolean;
+  readonly dimmed: boolean;
+  readonly clickable: boolean;
+}
+
+/**
+ * The class list, as a list.
+ *
+ * Extracted from the element because the complexity gate scores a component as
+ * one function and five chained ternaries inside a template were most of this
+ * one's branching.
+ */
+function rowClassName(states: RowStates): string {
+  const classes = ["row"];
+  if (states.isCursor) classes.push("row--cursor");
+  if (states.isMarked) classes.push("row--marked");
+  if (states.isMatch) classes.push("row--match");
+  if (states.dimmed) classes.push("row--flash-dim");
+  if (states.clickable) classes.push("row--clickable");
+  return classes.join(" ");
+}
+
+/**
+ * What a row reports about the running session: matched, dimmed, or nothing.
+ *
+ * Exported because the previewed directory's rows are deliberately NOT
+ * `FileRow` — they have neither a cursor nor a mark — and yet must answer this
+ * question identically. One function rather than two that agree today.
+ */
+export function flashStateOf(active: boolean, dimmed: boolean): "match" | "dim" | undefined {
+  if (!active) return undefined;
+  return dimmed ? "dim" : "match";
+}
+
 export function FileRow({
   entry,
   isCursor,
   isMarked = false,
   isMatch = false,
+  flash = null,
+  flashActive = false,
   onSelect,
   onActivate,
 }: FileRowProps) {
   const clickable = onSelect !== undefined;
+  // A session is running and this row offers nothing to jump to. Qt fades such
+  // a row to a quarter; the same figure is used here.
+  const dimmed = flashActive && flash === null;
 
   // The two suppressions below must sit on the lines directly above the element
   // — biome attaches a suppression to what follows it — so the reasoning is in
@@ -77,9 +132,8 @@ export function FileRow({
       data-cursor={isCursor ? "true" : undefined}
       data-marked={isMarked ? "true" : undefined}
       data-match={isMatch ? "true" : undefined}
-      className={`row${isCursor ? " row--cursor" : ""}${isMarked ? " row--marked" : ""}${
-        isMatch ? " row--match" : ""
-      }${clickable ? " row--clickable" : ""}`}
+      data-flash={flashStateOf(flashActive, dimmed)}
+      className={rowClassName({ isCursor, isMarked, isMatch, dimmed, clickable })}
       data-kind={entry.kind}
       onMouseDown={clickable ? (event) => event.preventDefault() : undefined}
       onClick={onSelect}
@@ -90,7 +144,9 @@ export function FileRow({
           apart at a glance. */}
       <span className="row__mark">{isMarked ? "▸" : ""}</span>
       <FileIcon name={entry.name} kind={entry.kind} />
-      <span className="row__name">{entry.name}</span>
+      <span className="row__name">
+        <FlashName name={entry.name} flash={flash} />
+      </span>
       {entry.isSymlink ? <span className="row__link">→</span> : null}
     </div>
   );

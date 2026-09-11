@@ -15,8 +15,10 @@ Loader {
     // (navigate to the parent dir + focus the file in the list). Hosts
     // that open files in their own surface — the IDE routes files to
     // nvim via RPC — set this and handle the signal; the FM's own
-    // instance keeps the default. Frecency recordOpen() fires on both
-    // paths so the shared fff ranking keeps learning regardless of host.
+    // instance keeps the default. recordOpen() fires on both paths, but it
+    // writes fff's QUERY TRACKER, not frecency — and that record is keyed on
+    // the absolute index root, so a host shares the learning only when it
+    // indexes the identical root. See FuzzyFinder::recordOpen.
     property bool externalActivation: false
 
     signal activated(string path, bool isDir)
@@ -294,8 +296,10 @@ Loader {
             const targetIsDir = fuzzyModel.data(idx, FuzzyFinder.IsDirRole);
             const targetName = fuzzyModel.data(idx, FuzzyFinder.NameRole);
 
-            // Record the open so fff's frecency ranking learns. Synchronous read
-            // of the path happens inside recordOpen before the model is cleared.
+            // Record the open in fff's QUERY TRACKER — it does NOT teach
+            // frecency; see FuzzyFinder::recordOpen for the evidence.
+            // Synchronous read of the path happens inside recordOpen before
+            // the model is cleared.
             fuzzyModel.recordOpen(popupScope.selectedIndex, searchInput.text);
 
             root.windowState.closeModal();

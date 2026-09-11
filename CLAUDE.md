@@ -71,13 +71,62 @@ To skip tests when doing a production build: `cmake -B build -DBUILD_TESTING=OFF
 
 GitHub Actions runs on every push/PR to `main` (`.github/workflows/ci.yml`). The workflow builds the C++ plugin and runs the QTest suite on Ubuntu 24.04. Qt 6.9 is installed via `jurplel/install-qt-action`; KF6SyntaxHighlighting and QXlsx are built from source and cached. The Rust toolchain is installed via `dtolnay/rust-toolchain@stable`; the submodule is checked out with `submodules: recursive`; the Cargo registry is cached by `actions/cache`.
 
+### Electron Changes — Rebuild and Restart Before Reporting
+
+An edit to anything bundled into `app/dist-electron/` — `app/src/**` and
+`packages/fm-*/src/**` — is NOT live until the bundle is rebuilt and the daemon
+restarts onto it. `symmetria-fm-electron.service` is resident and holds the old
+code in memory, so the operator then tests the previous bundle and sees a fix
+that did not work. A change confined to tests, docs or tooling needs no restart.
+
+**This is the LAST command of the change — after the tests, after the gates.**
+`pnpm -r test` rebuilds `app/dist-electron/` itself and leaves a DEVELOPMENT
+bundle there, so anything that runs the suite must be followed by this again:
+
+```bash
+readlink -f ~/.local/bin/symmetria-fm-electron   # must resolve inside THIS tree
+pnpm --filter @symmetria/fm-app build \
+  && systemctl --user restart symmetria-fm-electron.service \
+  && systemctl --user is-active symmetria-fm-electron.service
+```
+
+- **The `readlink` is not ceremony.** That launcher and the unit are symlinks
+  into ONE tree, and this project is worked on in `t3` worktrees. From any other
+  worktree the build succeeds and changes nothing the operator can see — the
+  same silent-stale failure this rule exists to prevent. If it resolves
+  elsewhere, say so instead of restarting.
+- **A failed build must NOT be followed by a restart** — the old bundle is still
+  serving the operator. Report the build output instead.
+- If the service is not `active` afterwards, report
+  `systemctl --user status symmetria-fm-electron.service`. Never `pkill`.
+
+Then state in the final summary that the daemon was rebuilt and restarted, so
+the operator knows the running window holds the new code.
+
+Restarting this unit needs NO consent: the operator asked for the reload so they
+can check the change, and accepts that it closes any open Electron FM window.
+The permission covers `symmetria-fm-electron.service` ONLY. `symmetria-fm.service`
+is the Qt daemon, serves the system's portal dialogs, and still needs consent —
+see the warning in Project Overview.
+
+Why the unit does not rebuild, and why a test run poisons the bundle:
+`docs/electron-transition/22-desktop-integration.md` → *Rebuilding before a
+restart*.
+
 ### QML Changes
 
 No compilation needed — just restart the service:
 ```bash
 systemctl --user restart symmetria-fm
 ```
-The service's `ExecStartPre` automatically clears the QML cache before each start.
+Qt's QML disk cache at `~/.cache/Symmetria/symmetria-fm/qmlcache/` **persists across
+restarts** — the unit has no `ExecStartPre` clearing it (an earlier version of this
+document claimed it did; that was never true of the standalone host's unit). Qt
+invalidates a `.qmlc` entry itself when the source `.qml` is newer, so an edit is
+picked up without any manual purge. Delete the directory only to test a genuinely
+cold compile. Keeping it is what holds the first window's panel load at ~0.2 s
+(measured offscreen: ~0.25 s cached vs ~0.30 s with `QML_DISABLE_DISK_CACHE=1`,
+against a ~0.05 s bare-process baseline).
 
 ### QML Linting
 
@@ -157,6 +206,9 @@ git diff -z --name-only --diff-filter=ACMR <base> -- '*.js' '*.jsx' '*.mjs' '*.c
 pnpm exec tsc -p packages/fm-core --noEmit --pretty false  # types — shared core: no environment at all
 pnpm exec tsc -p packages/fm-main --noEmit --pretty false  # types — privileged half: Node, no DOM
 pnpm exec tsc -p packages/fm-ui --noEmit --pretty false  # types — panel SOURCE: DOM, no Node
+pnpm exec tsc -p packages/fm-search --noEmit --pretty false  # types — finder engine: Node, no DOM
+pnpm exec tsc -p packages/fm-search/tsconfig.ui.json --noEmit --pretty false  # types — finder overlay: DOM, no Node
+pnpm exec tsc -p packages/fm-search/tsconfig.test.json --noEmit --pretty false  # types — finder TESTS: both, they read the source tree
 pnpm exec tsc -p packages/fm-ui/tsconfig.test.json --noEmit --pretty false  # types — panel TESTS: Node, they read the source tree
 pnpm exec tsc -p app/tsconfig.main.json --noEmit --pretty false  # types — host main process: Node, no DOM
 pnpm exec tsc -p app/tsconfig.renderer.json --noEmit --pretty false  # types — host renderer entry: DOM, no Node
@@ -170,13 +222,15 @@ git diff -z --name-only --diff-filter=ACMR <base> -- '*.qml' | xargs -0 -r tools
 
 Biome, `tsc` and the QML gate exit non-zero on findings. Anti-slop exits non-zero for its eight error rules; its seven pilot warnings print and exit zero. Fallow uses the gating `audit` command. The QML line exits 0 when the change touches no `.qml` file, which is the normal case for the Electron tree.
 
-**One `tsc` line per context, not one for the tree.** There are SIX and they must not share a `lib`. `packages/fm-core` is imported by everything and gets no environment at all; `packages/fm-main` — the privileged half — gets Node and no DOM; `packages/fm-ui` — the panel — gets DOM and no Node; the host's two halves get the same treatment as the packages they load. A shared `lib` would let a `window` reference type-check inside a main process and a `node:fs` import type-check inside a sandboxed renderer.
+**One `tsc` line per context, not one for the tree.** There are NINE and they must not share a `lib`. `packages/fm-core` is imported by everything and gets no environment at all; `packages/fm-main` — the privileged half — gets Node and no DOM; `packages/fm-ui` — the panel — gets DOM and no Node; the host's two halves get the same treatment as the packages they load. A shared `lib` would let a `window` reference type-check inside a main process and a `node:fs` import type-check inside a sandboxed renderer.
+
+**`packages/fm-search` is THREE of the nine, because it spans the boundary.** It is the only package that ships code for both sides — an engine that runs in a utility process and an overlay that runs in the sandboxed renderer — so it carries the fm-main and fm-ui treatments in one package: `tsconfig.json` covers `src/main` with Node and no DOM, `tsconfig.ui.json` covers `src/ui` with DOM and no Node. One config for the package would defeat the split the package exists to hold, since a host must be able to mount the overlay alone. Its `tsconfig.test.json` is the third and gets BOTH, for the same reason `packages/fm-ui` needs one: the boundary test reads every source file under `src/ui` to prove that half never imports Node, so it needs a filesystem, and the standalone test mounts the overlay, so it needs a DOM. Neither permission may reach either source.
 
 **`packages/fm-ui` has TWO configs and both are in the fence.** Its `tsconfig.json` covers `src` alone with `types: []`, which is the real contract: the panel is sandboxed and must not reach Node. Its tests DO need Node, because the invariant test reads every source file to prove that contract holds — so they live in `tsconfig.test.json`. One shared config would hand the source whatever the tests need, which is the whole thing this package exists to prevent. The rule earns its keep in practice, not only in principle: `packages/fm-core/src/windowUrl.ts` reaches for `URLSearchParams` and cannot have it, because that package compiles against no environment at all — which is what forced a hand-rolled parse, and the hand-rolled one turned out to be more correct anyway (`URLSearchParams` decodes `+` as a space, so a directory named `c++` would come back wrong).
 
 **`--with-callers` is yours to add, and the fence will not do it for you.** When a change alters a QML component's public API, the Quality Gate above requires `tools/quality/check-qml.sh --with-callers <component.qml>`. The scoped line in this fence never runs that form, so a reviewer who runs the fence and stops has skipped the one check that catches an API break at its call site.
 
-**Advisory pilot — anti-slop.** Catalog revision `bc94865c5c4a2663b344cc7a9b6d755526fd5fca614618ff92761f4e2658e396` (profile `typescript.md`, no layers matched). Tool source revision `6d538555cb151d4121ed51a27db81890eacf8ae9`. **Pilot review due 2026-09-03**; on or after that date, report `pilot review overdue` and keep the rules advisory until a reviewed decision changes this contract. Command records: `typescript.anti-slop.changed.v1` = `5ac5cd1291b040b6294b8429d5ee68c8e05b1df27002d46c7b70fc732ef814a6`; `typescript.anti-slop.full.v1` = `758ba14767a3b44c4d51dd419b710c17bf41120e0c4705a94fede96ab5b9f884`. The seven advisory rule IDs are `anti-slop/no-conditional-empty-object-spread`, `anti-slop/no-module-mocking`, `anti-slop/no-runtime-typeof`, `anti-slop/no-shape-in-symbol-names`, `anti-slop/no-unknown-parameters`, `anti-slop/no-unsafe-dictionary-type`, `anti-slop/require-safety-comment-for-type-assertion`. Promote a warning only with observed project evidence; keep it advisory when the sample is inconclusive.
+**Advisory pilot — anti-slop: REVIEWED 2026-09-07.** Catalog revision `bc94865c5c4a2663b344cc7a9b6d755526fd5fca614618ff92761f4e2658e396` (profile `typescript.md`, no layers matched). Tool source revision `6d538555cb151d4121ed51a27db81890eacf8ae9`. **Next review due 2027-03-07**; on or after that date, report `pilot review overdue` and keep the rules still listed as advisory until a reviewed decision changes this contract. Command records: `typescript.anti-slop.changed.v1` = `5ac5cd1291b040b6294b8429d5ee68c8e05b1df27002d46c7b70fc732ef814a6`; `typescript.anti-slop.full.v1` = `758ba14767a3b44c4d51dd419b710c17bf41120e0c4705a94fede96ab5b9f884`. The review measured all seven rules against the whole tree and settled five of them; each decision and its evidence sits beside the rule in `anti-slop.config.mjs`, which is the place to read before changing one. **Promoted to blocking errors**, taking the error set from eight rules to ten: `anti-slop/no-module-mocking` and `anti-slop/require-safety-comment-for-type-assertion`. **Retired to `off`**: `anti-slop/no-runtime-typeof`, `anti-slop/no-unknown-parameters` and `anti-slop/no-unsafe-dictionary-type` — they assume a schema library parses at the I/O boundary, this project parses by hand in `packages/fm-core/src/contract.ts`, and so they fired 151 times on the decoders that implement the discipline they exist to advocate without one defect among them. Reinstate them only if this project adopts a schema library. **The two rule IDs that remain advisory are `anti-slop/no-conditional-empty-object-spread` and `anti-slop/no-shape-in-symbol-names`**, both on an inconclusive sample — one observation and zero. `require-safety-comment-for-type-assertion` is scoped `off` for test files by an `overrides` block; source is clean and gates. Promote a warning only with observed project evidence; keep it advisory when the sample is inconclusive.
 
 This project prose is the runtime classification authority. A blocking finding prevents completion until it is fixed or suppressed narrowly with a reason. A listed advisory finding remains review evidence but does not prevent completion. A command that cannot execute is a tooling failure: report it and continue the review. Suppressions live in `biome.jsonc`, `anti-slop.config.mjs`, `.fallowrc.jsonc`, `knip.json` and `.qmllint.ini`, each beside a reason.
 
@@ -192,17 +246,20 @@ pnpm exec oxlint --config anti-slop.config.mjs --disable-nested-config --format 
 pnpm exec tsc -p packages/fm-core --noEmit --pretty false  # types — shared core: no environment at all
 pnpm exec tsc -p packages/fm-main --noEmit --pretty false  # types — privileged half: Node, no DOM
 pnpm exec tsc -p packages/fm-ui --noEmit --pretty false  # types — panel SOURCE: DOM, no Node
+pnpm exec tsc -p packages/fm-search --noEmit --pretty false  # types — finder engine: Node, no DOM
+pnpm exec tsc -p packages/fm-search/tsconfig.ui.json --noEmit --pretty false  # types — finder overlay: DOM, no Node
+pnpm exec tsc -p packages/fm-search/tsconfig.test.json --noEmit --pretty false  # types — finder TESTS: both, they read the source tree
 pnpm exec tsc -p packages/fm-ui/tsconfig.test.json --noEmit --pretty false  # types — panel TESTS: Node, they read the source tree
 pnpm exec tsc -p app/tsconfig.main.json --noEmit --pretty false  # types — host main process: Node, no DOM
 pnpm exec tsc -p app/tsconfig.renderer.json --noEmit --pretty false  # types — host renderer entry: DOM, no Node
-pnpm -r test  # the whole suite, per package. NEVER `vitest` from the root — see below
+pnpm -r test  # the whole suite, per package. NEVER `vitest` from the root — see below. Leaves a DEVELOPMENT bundle in app/dist-electron/: rebuild before any daemon restart (Build & Run → Electron Changes)
 pnpm exec knip --reporter json  # files, exports, dependencies, and the workspace package graph
 pnpm exec fallow dead-code --fail-on-issues  # whole-project dead code; any issue gates
 pnpm exec fallow health --score --hotspots --fail-on-issues  # complexity, cycles, and health hotspots
 pnpm exec fallow dupes --fail-on-issues  # whole-project duplication
 ```
 
-**Advisory pilot — anti-slop.** Catalog revision `bc94865c5c4a2663b344cc7a9b6d755526fd5fca614618ff92761f4e2658e396` (profile `typescript.md`, no layers matched). Tool source revision `6d538555cb151d4121ed51a27db81890eacf8ae9`. **Pilot review due 2026-09-03**; on or after that date, report `pilot review overdue` and keep the rules advisory until a reviewed decision changes this contract. Command records: `typescript.anti-slop.changed.v1` = `5ac5cd1291b040b6294b8429d5ee68c8e05b1df27002d46c7b70fc732ef814a6`; `typescript.anti-slop.full.v1` = `758ba14767a3b44c4d51dd419b710c17bf41120e0c4705a94fede96ab5b9f884`. The seven advisory rule IDs are `anti-slop/no-conditional-empty-object-spread`, `anti-slop/no-module-mocking`, `anti-slop/no-runtime-typeof`, `anti-slop/no-shape-in-symbol-names`, `anti-slop/no-unknown-parameters`, `anti-slop/no-unsafe-dictionary-type`, `anti-slop/require-safety-comment-for-type-assertion`. Promote a warning only with observed project evidence; keep it advisory when the sample is inconclusive.
+**Advisory pilot — anti-slop: REVIEWED 2026-09-07.** Catalog revision `bc94865c5c4a2663b344cc7a9b6d755526fd5fca614618ff92761f4e2658e396` (profile `typescript.md`, no layers matched). Tool source revision `6d538555cb151d4121ed51a27db81890eacf8ae9`. **Next review due 2027-03-07**; on or after that date, report `pilot review overdue` and keep the rules still listed as advisory until a reviewed decision changes this contract. Command records: `typescript.anti-slop.changed.v1` = `5ac5cd1291b040b6294b8429d5ee68c8e05b1df27002d46c7b70fc732ef814a6`; `typescript.anti-slop.full.v1` = `758ba14767a3b44c4d51dd419b710c17bf41120e0c4705a94fede96ab5b9f884`. The review measured all seven rules against the whole tree and settled five of them; each decision and its evidence sits beside the rule in `anti-slop.config.mjs`, which is the place to read before changing one. **Promoted to blocking errors**, taking the error set from eight rules to ten: `anti-slop/no-module-mocking` and `anti-slop/require-safety-comment-for-type-assertion`. **Retired to `off`**: `anti-slop/no-runtime-typeof`, `anti-slop/no-unknown-parameters` and `anti-slop/no-unsafe-dictionary-type` — they assume a schema library parses at the I/O boundary, this project parses by hand in `packages/fm-core/src/contract.ts`, and so they fired 151 times on the decoders that implement the discipline they exist to advocate without one defect among them. Reinstate them only if this project adopts a schema library. **The two rule IDs that remain advisory are `anti-slop/no-conditional-empty-object-spread` and `anti-slop/no-shape-in-symbol-names`**, both on an inconclusive sample — one observation and zero. `require-safety-comment-for-type-assertion` is scoped `off` for test files by an `overrides` block; source is clean and gates. Promote a warning only with observed project evidence; keep it advisory when the sample is inconclusive.
 
 This gate starts clean. Every blocking finding must be fixed or suppressed narrowly with a reason before setup is complete. Listed advisory findings remain visible for `/tech-debt` and do not prevent adoption. A command that cannot execute is a tooling failure and does not hide results from the remaining commands.
 
@@ -236,6 +293,29 @@ Model classes in C++ namespace `symmetria::filemanager::models`:
 | `AppIconProvider` | Resolves a `.desktop` id to a themed app-icon file path for the "Open With" menu via `IconThemeResolver::resolveApp`; cached per id |
 
 **Icon resolution returns file paths, not `QIcon`s, by design.** `IconThemeResolver::resolve` (MIME/folder icons) and `IconThemeResolver::resolveApp` (application icons, the `apps/` context path) hand-roll XDG theme lookup to return the real SVG/PNG path on disk — because QML `Image { source: "file://..." }` renders an SVG source crisply, whereas `QIcon::fromTheme(...).pixmap()` would rasterize and lose the vector. This is why a new `.desktop` app entry resolves automatically without QML changes.
+
+### The file finder: `packages/fm-search`
+
+The finder ships as its own workspace package because a host must be able to
+mount it **without** the file-manager panel — Mesura Code takes the finder, not
+the file manager. Everything a consumer looks up lives in
+`packages/fm-search/README.md`; what an agent has to know **before touching this
+tree** is only this:
+
+- **Two halves, two environments, and they must not cross.** `./main` is the
+  engine and runs in a Node process; `./ui` is the overlay and runs in a
+  sandboxed renderer. `test/boundary.test.ts` reads every source file under each
+  and fails on a `node:` import in `src/ui` or an `@symmetria/fm-ui` import in
+  either. The panel depends on this package, so an import back would also be a
+  cycle.
+- **One index per process, keyed by directory.** The engine's store refuses a
+  second open inside one program. This is the one place the port deliberately
+  departs from Qt, whose single process-wide engine swaps its base path and
+  races across windows. Do not "simplify" `main/pool` into a shared engine.
+- **The overlay reaches the engine through the bridge global, not through the
+  panel.** Its `onChoose` / `onClose` / `renderPreview` props are the activation
+  seam; a host supplies all three, and the panel's own preview arrives through
+  `renderPreview` rather than an import.
 
 ### Symmetria Shell Dependency (One-Sided)
 
@@ -286,6 +366,25 @@ If the plugin is not installed, Symmetria Shell's wallpaper picker and file dial
 - `symmetria-fm.service` — headless systemd user service, `ExecStart=/usr/bin/symmetria-fm`, `Restart=always`. The binary owns a `QLocalServer` at `$XDG_RUNTIME_DIR/symmetria-fm.sock`.
 - `portal/symmetria_portal.py` — XDG Desktop Portal backend for system file dialogs.
 - Communication: Portal → `symmetria-fm-cli createPicker '<json>'` → QLocalSocket → daemon → QML picker window → FIFO → Portal → D-Bus response.
+
+**The daemon is periodically absent, and every client MUST tolerate that.** It
+exits when its last window closes (deliberate — `main.cpp` documents why) and
+removes its socket file, so between that exit and the `Restart=always` respawn
+there is a window in which a connect fails INSTANTLY with `ServerNotFoundError`
+— a connect *timeout* never helps, because no connect is in flight to wait on.
+`symmetria-fm-cli` therefore retries for 5 s and asks systemd to start the unit
+if the socket stays absent (`connectWithRetry` in `cli.cpp`), and `RestartSec` is
+200 ms rather than seconds. Both were needed: at `RestartSec=2` a `Super+E` press
+right after closing the last window did nothing at all, silently, because a
+compositor `exec` bind discards the CLI's stderr. `StartLimitIntervalSec=0` is
+part of the same fix — with an exit-per-close daemon, a burst of open/close
+cycles is a burst of *starts*, and hitting systemd's default limit parks the
+unit in `failed` permanently.
+
+**Two copies of the unit file exist and only one is live.** The repo's
+`symmetria-fm.service` is the source; `~/.dotfiles/.config/systemd/user/symmetria-fm.service`
+is what stow symlinks into `~/.config/systemd/user`, so that is the one systemd
+reads. Editing only the repo copy changes nothing at runtime.
 
 **The app ID is a three-way contract** — `host/standalone/main.cpp`'s
 `setDesktopFileName()` value == the installed `.desktop` basename == that file's
@@ -537,4 +636,8 @@ Use `FileSystemModel.Alphabetical`, `.Modified`, `.Size`, `.Extension`, `.Natura
 - **`fff_search_mixed`, not `fff_search`** — the latter is files-only; mixed returns directories too (so directory navigation in the finder survives). Directory items carry a **trailing `/`** in their `relativePath` and `fullPath` (e.g., `src/components/`). The `name` role (`display_name`) is the bare last segment without a trailing slash.
 - **`matchIndices` are recomputed in the C++ wrapper** (greedy subsequence) because fff's file-search result exposes no per-character match positions; the popup's highlighter depends on them.
 - **`showHidden` is inert** for this backend — `FffCreateOptions` has no hidden toggle; fff governs hidden/ignored files via its own ignore model. The property is kept only for QML binding compatibility.
-- **Frecency LMDB** lives at `~/.local/share/symmetria/fff/` (`frecency`/`history` dirs). `SYMMETRIA_FM_FRECENCY_DIR` overrides the location (tests isolate it into a temp dir; also a user relocation hook). The directory is created automatically by fff (via `fs::create_dir_all`) if it does not exist — no manual `mkdir` required. `recordOpen(index, query)` → `fff_track_query` with the **absolute** path teaches frecency on file open.
+- **Frecency LMDB** lives at `~/.local/share/symmetria/fff/` (`frecency`/`history` dirs). `SYMMETRIA_FM_FRECENCY_DIR` overrides the location (tests isolate it into a temp dir; also a user relocation hook). The directory is created automatically by fff (via `fs::create_dir_all`) if it does not exist — no manual `mkdir` required. fff creates and opens the `frecency` environment, but **no code path in this application ever inserts a record into it** — see the next bullet.
+- **`recordOpen()` does NOT teach frecency, and this document used to say it did.** `recordOpen(index, query)` → `fff_track_query` writes the **query tracker**, not the frecency database. ⚠ And in this application even the tracker's payoff is currently zero: `startSearch()` passes `combo_boost_multiplier = 0` to `fff_search_mixed`, so the boost described below is always `0`. What the write buys in principle: the tracker keeps one record per `(project path, query)` pair holding the selected file and an `open_count`, and a later search whose query matches that record adds `open_count × combo_boost_multiplier` to the score — measured taking a result from 154 to 454, visible to a second process on the first read. That gain is **per-project and per-query**, so an embedding host shares it only when the host indexes the identical absolute root. Evidence, three ways (`docs/electron-transition/20-spike-search-topology.md` §2.1):
+  1. The frecency DB stays at its empty 8192 bytes across repeated writes, a reindex, a finder recreated in-process, and a fresh process.
+  2. The C wrapper's track-query function calls the query tracker's completion method and touches nothing else.
+  3. `fff_track_access` — the exported C symbol that would write frecency — is **not among the 78 `fff_*` symbols the shipped `libfff_c.so` exports**, so no C-ABI caller can reach it. (`Frecency::track_access` is the Rust function behind it, reachable only from the Neovim binding and the background watcher.)

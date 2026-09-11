@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "../../src/App.tsx";
 import { mockTextRanges } from "./flash-text-geometry.ts";
-import { installBridge } from "./support.ts";
+import { cursorIn, installBridge } from "./support.ts";
 
 beforeEach(() => {
   mockTextRanges();
@@ -254,4 +254,20 @@ it("shows an empty-result instruction when there are no matching names", async (
   expect(screen.getByRole("status", { name: "Flash navigation" }).textContent).toContain(
     "No matching names",
   );
+});
+
+it("returns flash key ownership to Miller after closing overview", async () => {
+  const log = await open();
+  await flash("beta");
+  key("Escape");
+  expect(screen.queryByRole("status", { name: "Flash navigation" })).toBeNull();
+  key("Escape");
+  expect(screen.queryByRole("dialog", { name: "Folder overview" })).toBeNull();
+  key("s");
+  expect(screen.getByTestId("status-flash")).toBeTruthy();
+  key("n");
+  key("a");
+  await waitFor(() => expect(cursorIn("column-current")).toBe("notes.txt"));
+  expect(screen.queryByTestId("status-flash")).toBeNull();
+  expect(log.ops).toEqual([]);
 });

@@ -101,7 +101,10 @@ export function naturalCompare(a: string, b: string): number {
   const right = b.toLowerCase().match(runs) ?? [];
 
   for (let i = 0; i < Math.min(left.length, right.length); i++) {
+    // SAFETY: `i < Math.min(left.length, right.length)` is the loop condition,
+    // so both index reads are in range.
     const l = left[i] as string;
+    // SAFETY: the same bound.
     const r = right[i] as string;
     if (l === r) continue;
 

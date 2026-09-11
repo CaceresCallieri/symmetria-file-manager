@@ -196,10 +196,43 @@ export async function claimSocket(
  * is what makes the two genuinely different requirements rather than one
  * duplicated.
  */
-export async function sendCommand(
-  path: string,
-  payload: unknown,
-): Promise<{ readonly ok: boolean; readonly error?: string }> {
+/** What the daemon answers a command with: whether it worked, and why not. */
+export interface CommandReply {
+  readonly ok: boolean;
+  readonly error?: string;
+}
+
+/**
+ * Read the daemon's one-line answer, or say why there is no answer.
+ *
+ * Checked rather than asserted. The peer is this application's own server, so
+ * the shape is not in doubt in practice — but `JSON.parse` accepts `null`,
+ * `123` and `"ok"` without throwing, and each of those would resolve a value
+ * whose `.ok` the caller reads off nothing. A truncated line is exactly how
+ * that arrives.
+ */
+function readReply(buffer: string): CommandReply {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(buffer.trim());
+  } catch {
+    return { ok: false, error: "no reply" };
+  }
+  // Narrowed with `in` rather than an assertion, so nothing here claims a
+  // shape it has not just proven.
+  if (typeof parsed !== "object" || parsed === null) {
+    return { ok: false, error: "malformed reply" };
+  }
+  if (!("ok" in parsed) || typeof parsed.ok !== "boolean") {
+    return { ok: false, error: "malformed reply" };
+  }
+  if ("error" in parsed && typeof parsed.error === "string") {
+    return { ok: parsed.ok, error: parsed.error };
+  }
+  return { ok: parsed.ok };
+}
+
+export async function sendCommand(path: string, payload: unknown): Promise<CommandReply> {
   return new Promise((resolve) => {
     const connection = createConnection(path);
     let buffer = "";
@@ -214,12 +247,6 @@ export async function sendCommand(
       buffer += chunk;
     });
     connection.once("error", (error: Error) => resolve({ ok: false, error: error.message }));
-    connection.once("close", () => {
-      try {
-        resolve(JSON.parse(buffer.trim()) as { ok: boolean; error?: string });
-      } catch {
-        resolve({ ok: false, error: "no reply" });
-      }
-    });
+    connection.once("close", () => resolve(readReply(buffer)));
   });
 }

@@ -56,10 +56,49 @@
    * one that is.
    */
   --search-match: rgb(255 255 255 / 5%);
+  /*
+   * Flash jump, and it is MONOCHROME on purpose.
+   *
+   * The Qt build draws the label as a near-white chip with dark ink and the
+   * matched characters on a much quieter grey, and the operator asked for the
+   * same here after seeing a coloured first attempt side by side with it. The
+   * accent colour is spoken for — it means "the application is doing
+   * something" — and a jump label is not that; it is the brightest thing on
+   * screen for a second and then gone.
+   *
+   * The contrast between the two is what separates them, so they may sit
+   * adjacent without reading as one block: 18% white against solid white.
+   */
+  --flash-query: rgb(255 255 255 / 18%);
+  --flash-label: var(--foreground);
+  --flash-label-ink: var(--background);
   /* The cut/mark indicator. Hardcoded in the Qt build for the same reason it is
      its own token here: an indicator that stops being legible is worse than one
      that does not match. */
   --marked: oklch(75% 0.09 25);
+
+  /*
+   * The rule down the side of a block quote, and the horizontal rule.
+   *
+   * Its own token rather than `--border`, which is the hairline used for
+   * separators and card edges. A quote bar at 6% white is invisible against
+   * the near-black base — it has to read as a deliberate mark rather than as
+   * an edge, and that is a different job from the one `--border` does.
+   */
+  --markdown-rule: rgb(255 255 255 / 14%);
+
+  /*
+   * The paper a rendered page sits on.
+   *
+   * White, because a page that declares no background of its own IS white by
+   * every browser's convention, and letting the near-black panel show through
+   * would misrepresent how the document actually looks. The Qt build sets its
+   * web view's background for exactly this reason.
+   *
+   * It is here rather than written into the rule because `theme.test.ts`
+   * refuses a colour literal anywhere else — and white is a colour.
+   */
+  --rendered-page: rgb(255 255 255);
 
   /* ── Scrollbars ───────────────────────────────────────────────────────── */
   /*
@@ -80,6 +119,20 @@
    * than the small inaccuracy.
    */
   --scrollbar-width: 6px;
+  /*
+   * What the lane is painted on.
+   *
+   * Transparent HERE, so the column surface runs under it rather than being
+   * interrupted by a stripe of its own. It is a token rather than the literal
+   * `transparent` because the SAME six rules are served into every previewed
+   * HTML document, where transparent is the one value that cannot be used:
+   * measured against Chromium 41, a custom-styled track in a framed document
+   * composites against the frame's own white base, which the previewed page
+   * cannot paint — with or without a background on its `html`. So a transparent
+   * track there is a white stripe down a dark page, which is the exact defect
+   * this whole token exists to end. `scrollbar.ts` gives it a solid value.
+   */
+  --scrollbar-track: transparent;
   --scrollbar-thumb: rgb(255 255 255 / 8%);
   --scrollbar-thumb-hover: rgb(255 255 255 / 12%);
 
@@ -113,6 +166,39 @@
   --seek-thumb: 9px;
   --radius: 0.5rem;
   --radius-sm: 4px;
+
+  /*
+   * The file finder, in three numbers.
+   *
+   * Here rather than beside the rules, and that is not a preference:
+   * `theme.test.ts` requires every `var(--x)` any stylesheet reads to be
+   * DECLARED IN THIS FILE, so a property declared on `.finder` fails the build.
+   *
+   * `--finder-list-share` is THE lever on the split, and it is one number on
+   * purpose. The user asked for sixty/forty and asked to try fifty/fifty; that
+   * second experiment is this line and nothing else. Expressed as a share
+   * rather than as a pixel count deliberately — Qt pins its information panel
+   * at exactly 360 pixels with a hard minimum and maximum because a Qt layout
+   * let a long file name blow the panel out and starve the list, and a flex
+   * ratio with a zero minimum width on the list cannot fail that way.
+   *
+   * It is a UNITLESS FRACTION, not a percentage, and the gap is a token beside
+   * it, because the split has to divide the space that is actually available.
+   * A plain `60%` basis is 60% of the WHOLE body, so the 12px gap comes out of
+   * the flexible side alone and the real ratio measures 61.5:38.5 — verified in
+   * a real window at 542px, where the list took 325.19 and the panel 204.81.
+   * `calc((100% - gap) * share)` divides what is left after the gap, so 0.6 is
+   * exactly sixty/forty and 0.5 would be exactly half. A lever whose number
+   * does not mean what it says is a lever nobody can experiment with.
+   *
+   * The two widths are the empty and answered states. The overlay is narrow
+   * until there are results, which is what makes it feel like it grows into its
+   * answer; the Qt original goes from 672 to 1080 pixels for the same reason.
+   */
+  --finder-list-share: 0.6;
+  --finder-gap: 12px;
+  --finder-width: 672px;
+  --finder-width-wide: 1080px;
 
   /* ── Type ─────────────────────────────────────────────────────────────── */
   --font-sans: Rubik, system-ui, sans-serif;

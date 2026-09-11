@@ -183,12 +183,20 @@ export function moveCursor(pane: PaneState, delta: number): PaneState {
 function remember(pane: PaneState, index: number): ReadonlyMap<string, string> {
   const name = pane.entries[index]?.name;
   if (name === undefined) return pane.cursorMemory;
+  return rememberIn(pane.cursorMemory, pane.path, name);
+}
 
-  const next = new Map(pane.cursorMemory);
+/** Record `name` as the cursor for `path`, evicting the least recent. */
+function rememberIn(
+  memory: ReadonlyMap<string, string>,
+  path: string,
+  name: string,
+): ReadonlyMap<string, string> {
+  const next = new Map(memory);
   // Re-inserting moves the key to the end, so the iteration order is
   // least-recently-used first and the eviction below drops the right one.
-  next.delete(pane.path);
-  next.set(pane.path, name);
+  next.delete(path);
+  next.set(path, name);
 
   while (next.size > MEMORY_LIMIT) {
     const oldest = next.keys().next().value;
@@ -196,6 +204,24 @@ function remember(pane: PaneState, index: number): ReadonlyMap<string, string> {
     next.delete(oldest);
   }
   return next;
+}
+
+/**
+ * Record where the cursor should land in a directory the pane is not in yet.
+ *
+ * The other half of a jump into another column: record, then go. `setEntries`
+ * restores from this memory by NAME when the listing arrives, so the cursor
+ * ends on the entry that was labelled rather than at the top.
+ *
+ * **By name and for a NAMED path, which is what removes a hazard rather than
+ * documenting one.** The Qt build writes the destination's cursor and the
+ * departing directory's cursor into one cache, and carries a comment warning
+ * that the two calls must happen in a particular order or the second overwrites
+ * what the first meant. Here the departing directory's own memory is untouched,
+ * so there is no order to get wrong.
+ */
+export function rememberCursorAt(pane: PaneState, path: string, name: string): PaneState {
+  return { ...pane, cursorMemory: rememberIn(pane.cursorMemory, path, name) };
 }
 
 /**
@@ -221,13 +247,54 @@ export function enterDirectory(pane: PaneState): PaneState {
   };
 }
 
-/** Go to the parent, stopping at the root rather than climbing past it. */
+/**
+ * Go to the parent, stopping at the root rather than climbing past it.
+ *
+ * The stop IS `goToPath`'s same-path rule and not a second guard beside it:
+ * `parentOf("/")` returns `"/"`, so climbing from the root asks to go where it
+ * already is and gets the pane back by reference. The body of this function was
+ * byte-identical to that transition, guard included, which is one pane literal
+ * too many — a field added to `PaneState` would have had to be remembered here
+ * as well.
+ */
 export function leaveDirectory(pane: PaneState): PaneState {
-  const parent = parentOf(pane.path);
-  if (parent === pane.path) return pane;
+  return goToPath(pane, parentOf(pane.path));
+}
+
+/**
+ * Go to a path named outright, rather than to one the cursor is standing on.
+ *
+ * The third way a pane changes location, beside entering and leaving, and the
+ * one every jump takes: a bookmark letter, a zoxide result, a breadcrumb, a
+ * click in the parent column.
+ *
+ * **A jump to where we already are returns the pane BY REFERENCE, and that is
+ * not a nicety.** Emptying a pane and re-listing it are two separate
+ * mechanisms: the transition clears `entries` so the column blanks and refills,
+ * and the watch reconciler starts the read — but the reconciler is keyed on the
+ * PATH, so a jump that does not change the path never asks for a listing. The
+ * hand-rolled transition this replaced cleared the entries anyway, and the
+ * column then sat empty for as long as the tab stayed there: `gd` inside
+ * Downloads reported "0 entries" for a directory full of files, and so did a
+ * click on the current directory in the parent column. Nothing recovered it but
+ * navigating away and back.
+ *
+ * The rule that follows, for anything added here later: **no NAVIGATION
+ * transition may empty a pane without changing its path.** `didNavigate` is how
+ * a caller asks whether one did. A listing that FAILS empties the pane at the
+ * same path on purpose — see the `failed` branch in `useTabs.ts` — because that
+ * is a report about a directory, not a move to one. Do not "fix" it to match
+ * this rule.
+ *
+ * The selection is dropped for the same reason `enterDirectory` drops it — a
+ * mark is a NAME, and a name that survives the move can match a different file
+ * at the destination.
+ */
+export function goToPath(pane: PaneState, path: string): PaneState {
+  if (path === pane.path) return pane;
 
   return {
-    path: parent,
+    path,
     entries: [],
     cursorIndex: 0,
     cursorMemory: pane.cursorMemory,
@@ -311,9 +378,11 @@ export function breadcrumbs(path: string): Breadcrumb[] {
 /**
  * Did a navigation actually happen?
  *
- * `enterDirectory` and `leaveDirectory` return the pane BY REFERENCE when there
- * is nowhere to go, so a caller can bind them to a key without asking first.
- * This names that convention rather than leaving each call site to know it.
+ * `enterDirectory`, `leaveDirectory` and `goToPath` all return the pane BY
+ * REFERENCE when there is nowhere to go, so a caller can bind them to a key
+ * without asking first. This names that convention rather than leaving each
+ * call site to know it. Keep the list complete: a transition that follows the
+ * convention but is missing here is one a reader will not know to trust.
  */
 export function didNavigate(before: PaneState, after: PaneState): boolean {
   return before !== after;

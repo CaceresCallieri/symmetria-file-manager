@@ -131,6 +131,9 @@ async function moveEntry(source: string, target: string, overwrite: boolean): Pr
     if (overwrite) await rm(target, { recursive: true, force: true });
     await rename(source, target);
   } catch (error) {
+    // SAFETY: `rename` rejects with an `ErrnoException`, on which `code` is
+    // optional — so a rejection of any other shape reads as `undefined`, fails
+    // this test and is rethrown, which is the conservative direction.
     if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
 
     await cp(source, target, { recursive: true, force: overwrite });

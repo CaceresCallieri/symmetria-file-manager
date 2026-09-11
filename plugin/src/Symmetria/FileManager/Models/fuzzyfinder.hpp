@@ -125,8 +125,17 @@ public:
 
     Q_INVOKABLE void clear();
 
-    // Record that the result at `index` was opened for query `query`, so fff's
-    // frecency ranking learns. No-op for an out-of-range index or no engine.
+    // Record that the result at `index` was opened for query `query`.
+    //
+    // This writes fff's QUERY TRACKER, not frecency — `fff_track_access`, the
+    // exported C symbol that would write it, is not among the 78 `fff_*` symbols
+    // the shipped `libfff_c.so` exports, so no C-ABI caller can write frecency at
+    // all. What it buys is a per-`(project path, query)` open count that boosts a
+    // later search on the same query.
+    // In THIS application that boost is always zero, because `startSearch()`
+    // passes `combo_boost_multiplier = 0`. See `recordOpen`'s definition.
+    //
+    // No-op for an out-of-range index or no engine.
     Q_INVOKABLE void recordOpen(int index, const QString& query);
 
     static constexpr int MaxResults = 200;

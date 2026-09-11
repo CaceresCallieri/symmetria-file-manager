@@ -121,6 +121,36 @@ one thing `Restart=always` exists to prevent. The refusal now exits **69**
 (`EX_UNAVAILABLE`) and a missing application directory exits **78**
 (`EX_CONFIG`); those two are exempt and everything else still restarts.
 
+## Rebuilding before a restart
+
+`CLAUDE.md` carries the rule — rebuild, restart, then report. This is why the
+two halves of it are not optional, and it is the long form of what `24-picker.md`
+records from the day the daemon answered `unknown command: createPicker`.
+
+**The unit never builds.** `bin/symmetria-fm-electron` runs `pnpm build` only
+when the bundle is absent; the comment above that `if` says why. So every run
+after the first leaves the build to the caller, and a restart on its own reloads
+exactly the code that was already running.
+
+**A test run leaves a DEVELOPMENT bundle behind.** `app/test/build.setup.ts`
+spawns the same `pnpm run build`, but it passes `{...process.env}` and pins
+nothing, so it inherits vitest's `NODE_ENV=test`. `app/vite.config.ts` has no
+mode handling, so that variable alone decides the renderer build: vite skips
+minification and keeps React's development build. Measured 2026-09-04 at
+743.84 kB against 495.45 kB, and `NODE_ENV=test pnpm build` reproduces the
+larger one exactly — same script both times, so do not go looking for a second
+build command. Restarting straight after `pnpm -r test` therefore serves that
+bundle to the operator's real window.
+
+That second one is a defect in the harness, not a fact of the tools. Setting
+`env.NODE_ENV = "production"` in `build.setup.ts`, beside the existing
+`delete env.ELECTRON_RUN_AS_NODE`, would remove it and would also make the smoke
+test assert against the bundle that actually ships. It is left undone
+deliberately: it changes what every test run exercises — minified code and
+production React — which can hide a development-only warning or surface a
+difference no test currently covers. Worth doing with a measurement, not as a
+drive-by.
+
 ## Verifying
 
 ```bash

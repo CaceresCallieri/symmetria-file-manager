@@ -80,14 +80,37 @@
     // in an earlier commit and never listed, so the check had been quietly
     // incomplete since then. Review noticed the comment conflated the two.
     "app/bin/symmetria-fm-electron-cli.mjs",
-    "app/bench/pickerWindow.mjs"
+    "app/bench/pickerWindow.mjs",
+    // The search worker has TWO entries and nothing imports either, because a
+    // worker is started by PATH rather than by import: the Electron one is
+    // handed to `utilityProcess.fork`, and the Node one is forked by the
+    // topology test, which needs two real processes to prove that two indices
+    // can share one store.
+    //
+    // Observed: `fallow dead-code` reported both as unused files the moment
+    // they were added — true of the module graph and false of the program, the
+    // same shape as the three Electron entries above.
+    "packages/fm-search/src/main/worker-entry-electron.ts",
+    "packages/fm-search/src/main/worker-entry.ts"
   ],
 
-  // Two paths inside `new URL(...)` point at build OUTPUT, not at modules:
-  // `../renderer/index.html` is the page the window loads, and
-  // `../preload/index.cjs` is the bundle Chromium loads. They resolve at
-  // runtime, relative to `dist-electron/`, and never at analysis time.
-  "ignoreUnresolvedImports": ["../renderer/index.html", "../preload/index.cjs"],
+  // Three paths inside `new URL(...)` point at build OUTPUT, not at modules:
+  // `../renderer/index.html` is the page the window loads,
+  // `../preload/index.cjs` is the bundle Chromium loads, and
+  // `./searchWorker.js` is the bundle `utilityProcess.fork` is handed. All
+  // three resolve at runtime, relative to `dist-electron/`, and never at
+  // analysis time.
+  //
+  // Observed for the worker: `fallow audit` reported it as an unresolved import
+  // the moment the path stopped being built from `__dirname`. It had to stop —
+  // the main bundle is ESM, where `__dirname` is a `ReferenceError` waiting for
+  // the first search — so `import.meta.url` is the correct form and this entry
+  // is the cost of it.
+  "ignoreUnresolvedImports": [
+    "../renderer/index.html",
+    "../preload/index.cjs",
+    "./searchWorker.js"
+  ],
 
   // The side effect of excluding the tree above: fallow can no longer see that
   // `tools/oxlint/anti-slop/index.ts` imports `@oxlint/plugins`, so it reported
@@ -95,5 +118,23 @@
   // `grep -rn '@oxlint/plugins' tools/oxlint/anti-slop/`, which finds it in
   // `index.ts`, `rules/no-reflect-apply.ts` and `shared/reflect-method.ts`.
   // `knip.json` carries the identical entry for the identical reason.
-  "ignoreDependencies": ["@oxlint/plugins"]
+  //
+  // `@ff-labs/fff-node` is the second entry, and it is unused by every static
+  // measure: no file under `app/src` imports it, and it is declared in
+  // `app/package.json` all the same. Observed: both `fallow audit` and `knip`
+  // reported it as an unused dependency of `app` the moment it was added.
+  //
+  // It is a RUNTIME dependency of a BUILD ARTEFACT. `app/scripts/build.mjs`
+  // marks the native engine external — a `.node` binary cannot be bundled into
+  // JavaScript — so `dist-electron/main/searchWorker.js` imports it at run
+  // time. Node resolves from the importing FILE's location, and pnpm links a
+  // package only into the `node_modules` of the workspace package that declares
+  // it, so the declaration has to sit in `app` for the bundle to find anything
+  // at all. Declared only by `packages/fm-search`, the shipped worker died on
+  // startup with `ERR_MODULE_NOT_FOUND` while every test stayed green, because
+  // tests import the TypeScript source from inside `fm-search` where resolution
+  // has always worked. `app/test/workerBundle.test.ts` is what now holds that
+  // line; do not remove this entry without also removing that test's reason to
+  // exist. `knip.json` carries the identical entry for the identical reason.
+  "ignoreDependencies": ["@oxlint/plugins", "@ff-labs/fff-node"]
 }

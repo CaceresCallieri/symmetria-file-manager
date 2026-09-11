@@ -494,10 +494,23 @@ void FuzzyFinder::recordOpen(int index, const QString& query) {
 
     auto             engine = m_engine;
     const QByteArray q      = query.toUtf8();
-    // fff_track_query keys frecency on the absolute opened path.
+    // fff_track_query does NOT write frecency. It writes the QUERY TRACKER:
+    // one record per (project path, query) pair, holding the opened path as
+    // its selection and an open_count. A later search on the same query adds
+    // open_count * combo_boost_multiplier to the score.
+    //
+    // Frecency is unreachable from here: fff_track_access — the exported C
+    // symbol that would write it — is not among the 78 fff_* symbols the
+    // shipped libfff_c.so exports, so no C-ABI caller can write frecency.
+    // (Frecency::track_access is the Rust function behind it, reachable only
+    // from the Neovim binding and the background watcher.) Measured three ways in
+    // docs/electron-transition/20-spike-search-topology.md section 2.1.
+    //
+    // And in THIS application the gain is always zero anyway: startSearch()
+    // passes combo_boost_multiplier = 0 to fff_search_mixed.
     const QByteArray p      = m_results.at(index).fullPath.toUtf8();
 
-    // Fire-and-forget on a worker thread — frecency tracking must never block UI.
+    // Fire-and-forget on a worker thread — the tracker write must never block UI.
     // The returned QFuture is deliberately discarded (cast to void to silence the
     // [[nodiscard]] warning); we never await this write.
     std::ignore = QtConcurrent::run([engine, q, p]() {

@@ -207,7 +207,7 @@ describe("the order the window opens in", () => {
 
   it("asks for the order that was stored, not the default", async () => {
     log = installBridge({
-      storedListing: { sort: "size", reverse: false, showHidden: true },
+      storedListing: { sort: "size", reverse: false, showHidden: true, renderDocuments: true },
     });
     await opened();
 
@@ -225,7 +225,7 @@ describe("the order the window opens in", () => {
     // arrives. Re-listing regardless would make a matching order flicker on
     // every open, which is the common case.
     log = installBridge({
-      storedListing: { sort: "modified", reverse: true, showHidden: false },
+      storedListing: { sort: "modified", reverse: true, showHidden: false, renderDocuments: true },
     });
     await opened();
     await act(async () => undefined);
@@ -254,7 +254,12 @@ describe("the order the window remembers", () => {
 
     await waitFor(() => expect(log.listingWrites.length).toBeGreaterThan(0));
     const written = log.listingWrites[log.listingWrites.length - 1];
-    expect(written).toEqual({ sort: "size", reverse: false, showHidden: false });
+    expect(written).toEqual({
+      sort: "size",
+      reverse: false,
+      showHidden: false,
+      renderDocuments: true,
+    });
   });
 
   it("writes it back when the direction is reversed", async () => {
@@ -280,7 +285,7 @@ describe("the order the window remembers", () => {
     // A window that starts, loads, and saves the same values back is harmless
     // until two do it at once — and the file dialog opens a second one.
     log = installBridge({
-      storedListing: { sort: "extension", reverse: true, showHidden: false },
+      storedListing: { sort: "extension", reverse: true, showHidden: false, renderDocuments: true },
     });
     await opened();
     await act(async () => undefined);
@@ -313,7 +318,12 @@ describe("the order the window remembers, under pressure", () => {
       await new Promise((resolve) => setTimeout(resolve, 40));
     });
 
-    expect(log.storedListingNow()).toEqual({ sort: "size", reverse: false, showHidden: true });
+    expect(log.storedListingNow()).toEqual({
+      sort: "size",
+      reverse: false,
+      showHidden: true,
+      renderDocuments: true,
+    });
   });
 
   it("still saves when React runs the load effect twice", async () => {
@@ -323,7 +333,9 @@ describe("the order the window remembers, under pressure", () => {
     // again gives a fresh ref, and even under `StrictMode` the second effect
     // issues its own read and sets the flag. The property below is real and
     // the one about ordering was not; see `useListingOptions.ts`.
-    log = installBridge({ storedListing: { sort: "size", reverse: false, showHidden: false } });
+    log = installBridge({
+      storedListing: { sort: "size", reverse: false, showHidden: false, renderDocuments: true },
+    });
     // `StrictMode` is the point of this test, not decoration: it makes React
     // run the effect, tear it down, and run it again on the SAME hook instance,
     // which is the only way a promise resolves into an already-cancelled
