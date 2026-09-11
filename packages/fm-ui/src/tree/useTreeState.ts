@@ -3,10 +3,17 @@ import { useLayoutEffect, useMemo, useState } from "react";
 import type { OverviewModel } from "../overview/useOverview.ts";
 import { projectTree } from "./model.ts";
 import { pruneTreeShape } from "./prune.ts";
-import { revealShape, type TreeRecord, type TreeShape } from "./state.ts";
+import {
+  revealShape,
+  type TreeAnchor,
+  type TreeRecord,
+  type TreeShape,
+  visibleFallback,
+} from "./state.ts";
 
 export function useTreeState(root: string, model: OverviewModel, record: TreeRecord) {
   const [shape, setShape] = useState(record.shape);
+  const [temporaryPath, setTemporaryPath] = useState<string | null>(null);
   useLayoutEffect(() => {
     record.shape = shape;
   }, [record, shape]);
@@ -14,9 +21,24 @@ export function useTreeState(root: string, model: OverviewModel, record: TreeRec
     () => effectiveCollapsed(root, model.folders, shape.preset, shape.collapsed),
     [root, model.folders, shape.preset, shape.collapsed],
   );
-  const rows = useMemo(
+  const baseRows = useMemo(
     () => projectTree(root, model.folders, collapsed),
     [root, model.folders, collapsed],
+  );
+  const rows = useMemo(
+    () =>
+      temporaryPath === null
+        ? baseRows
+        : projectTree(
+            root,
+            model.folders,
+            new Set(
+              [...collapsed].filter(
+                (path) => path === temporaryPath || !isAncestorPath(path, temporaryPath),
+              ),
+            ),
+          ),
+    [baseRows, root, model.folders, collapsed, temporaryPath],
   );
   const select = (path: string) =>
     setShape((previous) =>
@@ -43,8 +65,10 @@ export function useTreeState(root: string, model: OverviewModel, record: TreeRec
   const toggle = (path: string) =>
     setShape((previous) => {
       const next = new Set(collapsed);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
+      // Search can expand a persistently collapsed ancestor. The disclosure
+      // describes the projected row, so its action must follow that state.
+      if (rows.find((row) => row.path === path)?.expanded) next.add(path);
+      else next.delete(path);
       const selected =
         next.has(path) && isAncestorPath(path, previous.selected) ? path : previous.selected;
       return { ...previous, selected, collapsed: next, preset: null, checkpoint: null };
@@ -62,7 +86,26 @@ export function useTreeState(root: string, model: OverviewModel, record: TreeRec
         checkpoint: previous.checkpoint ?? collapsed,
       };
     });
-  return { shape, rows, select, reveal, toggle, preset };
+  return {
+    shape,
+    rows,
+    baseRows,
+    select,
+    reveal,
+    toggle,
+    preset,
+    chooseSearch: (path: string) => {
+      setTemporaryPath(path);
+      select(path);
+    },
+    restoreSearch: (path: string, anchor: TreeAnchor | null) => {
+      setTemporaryPath(null);
+      record.pendingReveal = null;
+      record.anchor = anchor;
+      record.restoreAnchor = true;
+      select(visibleFallback(path, baseRows));
+    },
+  };
 }
 
 function effectiveCollapsed(

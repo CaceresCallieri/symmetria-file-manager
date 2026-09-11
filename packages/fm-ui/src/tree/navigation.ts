@@ -24,7 +24,7 @@ function right(row: TreeRow, child: TreeRow | undefined, actions: TreeActions) {
 }
 
 export function runTreeCommand(
-  command: TreeCommand,
+  command: Exclude<TreeCommand, "search" | "search-next" | "search-previous" | "flash">,
   rows: readonly TreeRow[],
   cursor: number,
   actions: TreeActions,
@@ -52,6 +52,6 @@ export function runTreeCommand(
     },
     left: () => left(row, actions),
     right: () => right(row, rows[cursor + 1], actions),
-  } satisfies Record<TreeCommand, () => void>;
+  } satisfies Record<typeof command, () => void>;
   commands[command]();
 }

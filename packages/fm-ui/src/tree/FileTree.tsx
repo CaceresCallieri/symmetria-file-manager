@@ -1,13 +1,17 @@
 import { defaultRangeExtractor, type Range, useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useId, useState } from "react";
 import { PathBar } from "../components/PathBar.tsx";
 import { INITIAL_RECT, observeWithFallback } from "../components/virtualize.ts";
+import { ViewportFlash } from "../flash/ViewportFlash.tsx";
 import type { OverviewModel } from "../overview/useOverview.ts";
+import { LoadedPathSearch } from "../search/LoadedPathSearch.tsx";
 import { isTreeDirectory, treeItemId } from "./model.ts";
 import { runTreeCommand } from "./navigation.ts";
 import type { TreeRecord } from "./state.ts";
 import { TreeRow } from "./TreeRow.tsx";
 import { TreeToolbar } from "./TreeToolbar.tsx";
+import { useTreeController } from "./useTreeController.ts";
+import { useTreeInteractions } from "./useTreeInteractions.ts";
 import type { TreeCommand, TreePort } from "./useTreeMode.ts";
 import { useTreeNavigation } from "./useTreeNavigation.ts";
 import { useTreeState } from "./useTreeState.ts";
@@ -69,7 +73,35 @@ export function FileTree({
     if (isTreeDirectory(row)) toggle(row.path);
     else onOpen(row.path);
   };
-  const command = (name: TreeCommand) =>
+  const { search, flash, reset } = useTreeInteractions(
+    root,
+    model,
+    state,
+    record,
+    viewport,
+    port,
+    motion.cancel,
+  );
+  const command = (name: TreeCommand) => {
+    if (name === "search") {
+      motion.cancel();
+      search.open();
+      return;
+    }
+    if (name === "search-next") {
+      motion.cancel();
+      search.goNext();
+      return;
+    }
+    if (name === "search-previous") {
+      motion.cancel();
+      search.goPrevious();
+      return;
+    }
+    if (name === "flash") {
+      flash.open();
+      return;
+    }
     runTreeCommand(name, rows, cursor, {
       select: setSelected,
       toggle,
@@ -78,30 +110,15 @@ export function FileTree({
       jump: motion.jump,
       cancel: motion.cancel,
     });
-  const controller = useRef({ command, reveal: state.reveal, cancel: motion.cancel });
-  controller.current = { command, reveal: state.reveal, cancel: motion.cancel };
-  useEffect(
-    () =>
-      port.connect({
-        command: (name) => controller.current.command(name),
-        reveal: (path) => controller.current.reveal(path),
-        cancel: () => controller.current.cancel(),
-      }),
-    [port.connect],
+  };
+  useTreeController(
+    port,
+    { command, reveal: state.reveal, cancel: reset },
+    current,
+    search.active,
+    search.matchCount,
+    viewport,
   );
-  useEffect(() => {
-    if (current)
-      port.select({
-        name: current.name,
-        path: current.path,
-        isDirectory: isTreeDirectory(current),
-        isImage: false,
-        mimeType: "",
-      });
-  }, [current, port.select]);
-  useEffect(() => {
-    viewport?.focus({ preventScroll: true });
-  }, [viewport]);
   const width = useTreeWidth(rows, viewport);
   return (
     <section className="file-tree" aria-label="Project file tree">
@@ -109,49 +126,66 @@ export function FileTree({
         model={model}
         labelId={labelId}
         onMiller={onMiller}
-        preset={state.preset}
+        preset={(value) => {
+          reset();
+          state.preset(value);
+        }}
         canRestore={state.shape.checkpoint !== null}
       />
       <div className="tree-breadcrumb" title={selected}>
         <PathBar path={selected} />
       </div>
       <div
-        ref={setViewport}
-        className="tree-viewport"
-        role="tree"
-        aria-labelledby={labelId}
-        tabIndex={0}
-        aria-activedescendant={current ? treeItemId(current.path) : undefined}
-        data-root={root}
-        data-row-count={rows.length}
-        onScroll={motion.onScroll}
-        onWheel={motion.cancel}
-        onPointerDown={motion.cancel}
+        className="tree-search"
+        data-flash-hidden={flash.active}
+        aria-hidden={flash.active}
+        inert={flash.active}
       >
+        <LoadedPathSearch search={search} />
+      </div>
+      <div className="tree-frame" data-flash-mode={flash.active}>
         <div
-          className="tree-canvas"
-          style={{ height: virtualizer.getTotalSize(), minWidth: width }}
+          ref={setViewport}
+          className="tree-viewport"
+          role="tree"
+          aria-labelledby={labelId}
+          tabIndex={0}
+          aria-activedescendant={current ? treeItemId(current.path) : undefined}
+          data-root={root}
+          data-row-count={rows.length}
+          onScroll={motion.onScroll}
+          onWheel={motion.cancel}
+          onPointerDown={motion.cancel}
         >
-          {virtualizer.getVirtualItems().map((item) => {
-            const row = rows[item.index];
-            return row ? (
-              <TreeRow
-                key={row.path}
-                row={row}
-                selected={row.path === current?.path}
-                top={item.start}
-                select={() => {
-                  motion.cancel();
-                  setSelected(row.path);
-                  viewport?.focus({ preventScroll: true });
-                }}
-                activate={() => activate(item.index)}
-                toggle={() => toggle(row.path)}
-                include={() => model.include(row.path)}
-              />
-            ) : null;
-          })}
+          <div
+            className="tree-canvas"
+            style={{ height: virtualizer.getTotalSize(), minWidth: width }}
+          >
+            {virtualizer.getVirtualItems().map((item) => {
+              const row = rows[item.index];
+              return row ? (
+                <TreeRow
+                  key={row.path}
+                  row={row}
+                  selected={row.path === current?.path}
+                  matched={
+                    flash.active ? flash.matches.has(row.path) : search.matches.has(row.path)
+                  }
+                  top={item.start}
+                  select={() => {
+                    motion.cancel();
+                    setSelected(row.path);
+                    viewport?.focus({ preventScroll: true });
+                  }}
+                  activate={() => activate(item.index)}
+                  toggle={() => toggle(row.path)}
+                  include={() => model.include(row.path)}
+                />
+              ) : null;
+            })}
+          </div>
         </div>
+        <ViewportFlash flash={flash} />
       </div>
     </section>
   );

@@ -4,6 +4,7 @@ import { isTreeDirectory, type TreeRow as TreeRowModel, treeItemId } from "./mod
 export function TreeRow({
   row,
   selected,
+  matched = false,
   top,
   select,
   activate,
@@ -12,6 +13,7 @@ export function TreeRow({
 }: {
   row: TreeRowModel;
   selected: boolean;
+  matched?: boolean;
   top: number;
   select(): void;
   activate(): void;
@@ -32,6 +34,7 @@ export function TreeRow({
       aria-expanded={directory ? row.expanded : undefined}
       aria-selected={selected}
       data-path={row.path}
+      data-search-match={matched}
       data-coverage={row.status}
       className="tree-row"
       style={{ top, paddingLeft: 10 + row.depth * 14 }}

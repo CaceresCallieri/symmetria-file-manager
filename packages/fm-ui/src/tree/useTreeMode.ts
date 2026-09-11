@@ -2,11 +2,16 @@ import type { CursorEntry, KeyContext } from "@symmetria/fm-core/keys/types";
 import { isAncestorPath } from "@symmetria/fm-core/overview/model";
 import { cursorEntry, joinPath } from "@symmetria/fm-core/pane";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { type FlashPort, useFlashPort } from "../flash/useFlashPort.ts";
 import type { OverviewModel } from "../overview/useOverview.ts";
 import type { Tabs } from "../useTabs.ts";
 import { type TreeRecord, TreeStateCache } from "./state.ts";
 
 export type TreeCommand =
+  | "search"
+  | "search-next"
+  | "search-previous"
+  | "flash"
   | "down"
   | "up"
   | "left"
@@ -25,6 +30,8 @@ export interface TreeController {
   cancel(): void;
 }
 export interface TreePort {
+  flash?: FlashPort;
+  search?(state: { active: boolean; count: number }): void;
   connect(handler: TreeController): () => void;
   select(entry: CursorEntry): void;
 }
@@ -35,6 +42,8 @@ interface TreeTab {
 }
 
 export function useTreeMode(tabs: Tabs) {
+  const flash = useFlashPort();
+  const [search, setSearch] = useState({ active: false, count: 0 });
   const id = tabs.views[tabs.activeIndex]?.id ?? "";
   const [views, setViews] = useState<ReadonlyMap<string, TreeTab>>(new Map());
   const [cache] = useState(() => new TreeStateCache());
@@ -84,11 +93,14 @@ export function useTreeMode(tabs: Tabs) {
   };
   return {
     root,
+    search,
+    flashActive: root !== null && flash.active,
+    onFlashKey: flash.onKey,
     entry,
     id,
     key: JSON.stringify([id, root, tabs.showHidden]),
     record: root === null ? null : cache.get(id, root, tabs.showHidden),
-    port: { connect, select: setEntry } satisfies TreePort,
+    port: { connect, select: setEntry, flash: flash.port, search: setSearch } satisfies TreePort,
     newTab: () => tabs.open(root ?? tabs.pane.path),
     toggleHidden: tabs.toggleHidden,
     close,
@@ -113,11 +125,15 @@ export function treeKeyContext(
       ...context.state,
       cursorEntry: tree.entry,
       selectedCount: 0,
-      searchActive: false,
-      matchCount: 0,
+      searchActive: tree.search.active,
+      matchCount: tree.search.count,
     },
     actions: {
       ...context.actions,
+      startSearch: () => tree.command("search"),
+      nextMatch: () => tree.command("search-next"),
+      previousMatch: () => tree.command("search-previous"),
+      startFlash: () => tree.command("flash"),
       tabNew: tree.newTab,
       treeToggleHidden: tree.toggleHidden,
       treeRefresh: () => model.refresh?.(),

@@ -772,6 +772,10 @@ function isHtml(ctx: KeyContext): boolean {
 }
 
 const TREE_SHARED = new Set([
+  "search.start",
+  "match.next",
+  "match.prev",
+  "flash.enter",
   "nav.down",
   "nav.up",
   "nav.activate",

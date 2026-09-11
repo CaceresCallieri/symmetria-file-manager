@@ -82,6 +82,23 @@ export function useTreeNavigation(
     record.pendingReveal = null;
   }, [viewport, record, rows, loading, cancel, select, write, read]);
   useLayoutEffect(() => {
+    if (!viewport || !record.restoreAnchor) return;
+    const anchor = record.anchor;
+    if (anchor)
+      write({
+        x: anchor.left,
+        y:
+          Math.max(
+            0,
+            rows.findIndex((row) => row.path === visibleFallback(anchor.path, rows)),
+          ) *
+            TREE_ROW_HEIGHT +
+          anchor.offset,
+      });
+    previousSelected.current = selected;
+    record.restoreAnchor = false;
+  }, [viewport, rows, record, selected, write]);
+  useLayoutEffect(() => {
     if (previousSelected.current === selected) return;
     previousSelected.current = selected;
     if (pending.current || !viewport) return;

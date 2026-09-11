@@ -261,12 +261,17 @@ export function App(props: AppProps = {}) {
   );
   useBrowsingTransitions(tree.id, modes.reset, search.cancel, tree.cancel);
 
+  const flash = browsingFlash(context, tree, overview);
   const mode = useMemo<CascadeMode>(
-    () => cascadeModeFor(modes, ops.modal.kind, search.active, overview.flashActive),
-    [modes, ops.modal.kind, search.active, overview.flashActive],
+    () => cascadeModeFor(modes, ops.modal.kind, search.active, flash.active),
+    [modes, ops.modal.kind, search.active, flash.active],
   );
 
-  useKeyDispatch({ mode, context, onFlashKey: overview.onFlashKey });
+  useKeyDispatch({
+    mode,
+    context,
+    onFlashKey: flash.onKey,
+  });
 
   /**
    * A click in the parent column: go to that sibling directory.
@@ -409,4 +414,14 @@ function useProjectViews(tabs: Tabs) {
     { tab: tree.id, reveal: tree.reveal, exit: tree.close },
   );
   return { tree, overview };
+}
+
+function browsingFlash(
+  context: KeyContext,
+  tree: ReturnType<typeof useTreeMode>,
+  overview: ReturnType<typeof useOverviewMode>,
+) {
+  return context.view === "tree"
+    ? { active: tree.flashActive, onKey: tree.onFlashKey }
+    : { active: overview.flashActive, onKey: overview.onFlashKey };
 }

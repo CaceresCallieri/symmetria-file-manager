@@ -1,13 +1,11 @@
 import type { ViewKind } from "@symmetria/fm-core/keys/types";
 import type { OverviewCommand } from "@symmetria/fm-core/overview/navigation";
 import { useCallback, useRef, useState } from "react";
+import { type FlashPort, useFlashPort } from "../flash/useFlashPort.ts";
 import { type OverviewModel, useOverview } from "./useOverview.ts";
 import { type TreeOriginHost, useOverviewNavigation } from "./useOverviewNavigation.ts";
 export interface OverviewPort {
-  readonly flash?: {
-    connect(handler: (event: KeyboardEvent) => boolean): () => void;
-    setActive(active: boolean): void;
-  };
+  readonly flash?: FlashPort;
   connect(handler: (command: OverviewCommand) => void): () => void;
   reveal(path: string): void;
   focus(path: string): void;
@@ -28,14 +26,7 @@ export function useOverviewMode(
       if (handler.current === next) handler.current = () => undefined;
     };
   }, []);
-  const [flashActive, setFlashActive] = useState(false);
-  const flashHandler = useRef<(event: KeyboardEvent) => boolean>(() => true);
-  const connectFlash = useCallback((next: (event: KeyboardEvent) => boolean) => {
-    flashHandler.current = next;
-    return () => {
-      if (flashHandler.current === next) flashHandler.current = () => true;
-    };
-  }, []);
+  const flash = useFlashPort();
   const [minimapVisible, setMinimapVisible] = useState(true);
   const toggleMinimap = () => setMinimapVisible((visible) => !visible);
   const command = (name: OverviewCommand) => {
@@ -55,8 +46,8 @@ export function useOverviewMode(
   );
   const view: ViewKind = root === null ? "miller" : "overview";
   return {
-    flashActive: root !== null && flashActive,
-    onFlashKey: (event: KeyboardEvent) => flashHandler.current(event),
+    flashActive: root !== null && flash.active,
+    onFlashKey: flash.onKey,
     minimapVisible,
     toggleMinimap,
     root,
@@ -69,7 +60,7 @@ export function useOverviewMode(
     view,
     command,
     port: {
-      flash: { connect: connectFlash, setActive: setFlashActive },
+      flash: flash.port,
       connect,
       reveal: navigation.reveal,
       focus: navigation.focus,

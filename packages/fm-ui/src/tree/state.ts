@@ -17,6 +17,7 @@ export interface TreeRecord {
   shape: TreeShape;
   anchor: TreeAnchor | null;
   pendingReveal: string | null;
+  restoreAnchor?: boolean;
 }
 
 /** Visual state has its own lifetime, independent of directory snapshot eviction. */

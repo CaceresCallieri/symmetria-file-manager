@@ -136,3 +136,40 @@
 .tree-toolbar button:disabled {
   opacity: 0.45;
 }
+
+.tree-frame {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.tree-search > .overview-search {
+  position: relative;
+  inset: auto;
+  margin: 0 16px 4px;
+}
+.tree-row[data-search-match="true"] .tree-name {
+  color: var(--foreground);
+  text-decoration: underline;
+  text-decoration-color: var(--muted-foreground);
+}
+.tree-frame .tree-row {
+  transition: opacity 400ms cubic-bezier(0.2, 0, 0, 1);
+}
+.tree-frame[data-flash-mode="true"] .tree-row {
+  opacity: 0.25;
+}
+.tree-frame[data-flash-mode="true"] .tree-name {
+  text-decoration: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tree-frame .tree-row {
+    transition: none;
+  }
+}
+
+/* Preserve the captured viewport when flash temporarily hides search feedback. */
+.tree-search[data-flash-hidden="true"] {
+  visibility: hidden;
+}
