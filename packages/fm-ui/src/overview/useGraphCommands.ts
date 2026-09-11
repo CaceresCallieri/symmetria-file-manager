@@ -17,6 +17,7 @@ interface GraphCommandOptions extends GraphCameraOptions {
   collapsed: ReadonlySet<string>;
   setCollapsed: (value: Set<string>) => void;
   port: OverviewPort | undefined;
+  flash: () => void;
   search: () => void;
   searchNext: () => void;
   searchPrevious: () => void;
@@ -96,6 +97,7 @@ export function useGraphCommands(options: GraphCommandOptions) {
     ["fit", fit],
     ["toggle", () => toggle(selected)],
     ["search", options.search],
+    ["flash", options.flash],
     ["search-next", options.searchNext],
     ["search-previous", options.searchPrevious],
     ["reveal", () => options.port?.reveal(selected)],

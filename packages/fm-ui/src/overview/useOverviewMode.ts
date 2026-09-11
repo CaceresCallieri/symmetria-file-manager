@@ -3,6 +3,10 @@ import type { OverviewCommand } from "@symmetria/fm-core/overview/navigation";
 import { useCallback, useRef, useState } from "react";
 import { useOverview } from "./useOverview.ts";
 export interface OverviewPort {
+  readonly flash?: {
+    connect(handler: (event: KeyboardEvent) => boolean): () => void;
+    setActive(active: boolean): void;
+  };
   connect(handler: (command: OverviewCommand) => void): () => void;
   reveal(path: string): void;
   focus(path: string): void;
@@ -19,6 +23,14 @@ export function useOverviewMode(
     handler.current = next;
     return () => {
       if (handler.current === next) handler.current = () => undefined;
+    };
+  }, []);
+  const [flashActive, setFlashActive] = useState(false);
+  const flashHandler = useRef<(event: KeyboardEvent) => boolean>(() => true);
+  const connectFlash = useCallback((next: (event: KeyboardEvent) => boolean) => {
+    flashHandler.current = next;
+    return () => {
+      if (flashHandler.current === next) flashHandler.current = () => true;
     };
   }, []);
   const [minimapVisible, setMinimapVisible] = useState(true);
@@ -40,6 +52,8 @@ export function useOverviewMode(
   );
   const view: ViewKind = root === null ? "miller" : "overview";
   return {
+    flashActive: root !== null && flashActive,
+    onFlashKey: (event: KeyboardEvent) => flashHandler.current(event),
     minimapVisible,
     toggleMinimap,
     root,
@@ -50,6 +64,7 @@ export function useOverviewMode(
     view,
     command,
     port: {
+      flash: { connect: connectFlash, setActive: setFlashActive },
       connect,
       reveal: (selected: string) => {
         setRoot(null);

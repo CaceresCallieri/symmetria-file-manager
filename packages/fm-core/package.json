@@ -46,6 +46,7 @@
     "./overview/layout": "./src/overview/layout.ts",
     "./overview/model": "./src/overview/model.ts",
     "./overview/navigation": "./src/overview/navigation.ts",
-    "./overview/viewport": "./src/overview/viewport.ts"
+    "./overview/viewport": "./src/overview/viewport.ts",
+    "./flash": "./src/flash.ts"
   }
 }

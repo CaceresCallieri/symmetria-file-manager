@@ -114,6 +114,7 @@ function cascadeModeFor(
   modes: KeyWiring["modes"],
   opsModalKind: string,
   searchActive: boolean,
+  flashActive: boolean,
 ): CascadeMode {
   return {
     // One gate for every dialog: the help sheet and the operation dialogs
@@ -123,9 +124,7 @@ function cascadeModeFor(
     modalOpen: modes.helpOpen || modes.zoxideOpen || opsModalKind !== "none",
     bookmarkSubMode: modes.bookmarkSubMode,
     chordPrefix: modes.chordPrefix,
-    // Flash jump is a text-input mode that arrives with its own phase. Until
-    // then nothing can enter it, so the cascade never reaches that step.
-    flashActive: false,
+    flashActive,
     // The seam the cascade documented and nothing used until now. The field is
     // a real `<input>`, so `useKeyDispatch` would report this anyway from the
     // event target — stating it here as well means a key that arrives while the
@@ -247,11 +246,11 @@ export function App(props: AppProps = {}) {
   );
 
   const mode = useMemo<CascadeMode>(
-    () => cascadeModeFor(modes, ops.modal.kind, search.active),
-    [modes, ops.modal.kind, search.active],
+    () => cascadeModeFor(modes, ops.modal.kind, search.active, overview.flashActive),
+    [modes, ops.modal.kind, search.active, overview.flashActive],
   );
 
-  useKeyDispatch({ mode, context });
+  useKeyDispatch({ mode, context, onFlashKey: overview.onFlashKey });
 
   /**
    * A click in the parent column: go to that sibling directory.

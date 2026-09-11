@@ -395,6 +395,7 @@ export const OVERVIEW_ONLY: readonly Binding[] = [
   overviewBinding("toggle-minimap", ["m"], "Alt", "Toggle minimap"),
   overviewBinding("fit", ["f"], "", "Fit loaded graph"),
   overviewBinding("toggle", [" "], "", "Toggle folder"),
+  overviewBinding("flash", ["s"], "", "Flash visible names"),
   overviewBinding("search", ["/"], "Symbol", "Search loaded paths"),
   overviewBinding("search-next", ["n"], "", "Next search result"),
   overviewBinding("search-previous", ["n"], "Shift", "Previous search result"),

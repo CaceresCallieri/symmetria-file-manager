@@ -34,8 +34,9 @@ export function computeTextMatches<T>(
   entries: readonly T[],
   query: string,
   textOf: (entry: T) => string,
+  trimQuery = true,
 ): number[] {
-  const needle = query.trim().toLowerCase();
+  const needle = (trimQuery ? query.trim() : query).toLowerCase();
   if (needle === "") return [];
   const found: number[] = [];
   entries.forEach((entry, index) => {

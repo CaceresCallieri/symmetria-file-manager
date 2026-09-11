@@ -10,6 +10,7 @@ export type OverviewCommand =
   | "reset"
   | "fit"
   | "toggle"
+  | "flash"
   | "search"
   | "search-next"
   | "search-previous"

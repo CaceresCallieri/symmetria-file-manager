@@ -16,9 +16,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { FolderGroup } from "./FolderGroup.tsx";
 import { OverviewControls } from "./OverviewControls.tsx";
-import { OverviewLinks } from "./OverviewLinks.tsx";
+import { OverviewFlash } from "./OverviewFlash.tsx";
+import { OverviewGraphViewport } from "./OverviewGraphViewport.tsx";
 import { OverviewMinimap } from "./OverviewMinimap.tsx";
 import { OverviewSearch } from "./OverviewSearch.tsx";
 import { useGraphAnchor } from "./useGraphAnchor.ts";
@@ -26,13 +26,14 @@ import { useGraphCommands } from "./useGraphCommands.ts";
 import { useGraphScene } from "./useGraphScene.ts";
 import { useGraphState, useRememberGraph } from "./useGraphState.ts";
 import type { useOverview } from "./useOverview.ts";
+import { useOverviewFlash } from "./useOverviewFlash.ts";
 import type { OverviewPort } from "./useOverviewMode.ts";
 import { useOverviewSearch } from "./useOverviewSearch.ts";
 export function ConnectedGroups({
   root,
   model,
   port,
-  renderToolbar = (controls) => controls,
+  renderToolbar = renderControls,
   minimapVisible = true,
   onToggleMinimap,
 }: {
@@ -54,8 +55,7 @@ export function ConnectedGroups({
     state.initial?.boxes,
   );
   useRememberGraph(model, state, viewport, boxes);
-  const shown = useMemo(() => visibleGroups(groups, collapsed), [groups, collapsed]);
-  const bounds = useMemo(() => graphBounds(shown), [shown]);
+  const { shown, bounds } = useVisibleGraph(groups, collapsed);
   const windowBox = graphWindow(scroll, origin, zoom);
   useGraphAnchor(groups, selected, zoom, viewport, extent);
   const mounted = groupsInViewport(shown, windowBox, zoom, selected);
@@ -74,6 +74,7 @@ export function ConnectedGroups({
     extent,
     bounds,
     port,
+    flash: () => flash.open(),
     search: () => search.open(),
     searchNext: () => search.goNext(),
     searchPrevious: () => search.goPrevious(),
@@ -86,6 +87,22 @@ export function ConnectedGroups({
     select: commands.select,
     restore: commands.restore,
   });
+  const generation = useMemo(
+    () => graphGeneration(groups, collapsed, zoom, origin),
+    [groups, collapsed, zoom, origin],
+  );
+  const flash = useOverviewFlash({
+    viewport,
+    generation,
+    port,
+    stopCamera: commands.cancel,
+    select: commands.select,
+  });
+  const matches = activeMatches(flash, search);
+  const onScroll = () => {
+    flash.cancel();
+    sample();
+  };
   const backgroundDrag = useBackgroundDrag(commands.cancel, sample);
   const controls = (
     <OverviewControls
@@ -95,67 +112,39 @@ export function ConnectedGroups({
       run={commands.run}
       selected={selected}
       canFocus={model.folders.has(selected)}
-      onFocus={() => port?.focus(selected)}
+      onFocus={focusFolder(port, selected)}
       onRearrange={rearrange}
     />
   );
   return (
     <>
-      <OverviewSearch search={search} />
+      {renderSearch(search, flash.active)}
       {renderToolbar(controls)}
       <div className="overview-graph-frame">
-        <div
-          ref={viewport}
-          className="connected-groups"
-          data-testid="connected-groups"
-          data-zoom={zoom}
-          data-selected={selected}
-          onScroll={sample}
+        <OverviewGraphViewport
+          viewport={viewport}
+          extent={extent}
+          bounds={bounds}
+          origin={origin}
+          zoom={zoom}
+          selected={selected}
+          onScroll={onScroll}
+          backgroundDrag={backgroundDrag}
+          shown={shown}
+          boxes={boxes.current}
+          windowBox={windowBox}
+          mounted={mounted}
+          matches={matches}
+          collapsed={collapsed}
+          onSelect={commands.select}
+          onToggle={commands.toggle}
+          onMeasure={onMeasure}
+          onInclude={model.include}
           onWheel={commands.cancel}
-          {...backgroundDrag}
-        >
-          <div
-            ref={extent}
-            style={{
-              width: bounds.width * zoom + origin.x + 24,
-              height: bounds.height * zoom + origin.y + 24,
-              overflow: "hidden",
-            }}
-          >
-            <div
-              className="overview-canvas"
-              style={{
-                width: bounds.width,
-                height: bounds.height,
-                transform: `translate(${origin.x}px, ${origin.y}px) scale(${zoom})`,
-              }}
-            >
-              <OverviewLinks
-                shown={shown}
-                boxes={boxes.current}
-                bounds={bounds}
-                windowBox={windowBox}
-                zoom={zoom}
-                selected={selected}
-              />
-              {mounted.map((group) => (
-                <FolderGroup
-                  key={group.path}
-                  group={group}
-                  selected={selected}
-                  matches={search.matches}
-                  collapsed={collapsed.has(group.path)}
-                  onSelect={commands.select}
-                  onToggle={commands.toggle}
-                  onMeasure={onMeasure}
-                  onInclude={model.include}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
+        />
+        <OverviewFlash flash={flash} />
         <OverviewMinimap
-          matches={search.matches}
+          matches={matches}
           selected={selected}
           visible={minimapVisible}
           shown={shown}
@@ -263,4 +252,37 @@ function graphWindow(scroll: Box, origin: { x: number; y: number }, zoom: number
     width: (scroll.width || 1200) / zoom,
     height: (scroll.height || 800) / zoom,
   };
+}
+
+function graphGeneration(
+  groups: readonly GraphGroup[],
+  collapsed: ReadonlySet<string>,
+  zoom: number,
+  origin: { x: number; y: number },
+) {
+  return JSON.stringify([groups, [...collapsed], zoom, origin]);
+}
+
+function activeMatches(
+  flash: ReturnType<typeof useOverviewFlash>,
+  search: ReturnType<typeof useOverviewSearch>,
+) {
+  return flash.active ? flash.matches : search.matches;
+}
+function renderSearch(search: ReturnType<typeof useOverviewSearch>, flashActive: boolean) {
+  return flashActive ? null : <OverviewSearch search={search} />;
+}
+
+function renderControls(controls: ReactNode) {
+  return controls;
+}
+function focusFolder(port: OverviewPort | undefined, path: string) {
+  return () => port?.focus(path);
+}
+
+function useVisibleGraph(groups: readonly GraphGroup[], collapsed: ReadonlySet<string>) {
+  return useMemo(() => {
+    const shown = visibleGroups(groups, collapsed);
+    return { shown, bounds: graphBounds(shown) };
+  }, [groups, collapsed]);
 }

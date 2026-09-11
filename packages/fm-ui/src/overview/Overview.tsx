@@ -36,6 +36,7 @@ function Overview({
       onKeyDownCapture={(event) => {
         if (
           event.key !== "Escape" ||
+          panel.current?.querySelector("[data-flash-active]") ||
           (event.target instanceof Element && event.target.closest("input,textarea,select"))
         )
           return;
