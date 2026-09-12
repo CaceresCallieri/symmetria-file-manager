@@ -2,7 +2,7 @@ import type { Bookmark } from "@symmetria/fm-core/bookmarks";
 import { CHORD_GROUPS, groupFor } from "@symmetria/fm-core/keys/chords";
 import { isSuppressedInPicker } from "@symmetria/fm-core/keys/dispatch";
 import { bindingsFor, HELP_GROUPS, MODES } from "@symmetria/fm-core/keys/registry";
-import type { KeyContext } from "@symmetria/fm-core/keys/types";
+import type { Binding, KeyContext } from "@symmetria/fm-core/keys/types";
 import { useEffect, useRef } from "react";
 import { useDialogFocus } from "../hooks/useDialogFocus.ts";
 
@@ -65,7 +65,8 @@ export function HelpOverlay({ context, bookmarks, onClose }: HelpOverlayProps) {
             (binding) =>
               binding.group === group &&
               // Never advertise a key the picker has taken away.
-              !isSuppressedInPicker(binding, context),
+              !isSuppressedInPicker(binding, context) &&
+              (binding.when?.(context) ?? true),
           );
           if (rows.length === 0) return null;
 
@@ -75,14 +76,25 @@ export function HelpOverlay({ context, bookmarks, onClose }: HelpOverlayProps) {
               {rows.map((binding) => (
                 <div key={binding.id} className="help-row" data-testid="help-row">
                   <kbd>{binding.keycap}</kbd>
-                  <span>{binding.label}</span>
+                  <span>{bindingLabel(binding, context)}</span>
                 </div>
               ))}
             </section>
           );
         })}
 
-        {context.view !== "overview" ? (
+        {context.view === "tree" ? (
+          <section data-testid="help-group-Chords">
+            <h3>Chords</h3>
+            {CHORD_GROUPS.get("g")?.binds.map((entry) => (
+              <div key={entry.key} className="help-row" data-testid="help-row">
+                <kbd>g{entry.key}</kbd>
+                <span>{entry.label}</span>
+              </div>
+            ))}
+          </section>
+        ) : null}
+        {context.view === "miller" ? (
           <>
             <section data-testid="help-group-Chords">
               <h3>Chords</h3>
@@ -124,4 +136,10 @@ export function HelpOverlay({ context, bookmarks, onClose }: HelpOverlayProps) {
       </div>
     </div>
   );
+}
+
+function bindingLabel(binding: Binding, context: KeyContext) {
+  return binding.id === "overview.reveal"
+    ? `Reveal in ${context.overview?.revealDestination ?? "Miller"}`
+    : binding.label;
 }

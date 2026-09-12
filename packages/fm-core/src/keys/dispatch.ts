@@ -99,8 +99,7 @@ export function isSuppressedInPicker(binding: Binding, ctx: KeyContext): boolean
  *
  * The phases mirror the original: bare modifier, then the picker pre-pass, then
  * the binding scan. **A binding whose `when()` is false does NOT consume** — the
- * key falls through to the next handler, which is what preserves `n`/`N` and
- * lets Escape propagate out of the tree.
+ * key falls through to the next handler, which is what preserves `n`/`N` when there are no matches.
  */
 export function dispatch(event: KeyEvent, ctx: KeyContext): boolean {
   if (isBareModifier(event)) return false;

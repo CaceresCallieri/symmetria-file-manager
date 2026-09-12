@@ -11,35 +11,36 @@ export interface OverviewViewState {
 }
 interface CachedOverview {
   snapshot: OverviewSnapshot;
-  view?: OverviewViewState;
+  view?: OverviewViewState | undefined;
 }
 /** One renderer owns this cache; no subscriptions or pending work enter it. */
 export class OverviewCache {
-  private roots = new Map<string, CachedOverview>();
+  private roots = new Map<string, OverviewSnapshot>();
+  private views = new Map<string, OverviewViewState>();
   get size(): number {
     return this.roots.size;
   }
   get entries(): number {
     return [...this.roots.values()].reduce(
-      (count, item) => count + representedEntries(item.snapshot.folders),
+      (count, item) => count + representedEntries(item.folders),
       0,
     );
   }
   get(key: string): CachedOverview | undefined {
-    return this.roots.get(key);
+    const snapshot = this.roots.get(key);
+    return snapshot ? { snapshot, view: this.views.get(key) } : undefined;
   }
   save(key: string, snapshot: OverviewSnapshot): void {
-    const previous = this.roots.get(key);
     this.roots.delete(key);
-    this.roots.set(key, { ...previous, snapshot });
+    this.roots.set(key, snapshot);
     while (this.roots.size > 3 || this.entries > 15000) {
       const oldest = this.roots.keys().next().value;
       if (oldest === undefined) break;
       this.roots.delete(oldest);
+      this.views.delete(oldest);
     }
   }
   saveView(key: string, view: OverviewViewState): void {
-    const item = this.roots.get(key);
-    if (item) item.view = view;
+    if (this.roots.has(key)) this.views.set(key, view);
   }
 }

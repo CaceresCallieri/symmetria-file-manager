@@ -44,6 +44,8 @@
 }
 /* Keep actions visible when Retry and the minimap toggle share a narrow toolbar. */
 .overview-toolbar > strong,
+.overview-toolbar > span,
+.tree-scope,
 .overview-search-query {
   min-width: 0;
   overflow: hidden;
@@ -58,7 +60,8 @@
   align-items: center;
   gap: 6px;
 }
-.overview button {
+.overview button,
+.file-tree button {
   font: inherit;
   color: var(--foreground);
   background: var(--card);
@@ -66,15 +69,12 @@
   border-radius: 3px;
   cursor: pointer;
 }
-.overview button:focus-visible {
+.overview button:focus-visible,
+.file-tree button:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 1px;
 }
 .overview-toolbar > span {
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-size: 11px;
   color: var(--muted-foreground);
 }
@@ -388,4 +388,21 @@
 
 [data-flash-mode="true"] [data-search-match="true"] > .overview-name {
   opacity: 0.25;
+}
+
+.overview-toolbar,
+.tree-toolbar {
+  position: relative;
+}
+/* Anchoring to the summary clipped Scope on narrow windows. The toolbar is
+   the containing block so both views keep the popup inside their bounds. */
+.overview-toolbar > .overview-scope,
+.tree-toolbar > .overview-scope {
+  position: static;
+}
+.overview-scope > .overview-popover {
+  top: 100%;
+  right: 16px;
+  width: min(300px, calc(100vw - 48px));
+  box-sizing: border-box;
 }

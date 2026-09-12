@@ -15,12 +15,11 @@ import {
   pickerFromSearch,
 } from "@symmetria/fm-core/windowUrl";
 import { FinderOverlay } from "@symmetria/fm-search/ui";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { BrowsingView } from "./components/BrowsingView.tsx";
 import { FinderPreview } from "./components/FinderPreview.tsx";
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
-import { MillerColumns } from "./components/MillerColumns.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
-import { PathBar } from "./components/PathBar.tsx";
 import type { SearchFieldProps } from "./components/SearchField.tsx";
 import { type RenderMode, StatusBar } from "./components/StatusBar.tsx";
 import { TabBar } from "./components/TabBar.tsx";
@@ -30,6 +29,8 @@ import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
 import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { OverviewLayer } from "./overview/Overview.tsx";
 import { useOverviewMode } from "./overview/useOverviewMode.ts";
+import { treeDirectoryError, treeSummary } from "./tree/TreeSummary.tsx";
+import { treeKeyContext, useTreeMode } from "./tree/useTreeMode.ts";
 import { useBookmarks } from "./useBookmarks.ts";
 import { useExternalOpen } from "./useExternalOpen.ts";
 import { type FileOps, useFileOps } from "./useFileOps.ts";
@@ -126,9 +127,14 @@ function searchChromeOf(search: Search): SearchFieldProps | null {
  * The precedence between them belongs to `transientLine`; this only decides
  * which message there is to show, since two sources can offer one.
  */
-function transientOf(tabs: Tabs, ops: FileOps, modes: KeyWiring["modes"]): TransientLineProps {
+function transientOf(
+  tabs: Tabs,
+  ops: FileOps,
+  modes: KeyWiring["modes"],
+  treeRoot: string | null,
+): TransientLineProps {
   return {
-    error: tabs.error,
+    error: treeDirectoryError(treeRoot, tabs.error),
     message: ops.message ?? modes.message,
     progress: ops.progress,
     onCancelTransfer: ops.cancelRunningTransfer,
@@ -175,6 +181,7 @@ function flashHostFor(tabs: Tabs, preview: Preview, cursorPath: string | null): 
 }
 
 export interface AppProps {
+  readonly onOpenFile?: (path: string) => void;
   /** Overridden by tests, which must not depend on the real location. */
   readonly startPath?: string;
   /** Overridden by tests, for the same reason. */
@@ -316,13 +323,7 @@ function Overlays({
 export function App(props: AppProps = {}) {
   const tabs = useTabs(initialPath(props.startPath));
   const home = homePath(props.homePath);
-  const overview = useOverviewMode(
-    tabs.pane.path,
-    tabs.showHidden,
-    tabs.openAt,
-    tabs.reveal,
-    tabs.navigate,
-  );
+  const { tree, overview } = useProjectViews(tabs);
   // Memoised because `pickerFromSearch` PARSES the URL: a fresh object each
   // render would defeat every memo inside `usePicker`, and through it the whole
   // key action table. The URL cannot change for this window's lifetime.
@@ -340,7 +341,13 @@ export function App(props: AppProps = {}) {
   // Wired here rather than inside `useTabs`, and the placement is the point:
   // `useTabs` owns the tab collection, while composing an external event source
   // onto it is this component's job.
-  useExternalOpen(overview.openExternal);
+  useExternalOpen((path) => {
+    search.cancel();
+    modes.reset();
+    millerFlash.clear();
+    overview.close();
+    tree.external(path);
+  });
 
   // The preview is resolved BEFORE the key actions, not after, because one of
   // those actions needs its answer: the copy chord's image row asks whether the
@@ -350,7 +357,7 @@ export function App(props: AppProps = {}) {
   const cursorPath = cursorPathOf(tabs.pane);
   const previewing = usePreviewPane(cursorPath, tabs.renderDocuments);
   // After the preview, because a session may label the directory it shows.
-  const flash = useFlash(flashHostFor(tabs, previewing.preview, cursorPath));
+  const millerFlash = useFlash(flashHostFor(tabs, previewing.preview, cursorPath));
 
   const { actions, modes, state } = useKeyActions(
     tabs,
@@ -361,24 +368,31 @@ export function App(props: AppProps = {}) {
     cursorImageMimeOf(previewing.preview, cursorPath),
     picker,
     previewing.toggleAudio,
-    flash.start,
+    millerFlash.start,
   );
 
-  const context = useMemo<KeyContext>(
-    () => ({ view: overview.view, state, actions, overview }),
-    [state, actions, overview],
+  const context = browsingContext(
+    picker.state.active,
+    search,
+    modes,
+    tree,
+    overview,
+    state,
+    actions,
   );
+  useBrowsingTransitions(tree.id, modes.reset, search.cancel, tree.cancel, millerFlash.clear);
+  useBrowsingTransitions(context.view, millerFlash.clear);
 
-  const flashActive = overview.root === null ? flash.active : overview.flashActive;
+  const flash = browsingFlash(context, tree, overview, millerFlash);
   const mode = useMemo<CascadeMode>(
-    () => cascadeModeFor(modes, ops.modal.kind, search.active, flashActive),
-    [modes, ops.modal.kind, search.active, flashActive],
+    () => cascadeModeFor(modes, ops.modal.kind, search.active, flash.active),
+    [modes, ops.modal.kind, search.active, flash.active],
   );
 
   useKeyDispatch({
     mode,
     context,
-    onFlashKey: overview.root === null ? flash.onKey : overview.onFlashKey,
+    onFlashKey: flash.onKey,
   });
 
   /**
@@ -400,33 +414,30 @@ export function App(props: AppProps = {}) {
           onActivate={tabs.activate}
           onClose={tabs.close}
         />
-        <PathBar path={tabs.pane.path} onNavigate={tabs.navigate} />
-        <MillerColumns
-          path={tabs.pane.path}
-          parentEntries={tabs.parentEntries}
-          entries={tabs.pane.entries}
-          cursorIndex={tabs.pane.cursorIndex}
-          parentCursorName={tabs.parentCursorName}
-          selection={tabs.pane.selection}
+        <BrowsingView
+          tabs={tabs}
+          tree={tree}
+          model={overview.treeModel}
+          onOpen={props.onOpenFile ?? ops.openAbsolute}
           matches={search.matches}
-          flashLabels={flash.labels}
-          flashActive={flash.active}
-          onVisibleRange={flash.reportVisibleRange}
-          onSelect={tabs.moveTo}
+          preview={previewing.pane}
+          flashLabels={millerFlash.labels}
+          flashActive={millerFlash.active}
+          onVisibleRange={millerFlash.reportVisibleRange}
           onActivate={(index) => activateAt(tabs, ops, index)}
           onLeaveTo={leaveTo}
-          preview={previewing.pane}
         />
         <WhichKeyOverlay
           prefix={modes.chordPrefix}
           cursorIsImage={state.cursorEntry?.isImage === true}
-          bookmarks={bookmarks.byLetter}
+          bookmarks={browsingBookmarks(context, bookmarks.byLetter)}
         />
         {/* One bar, and nothing above it that comes and goes. The search field
           and the transient line were rows of their own here, so opening a
           search pushed the columns down and a copy starting pushed them up.
           Both now live inside the bar, which has a fixed height. */}
         <StatusBar
+          summary={treeSummary(tree.root, overview.model, tabs.showHidden)}
           picker={picker.chrome}
           entryCount={tabs.pane.entries.length}
           selectedCount={state.selectedCount}
@@ -436,7 +447,7 @@ export function App(props: AppProps = {}) {
           renderMode={renderModeOf(previewing.preview, cursorPath, tabs.renderDocuments)}
           search={searchChromeOf(search)}
           flash={flash.chrome}
-          transient={transientOf(tabs, ops, modes)}
+          transient={transientOf(tabs, ops, modes, tree.root)}
         />
         <OpsModals
           modal={ops.modal}
@@ -466,4 +477,77 @@ export function App(props: AppProps = {}) {
       />
     </>
   );
+}
+
+function useBrowsingTransitions(id: string, ...reset: (() => void)[]) {
+  const latest = useRef(reset);
+  latest.current = reset;
+  const previous = useRef(id);
+  useEffect(() => {
+    if (previous.current === id) return;
+    previous.current = id;
+    for (const clear of latest.current) clear();
+  }, [id]);
+}
+
+function browsingBookmarks(context: KeyContext, bookmarks: ReadonlyMap<string, Bookmark>) {
+  return context.view === "tree" ? new Map<string, Bookmark>() : bookmarks;
+}
+
+function browsingContext(
+  pickerActive: boolean,
+  search: Search,
+  modes: KeyWiring["modes"],
+  tree: ReturnType<typeof useTreeMode>,
+  overview: ReturnType<typeof useOverviewMode>,
+  state: KeyContext["state"],
+  actions: KeyContext["actions"],
+) {
+  const toggleView = () => {
+    if (pickerActive) return;
+    search.cancel();
+    modes.reset();
+    tree.cancel();
+    tree.open();
+  };
+  const base: KeyContext = {
+    view: overview.view,
+    state,
+    actions: { ...actions, toggleViewMode: toggleView },
+    overview: {
+      ...overview,
+      toggle: () => {
+        tree.cancel();
+        overview.toggle();
+      },
+    },
+  };
+  return treeKeyContext(base, tree, overview.model);
+}
+
+function useProjectViews(tabs: Tabs) {
+  const tree = useTreeMode(tabs);
+  const overview = useOverviewMode(
+    tabs.pane.path,
+    tabs.showHidden,
+    tabs.openAt,
+    tabs.reveal,
+    tabs.navigate,
+    tree.root,
+    { tab: tree.id, reveal: tree.reveal, exit: tree.close },
+  );
+  return { tree, overview };
+}
+
+function browsingFlash(
+  context: KeyContext,
+  tree: ReturnType<typeof useTreeMode>,
+  overview: ReturnType<typeof useOverviewMode>,
+  miller: ReturnType<typeof useFlash>,
+) {
+  if (context.view === "tree")
+    return { active: tree.flashActive, onKey: tree.onFlashKey, chrome: null };
+  if (context.view === "overview")
+    return { active: overview.flashActive, onKey: overview.onFlashKey, chrome: null };
+  return miller;
 }

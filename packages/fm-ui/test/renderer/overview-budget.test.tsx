@@ -44,7 +44,7 @@ it("caps initial traversal at four concurrent reads, 512 reads, depth eight and 
   expect(paths.every((path) => path.split("/").length <= 9)).toBe(true);
 });
 
-it("stops a narrow deep tree at depth eight", async () => {
+it.each([6, 8])("stops a narrow deep tree at configured depth %i", async (depth) => {
   installBridge();
   const paths: string[] = [];
   Object.assign(window.symmetriaFm ?? {}, {
@@ -60,12 +60,12 @@ it("stops a narrow deep tree at depth eight", async () => {
       };
     },
   });
-  const { result } = renderHook(() => useOverview("/root", false));
+  const { result } = renderHook(() => useOverview("/root", false, depth));
   await waitFor(() => expect(result.current.loading).toBe(false));
-  expect(paths).toHaveLength(8);
+  expect(paths).toHaveLength(depth);
   expect(
     [...result.current.folders.values()].some(
-      (folder) => folder.depth === 8 && folder.status === "Depth limit reached",
+      (folder) => folder.depth === depth && folder.status === "Depth limit reached",
     ),
   ).toBe(true);
 });

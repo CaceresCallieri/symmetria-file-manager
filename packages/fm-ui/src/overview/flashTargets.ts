@@ -38,15 +38,27 @@ function covered(rect: Rectangle, overlays: readonly Rectangle[]) {
   return overlays.some((overlay) => overlaps(rect, overlay));
 }
 
+export interface FlashSceneAdapter {
+  owner(viewport: HTMLElement): HTMLElement | null;
+  focus?(viewport: HTMLElement): HTMLElement | null;
+  readonly targets: string;
+  readonly name: string;
+  readonly occluders: string;
+  path(element: HTMLElement): string | undefined;
+}
+const OVERVIEW_ADAPTER: FlashSceneAdapter = {
+  owner: (viewport) => viewport.closest('[role="dialog"]'),
+  targets: "[data-entry], [data-basename]",
+  name: ".overview-name",
+  occluders: ".overview-minimap-surface, .overview-popover, .overview-toolbar",
+  path: (element) =>
+    element.dataset.entry ?? element.closest<HTMLElement>("[data-group]")?.dataset.group,
+};
 /** Measure actual name spans; mounted overscan and pinned selection are not visibility. */
-export function readFlashScene(viewport: HTMLElement): FlashScene {
+export function readFlashScene(viewport: HTMLElement, adapter = OVERVIEW_ADAPTER): FlashScene {
   const clip = viewport.getBoundingClientRect();
-  const panel = viewport.closest('[role="dialog"]');
-  const overlays = [
-    ...(panel?.querySelectorAll<HTMLElement>(
-      ".overview-minimap-surface, .overview-popover, .overview-toolbar",
-    ) ?? []),
-  ]
+  const panel = adapter.owner(viewport);
+  const overlays = [...(panel?.querySelectorAll<HTMLElement>(adapter.occluders) ?? [])]
     // Closed details can retain measurable boxes, but their popovers do not cover names.
     .filter((element) => !element.closest("details:not([open])"))
     .map((element) => element.getBoundingClientRect())
@@ -63,14 +75,14 @@ export function readFlashScene(viewport: HTMLElement): FlashScene {
   ];
   const paths = new Map<string, FlashAnchor>();
   const names = new Map<string, HTMLElement>();
-  const buttons = viewport.querySelectorAll<HTMLElement>("[data-entry], [data-basename]");
+  const buttons = viewport.querySelectorAll<HTMLElement>(adapter.targets);
   for (const button of buttons) {
-    const name = button.querySelector<HTMLElement>(".overview-name");
+    const name = button.querySelector<HTMLElement>(adapter.name);
     if (!name) continue;
     const rect = name.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0 || !overlaps(rect, clip) || covered(rect, occluders))
       continue;
-    const path = button.dataset.entry ?? button.closest<HTMLElement>("[data-group]")?.dataset.group;
+    const path = adapter.path(button);
     if (!path || paths.has(path)) continue;
     names.set(path, name);
     paths.set(path, {

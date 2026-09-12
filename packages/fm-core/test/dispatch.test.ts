@@ -91,7 +91,8 @@ function recorder(): Recorder {
     treeExpandOrActivate: log("treeExpandOrActivate"),
     treeToggleExpand: log("treeToggleExpand"),
     treeToggleHidden: log("treeToggleHidden"),
-    treeToggleGitignore: log("treeToggleGitignore"),
+    treePageDown: log("treePageDown"),
+    treePageUp: log("treePageUp"),
     treeRefresh: log("treeRefresh"),
   };
 
@@ -99,7 +100,7 @@ function recorder(): Recorder {
 }
 
 /** A state in which as many conditional rows as possible are live. */
-function permissiveState(): KeyState {
+function permissiveState(): KeyState & { cursorEntry: NonNullable<KeyState["cursorEntry"]> } {
   return {
     selectedCount: 1,
     searchActive: false,
@@ -123,6 +124,7 @@ function contextWith(state: Partial<KeyState>, view: ViewKind = "miller"): KeyCo
     actions,
     calls,
     overview: { toggle: () => calls.push("overview.toggle"), command: (name) => calls.push(name) },
+    tree: { close: () => calls.push("tree.close") },
   };
 }
 
@@ -206,11 +208,11 @@ describe("a false condition does not consume", () => {
     expect(dispatch(press("n"), ctx)).toBe(false);
   });
 
-  it("lets Escape propagate out of the tree, where nothing swallows it", () => {
-    // Miller swallows a stray Escape; the tree deliberately does not, so an
-    // embedding host can close on it.
-    const tree = contextWith({ selectedCount: 0 }, "tree");
-    expect(dispatch(press("escape"), tree)).toBe(false);
+  it("closes the tree on Escape without propagating to the embedding host", () => {
+    const ctx = contextWith({ selectedCount: 0 }, "tree");
+    const tree = { ...ctx, tree: { close: () => ctx.calls.push("tree.close") } };
+    expect(dispatch(press("escape"), tree)).toBe(true);
+    expect(tree.calls).toEqual(["tree.close"]);
 
     const miller = contextWith({ selectedCount: 0 }, "miller");
     expect(dispatch(press("escape"), miller)).toBe(true);
@@ -350,7 +352,7 @@ describe("chords", () => {
 
   it("refuses to copy the bytes of something that is not an image", () => {
     const notImage = contextWith({
-      cursorEntry: { ...permissiveState().cursorEntry, isImage: false } as never,
+      cursorEntry: { ...permissiveState().cursorEntry, isImage: false },
     });
 
     resolveChord("c", press("i"), notImage);
@@ -364,7 +366,7 @@ describe("chords", () => {
       cursorEntry: {
         ...permissiveState().cursorEntry,
         mimeType: "application/octet-stream",
-      } as never,
+      },
     });
 
     resolveChord("c", press("i"), disguised);
