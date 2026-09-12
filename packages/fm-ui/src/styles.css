@@ -372,16 +372,28 @@ kbd {
 
 .preview__body {
   margin: 0;
+  padding: 12px;
   overflow: auto;
-  font-family: monospace;
-  font-size: 12px;
-  line-height: 1.45;
+  font-family: var(--font-mono);
+  font-size: inherit;
+  line-height: 1.55;
   white-space: pre;
   tab-size: 4;
 
   /* Selectable, because reading a preview and copying a line out of it is the
      same activity. */
   user-select: text;
+}
+
+/* The syntax theme supplies token colours. The panel owns the reading surface,
+   including before the highlighter responds. */
+.preview__body.hljs {
+  background: transparent;
+}
+
+.preview--code .hljs-comment,
+.preview--code .hljs-doctag {
+  font-style: normal;
 }
 
 .preview__truncated {
