@@ -11,9 +11,9 @@ import { useEffect } from "react";
  * folder, video, audio, document, executable — come from `lucide-react`, which
  * is the same pairing Mesura Code uses.
  *
- * **Icons paint `currentColor`.** They inherit whatever the row's text is, so a
- * cursor row's icon brightens with its text and a marked row's takes the mark's
- * colour, with no per-icon colour to keep in step.
+ * Both icon sources paint `currentColor`. The shared stylesheet maps the
+ * resolved `data-icon` to optional theme colours. Marked rows override those
+ * colours in the panel stylesheet to preserve the mark indicator.
  *
  * ── Why this file sits in the FINDER's package ─────────────────────────────
  * It is not about searching, and it did live in the panel package. It moved

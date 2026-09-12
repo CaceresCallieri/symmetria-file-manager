@@ -25,16 +25,92 @@
  * package. Appearance and behaviour of one pattern, in one place.
  */
 
-/*
- * Icons inherit the row's colour.
- *
- * Both sources paint `currentColor`, so a cursor row's icon brightens with its
- * text and a marked row's takes the mark colour — with no per-icon colour to
- * keep in step with the palette.
- */
+/* Both icon sources use currentColor. Hosts can supply this optional palette;
+   without it, icons retain the surrounding text colour. */
 .file-icon {
   flex: 0 0 auto;
   color: currentcolor;
+}
+
+.file-icon[data-icon="folder"] {
+  color: var(--muted-foreground, currentcolor);
+}
+
+.file-icon:is(
+  [data-icon="typescript"],
+  [data-icon="c"],
+  [data-icon="cpp"],
+  [data-icon="css"],
+  [data-icon="docker"],
+  [data-icon="markdown"]
+) {
+  color: var(--icon-blue, currentcolor);
+}
+
+.file-icon:is([data-icon="react"], [data-icon="go"], [data-icon="tailwind"], [data-icon="biome"]) {
+  color: var(--icon-cyan, currentcolor);
+}
+
+.file-icon:is(
+  [data-icon="javascript"],
+  [data-icon="json"],
+  [data-icon="python"],
+  [data-icon="svg"],
+  [data-icon="zip"]
+) {
+  color: var(--icon-yellow, currentcolor);
+}
+
+.file-icon:is([data-icon="vue"], [data-icon="bash"], [data-icon="table"]) {
+  color: var(--icon-green, currentcolor);
+}
+
+.file-icon:is(
+  [data-icon="git"],
+  [data-icon="html"],
+  [data-icon="svelte"],
+  [data-icon="rust"],
+  [data-icon="swift"],
+  [data-icon="zig"],
+  [data-icon="astro"],
+  [data-icon="claude"]
+) {
+  color: var(--icon-orange, currentcolor);
+}
+
+.file-icon:is(
+  [data-icon="vite"],
+  [data-icon="eslint"],
+  [data-icon="terraform"],
+  [data-icon="wasm"],
+  [data-icon="database"],
+  [data-icon="video"]
+) {
+  color: var(--icon-purple, currentcolor);
+}
+
+.file-icon:is(
+  [data-icon="image"],
+  [data-icon="audio"],
+  [data-icon="sass"],
+  [data-icon="graphql"],
+  [data-icon="ruby"],
+  [data-icon="npm"]
+) {
+  color: var(--icon-pink, currentcolor);
+}
+
+.file-icon:is(
+  [data-icon="default"],
+  [data-icon="text"],
+  [data-icon="document"],
+  [data-icon="binary"],
+  [data-icon="font"],
+  [data-icon="bun"],
+  [data-icon="prettier"],
+  [data-icon="yml"]
+) {
+  color: var(--icon-muted, currentcolor);
 }
 
 /* The query field, the list and the row are shared by every overlay that is a

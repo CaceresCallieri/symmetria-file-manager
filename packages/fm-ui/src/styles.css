@@ -112,6 +112,11 @@ body {
   color: var(--marked);
 }
 
+/* Marked entries keep one colour across the icon and name. */
+.row--marked .file-icon {
+  color: inherit;
+}
+
 /*
  * ── Why every box in a row states its flex behaviour ────────────────────────
  *

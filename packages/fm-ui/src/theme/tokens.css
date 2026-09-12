@@ -45,6 +45,16 @@
   /* What dims the window behind a dialog. */
   --overlay-scrim: rgb(0 0 0 / 60%);
 
+  /* File-type colours stay softer than search and flash labels. */
+  --icon-blue: #89b4e8;
+  --icon-cyan: #79c5ce;
+  --icon-yellow: #dfc47d;
+  --icon-green: #96c698;
+  --icon-orange: #dba17c;
+  --icon-purple: #b4a0da;
+  --icon-pink: #d39ab8;
+  --icon-muted: #a8adb8;
+
   /* ── Meaning ──────────────────────────────────────────────────────────── */
   --primary: oklch(57.1% 0.21 264);
   --destructive: oklch(63.7% 0.208 25.3);

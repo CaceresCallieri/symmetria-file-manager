@@ -72,7 +72,7 @@ describe("colour inheritance", () => {
     expect(sheet).not.toMatch(/\.row--marked \.row__name/);
   });
 
-  it("lets icons take the surrounding colour rather than carrying their own", async () => {
+  it("lets icons inherit the surrounding colour when no palette is supplied", async () => {
     // The rule moved with its component into the finder's package. This test
     // did not move: the property it pins is about how the PANEL renders, and
     // the panel imports that stylesheet.
