@@ -23,8 +23,24 @@ export function ReaderOverlay({ pane, onClose }: ReaderOverlayProps) {
         onClose();
       }
     };
+    // Chromium's PDF viewer is a plugin: once it holds keyboard focus, no key
+    // reaches the page, the main process, or this listener, so Escape could not
+    // close the reader. When focus leaves the document into an embedded
+    // viewer inside the panel, take it back on the next tick. The plugin keeps
+    // mouse scrolling, which follows the pointer; it loses its own keys.
+    const onBlur = () => {
+      const active = document.activeElement;
+      const embedded = active instanceof HTMLEmbedElement || active instanceof HTMLIFrameElement;
+      if (embedded && panel.current?.contains(active)) {
+        setTimeout(() => panel.current?.focus(), 0);
+      }
+    };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("blur", onBlur);
+    };
   }, [onClose]);
 
   return (

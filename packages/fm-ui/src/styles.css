@@ -367,6 +367,19 @@ kbd {
   flex-direction: column;
 }
 
+/* The reader is the whole window while it is open, so the focused panel and
+   the focused scroll surface need no ring to show where focus is; the browser's
+   default outline drew a frame around the entire reader. */
+.reader:focus,
+.reader:focus-visible {
+  outline: none;
+}
+
+.preview-pane--reader [data-scrolls]:focus,
+.preview-pane--reader [data-scrolls]:focus-visible {
+  outline: none;
+}
+
 .reader .reader__header {
   display: flex;
   flex: 0 0 auto;

@@ -95,6 +95,21 @@ it("guard: closing the reader restores silent autoplaying column video without c
   expect(columnVideo.hasAttribute("controls")).toBe(false);
 });
 
+it("regression: focus that leaves the page into the PDF embed comes back to the reader", async () => {
+  installNotesPreview("application/pdf", "%PDF-1.7");
+  const reader = await openReader();
+  const embed = await within(reader).findByTestId("preview-document-embed");
+  // A plugin that takes keyboard focus makes the embed the active element and
+  // blurs the window; from there no key would reach the reader's Escape.
+  embed.tabIndex = 0;
+  embed.focus();
+  expect(document.activeElement).toBe(embed);
+  fireEvent.blur(window);
+  await waitFor(() => expect(document.activeElement).toBe(reader));
+  fireEvent.keyDown(window, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByTestId("reader")).toBeNull());
+});
+
 it("guard: the reader preserves the column PDF route and embed source", async () => {
   installNotesPreview("application/pdf", "%PDF-1.7");
   await moveToNotes();
