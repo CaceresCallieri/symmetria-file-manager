@@ -37,6 +37,7 @@ interface KeyModes {
   closeZoxide(): void;
   closeFinder(): void;
   clearMessage(): void;
+  reset(): void;
 }
 
 export interface KeyWiring {
@@ -276,7 +277,8 @@ export function useKeyActions(
       treeExpandOrActivate: soon("The tree view"),
       treeToggleExpand: soon("The tree view"),
       treeToggleHidden: soon("The tree view"),
-      treeToggleGitignore: soon("The tree view"),
+      treePageDown: () => undefined,
+      treePageUp: () => undefined,
       treeRefresh: soon("The tree view"),
     };
   }, [tabs, ops, search, bookmarks, home, picker, toggleAudioPlayback, startFlash, openReader]);
@@ -326,6 +328,13 @@ export function useKeyActions(
       closeZoxide: () => setZoxideOpen(false),
       closeFinder: () => setFinderOpen(false),
       clearMessage: () => setMessage(null),
+      reset: () => {
+        setChordPrefix("");
+        setBookmarkSubMode(null);
+        setHelpOpen(false);
+        setZoxideOpen(false);
+        setFinderOpen(false);
+      },
     }),
     [
       chordPrefix,

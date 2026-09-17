@@ -117,9 +117,28 @@ describe("symbol glyphs and the Latin-American layout", () => {
 });
 
 describe("view scoping", () => {
-  it("gives each view the shared rows plus its own", () => {
+  it("preserves Miller bindings and limits tree to its supported operations", () => {
     expect(bindingsFor("miller")).toEqual([...CORE, ...MILLER_ONLY]);
-    expect(bindingsFor("tree")).toEqual([...CORE, ...TREE_ONLY]);
+    const tree = bindingsFor("tree");
+    expect(tree.map((binding) => binding.id)).toEqual(
+      expect.arrayContaining([
+        "nav.down",
+        "nav.up",
+        "nav.activate",
+        "view.toggle",
+        "tree.collapseOrParent",
+        "tree.expandOrActivate",
+      ]),
+    );
+    expect(tree.every((binding) => [...CORE, ...TREE_ONLY, ...MILLER_ONLY].includes(binding))).toBe(
+      true,
+    );
+    expect(
+      tree.some((binding) =>
+        ["File", "Clipboard", "Selection", "History", "Tools"].includes(binding.group),
+      ),
+    ).toBe(false);
+    expect(tree.some((binding) => binding.id === "tree.toggleGitignore")).toBe(false);
   });
 
   it("ports the whole Qt table", () => {
@@ -130,7 +149,8 @@ describe("view scoping", () => {
     // The overview adds one row. preview.expand replaces the ported
     // miller.contextMenu row, so that replacement leaves the count unchanged.
     expect(MILLER_ONLY).toHaveLength(21);
-    expect(TREE_ONLY).toHaveLength(6);
+    // Tree adds a mode close binding on Escape.
+    expect(TREE_ONLY).toHaveLength(10);
   });
 });
 

@@ -1,8 +1,7 @@
 import { type ReactNode, useRef } from "react";
+import { DirectoryScope, snapshotStatus } from "../directory/DirectoryScope.tsx";
 import { useDialogFocus } from "../hooks/useDialogFocus.ts";
 import { ConnectedGroups } from "./ConnectedGroups.tsx";
-import { OVERVIEW_LIMITS } from "./limits.ts";
-import { EXCLUSIONS } from "./session.ts";
 import type { useOverview } from "./useOverview.ts";
 import type { OverviewPort } from "./useOverviewMode.ts";
 import "./overview.css";
@@ -74,34 +73,16 @@ function OverviewToolbar({
   readonly onClose: () => void;
   readonly children: ReactNode;
 }) {
-  const scopeLabel = model.coverage?.size ? "Scope · Live updates unavailable" : "Scope";
   return (
     <header className="overview-toolbar">
       <strong>Folder overview</strong>
-      <span title={statusText(model)}>{statusText(model)}</span>
+      <span title={snapshotStatus(model)}>{snapshotStatus(model)}</span>
       {model.coverage?.size ? (
         <button type="button" aria-label="Refresh overview" onClick={model.refresh}>
           Retry
         </button>
       ) : null}
-      <details className="overview-scope">
-        <summary title={scopeLabel}>{scopeLabel}</summary>
-        <div className="overview-popover">
-          {model.coverage?.size ? (
-            <p>
-              Coverage degraded in {model.coverage.size} folders. {[...model.coverage.values()][0]}
-            </p>
-          ) : null}
-          <button type="button" aria-label="Refresh snapshot" onClick={model.refresh}>
-            Refresh
-          </button>
-          <p>
-            Depth {OVERVIEW_LIMITS.automaticDepth} · 5,000 entries ·{" "}
-            {OVERVIEW_LIMITS.directoryReads} directories
-          </p>
-          <p>Excluded: {EXCLUSIONS.join(", ")}</p>
-        </div>
-      </details>
+      <DirectoryScope model={model} />
       {children}
       <button type="button" onClick={onClose}>
         Close · Esc
@@ -136,11 +117,4 @@ export function OverviewLayer({
       onToggleMinimap={onToggleMinimap}
     />
   );
-}
-
-function statusText(model: ReturnType<typeof useOverview>): string {
-  if (model.paused) return "Live updates paused";
-  if (model.refreshing) return "Refreshing…";
-  if (model.loading) return "Loading…";
-  return `${model.inspected} entries inspected`;
 }

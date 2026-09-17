@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 export function useCameraAnimation(
   read: () => Point,
   write: (point: Point) => void,
-  reduced: boolean,
+  reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
 ) {
   const frame = useRef<number | null>(null);
   const latest = useRef({ read, write, reduced });

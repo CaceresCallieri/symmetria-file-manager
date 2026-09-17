@@ -9,7 +9,7 @@ async function open() {
   const log = installBridge();
   render(<App startPath="/home/jc" />);
   await waitFor(() => expect(namesIn("column-current")).toContain("projects"));
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   await screen.findByTestId("connected-groups");
   return log;
 }

@@ -130,22 +130,12 @@ describe("the help overlay", () => {
   });
 });
 
-describe("operations that later phases build", () => {
-  it("says so rather than doing nothing silently", async () => {
-    // The registry is ported whole, so it names operations that do not exist
-    // yet. A key that silently does nothing reads as a bug; one that says why
-    // reads as a roadmap.
-    //
-    // `Ctrl+E` is the tree view, still unbuilt. Two keys have already stood
-    // here and moved on: `d` now opens the trash dialog, and `f` now opens the
-    // finder. An operation graduating out of this test is the point of the
-    // test, not a break in it.
+describe("implemented browsing operations", () => {
+  it("opens the tree instead of reporting an unbuilt operation", async () => {
     await openedAtHome();
-
     fireEvent.keyDown(window, { key: "e", ctrlKey: true });
-
-    const message = await screen.findByTestId("pane-message");
-    expect(message.textContent).toMatch(/tree view/i);
+    expect(await screen.findByRole("tree")).toBeDefined();
+    expect(screen.queryByText(/is not built yet/)).toBeNull();
   });
 
   it("opens the finder for an operation that now exists", async () => {

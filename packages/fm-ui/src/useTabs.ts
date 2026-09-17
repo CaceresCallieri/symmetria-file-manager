@@ -26,6 +26,7 @@ import {
   useState,
 } from "react";
 import { hideWindow, listDirectory, watchDirectory } from "./bridge.ts";
+import { useNavigationGenerations } from "./hooks/useNavigationGenerations.ts";
 import {
   activateTab,
   activePane,
@@ -183,7 +184,9 @@ export interface Tabs {
   toggleMark(): void;
   clearMarks(): void;
 
-  open(): void;
+  open(path?: string): void;
+  navigationGeneration(): number;
+  pendingRevealPath(): string | null;
   /**
    * Show a path, reusing a tab already on it.
    *
@@ -266,6 +269,7 @@ interface DirectoryLoader {
    * shape is meaningless. This is stable, so it is an ordinary dependency.
    */
   listedOptionsFor(id: string): ListingOptions | undefined;
+  pendingPath(id: string | undefined): string | null;
 }
 
 /**
@@ -462,6 +466,10 @@ function useDirectoryLoader(
     invalidate,
     release,
     listedOptionsFor,
+    pendingPath: (id) => {
+      const target = pendingReveal.current.get(id ?? "");
+      return target ? `${target.path === "/" ? "" : target.path}/${target.name}` : null;
+    },
     prepareReveal: (id: string, path: string, name: string) => {
       invalidate(id, true);
       pendingReveal.current.set(id, {
@@ -601,6 +609,12 @@ function useParentColumn(activePath: string, options: ListingOptions): ParentCol
 
 export function useTabs(initialPath: string): Tabs {
   const [state, setState] = useState<TabsState>(() => createTabs(initialPath));
+  const activeId = state.tabs[state.activeIndex]?.id;
+  const {
+    current: navigationGeneration,
+    note: noteNavigation,
+    release: releaseNavigation,
+  } = useNavigationGenerations(activeId);
   const { errorFor, reportError } = useTabErrors();
   const stored = useListingOptions();
   const options = stored.options;
@@ -642,11 +656,8 @@ export function useTabs(initialPath: string): Tabs {
   // so what it depends on and what it uses are the same thing.
   const topology = state.tabs.map((tab) => `${tab.id}${FIELD}${tab.pane.path}`).join(RECORD);
 
-  const { loadTab, release, listedOptionsFor, prepareReveal, invalidate } = useDirectoryLoader(
-    optionsRef,
-    setState,
-    reportError,
-  );
+  const { loadTab, release, listedOptionsFor, prepareReveal, invalidate, pendingPath } =
+    useDirectoryLoader(optionsRef, setState, reportError);
 
   useWatchReconciler(topology, loadTab);
 
@@ -660,7 +671,6 @@ export function useTabs(initialPath: string): Tabs {
    * was in the background when it changed. Both are "what is in front of me was
    * listed under different options", and both are answered by re-listing it.
    */
-  const activeId = state.tabs[state.activeIndex]?.id;
   useEffect(() => {
     if (activeId === undefined) return;
 
@@ -680,10 +690,11 @@ export function useTabs(initialPath: string): Tabs {
   /** A deliberate move to another directory, which the trail remembers. */
   const goTo = useCallback(
     (change: (p: PaneState) => PaneState) => {
+      noteNavigation(activeId);
       invalidate(activeId);
       setState((previous) => navigateActivePane(previous, change));
     },
-    [activeId, invalidate],
+    [activeId, invalidate, noteNavigation],
   );
 
   const close = useCallback(
@@ -694,6 +705,7 @@ export function useTabs(initialPath: string): Tabs {
         // tab's failure outlives it for the life of the window.
         const closing = previous.tabs[index ?? previous.activeIndex]?.id;
         if (closing !== undefined) {
+          releaseNavigation(closing);
           release(closing);
           reportError(closing, null);
         }
@@ -718,10 +730,12 @@ export function useTabs(initialPath: string): Tabs {
         return previous;
       });
     },
-    [release, reportError],
+    [release, reportError, releaseNavigation],
   );
 
   return {
+    navigationGeneration,
+    pendingRevealPath: pendingPath.bind(null, activeId),
     pane,
     parentEntries,
     parentCursorName: nameOf(activePath),
@@ -740,10 +754,12 @@ export function useTabs(initialPath: string): Tabs {
     loading,
 
     historyBack: () => {
+      noteNavigation(activeId);
       invalidate(activeId);
       setState((previous) => stepActiveHistory(previous, "back"));
     },
     historyForward: () => {
+      noteNavigation(activeId);
       invalidate(activeId);
       setState((previous) => stepActiveHistory(previous, "forward"));
     },
@@ -761,34 +777,25 @@ export function useTabs(initialPath: string): Tabs {
     moveTo: (index) => changeActive((p) => moveCursor(p, index - p.cursorIndex)),
     enter: () => goTo(enterDirectory),
     leave: () => goTo(leaveDirectory),
-    reveal: (path) => {
-      if (activeId === undefined) return;
-      const parent = parentOf(path);
-      prepareReveal(activeId, parent, nameOf(path));
-      if (parent === pane.path) loadTab(activeId, parent);
-      else
-        setState((previous) =>
-          navigateActivePane(previous, (p) => ({
-            ...p,
-            path: parent,
-            entries: [],
-            cursorIndex: 0,
-          })),
-        );
-    },
     navigate: (path) => goTo((p) => goToPath(p, path)),
-    // Recorded BEFORE the move, and into the destination's own key, so the
-    // listing that arrives restores from it. See `rememberCursorAt`.
     navigateTo: (path, name) => goTo((p) => goToPath(rememberCursorAt(p, path, name), path)),
+    reveal: (path) =>
+      revealInTab(path, activeId, pane.path, {
+        noteNavigation,
+        prepareReveal,
+        loadTab,
+        setState,
+      }),
     toggleMark: () => changeActive(toggleSelection),
     clearMarks: () => changeActive(clearSelection),
 
-    open: () => setState((previous) => openTab(previous, activePath)),
+    open: (path) => appendTab(setState, activePath, path),
     // A fresh arrow, like every other action here except `close` — which is a
     // callback only because effects in this file depend on it. Its ONE
     // subscriber holds it through a ref instead, so the identity never
     // matters; see the note in App.
     openAt: (path) => {
+      noteNavigation(activeId);
       invalidate(activeId);
       setState((previous) => openOrActivateTab(previous, path));
     },
@@ -803,4 +810,39 @@ export function useTabs(initialPath: string): Tabs {
     goPrevious: () => setState(previousTab),
     activate: (index) => setState((previous) => activateTab(previous, index)),
   };
+}
+
+function appendTab(
+  setState: Dispatch<SetStateAction<TabsState>>,
+  currentPath: string,
+  requestedPath?: string,
+) {
+  setState((previous) => openTab(previous, requestedPath ?? currentPath));
+}
+
+function revealInTab(
+  path: string,
+  id: string | undefined,
+  currentPath: string,
+  actions: {
+    noteNavigation(id: string | undefined): void;
+    prepareReveal: DirectoryLoader["prepareReveal"];
+    loadTab: DirectoryLoader["loadTab"];
+    setState: Dispatch<SetStateAction<TabsState>>;
+  },
+) {
+  actions.noteNavigation(id);
+  if (id === undefined) return;
+  const parent = parentOf(path);
+  actions.prepareReveal(id, parent, nameOf(path));
+  if (parent === currentPath) actions.loadTab(id, parent);
+  else
+    actions.setState((previous) =>
+      navigateActivePane(previous, (pane) => ({
+        ...pane,
+        path: parent,
+        entries: [],
+        cursorIndex: 0,
+      })),
+    );
 }

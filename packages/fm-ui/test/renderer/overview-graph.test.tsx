@@ -11,7 +11,7 @@ afterEach(cleanup);
 async function graph() {
   installBridge();
   render(<App startPath="/home/jc" />);
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   return screen.findByTestId("connected-groups");
 }
 it("shows basenames separately from ancestor paths in graph headers", async () => {

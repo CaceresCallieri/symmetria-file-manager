@@ -91,6 +91,7 @@ export interface FileOps {
   open(): void;
   /** Hand the entry at this index to the desktop, whatever is marked. */
   openAt(index: number): void;
+  openAbsolute(path: string): void;
   /**
    * Put something about the marked entries — or the cursor — on the clipboard.
    *
@@ -303,6 +304,7 @@ export function useFileOps(tabs: Tabs): FileOps {
     },
     requestRename,
     requestCreate: () => setModal({ kind: "create" }),
+    openAbsolute: openOne,
     open: () => {
       const target = targets[0];
       if (target !== undefined) openOne(target);

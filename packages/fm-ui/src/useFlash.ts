@@ -56,6 +56,8 @@ export interface Flash {
   readonly labels: ColumnLabels;
   /** Begin a session, remembering where the cursor is. */
   start(): void;
+  /** Discard a session when its tab or view loses ownership; do not restore its cursor. */
+  clear(): void;
   /**
    * Tell the hook which rows one column has on screen.
    *
@@ -405,6 +407,11 @@ export function useFlash(host: FlashHost): Flash {
     [],
   );
 
+  const clear = useCallback(() => {
+    refs.current.live = null;
+    setSession(null);
+  }, []);
+
   const start = useCallback(() => {
     const { host: current } = refs.current;
     refs.current.restoreTo = {
@@ -433,5 +440,5 @@ export function useFlash(host: FlashHost): Flash {
 
   const chrome = useMemo(() => chromeOf(session), [session]);
 
-  return { active: session !== null, chrome, labels, start, reportVisibleRange, onKey };
+  return { active: session !== null, chrome, labels, start, clear, reportVisibleRange, onKey };
 }

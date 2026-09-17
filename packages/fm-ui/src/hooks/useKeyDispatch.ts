@@ -115,9 +115,42 @@ function routeKey(
   context: KeyContext,
   flash: KeyDispatchOptions["onFlashKey"],
 ): KeyOutcome {
-  if (event.repeat && !mode.flashActive && matchBinding(key, context)?.id === "overview.flash")
-    return { kind: "unhandled" };
+  // Tree toolbar controls retain native activation. Otherwise Enter on Include
+  // opened the selected file and prevented the focused button's default action.
+  if (nativeControlActivation(event, context, mode)) return { kind: "notOurs" };
+  if (repeatedFlash(event, key, mode, context)) return { kind: "unhandled" };
   const outcome = handleKey(key, mode, context);
   if (outcome.kind !== "flash" || flash?.(event) !== false) return outcome;
   return handleKey(key, { ...mode, flashActive: false }, context);
+}
+
+function nativeControlActivation(event: KeyboardEvent, context: KeyContext, mode: CascadeMode) {
+  if (mode.modalOpen || mode.flashActive || mode.chordPrefix) return false;
+  if (!isPlainActivation(event)) return false;
+  if (!(event.target instanceof Element)) return false;
+  const selector =
+    context.view === "tree"
+      ? "button, summary"
+      : ".overview-toolbar button, .overview-toolbar summary";
+  return event.target.closest(selector) !== null;
+}
+
+function isPlainActivation(event: KeyboardEvent) {
+  return (
+    ![event.ctrlKey, event.altKey, event.metaKey, event.shiftKey].some(Boolean) &&
+    ["Enter", " "].includes(event.key)
+  );
+}
+
+function repeatedFlash(
+  event: KeyboardEvent,
+  key: KeyEvent,
+  mode: CascadeMode,
+  context: KeyContext,
+) {
+  return (
+    event.repeat &&
+    !mode.flashActive &&
+    ["overview.flash", "flash.enter"].includes(matchBinding(key, context)?.id ?? "")
+  );
 }

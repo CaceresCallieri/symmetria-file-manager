@@ -59,6 +59,7 @@ export class OverviewSession {
     private readonly showHidden: boolean,
     private readonly changed: (snapshot: OverviewSnapshot) => void,
     seed?: OverviewSnapshot,
+    private readonly automaticDepth: number = OVERVIEW_LIMITS.automaticDepth,
   ) {
     for (const [path, folder] of seed?.folders ?? []) this.folders.set(path, folder);
     this.queue.push({ path: root, depth: 0, refresh: false });
@@ -212,7 +213,7 @@ export class OverviewSession {
       const path = joinPath(folder.path, entry.name);
       if (!children.has(path) || this.folders.has(path)) continue;
       const depth = folder.depth + 1;
-      const status = childStatus(entry.name, depth, recursive);
+      const status = childStatus(entry.name, depth, recursive, this.automaticDepth);
       this.folders.set(path, { path, depth, entries: [], status });
       if (status === "Queued") this.queue.push({ path, depth, refresh: false });
     }
@@ -277,8 +278,13 @@ function canRevalidate(folder: OverviewFolder): boolean {
     (folder.status === "Traversal budget reached" && folder.entries.length > 0)
   );
 }
-function childStatus(name: string, depth: number, recursive: boolean): string {
+function childStatus(
+  name: string,
+  depth: number,
+  recursive: boolean,
+  automaticDepth: number,
+): string {
   if (EXCLUSIONS.some((excluded) => excluded === name)) return "Excluded by scope";
-  if (depth >= OVERVIEW_LIMITS.automaticDepth) return "Depth limit reached";
+  if (depth >= automaticDepth) return "Depth limit reached";
   return recursive ? "Queued" : "Not loaded";
 }

@@ -327,7 +327,9 @@ it("spec: reopening the reader on a different entry shows only that entry's cont
 });
 
 it("spec: help advertises Expand preview with its Ctrl+Enter keycap", async () => {
-  await openedAtHome();
+  // The help lists only the bindings whose `when` holds, so the cursor must
+  // sit on a file: on a directory the row is correctly absent.
+  await moveToNotes();
   fireEvent.keyDown(window, { key: "?", shiftKey: true });
   const help = await screen.findByTestId("help-overlay");
   const rows = within(help).getAllByTestId("help-row");

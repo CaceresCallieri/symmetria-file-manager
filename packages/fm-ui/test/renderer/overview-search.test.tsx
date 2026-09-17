@@ -30,7 +30,7 @@ async function open() {
   await waitFor(() =>
     expect(screen.getByTestId("column-current").textContent).toContain("projects"),
   );
-  fireEvent.keyDown(window, { key: "O", shiftKey: true });
+  fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   await screen.findByTestId("connected-groups");
   await waitFor(() => expect(screen.queryByText("Loading…")).toBeNull());
   return { ...log, reads };
@@ -190,7 +190,7 @@ it.each(["close", "focus"])("resets search across a %s boundary", async (boundar
   confirm("projects");
   if (boundary === "close") {
     fireEvent.keyDown(window, { key: "Escape" });
-    fireEvent.keyDown(window, { key: "O", shiftKey: true });
+    fireEvent.keyDown(window, { key: "o", ctrlKey: true });
   } else {
     screen.getByText("Details").closest("details")?.setAttribute("open", "");
     fireEvent.click(screen.getByRole("button", { name: "Focus here" }));
