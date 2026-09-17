@@ -3,8 +3,9 @@ import { CHORD_GROUPS, groupFor } from "@symmetria/fm-core/keys/chords";
 import { isSuppressedInPicker } from "@symmetria/fm-core/keys/dispatch";
 import { bindingsFor, HELP_GROUPS, MODES } from "@symmetria/fm-core/keys/registry";
 import type { KeyContext } from "@symmetria/fm-core/keys/types";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { useDialogFocus } from "../hooks/useDialogFocus.ts";
+import { isEscape, useOverlayCloseKeys } from "../hooks/useOverlayCloseKeys.ts";
 
 export interface HelpOverlayProps {
   readonly context: KeyContext;
@@ -29,15 +30,10 @@ export function HelpOverlay({ context, bookmarks, onClose }: HelpOverlayProps) {
   useDialogFocus(panel);
   // A modal handles its own Escape. The cascade reports `modal` and does
   // nothing, which is what makes "the modal handles it" true rather than a
-  // claim — if this listener were missing, the help would be uncloseable by
-  // keyboard in a keyboard-first application.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  // claim — without this the help would be uncloseable by keyboard in a
+  // keyboard-first application. Nothing sits behind the help, so it does not
+  // consume the key.
+  useOverlayCloseKeys(onClose, isEscape);
 
   const bindings = bindingsFor(context.view);
   const cursorIsImage = context.state.cursorEntry?.isImage === true;

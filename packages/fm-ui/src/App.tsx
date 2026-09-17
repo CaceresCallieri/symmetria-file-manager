@@ -22,7 +22,7 @@ import { MillerColumns } from "./components/MillerColumns.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
 import { PathBar } from "./components/PathBar.tsx";
 import type { PreviewPaneProps } from "./components/preview/PreviewPane.tsx";
-import { ReaderOverlay } from "./components/ReaderOverlay.tsx";
+import { type ReaderDescription, ReaderOverlay } from "./components/ReaderOverlay.tsx";
 import type { SearchFieldProps } from "./components/SearchField.tsx";
 import { type RenderMode, StatusBar } from "./components/StatusBar.tsx";
 import { TabBar } from "./components/TabBar.tsx";
@@ -262,9 +262,12 @@ function activateAt(tabs: Tabs, ops: FileOps, index: number): void {
  *
  * A component rather than two conditionals inside `App`, for the reason the
  * gate keeps making: a component is measured as one function, and `App` reached
- * a cognitive 16 against a bound of 15 the moment the picker was wired in. They
- * belong together anyway — both are gated by the same `modalOpen`, so only one
- * can ever be showing.
+ * a cognitive 16 against a bound of 15 the moment the picker was wired in.
+ *
+ * The four — the reader, the finder, the help sheet and the picker's own — are
+ * all behind the one `modalOpen` gate, so at most one is ever open. The reader
+ * is tested first because it is the only one that can be open while an
+ * operation dialog arrives asynchronously behind it.
  */
 function Overlays({
   modes,
@@ -273,6 +276,7 @@ function Overlays({
   directory,
   renderDocuments,
   pane,
+  description,
   onNavigate,
   onReveal,
 }: {
@@ -284,11 +288,13 @@ function Overlays({
   /** Passed through to the finder's preview, as the pane's own preview gets it. */
   readonly renderDocuments: boolean;
   readonly pane: PreviewPaneProps | null;
+  /** What the reader's header names. Beside the pane, never inside it. */
+  readonly description: ReaderDescription | null;
   onNavigate(path: string): void;
   onReveal(path: string): void;
 }) {
   if (modes.readerOpen) {
-    return <ReaderOverlay pane={pane} onClose={modes.closeReader} />;
+    return <ReaderOverlay pane={pane} description={description} onClose={modes.closeReader} />;
   }
   if (modes.finderOpen) {
     return (
@@ -405,6 +411,8 @@ export function App(props: AppProps = {}) {
 
   return (
     <>
+      {/* A named helper for a two-term boolean: it keeps `App` under the
+        cognitive-complexity bound the health gate enforces. Do not inline it. */}
       <main className="app" inert={columnsAreInert(overview.root, modes.readerOpen)}>
         <TabBar
           visible={tabs.showBar}
@@ -475,6 +483,7 @@ export function App(props: AppProps = {}) {
         directory={tabs.pane.path}
         renderDocuments={tabs.renderDocuments}
         pane={previewPanes.reader}
+        description={previewing.preview.description}
         onNavigate={tabs.navigate}
         onReveal={tabs.reveal}
       />

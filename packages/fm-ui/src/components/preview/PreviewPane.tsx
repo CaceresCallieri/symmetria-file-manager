@@ -1,6 +1,6 @@
 import type { EntrySummary } from "@symmetria/fm-core/entry";
 import { humanSize } from "@symmetria/fm-core/format";
-import type { PreviewRoute, PreviewTarget, RenderableAs } from "@symmetria/fm-core/preview/route";
+import type { PreviewRoute, RenderableAs } from "@symmetria/fm-core/preview/route";
 import { FileIcon } from "@symmetria/fm-search/ui";
 import { useCallback, useEffect, useState } from "react";
 import { ROW_HEIGHT, type VisibleRange } from "../FileList.tsx";
@@ -31,8 +31,6 @@ const NO_LABELS: ReadonlyMap<number, FlashRowLabel> = new Map();
 
 export interface PreviewPaneProps {
   readonly variant?: PreviewVariant;
-  /** Facts from the same describe reply as the route, without another read. */
-  readonly description?: Pick<PreviewTarget, "name" | "mime"> | null;
   /**
    * Flash labels for a previewed DIRECTORY's rows, by index.
    *
@@ -168,7 +166,7 @@ function textual(
   variant: PreviewVariant,
 ) {
   if (renderAs === "markdown") return <MarkdownPreview path={path} variant={variant} />;
-  if (renderAs === "html") return <HtmlPreview path={path} />;
+  if (renderAs === "html") return <HtmlPreview path={path} variant={variant} />;
   return language === null ? (
     <TextPreview path={path} variant={variant} />
   ) : (

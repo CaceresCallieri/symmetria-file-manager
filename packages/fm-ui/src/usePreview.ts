@@ -2,6 +2,7 @@ import { isFailure } from "@symmetria/fm-core/contract";
 import type { MimeTables } from "@symmetria/fm-core/mime";
 import {
   type PreviewRoute,
+  type PreviewTarget,
   type RenderableAs,
   renderableAs,
   routePreview,
@@ -82,7 +83,14 @@ export const RENDERER_TABLES: MimeTables = {
 };
 
 export interface Preview {
-  readonly description: NonNullable<PreviewPaneProps["description"]> | null;
+  /**
+   * Facts from the same describe reply as the route, without another read.
+   *
+   * Typed off `PreviewTarget` directly. The reader's header is the only
+   * consumer, and `PreviewPane` never reads it — routing it through the pane's
+   * prop type would make that type a transport bag.
+   */
+  readonly description: Pick<PreviewTarget, "name" | "mime"> | null;
   readonly route: PreviewRoute;
   /** The path the route describes, so a consumer can read the file itself. */
   readonly path: string | null;
@@ -198,7 +206,6 @@ export function usePreviewPane(cursorPath: string | null, renderDocuments: boole
 
   const pane = useMemo<PreviewPaneProps>(
     () => ({
-      description: preview.description,
       route: preview.route,
       path: preview.path,
       size: preview.size,

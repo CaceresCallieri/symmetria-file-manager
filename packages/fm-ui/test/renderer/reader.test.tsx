@@ -8,12 +8,14 @@
  * the behavior: the registry, modal cascade, preview pane, and focus return
  * must work as one path.
  */
-import { BRIDGE_KEY, type Bridge } from "@symmetria/fm-core/bridge";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
 import { App } from "../../src/App.tsx";
-import { type BridgeLog, cursorIn, installBridge, namesIn } from "./support.ts";
+import { type BridgeLog, cursorIn, installBridge, installFilePreview, namesIn } from "./support.ts";
+
+/** The one file these tests preview. */
+const NOTES = "/home/jc/notes.txt";
 
 let log: BridgeLog;
 
@@ -39,45 +41,8 @@ async function openReader(): Promise<HTMLElement> {
   return screen.findByTestId("reader");
 }
 
-/** Keep the real listing and router; supply file bytes and MIME at the bridge boundary. */
-function installNotesPreview(mime: string, contents = ""): void {
-  const bridge = window[BRIDGE_KEY];
-  if (!bridge) throw new Error("The fixture bridge must be installed first");
-  const replacement: Bridge = {
-    ...bridge,
-    describe: (request) => {
-      const { path } = request as { path: string };
-      if (path !== "/home/jc/notes.txt") return bridge.describe(request);
-      return Promise.resolve({
-        ok: true,
-        value: {
-          path,
-          name: "notes.txt",
-          isDirectory: false,
-          entryCount: 0,
-          entries: [],
-          size: contents.length,
-          mime,
-          head: new TextEncoder().encode(contents.slice(0, 64)),
-        },
-      });
-    },
-    readText: (request) => {
-      const { path, maxBytes } = request as { path: string; maxBytes: number };
-      if (path !== "/home/jc/notes.txt") return bridge.readText(request);
-      // These fixtures are ASCII, so one character is one byte.
-      const text = contents.slice(0, maxBytes);
-      return Promise.resolve({
-        ok: true,
-        value: { text, bytesRead: text.length, truncated: text.length < contents.length },
-      });
-    },
-  };
-  Object.defineProperty(window, BRIDGE_KEY, { value: replacement, configurable: true });
-}
-
 it("guard: closing the reader restores silent autoplaying column video without controls", async () => {
-  installNotesPreview("video/mp4");
+  installFilePreview(NOTES, "video/mp4");
   await moveToNotes();
   await screen.findByTestId("preview-video-element");
   fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
@@ -96,7 +61,7 @@ it("guard: closing the reader restores silent autoplaying column video without c
 });
 
 it("regression: focus that leaves the page into the PDF embed comes back to the reader", async () => {
-  installNotesPreview("application/pdf", "%PDF-1.7");
+  installFilePreview(NOTES, "application/pdf", "%PDF-1.7");
   const reader = await openReader();
   const embed = await within(reader).findByTestId("preview-document-embed");
   // A plugin that takes keyboard focus makes the embed the active element and
@@ -111,7 +76,7 @@ it("regression: focus that leaves the page into the PDF embed comes back to the 
 });
 
 it("guard: the reader preserves the column PDF route and embed source", async () => {
-  installNotesPreview("application/pdf", "%PDF-1.7");
+  installFilePreview(NOTES, "application/pdf", "%PDF-1.7");
   await moveToNotes();
   const columnEmbed = await screen.findByTestId("preview-document-embed");
   const source = columnEmbed.getAttribute("src");
@@ -160,7 +125,7 @@ it("guard: closing the reader returns j and k to navigation and leaves PageDown 
 it.each([false, true])(
   "guard: text truncation follows the read cap across reader open and close (capped=%s)",
   async (capped) => {
-    installNotesPreview("text/plain", capped ? "x".repeat(600_000) : "complete text");
+    installFilePreview(NOTES, "text/plain", capped ? "x".repeat(600_000) : "complete text");
     await moveToNotes();
     const column = await screen.findByTestId("preview-text");
     expect(within(column).queryByTestId("preview-truncated") !== null).toBe(capped);

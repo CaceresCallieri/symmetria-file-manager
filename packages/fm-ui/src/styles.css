@@ -369,18 +369,21 @@ kbd {
 
 /* The reader is the whole window while it is open, so the focused panel and
    the focused scroll surface need no ring to show where focus is; the browser's
-   default outline drew a frame around the entire reader. */
-.reader:focus,
-.reader:focus-visible {
+   default outline drew a frame around the entire reader.
+
+   `:focus-visible` matches a strict subset of `:focus`, so it needs no line of
+   its own. Do NOT merge these two rules into one selector list either:
+   `theme.test.ts` requires every comma member of a selector containing
+   `.preview-pane--reader` to start with it. */
+.reader:focus {
   outline: none;
 }
 
-.preview-pane--reader [data-scrolls]:focus,
-.preview-pane--reader [data-scrolls]:focus-visible {
+.preview-pane--reader [data-scrolls]:focus {
   outline: none;
 }
 
-.reader .reader__header {
+.reader__header {
   display: flex;
   flex: 0 0 auto;
   gap: var(--reader-header-gap);
@@ -391,7 +394,7 @@ kbd {
   overflow: hidden;
 }
 
-.reader .reader__name {
+.reader__name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

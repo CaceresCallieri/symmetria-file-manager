@@ -205,7 +205,9 @@ function PreviewSlot({
   flashActive,
   onVisibleRange,
 }: PreviewSlotProps) {
+  // `null` is RESERVED: another surface — the reader — owns the preview now.
   if (preview === null) return <div className="list" data-testid="preview-placeholder" />;
+  // `undefined` is EMPTY: nothing has resolved yet, so the slot names the cursor.
   if (preview === undefined) {
     return (
       <div className="list" data-testid="column-preview">

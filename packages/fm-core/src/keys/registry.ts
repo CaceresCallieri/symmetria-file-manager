@@ -463,6 +463,11 @@ export const MILLER_ONLY: readonly Binding[] = [
     label: "Expand preview",
     icon: "fullscreen",
     group: "Navigation",
+    // This row replaces `miller.contextMenu`, row 3 of MILLER_ONLY in
+    // `docs/electron-transition/01-navigation-and-keyboard.md`, which still
+    // specifies the ported Qt behaviour for Ctrl+Enter — read that divergence
+    // here rather than as a dropped row.
+    //
     // Keep this condition outside run so Ctrl+Enter on a directory falls
     // through without consuming the key.
     when: (ctx) => ctx.state.cursorEntry !== null && !ctx.state.cursorEntry.isDirectory,

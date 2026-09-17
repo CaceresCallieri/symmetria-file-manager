@@ -182,6 +182,7 @@ export interface KeyActions {
    * what decides which files those are.
    */
   toggleDocumentRender(): void;
+  /** Open the reader: the current file's preview, across the whole window. */
   expandPreview(): void;
   /** Open, and in a picker put the chosen path on the clipboard first. */
   openCopyingPath(): void;

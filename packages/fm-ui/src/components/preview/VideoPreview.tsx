@@ -41,6 +41,25 @@ export function VideoPreview({ path, mime, variant = "column" }: VideoPreviewPro
   const failed = failedPath === path;
 
   /**
+   * Whether showing the window again should resume playback.
+   *
+   * A ref, not a closure local. The effect below re-runs whenever `url`
+   * changes, and a grant renewal hands the SAME file a new URL — a local would
+   * reset to `true` there and quietly turn a reader pause back into "resume on
+   * show". Only a new `path` is a new intent, so only a new `path` resets it.
+   *
+   * Reset while rendering rather than from an effect of its own: the effect
+   * form only mutates a ref, so `useExhaustiveDependencies` reads `[path]` as
+   * a dependency more than the body needs and rejects it.
+   */
+  const resume = useRef(true);
+  const intentPath = useRef(path);
+  if (intentPath.current !== path) {
+    intentPath.current = path;
+    resume.current = true;
+  }
+
+  /**
    * Stop decoding while nobody can see it.
    *
    * The window is a resident daemon — hidden far more often than it is closed —
@@ -54,6 +73,12 @@ export function VideoPreview({ path, mime, variant = "column" }: VideoPreviewPro
    * misses the case that actually happens more often: the window is ALREADY
    * hidden and the cursor moves, mounting a fresh element whose `autoPlay`
    * starts decoding with no transition left to stop it. Found in review.
+   *
+   * The arrival path pauses the element DIRECTLY rather than calling
+   * `applyVisibility`, and that is the whole reason it does not reuse it: at
+   * mount autoplay may not have started, so the element reads as paused, and
+   * `applyVisibility` would record that initial state as a user pause and then
+   * never play the clip again.
    *
    * **It depends on `url`, and an empty dependency list is WRONG here.** The
    * first render has no `<video>` at all — the component shows "reading…" until
@@ -71,8 +96,6 @@ export function VideoPreview({ path, mime, variant = "column" }: VideoPreviewPro
     // would strip.
     if (url === null) return;
 
-    let resume = true;
-
     const applyVisibility = () => {
       const video = element.current;
       if (video === null) return;
@@ -80,14 +103,16 @@ export function VideoPreview({ path, mime, variant = "column" }: VideoPreviewPro
       if (document.visibilityState === "hidden") {
         // Reader controls make a user pause authoritative across hide/show.
         // The column has no controls and retains its continuous autoplay.
-        resume = variant === "column" || (!video.paused && !video.ended);
+        // An ended element already reports `paused`, so the ended case needs no
+        // term of its own here.
+        resume.current = variant === "column" || !video.paused;
         video.pause();
         return;
       }
       // `play()` rejects when the element has no source yet or the document is
       // still not allowed to autoplay. Neither is an error worth surfacing in a
       // preview pane, and an unhandled rejection would reach the console.
-      if (resume) void video.play().catch(() => undefined);
+      if (resume.current) void video.play().catch(() => undefined);
     };
 
     // At first mount autoplay may not have started yet. Pause without

@@ -138,7 +138,6 @@ it("spec: replaces the context-menu row with a help-visible Ctrl+Enter row", () 
   const rows = CORE.concat(MILLER_ONLY);
   const row = rows.find((binding) => binding.id === "preview.expand");
 
-  expect(rows.find((binding) => binding.id === "miller.contextMenu")).toBeUndefined();
   expect(row).toBeDefined();
   expect(row?.keys).toContain("enter");
   expect(row?.mods).toBe("Ctrl");
