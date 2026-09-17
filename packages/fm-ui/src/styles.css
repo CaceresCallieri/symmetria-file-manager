@@ -367,6 +367,24 @@ kbd {
   flex-direction: column;
 }
 
+.reader .reader__header {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--reader-header-gap);
+  padding: var(--reader-header-padding);
+  color: var(--muted-foreground);
+  background: var(--background);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.reader .reader__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--foreground);
+}
+
 .preview {
   display: flex;
   flex-direction: column;
@@ -1252,4 +1270,27 @@ kbd {
   padding: 0 4px;
   font-size: 10px;
   line-height: 1.5;
+}
+
+/* The shared .list and .preview rules already fill the reader's flex column. */
+.preview-pane--reader .preview--text,
+.preview-pane--reader .preview--code,
+.preview-pane--reader .preview--markdown {
+  overflow: auto;
+}
+
+/* The focused reader container owns native keyboard scrolling. */
+.preview-pane--reader .preview__body {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.preview-pane--reader .preview__markdown-body {
+  flex: 0 0 auto;
+}
+
+.preview-pane--reader .preview__truncated {
+  position: sticky;
+  bottom: 0;
+  background: var(--background);
 }

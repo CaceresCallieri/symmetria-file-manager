@@ -8,6 +8,7 @@
  * the behavior: the registry, modal cascade, preview pane, and focus return
  * must work as one path.
  */
+import { BRIDGE_KEY, type Bridge } from "@symmetria/fm-core/bridge";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
@@ -37,6 +38,130 @@ async function openReader(): Promise<HTMLElement> {
   fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
   return screen.findByTestId("reader");
 }
+
+/** Keep the real listing and router; supply file bytes and MIME at the bridge boundary. */
+function installNotesPreview(mime: string, contents = ""): void {
+  const bridge = window[BRIDGE_KEY];
+  if (!bridge) throw new Error("The fixture bridge must be installed first");
+  const replacement: Bridge = {
+    ...bridge,
+    describe: (request) => {
+      const { path } = request as { path: string };
+      if (path !== "/home/jc/notes.txt") return bridge.describe(request);
+      return Promise.resolve({
+        ok: true,
+        value: {
+          path,
+          name: "notes.txt",
+          isDirectory: false,
+          entryCount: 0,
+          entries: [],
+          size: contents.length,
+          mime,
+          head: new TextEncoder().encode(contents.slice(0, 64)),
+        },
+      });
+    },
+    readText: (request) => {
+      const { path, maxBytes } = request as { path: string; maxBytes: number };
+      if (path !== "/home/jc/notes.txt") return bridge.readText(request);
+      // These fixtures are ASCII, so one character is one byte.
+      const text = contents.slice(0, maxBytes);
+      return Promise.resolve({
+        ok: true,
+        value: { text, bytesRead: text.length, truncated: text.length < contents.length },
+      });
+    },
+  };
+  Object.defineProperty(window, BRIDGE_KEY, { value: replacement, configurable: true });
+}
+
+it("guard: closing the reader restores silent autoplaying column video without controls", async () => {
+  installNotesPreview("video/mp4");
+  await moveToNotes();
+  await screen.findByTestId("preview-video-element");
+  fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+  const reader = await screen.findByTestId("reader");
+  const readerVideo = await within(reader).findByTestId("preview-video-element");
+  expect(readerVideo.hasAttribute("controls")).toBe(true);
+  fireEvent.keyDown(window, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByTestId("reader")).toBeNull());
+
+  const columnVideo = await screen.findByTestId("preview-video-element");
+  expect(columnVideo.closest("main.app")).not.toBeNull();
+  expect(columnVideo).toHaveProperty("autoplay", true);
+  expect(columnVideo).toHaveProperty("loop", true);
+  expect(columnVideo).toHaveProperty("muted", true);
+  expect(columnVideo.hasAttribute("controls")).toBe(false);
+});
+
+it("guard: the reader preserves the column PDF route and embed source", async () => {
+  installNotesPreview("application/pdf", "%PDF-1.7");
+  await moveToNotes();
+  const columnEmbed = await screen.findByTestId("preview-document-embed");
+  const source = columnEmbed.getAttribute("src");
+  expect(source).toBe("symmetria-fm://app/__preview/%2Fhome%2Fjc%2Fnotes.txt");
+  expect(screen.getByTestId("column-preview").dataset.kind).toBe("document");
+
+  fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+  const reader = await screen.findByTestId("reader");
+  expect(within(reader).getByTestId("column-preview").dataset.kind).toBe("document");
+  const readerEmbed = await within(reader).findByTestId("preview-document-embed");
+  expect(readerEmbed.getAttribute("src")).toBe(source);
+});
+
+it.each([
+  ["image", "/home/jc/pictures", "shot.png", "0 B", "image/png", false],
+  ["markdown", "/home/jc/projects", "beta.md", "13 B", "text/markdown", true],
+])(
+  "guard: the %s reader header shows name, size, and type",
+  async (_, path, name, size, mime, move) => {
+    render(<App startPath={path} />);
+    await waitFor(() => expect(namesIn("column-current")).toContain(name));
+    if (move) fireEvent.keyDown(window, { key: "j" });
+    fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    const reader = await screen.findByTestId("reader");
+    const header = await within(reader).findByTestId("reader-header");
+    for (const fact of [name, size, mime]) expect(header.textContent).toContain(fact);
+  },
+);
+
+it("guard: closing the reader returns j and k to navigation and leaves PageDown unbound", async () => {
+  const reader = await openReader();
+  const viewer = await within(reader).findByTestId("preview-text");
+  await waitFor(() => expect(document.activeElement).toBe(viewer));
+  fireEvent.keyDown(viewer, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByTestId("reader")).toBeNull());
+
+  expect(fireEvent.keyDown(window, { key: "j" })).toBe(false);
+  expect(cursorIn("column-current")).toContain("todo.txt");
+  expect(fireEvent.keyDown(window, { key: "k" })).toBe(false);
+  expect(cursorIn("column-current")).toContain("notes.txt");
+  expect(fireEvent.keyDown(window, { key: "PageDown" })).toBe(true);
+  expect(cursorIn("column-current")).toContain("notes.txt");
+  expect(screen.queryByTestId("reader")).toBeNull();
+});
+
+it.each([false, true])(
+  "guard: text truncation follows the read cap across reader open and close (capped=%s)",
+  async (capped) => {
+    installNotesPreview("text/plain", capped ? "x".repeat(600_000) : "complete text");
+    await moveToNotes();
+    const column = await screen.findByTestId("preview-text");
+    expect(within(column).queryByTestId("preview-truncated") !== null).toBe(capped);
+
+    fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    const reader = await screen.findByTestId("reader");
+    const viewer = await within(reader).findByTestId("preview-text");
+    expect(within(viewer).queryByTestId("preview-truncated") !== null).toBe(capped);
+    if (!capped) expect(viewer.textContent).toBe("complete text");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("reader")).toBeNull());
+    const restored = await screen.findByTestId("preview-text");
+    expect(within(restored).queryByTestId("preview-truncated") !== null).toBe(capped);
+  },
+);
 
 it("spec: Ctrl+Enter on a file opens a reader containing that file's preview pane", async () => {
   const reader = await openReader();
@@ -139,6 +264,71 @@ it("spec: the reader routes an image entry to that image", async () => {
   expect(preview.dataset.kind).toBe("image");
   const image = await within(preview).findByTestId("preview-image-element");
   expect(image.getAttribute("src")).toContain(encodeURIComponent("/home/jc/pictures/shot.png"));
+});
+
+it.each([
+  ["image", "/home/jc/pictures", "shot.png", false],
+  ["text", "/home/jc", "notes.txt", true],
+])("spec: the reader marks the %s route as a reader preview", async (kind, path, name, move) => {
+  render(<App startPath={path} />);
+  await waitFor(() => expect(namesIn("column-current")).toContain(name));
+  if (move) fireEvent.keyDown(window, { key: "j" });
+  fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+  const reader = await screen.findByTestId("reader");
+  const preview = await within(reader).findByTestId("column-preview");
+  expect(preview.dataset.kind).toBe(kind);
+  expect(preview.classList.contains("preview-pane--reader")).toBe(true);
+});
+
+it.each(["text", "code", "markdown"])(
+  "spec: the reader focuses its %s scrolling viewer when it opens",
+  async (kind) => {
+    const path = kind === "text" ? "/home/jc" : "/home/jc/projects";
+    const name = kind === "text" ? "notes.txt" : "beta.md";
+    render(<App startPath={path} />);
+    await waitFor(() => expect(namesIn("column-current")).toContain(name));
+    fireEvent.keyDown(window, { key: "j" });
+    if (kind === "code") {
+      await screen.findByTestId("preview-markdown");
+      fireEvent.keyDown(window, { key: "r", ctrlKey: true });
+    }
+    fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    const reader = await screen.findByTestId("reader");
+    const viewer = await within(reader).findByTestId(`preview-${kind}`);
+    await waitFor(() => expect(document.activeElement).toBe(viewer));
+    expect(viewer.getAttribute("tabindex")).toBe("-1");
+    const cursor = cursorIn("column-current");
+    for (const key of [
+      "PageDown",
+      "PageUp",
+      "ArrowDown",
+      "ArrowUp",
+      "ArrowLeft",
+      "ArrowRight",
+      "Home",
+      "End",
+      " ",
+    ]) {
+      for (const target of [viewer, window]) {
+        const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+        fireEvent(target, event);
+        expect(event.defaultPrevented, `${kind}: ${key}`).toBe(false);
+      }
+    }
+    expect(cursorIn("column-current")).toBe(cursor);
+    expect(fireEvent.keyDown(viewer, { key: "j" })).toBe(false);
+    fireEvent.keyDown(viewer, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("reader")).toBeNull());
+  },
+);
+
+it("spec: the reader header shows the described entry name, size, and type", async () => {
+  const reader = await openReader();
+  const header = await within(reader).findByTestId("reader-header");
+
+  expect(header.textContent).toContain("notes.txt");
+  expect(header.textContent).toContain("24 B");
+  expect(header.textContent).toContain("text/plain");
 });
 
 it("spec: reopening the reader on a different entry shows only that entry's contents", async () => {

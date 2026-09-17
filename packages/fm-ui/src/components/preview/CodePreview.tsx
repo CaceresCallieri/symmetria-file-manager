@@ -1,9 +1,12 @@
+import { ScrollablePreview } from "./ScrollablePreview.tsx";
 import { TruncationMarker, useFileText } from "./TextPreview.tsx";
 import { useHighlighted } from "./useHighlighted.ts";
+import type { PreviewVariant } from "./variant.ts";
 
 export interface CodePreviewProps {
   readonly path: string;
   readonly language: string;
+  readonly variant?: PreviewVariant;
 }
 
 /**
@@ -14,14 +17,14 @@ export interface CodePreviewProps {
  * is left here is the reading and the drawing. See that module for why
  * highlighting failing must never make the preview fail.
  */
-export function CodePreview({ path, language }: CodePreviewProps) {
+export function CodePreview({ path, language, variant = "column" }: CodePreviewProps) {
   const loaded = useFileText(path);
   const { html, lineCapped } = useHighlighted(loaded === null ? null : loaded.text, language);
 
   if (loaded === null) return <div data-testid="preview-loading">reading…</div>;
 
   return (
-    <div className="preview preview--code" data-testid="preview-code" data-language={language}>
+    <ScrollablePreview kind="code" variant={variant} language={language}>
       {html === null ? (
         <pre className="preview__body">{loaded.text}</pre>
       ) : (
@@ -32,6 +35,6 @@ export function CodePreview({ path, language }: CodePreviewProps) {
         <pre className="preview__body hljs" dangerouslySetInnerHTML={{ __html: html }} />
       )}
       {loaded.truncated || lineCapped ? <TruncationMarker /> : null}
-    </div>
+    </ScrollablePreview>
   );
 }

@@ -1,22 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 
 import { usePreviewUrl } from "./previewUrl.ts";
+import type { PreviewVariant } from "./variant.ts";
 
 export interface VideoPreviewProps {
   readonly path: string;
   readonly mime: string;
+  readonly variant?: PreviewVariant;
 }
 
 /**
- * A video, playing silently on a loop.
+ * A video, initially muted. The column loops; the reader offers native controls.
  *
  * Parity with the Qt build's `VideoPreview.qml`, which autoplays and loops
- * forever and attaches no audio output at all. Three of the four attributes
- * below are load-bearing and each of them fails silently when it is missing:
+ * forever and attaches no audio output at all. The column preserves that
+ * behavior; the reader lets the user control playback:
  *
  * - **`muted`** decides whether anything happens. Chromium blocks autoplay with
  *   sound, so an unmuted element refuses to start and reports nothing.
- * - **`loop`** is what makes it a preview rather than a clip that stops.
+ * - **`loop`** repeats the column preview. The reader drops it so a clip ends.
+ * - **`controls`** lets the reader pause, seek, and unmute deliberately.
  * - **`playsInline`** stops a host that honours it from going fullscreen.
  *
  * The browser does the decoding, which is why this file contains no codec
@@ -25,7 +28,7 @@ export interface VideoPreviewProps {
  * and takes the failure path below, which is the same path a file whose name
  * lies about its contents takes.
  */
-export function VideoPreview({ path, mime }: VideoPreviewProps) {
+export function VideoPreview({ path, mime, variant = "column" }: VideoPreviewProps) {
   const url = usePreviewUrl(path);
   const element = useRef<HTMLVideoElement | null>(null);
 
@@ -68,25 +71,32 @@ export function VideoPreview({ path, mime }: VideoPreviewProps) {
     // would strip.
     if (url === null) return;
 
+    let resume = true;
+
     const applyVisibility = () => {
       const video = element.current;
       if (video === null) return;
 
       if (document.visibilityState === "hidden") {
+        // Reader controls make a user pause authoritative across hide/show.
+        // The column has no controls and retains its continuous autoplay.
+        resume = variant === "column" || (!video.paused && !video.ended);
         video.pause();
         return;
       }
       // `play()` rejects when the element has no source yet or the document is
       // still not allowed to autoplay. Neither is an error worth surfacing in a
       // preview pane, and an unhandled rejection would reach the console.
-      void video.play().catch(() => undefined);
+      if (resume) void video.play().catch(() => undefined);
     };
 
-    if (document.visibilityState === "hidden") applyVisibility();
+    // At first mount autoplay may not have started yet. Pause without
+    // mistaking that initial paused state for a user pause.
+    if (document.visibilityState === "hidden") element.current?.pause();
 
     document.addEventListener("visibilitychange", applyVisibility);
     return () => document.removeEventListener("visibilitychange", applyVisibility);
-  }, [url]);
+  }, [url, variant]);
 
   if (url === null) return <div data-testid="preview-loading">reading…</div>;
 
@@ -101,14 +111,14 @@ export function VideoPreview({ path, mime }: VideoPreviewProps) {
   return (
     <div className="preview preview--video" data-testid="preview-video">
       {/* `object-fit: contain` in the stylesheet keeps the aspect ratio, which
-          is why no width or height is set here. No caption track is offered
-          because the element is muted by construction: there is no audio to
-          caption, and an empty track would be worse than none. */}
+          is why no width or height is set here. There is no external caption
+          source in the preview contract, so no empty track is invented. */}
       <video
         ref={element}
         src={url}
         autoPlay
-        loop
+        loop={variant === "column"}
+        controls={variant === "reader"}
         muted
         playsInline
         data-testid="preview-video-element"

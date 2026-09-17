@@ -1,3 +1,4 @@
+import { humanSize } from "@symmetria/fm-core/format";
 import { useEffect, useRef } from "react";
 import { useDialogFocus } from "../hooks/useDialogFocus.ts";
 import { PreviewPane, type PreviewPaneProps } from "./preview/PreviewPane.tsx";
@@ -42,9 +43,27 @@ export function ReaderOverlay({ pane, onClose }: ReaderOverlayProps) {
             Reading…
           </div>
         ) : (
-          <PreviewPane {...pane} />
+          <>
+            <ReaderHeader pane={pane} />
+            <PreviewPane {...pane} variant="reader" />
+          </>
         )}
       </div>
+    </div>
+  );
+}
+
+function ReaderHeader({ pane }: { readonly pane: PreviewPaneProps }) {
+  const description = pane.description;
+  if (description == null) return null;
+  const type = description.mime ?? "unknown type";
+  return (
+    <div className="reader__header" data-testid="reader-header">
+      <span className="reader__name" title={description.name}>
+        {description.name}
+      </span>
+      <span>{humanSize(pane.size)}</span>
+      <span>{type}</span>
     </div>
   );
 }

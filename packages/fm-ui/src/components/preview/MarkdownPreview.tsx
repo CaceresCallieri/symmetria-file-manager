@@ -5,11 +5,14 @@ import remarkGfm from "remark-gfm";
 
 import { resolveDocumentAsset } from "./markdownAssets.ts";
 import { usePreviewDirectoryUrl } from "./previewUrl.ts";
+import { ScrollablePreview } from "./ScrollablePreview.tsx";
 import { TruncationMarker, useFileText } from "./TextPreview.tsx";
 import { useHighlighted } from "./useHighlighted.ts";
+import type { PreviewVariant } from "./variant.ts";
 
 export interface MarkdownPreviewProps {
   readonly path: string;
+  readonly variant?: PreviewVariant;
 }
 
 /**
@@ -29,7 +32,7 @@ export interface MarkdownPreviewProps {
  * leaves raw HTML alone by default — no `rehype-raw` here, deliberately — so a
  * tag written in the file appears as the text it is.
  */
-export function MarkdownPreview({ path }: MarkdownPreviewProps) {
+export function MarkdownPreview({ path, variant = "column" }: MarkdownPreviewProps) {
   const loaded = useFileText(path);
   const directory = usePreviewDirectoryUrl(path);
 
@@ -41,14 +44,14 @@ export function MarkdownPreview({ path }: MarkdownPreviewProps) {
   if (loaded === null) return <div data-testid="preview-loading">reading…</div>;
 
   return (
-    <div className="preview preview--markdown" data-testid="preview-markdown">
+    <ScrollablePreview kind="markdown" variant={variant}>
       <div className="preview__markdown-body">
         <Markdown remarkPlugins={[remarkGfm]} components={components}>
           {loaded.text}
         </Markdown>
       </div>
       {loaded.truncated ? <TruncationMarker /> : null}
-    </div>
+    </ScrollablePreview>
   );
 }
 

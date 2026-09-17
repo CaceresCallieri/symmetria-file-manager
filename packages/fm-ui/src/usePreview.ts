@@ -82,6 +82,7 @@ export const RENDERER_TABLES: MimeTables = {
 };
 
 export interface Preview {
+  readonly description: NonNullable<PreviewPaneProps["description"]> | null;
   readonly route: PreviewRoute;
   /** The path the route describes, so a consumer can read the file itself. */
   readonly path: string | null;
@@ -107,6 +108,7 @@ export interface Preview {
 }
 
 const NOTHING: Preview = {
+  description: null,
   route: { kind: "none" },
   path: null,
   size: 0,
@@ -139,6 +141,7 @@ function usePreview(path: string | null): Preview {
 
         if (isFailure(reply)) {
           setPreview({
+            description: null,
             route: { kind: "none" },
             path,
             size: 0,
@@ -148,6 +151,10 @@ function usePreview(path: string | null): Preview {
           return;
         }
         setPreview({
+          description: {
+            name: reply.value.name,
+            mime: reply.value.mime,
+          },
           route: routePreview(RENDERER_TABLES, reply.value),
           path,
           size: reply.value.size,
@@ -191,6 +198,7 @@ export function usePreviewPane(cursorPath: string | null, renderDocuments: boole
 
   const pane = useMemo<PreviewPaneProps>(
     () => ({
+      description: preview.description,
       route: preview.route,
       path: preview.path,
       size: preview.size,

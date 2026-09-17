@@ -27,6 +27,26 @@ export interface KeyDispatchOptions {
   onFlashKey?: (event: KeyboardEvent) => boolean;
 }
 
+const SCROLL_KEYS = new Set([
+  "PageDown",
+  "PageUp",
+  "ArrowDown",
+  "ArrowUp",
+  "ArrowLeft",
+  "ArrowRight",
+  "Home",
+  "End",
+  " ",
+]);
+
+/** Focused reader surfaces need the browser's default scrolling action. */
+function targetScrolls(event: KeyboardEvent): boolean {
+  const target = event.target instanceof HTMLElement ? event.target : document.activeElement;
+  return (
+    target instanceof HTMLElement && target.dataset.scrolls === "true" && SCROLL_KEYS.has(event.key)
+  );
+}
+
 export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions): void {
   // The listener is attached once and reads through a ref.
   //
@@ -39,6 +59,9 @@ export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.isComposing || event.defaultPrevented) return;
+      // A modal outcome consumes all keys. Preserve native scrolling before
+      // entering the cascade; Escape and Ctrl+Enter still reach the reader.
+      if (targetScrolls(event)) return;
       const { mode: currentMode, context: ctx, onFlashKey: flash } = latest.current;
 
       // Focus wins over everything, and it is decided by the DOM rather than by

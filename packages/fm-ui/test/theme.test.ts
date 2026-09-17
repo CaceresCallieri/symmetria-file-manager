@@ -150,6 +150,63 @@ function rulesIn(css: string): Map<string, string[]> {
   return rules;
 }
 
+it("guard: the shared pane and viewer rules fill the reader's flex column", async () => {
+  const rules = rulesIn(await readFile(join(RENDERER, "styles.css"), "utf8"));
+  expect(rules.get(".reader")).toEqual(
+    expect.arrayContaining(["display: flex", "flex-direction: column", "min-height: 0"]),
+  );
+  for (const selector of [".list", ".preview"]) {
+    expect(rules.get(selector)).toEqual(expect.arrayContaining(["flex: 1", "min-height: 0"]));
+  }
+  expect(rules.get(".preview--document embed")).toEqual(
+    expect.arrayContaining(["flex: 1", "min-height: 0"]),
+  );
+});
+
+it("guard: the reader keeps the truncation notice visible above scrolled text", async () => {
+  const rules = rulesIn(await readFile(join(RENDERER, "styles.css"), "utf8"));
+  expect(rules.get(".preview-pane--reader .preview__truncated")).toEqual(
+    expect.arrayContaining(["position: sticky", "bottom: 0", "background: var(--background)"]),
+  );
+});
+
+it("guard: truncation notices become sticky only inside the reader", async () => {
+  const rules = rulesIn(await readFile(join(RENDERER, "styles.css"), "utf8"));
+  const stickyNotices = [...rules].filter(
+    ([selector, declarations]) =>
+      selector.includes(".preview__truncated") && declarations.includes("position: sticky"),
+  );
+  expect(stickyNotices.length).toBeGreaterThan(0);
+  for (const [selectors] of stickyNotices) {
+    for (const selector of selectors.split(",")) {
+      expect(selector.trim().startsWith(".preview-pane--reader ")).toBe(true);
+    }
+  }
+});
+
+it("guard: images remain contained at their natural aspect ratio", async () => {
+  const rules = rulesIn(await readFile(join(RENDERER, "styles.css"), "utf8"));
+  const media = rules.get(".preview--image img,\n.preview--video video") ?? [];
+
+  expect(media).toContain("max-width: 100%");
+  expect(media).toContain("max-height: 100%");
+  expect(media).toContain("object-fit: contain");
+});
+
+it("spec: every reader-specific selector is rooted in the reader preview class", async () => {
+  const sheet = await readFile(join(RENDERER, "styles.css"), "utf8");
+  const readerRules = [...rulesIn(sheet)].filter(([selector]) =>
+    selector.includes(".preview-pane--reader"),
+  );
+
+  expect(readerRules.length).toBeGreaterThan(0);
+  for (const [selector] of readerRules) {
+    for (const member of selector.split(",")) {
+      expect(member.trim().startsWith(".preview-pane--reader")).toBe(true);
+    }
+  }
+});
+
 /** The value `tokens.css` declares for one custom property. */
 function declaredValue(tokens: string, name: string): string | undefined {
   return new RegExp(`^\\s*${name}:\\s*([^;]+);`, "m").exec(tokens)?.[1]?.trim();

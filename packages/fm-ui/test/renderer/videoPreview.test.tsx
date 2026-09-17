@@ -117,6 +117,44 @@ describe("VideoPreview", () => {
   });
 });
 
+it("spec: reader video has controls and no loop while column video stays muted and looping", async () => {
+  const columnProps = {
+    route: { kind: "video", mime: "video/mp4" } as const,
+    path: "/home/jc/Videos/clip.mp4",
+    size: 1024,
+  };
+  const readerProps = { ...columnProps, variant: "reader" as const };
+  const view = render(<PreviewPane {...columnProps} />);
+
+  const columnVideo = await screen.findByTestId("preview-video-element");
+  expect(columnVideo.hasAttribute("controls")).toBe(false);
+  expect(columnVideo).toHaveProperty("muted", true);
+  expect(columnVideo).toHaveProperty("loop", true);
+
+  view.rerender(<PreviewPane {...readerProps} />);
+  const readerVideo = await screen.findByTestId("preview-video-element");
+  expect(readerVideo.hasAttribute("controls")).toBe(true);
+  expect(readerVideo).toHaveProperty("muted", true);
+  expect(readerVideo).toHaveProperty("loop", false);
+});
+
+it("guard: omitting the variant keeps the column pane and video contract", async () => {
+  render(
+    <PreviewPane
+      route={{ kind: "video", mime: "video/mp4" }}
+      path="/home/jc/Videos/clip.mp4"
+      size={1024}
+    />,
+  );
+
+  const pane = screen.getByTestId("column-preview");
+  const video = await screen.findByTestId("preview-video-element");
+  expect(pane.classList.contains("preview-pane--reader")).toBe(false);
+  expect(video.hasAttribute("controls")).toBe(false);
+  expect(video).toHaveProperty("muted", true);
+  expect(video).toHaveProperty("loop", true);
+});
+
 describe("guards", () => {
   it("does not start decoding when it mounts into an already-hidden window", async () => {
     // Found in review. The listener alone covers "playing, then hidden" and
@@ -172,6 +210,50 @@ describe("guards", () => {
 
     expect(screen.queryByTestId("preview-unbuilt")).toBeNull();
   });
+});
+
+it.each([
+  ["paused", true, false, false],
+  ["ended", true, true, false],
+  ["playing", false, false, true],
+])(
+  "guard: reader video that was %s preserves playback intent across hide/show",
+  async (_, paused, ended, resumes) => {
+    render(<VideoPreview path="/home/jc/Videos/clip.mp4" mime="video/mp4" variant="reader" />);
+    const video = (await screen.findByTestId("preview-video-element")) as HTMLVideoElement;
+    Object.defineProperty(video, "paused", { value: paused, configurable: true });
+    Object.defineProperty(video, "ended", { value: ended, configurable: true });
+    const pause = vi.spyOn(video, "pause").mockImplementation(() => undefined);
+    const play = vi.spyOn(video, "play").mockImplementation(() => Promise.resolve());
+    try {
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+      fireEvent(document, new Event("visibilitychange"));
+      expect(pause).toHaveBeenCalledOnce();
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+      fireEvent(document, new Event("visibilitychange"));
+      expect(play).toHaveBeenCalledTimes(resumes ? 1 : 0);
+    } finally {
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    }
+  },
+);
+
+it("guard: reader video mounted hidden preserves its initial autoplay request", async () => {
+  Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+  const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+  const play = vi
+    .spyOn(HTMLMediaElement.prototype, "play")
+    .mockImplementation(() => Promise.resolve());
+  try {
+    render(<VideoPreview path="/home/jc/Videos/clip.mp4" mime="video/mp4" variant="reader" />);
+    await screen.findByTestId("preview-video-element");
+    expect(pause).toHaveBeenCalled();
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    fireEvent(document, new Event("visibilitychange"));
+    expect(play).toHaveBeenCalledOnce();
+  } finally {
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+  }
 });
 
 describe("the extracted preview-URL hook", () => {
