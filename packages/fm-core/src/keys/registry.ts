@@ -456,20 +456,17 @@ export const MILLER_ONLY: readonly Binding[] = [
     run: (ctx) => ctx.actions.enterDirectory(),
   },
   {
-    id: "miller.contextMenu",
+    id: "preview.expand",
     keys: ["enter"],
     mods: "Ctrl",
     keycap: "⌃⏎",
-    label: "Context menu",
-    icon: "more_horiz",
+    label: "Expand preview",
+    icon: "fullscreen",
     group: "Navigation",
-    // A deliberate deviation from the original, which carried this same test
-    // INSIDE its run body. There it consumed Ctrl+Enter on a directory and then
-    // did nothing; as a `when` the key falls through instead, which is what the
-    // registry's own contract says a false condition means. Nothing else claims
-    // Ctrl+Enter today, so the visible behaviour is unchanged.
+    // Keep this condition outside run so Ctrl+Enter on a directory falls
+    // through without consuming the key.
     when: (ctx) => ctx.state.cursorEntry !== null && !ctx.state.cursorEntry.isDirectory,
-    run: (ctx) => ctx.actions.openContextMenu(),
+    run: (ctx) => ctx.actions.expandPreview(),
   },
   {
     id: "miller.shiftEnter",

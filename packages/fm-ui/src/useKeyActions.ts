@@ -1,7 +1,7 @@
 import { isReservedLetter, labelFor } from "@symmetria/fm-core/bookmarks";
 import type { BookmarkSubMode, KeyActions, KeyState } from "@symmetria/fm-core/keys/types";
 import { boundaryIndex, cursorEntry, isDirectoryEntry, joinPath } from "@symmetria/fm-core/pane";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { Bookmarks } from "./useBookmarks.ts";
 import type { FileOps } from "./useFileOps.ts";
 import type { Picker } from "./usePicker.ts";
@@ -30,6 +30,8 @@ interface KeyModes {
   readonly helpOpen: boolean;
   readonly zoxideOpen: boolean;
   readonly finderOpen: boolean;
+  readonly readerOpen: boolean;
+  closeReader(): void;
   readonly message: string | null;
   closeHelp(): void;
   closeZoxide(): void;
@@ -144,6 +146,9 @@ export function useKeyActions(
   const [helpOpen, setHelpOpen] = useState(false);
   const [zoxideOpen, setZoxideOpen] = useState(false);
   const [finderOpen, setFinderOpen] = useState(false);
+  const [readerOpen, setReaderOpen] = useState(false);
+  const openReader = useCallback(() => setReaderOpen(true), []);
+  const closeReader = useCallback(() => setReaderOpen(false), []);
   const [message, setMessage] = useState<string | null>(null);
 
   const actions = useMemo<KeyActions>(() => {
@@ -239,7 +244,7 @@ export function useKeyActions(
       toggleViewMode: soon("The tree view"),
       toggleHidden: () => tabs.toggleHidden(),
       toggleDocumentRender: () => tabs.toggleRenderDocuments(),
-      openContextMenu: soon("The context menu"),
+      expandPreview: openReader,
       openCopyingPath: () => {
         // **The same hole as plain Enter, one key over.** Review found it right
         // after the Enter fix landed: this handed the cursor entry to the
@@ -274,7 +279,7 @@ export function useKeyActions(
       treeToggleGitignore: soon("The tree view"),
       treeRefresh: soon("The tree view"),
     };
-  }, [tabs, ops, search, bookmarks, home, picker, toggleAudioPlayback, startFlash]);
+  }, [tabs, ops, search, bookmarks, home, picker, toggleAudioPlayback, startFlash, openReader]);
 
   const state = useMemo<KeyState>(() => {
     const entry = tabs.pane.entries[tabs.pane.cursorIndex];
@@ -314,13 +319,24 @@ export function useKeyActions(
       helpOpen,
       zoxideOpen,
       finderOpen,
+      readerOpen,
+      closeReader,
       message,
       closeHelp: () => setHelpOpen(false),
       closeZoxide: () => setZoxideOpen(false),
       closeFinder: () => setFinderOpen(false),
       clearMessage: () => setMessage(null),
     }),
-    [chordPrefix, bookmarkSubMode, helpOpen, zoxideOpen, finderOpen, message],
+    [
+      chordPrefix,
+      bookmarkSubMode,
+      helpOpen,
+      zoxideOpen,
+      finderOpen,
+      readerOpen,
+      closeReader,
+      message,
+    ],
   );
 
   return { actions, modes, state };

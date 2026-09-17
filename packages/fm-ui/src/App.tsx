@@ -21,6 +21,8 @@ import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { MillerColumns } from "./components/MillerColumns.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
 import { PathBar } from "./components/PathBar.tsx";
+import type { PreviewPaneProps } from "./components/preview/PreviewPane.tsx";
+import { ReaderOverlay } from "./components/ReaderOverlay.tsx";
 import type { SearchFieldProps } from "./components/SearchField.tsx";
 import { type RenderMode, StatusBar } from "./components/StatusBar.tsx";
 import { TabBar } from "./components/TabBar.tsx";
@@ -33,7 +35,7 @@ import { useOverviewMode } from "./overview/useOverviewMode.ts";
 import { useBookmarks } from "./useBookmarks.ts";
 import { useExternalOpen } from "./useExternalOpen.ts";
 import { type FileOps, useFileOps } from "./useFileOps.ts";
-import { type FlashHost, type PreviewedDirectory, useFlash } from "./useFlash.ts";
+import { type Flash, type FlashHost, type PreviewedDirectory, useFlash } from "./useFlash.ts";
 import { type KeyWiring, useKeyActions } from "./useKeyActions.ts";
 import { usePicker } from "./usePicker.ts";
 import { type Preview, usePreviewPane } from "./usePreview.ts";
@@ -215,7 +217,12 @@ function cascadeModeFor(
     // share it, so two can never be open at once. The zoxide list joins the
     // same gate — it is a dialog with a text field, and two of those open at
     // once would each think the keyboard was theirs.
-    modalOpen: modes.helpOpen || modes.zoxideOpen || modes.finderOpen || opsModalKind !== "none",
+    modalOpen:
+      modes.helpOpen ||
+      modes.zoxideOpen ||
+      modes.finderOpen ||
+      modes.readerOpen ||
+      opsModalKind !== "none",
     bookmarkSubMode: modes.bookmarkSubMode,
     chordPrefix: modes.chordPrefix,
     // Flash jump is a text-input mode with no input to focus: it reads the raw
@@ -251,7 +258,7 @@ function activateAt(tabs: Tabs, ops: FileOps, index: number): void {
 }
 
 /**
- * The two things that sit above the panel and take the keyboard.
+ * The overlays that sit above the panel and take the keyboard.
  *
  * A component rather than two conditionals inside `App`, for the reason the
  * gate keeps making: a component is measured as one function, and `App` reached
@@ -265,6 +272,7 @@ function Overlays({
   bookmarks,
   directory,
   renderDocuments,
+  pane,
   onNavigate,
   onReveal,
 }: {
@@ -275,9 +283,13 @@ function Overlays({
   readonly directory: string;
   /** Passed through to the finder's preview, as the pane's own preview gets it. */
   readonly renderDocuments: boolean;
+  readonly pane: PreviewPaneProps | null;
   onNavigate(path: string): void;
   onReveal(path: string): void;
 }) {
+  if (modes.readerOpen) {
+    return <ReaderOverlay pane={pane} onClose={modes.closeReader} />;
+  }
   if (modes.finderOpen) {
     return (
       <FinderOverlay
@@ -369,16 +381,17 @@ export function App(props: AppProps = {}) {
     [state, actions, overview],
   );
 
-  const flashActive = overview.root === null ? flash.active : overview.flashActive;
+  const activeFlash = flashForView(overview, flash);
+  const previewPanes = previewPanesFor(modes.readerOpen, cursorPath, previewing.pane);
   const mode = useMemo<CascadeMode>(
-    () => cascadeModeFor(modes, ops.modal.kind, search.active, flashActive),
-    [modes, ops.modal.kind, search.active, flashActive],
+    () => cascadeModeFor(modes, ops.modal.kind, search.active, activeFlash.active),
+    [modes, ops.modal.kind, search.active, activeFlash.active],
   );
 
   useKeyDispatch({
     mode,
     context,
-    onFlashKey: overview.root === null ? flash.onKey : overview.onFlashKey,
+    onFlashKey: activeFlash.onKey,
   });
 
   /**
@@ -392,7 +405,7 @@ export function App(props: AppProps = {}) {
 
   return (
     <>
-      <main className="app" inert={overview.root !== null}>
+      <main className="app" inert={columnsAreInert(overview.root, modes.readerOpen)}>
         <TabBar
           visible={tabs.showBar}
           views={tabs.views}
@@ -415,7 +428,7 @@ export function App(props: AppProps = {}) {
           onSelect={tabs.moveTo}
           onActivate={(index) => activateAt(tabs, ops, index)}
           onLeaveTo={leaveTo}
-          preview={previewing.pane}
+          preview={previewPanes.column}
         />
         <WhichKeyOverlay
           prefix={modes.chordPrefix}
@@ -461,9 +474,29 @@ export function App(props: AppProps = {}) {
         bookmarks={bookmarks.byLetter}
         directory={tabs.pane.path}
         renderDocuments={tabs.renderDocuments}
+        pane={previewPanes.reader}
         onNavigate={tabs.navigate}
         onReveal={tabs.reveal}
       />
     </>
   );
+}
+
+/** The reader and overview each own pointer interaction while visible. */
+function columnsAreInert(overviewRoot: string | null, readerOpen: boolean): boolean {
+  return overviewRoot !== null || readerOpen;
+}
+
+/** Keep the flash state and handler on the same view. */
+function flashForView(overview: ReturnType<typeof useOverviewMode>, flash: Flash) {
+  if (overview.root === null) return { active: flash.active, onKey: flash.onKey };
+  return { active: overview.flashActive, onKey: overview.onFlashKey };
+}
+
+/** Only one surface mounts a preview; the reader never shows a stale path. */
+function previewPanesFor(readerOpen: boolean, cursorPath: string | null, pane: PreviewPaneProps) {
+  return {
+    column: readerOpen ? null : pane,
+    reader: pane.path === cursorPath ? pane : null,
+  };
 }

@@ -127,10 +127,25 @@ describe("view scoping", () => {
     // count that drifts means a row was dropped in the port rather than
     // deliberately removed.
     expect(CORE).toHaveLength(28);
-    // The connected overview adds one binding to the ported table.
+    // The overview adds one row. preview.expand replaces the ported
+    // miller.contextMenu row, so that replacement leaves the count unchanged.
     expect(MILLER_ONLY).toHaveLength(21);
     expect(TREE_ONLY).toHaveLength(6);
   });
+});
+
+it("spec: replaces the context-menu row with a help-visible Ctrl+Enter row", () => {
+  const rows = CORE.concat(MILLER_ONLY);
+  const row = rows.find((binding) => binding.id === "preview.expand");
+
+  expect(rows.find((binding) => binding.id === "miller.contextMenu")).toBeUndefined();
+  expect(row).toBeDefined();
+  expect(row?.keys).toContain("enter");
+  expect(row?.mods).toBe("Ctrl");
+  expect(row?.label).toBe("Expand preview");
+  expect(row?.keycap).not.toBe("");
+  expect(row?.icon).not.toBe("");
+  expect(HELP_GROUPS).toContain(row?.group);
 });
 
 describe("the rendered-document toggle", () => {

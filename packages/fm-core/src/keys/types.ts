@@ -182,7 +182,7 @@ export interface KeyActions {
    * what decides which files those are.
    */
   toggleDocumentRender(): void;
-  openContextMenu(): void;
+  expandPreview(): void;
   /** Open, and in a picker put the chosen path on the clipboard first. */
   openCopyingPath(): void;
 

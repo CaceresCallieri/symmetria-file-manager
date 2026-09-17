@@ -265,6 +265,15 @@ body {
   background: var(--overlay-scrim);
 }
 
+.reader {
+  position: absolute;
+  inset: var(--reader-inset);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .overlay__panel {
   max-height: 80vh;
   min-width: 420px;

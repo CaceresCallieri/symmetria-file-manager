@@ -116,6 +116,18 @@ describe("the palette", () => {
   });
 });
 
+it("spec: declares one reader inset token and uses it for the full-window panel", async () => {
+  const tokens = await readFile(TOKENS, "utf8");
+  const sheet = await readFile(join(RENDERER, "styles.css"), "utf8");
+  const declarations = [...tokens.matchAll(/^\s*--reader-inset:\s*([^;]+);/gm)];
+  const readerRule = /^\.reader\s*\{[^}]*\}/m.exec(sheet)?.[0] ?? "";
+
+  expect(declarations).toHaveLength(1);
+  expect(declarations[0]?.[1]?.trim()).not.toBe("");
+  expect(readerRule).toContain("position: absolute");
+  expect(readerRule).toContain("inset: var(--reader-inset)");
+});
+
 /**
  * Every `selector { … }` block in a sheet, as sorted declaration lists.
  *
