@@ -79,7 +79,7 @@ function recorder(): Recorder {
     toggleViewMode: log("toggleViewMode"),
     toggleHidden: log("toggleHidden"),
     toggleDocumentRender: log("toggleDocumentRender"),
-    openContextMenu: log("openContextMenu"),
+    expandPreview: log("expandPreview"),
     openCopyingPath: log("openCopyingPath"),
     tabNew: log("tabNew"),
     tabClose: log("tabClose"),

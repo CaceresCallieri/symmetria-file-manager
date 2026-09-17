@@ -2,6 +2,8 @@ import { isFailure } from "@symmetria/fm-core/contract";
 import { useEffect, useState } from "react";
 
 import { readFileText } from "../../bridge.ts";
+import { ScrollablePreview } from "./ScrollablePreview.tsx";
+import type { PreviewVariant } from "./variant.ts";
 
 /**
  * How much of a file a text preview reads.
@@ -14,6 +16,7 @@ const TEXT_CAP_BYTES = 512 * 1024;
 
 export interface TextPreviewProps {
   readonly path: string;
+  readonly variant?: PreviewVariant;
 }
 
 interface Loaded {
@@ -47,15 +50,15 @@ export function useFileText(path: string): Loaded | null {
 }
 
 /** A file's contents, scrollable and selectable. */
-export function TextPreview({ path }: TextPreviewProps) {
+export function TextPreview({ path, variant = "column" }: TextPreviewProps) {
   const loaded = useFileText(path);
   if (loaded === null) return <div data-testid="preview-loading">reading…</div>;
 
   return (
-    <div className="preview preview--text" data-testid="preview-text">
+    <ScrollablePreview kind="text" variant={variant}>
       <pre className="preview__body">{loaded.text}</pre>
       {loaded.truncated ? <TruncationMarker /> : null}
-    </div>
+    </ScrollablePreview>
   );
 }
 

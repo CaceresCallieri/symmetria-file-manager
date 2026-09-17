@@ -870,6 +870,60 @@ export function installBridge(options: BridgeOptions = {}): BridgeLog {
   };
 }
 
+/**
+ * Give ONE path a preview, keeping the rest of the fixture as it is.
+ *
+ * An override layered over the installed bridge rather than a replacement for
+ * it: the real listing, the real router and every other path keep working, and
+ * only the bytes and the MIME type of the named file are supplied here. That is
+ * what lets a suite drive a preview through the application's own wiring
+ * instead of rendering the viewer on its own.
+ *
+ * Call `installBridge` first — this reads the bridge it wraps.
+ */
+export function installFilePreview(path: string, mime: string, contents = ""): void {
+  const bridge = window[BRIDGE_KEY];
+  if (!bridge) throw new Error("The fixture bridge must be installed first");
+
+  const name = path.split("/").pop() ?? path;
+  const replacement: Bridge = {
+    ...bridge,
+    describe: (request) => {
+      const asked = request as { path: string };
+      if (asked.path !== path) return bridge.describe(request);
+      return Promise.resolve({
+        ok: true,
+        value: {
+          path,
+          name,
+          isDirectory: false,
+          entryCount: 0,
+          entries: [],
+          size: contents.length,
+          mime,
+          head: new TextEncoder().encode(contents.slice(0, 64)),
+        },
+      });
+    },
+    readText: (request) => {
+      const asked = request as { path: string; maxBytes: number };
+      if (asked.path !== path) return bridge.readText(request);
+      // These fixtures are ASCII, so one character is one byte.
+      const text = contents.slice(0, asked.maxBytes);
+      return Promise.resolve({
+        ok: true,
+        value: { text, bytesRead: text.length, truncated: text.length < contents.length },
+      });
+    },
+  };
+
+  Object.defineProperty(window, BRIDGE_KEY, {
+    value: replacement,
+    configurable: true,
+    writable: true,
+  });
+}
+
 /** The names visible in one column, in order. */
 export function namesIn(testId: string): string[] {
   return within(screen.getByTestId(testId))

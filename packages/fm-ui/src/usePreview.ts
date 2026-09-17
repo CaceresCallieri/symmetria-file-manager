@@ -2,6 +2,7 @@ import { isFailure } from "@symmetria/fm-core/contract";
 import type { MimeTables } from "@symmetria/fm-core/mime";
 import {
   type PreviewRoute,
+  type PreviewTarget,
   type RenderableAs,
   renderableAs,
   routePreview,
@@ -82,6 +83,14 @@ export const RENDERER_TABLES: MimeTables = {
 };
 
 export interface Preview {
+  /**
+   * Facts from the same describe reply as the route, without another read.
+   *
+   * Typed off `PreviewTarget` directly. The reader's header is the only
+   * consumer, and `PreviewPane` never reads it — routing it through the pane's
+   * prop type would make that type a transport bag.
+   */
+  readonly description: Pick<PreviewTarget, "name" | "mime"> | null;
   readonly route: PreviewRoute;
   /** The path the route describes, so a consumer can read the file itself. */
   readonly path: string | null;
@@ -107,6 +116,7 @@ export interface Preview {
 }
 
 const NOTHING: Preview = {
+  description: null,
   route: { kind: "none" },
   path: null,
   size: 0,
@@ -139,6 +149,7 @@ function usePreview(path: string | null): Preview {
 
         if (isFailure(reply)) {
           setPreview({
+            description: null,
             route: { kind: "none" },
             path,
             size: 0,
@@ -148,6 +159,10 @@ function usePreview(path: string | null): Preview {
           return;
         }
         setPreview({
+          description: {
+            name: reply.value.name,
+            mime: reply.value.mime,
+          },
           route: routePreview(RENDERER_TABLES, reply.value),
           path,
           size: reply.value.size,

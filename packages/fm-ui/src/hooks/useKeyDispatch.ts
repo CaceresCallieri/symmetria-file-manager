@@ -27,6 +27,36 @@ export interface KeyDispatchOptions {
   onFlashKey?: (event: KeyboardEvent) => boolean;
 }
 
+const SCROLL_KEYS = new Set([
+  "PageDown",
+  "PageUp",
+  "ArrowDown",
+  "ArrowUp",
+  "ArrowLeft",
+  "ArrowRight",
+  "Home",
+  "End",
+  " ",
+]);
+
+/**
+ * Focused reader surfaces need the browser's default scrolling action.
+ *
+ * The surface is resolved by ANCESTRY, not from the target itself. A link in a
+ * markdown viewer — or any other focusable child of the scroll container — is
+ * the event target while the container is the thing that scrolls, and matching
+ * only the target left the reader unable to scroll by keyboard from then on.
+ *
+ * The `document.activeElement` fallback covers a target that is not an element,
+ * which is how the suite dispatches a key on `window`, and also a key that
+ * targets the document while `body` holds focus.
+ */
+function targetScrolls(event: KeyboardEvent): boolean {
+  const node = event.target instanceof HTMLElement ? event.target : document.activeElement;
+  const surface = node instanceof HTMLElement ? node.closest("[data-scrolls='true']") : null;
+  return surface !== null && SCROLL_KEYS.has(event.key);
+}
+
 export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions): void {
   // The listener is attached once and reads through a ref.
   //
@@ -60,6 +90,15 @@ export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions
       // `notOurs` and `unhandled` are the two that must NOT be swallowed: one
       // belongs to a text field, the other to whatever handles it next.
       if (outcome.kind === "notOurs" || outcome.kind === "unhandled") return;
+
+      // A modal outcome consumes all keys, and the reader is the one modal that
+      // must not swallow the browser's native scrolling. Asked AFTER the
+      // cascade and only of a `modal` outcome: an early return would hand every
+      // scroll key to the DOM for any surface that ever carries `data-scrolls`,
+      // silently killing j/k navigation, flash mode and text-input routing
+      // there. Escape and Ctrl+Enter are not scroll keys, so the reader's own
+      // listener still gets them.
+      if (outcome.kind === "modal" && targetScrolls(event)) return;
 
       event.preventDefault();
     };

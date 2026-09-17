@@ -111,8 +111,11 @@ export interface MillerColumnsProps {
   /** Flash labels for every column, by index within it, and whether one runs. */
   readonly flashLabels?: ColumnLabels;
   readonly flashActive?: boolean;
-  /** What the third column shows. Absent means an empty slot. */
-  readonly preview?: PreviewPaneProps;
+  /**
+   * What the third column shows. Absent means an empty slot.
+   * Null reserves the column while another surface owns the live preview.
+   */
+  readonly preview?: PreviewPaneProps | null;
   /** Move the cursor to a row of the current column. */
   readonly onSelect?: (index: number) => void;
   /** Enter or open a row of the current column. */
@@ -178,7 +181,7 @@ interface PreviewSlotProps {
    * is on, and the caller forwards a value that may be absent rather than
    * choosing whether to pass the prop at all.
    */
-  readonly preview: PreviewPaneProps | undefined;
+  readonly preview: PreviewPaneProps | null | undefined;
   /** What the cursor is on, for the empty slot to name. */
   readonly cursorName: string;
 }
@@ -202,6 +205,9 @@ function PreviewSlot({
   flashActive,
   onVisibleRange,
 }: PreviewSlotProps) {
+  // `null` is RESERVED: another surface — the reader — owns the preview now.
+  if (preview === null) return <div className="list" data-testid="preview-placeholder" />;
+  // `undefined` is EMPTY: nothing has resolved yet, so the slot names the cursor.
   if (preview === undefined) {
     return (
       <div className="list" data-testid="column-preview">

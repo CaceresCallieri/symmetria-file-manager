@@ -20,6 +20,8 @@ import { BrowsingView } from "./components/BrowsingView.tsx";
 import { FinderPreview } from "./components/FinderPreview.tsx";
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
+import type { PreviewPaneProps } from "./components/preview/PreviewPane.tsx";
+import { type ReaderDescription, ReaderOverlay } from "./components/ReaderOverlay.tsx";
 import type { SearchFieldProps } from "./components/SearchField.tsx";
 import { type RenderMode, StatusBar } from "./components/StatusBar.tsx";
 import { TabBar } from "./components/TabBar.tsx";
@@ -222,7 +224,12 @@ function cascadeModeFor(
     // share it, so two can never be open at once. The zoxide list joins the
     // same gate — it is a dialog with a text field, and two of those open at
     // once would each think the keyboard was theirs.
-    modalOpen: modes.helpOpen || modes.zoxideOpen || modes.finderOpen || opsModalKind !== "none",
+    modalOpen:
+      modes.helpOpen ||
+      modes.zoxideOpen ||
+      modes.finderOpen ||
+      modes.readerOpen ||
+      opsModalKind !== "none",
     bookmarkSubMode: modes.bookmarkSubMode,
     chordPrefix: modes.chordPrefix,
     // Flash jump is a text-input mode with no input to focus: it reads the raw
@@ -258,13 +265,16 @@ function activateAt(tabs: Tabs, ops: FileOps, index: number): void {
 }
 
 /**
- * The two things that sit above the panel and take the keyboard.
+ * The overlays that sit above the panel and take the keyboard.
  *
  * A component rather than two conditionals inside `App`, for the reason the
  * gate keeps making: a component is measured as one function, and `App` reached
- * a cognitive 16 against a bound of 15 the moment the picker was wired in. They
- * belong together anyway — both are gated by the same `modalOpen`, so only one
- * can ever be showing.
+ * a cognitive 16 against a bound of 15 the moment the picker was wired in.
+ *
+ * The four — the reader, the finder, the help sheet and the picker's own — are
+ * all behind the one `modalOpen` gate, so at most one is ever open. The reader
+ * is tested first because it is the only one that can be open while an
+ * operation dialog arrives asynchronously behind it.
  */
 function Overlays({
   modes,
@@ -272,6 +282,8 @@ function Overlays({
   bookmarks,
   directory,
   renderDocuments,
+  pane,
+  description,
   onNavigate,
   onReveal,
 }: {
@@ -282,9 +294,15 @@ function Overlays({
   readonly directory: string;
   /** Passed through to the finder's preview, as the pane's own preview gets it. */
   readonly renderDocuments: boolean;
+  readonly pane: PreviewPaneProps | null;
+  /** What the reader's header names. Beside the pane, never inside it. */
+  readonly description: ReaderDescription | null;
   onNavigate(path: string): void;
   onReveal(path: string): void;
 }) {
+  if (modes.readerOpen) {
+    return <ReaderOverlay pane={pane} description={description} onClose={modes.closeReader} />;
+  }
   if (modes.finderOpen) {
     return (
       <FinderOverlay
@@ -384,6 +402,7 @@ export function App(props: AppProps = {}) {
   useBrowsingTransitions(context.view, millerFlash.clear);
 
   const flash = browsingFlash(context, tree, overview, millerFlash);
+  const previewPanes = previewPanesFor(modes.readerOpen, cursorPath, previewing.pane);
   const mode = useMemo<CascadeMode>(
     () => cascadeModeFor(modes, ops.modal.kind, search.active, flash.active),
     [modes, ops.modal.kind, search.active, flash.active],
@@ -406,7 +425,9 @@ export function App(props: AppProps = {}) {
 
   return (
     <>
-      <main className="app" inert={overview.root !== null}>
+      {/* A named helper for a two-term boolean: it keeps `App` under the
+        cognitive-complexity bound the health gate enforces. Do not inline it. */}
+      <main className="app" inert={columnsAreInert(overview.root, modes.readerOpen)}>
         <TabBar
           visible={tabs.showBar}
           views={tabs.views}
@@ -420,7 +441,7 @@ export function App(props: AppProps = {}) {
           model={overview.treeModel}
           onOpen={props.onOpenFile ?? ops.openAbsolute}
           matches={search.matches}
-          preview={previewing.pane}
+          preview={previewPanes.column}
           flashLabels={millerFlash.labels}
           flashActive={millerFlash.active}
           onVisibleRange={millerFlash.reportVisibleRange}
@@ -472,11 +493,26 @@ export function App(props: AppProps = {}) {
         bookmarks={bookmarks.byLetter}
         directory={tabs.pane.path}
         renderDocuments={tabs.renderDocuments}
+        pane={previewPanes.reader}
+        description={previewing.preview.description}
         onNavigate={tabs.navigate}
         onReveal={tabs.reveal}
       />
     </>
   );
+}
+
+/** The reader and overview each own pointer interaction while visible. */
+function columnsAreInert(overviewRoot: string | null, readerOpen: boolean): boolean {
+  return overviewRoot !== null || readerOpen;
+}
+
+/** Only one surface mounts a preview; the reader never shows a stale path. */
+function previewPanesFor(readerOpen: boolean, cursorPath: string | null, pane: PreviewPaneProps) {
+  return {
+    column: readerOpen ? null : pane,
+    reader: pane.path === cursorPath ? pane : null,
+  };
 }
 
 function useBrowsingTransitions(id: string, ...reset: (() => void)[]) {

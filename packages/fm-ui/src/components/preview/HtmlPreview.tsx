@@ -1,9 +1,12 @@
 import { basename } from "@symmetria/fm-core/pane";
 
 import { usePreviewDirectoryUrl } from "./previewUrl.ts";
+import { ScrollablePreview } from "./ScrollablePreview.tsx";
+import type { PreviewVariant } from "./variant.ts";
 
 export interface HtmlPreviewProps {
   readonly path: string;
+  readonly variant?: PreviewVariant;
 }
 
 /**
@@ -60,8 +63,15 @@ const FRAME_PERMISSIONS = "allow-same-origin";
  * origin, so the page cannot fetch a tracker, a remote font or a remote
  * stylesheet. That lock and this one are independent and neither is stated
  * where a reader of the other would see it: see `fileResponse.ts`.
+ *
+ * ── The reader gives it a surface like the other three textual viewers ──────
+ * It shares `ScrollablePreview`, so in the reader the wrapper is focusable and
+ * carries `data-scrolls` — otherwise the modal cascade swallows every arrow
+ * key and the page is mouse-only, which none of markdown, text or code is. The
+ * framed document still owns its own INNER scrolling: the wrapper's surface is
+ * what keeps the keys native, not what moves the page.
  */
-export function HtmlPreview({ path }: HtmlPreviewProps) {
+export function HtmlPreview({ path, variant = "column" }: HtmlPreviewProps) {
   const directory = usePreviewDirectoryUrl(path);
 
   // Nothing to point a frame at until the main process has authorised the
@@ -71,7 +81,7 @@ export function HtmlPreview({ path }: HtmlPreviewProps) {
   const url = `${directory}/${encodeURIComponent(basename(path))}`;
 
   return (
-    <div className="preview preview--html" data-testid="preview-html">
+    <ScrollablePreview kind="html" variant={variant}>
       <iframe
         className="preview__html-frame"
         data-testid="preview-html-frame"
@@ -82,6 +92,6 @@ export function HtmlPreview({ path }: HtmlPreviewProps) {
         sandbox={FRAME_PERMISSIONS}
         referrerPolicy="no-referrer"
       />
-    </div>
+    </ScrollablePreview>
   );
 }

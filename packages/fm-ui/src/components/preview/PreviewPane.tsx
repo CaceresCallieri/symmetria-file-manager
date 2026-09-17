@@ -17,6 +17,7 @@ import { MarkdownPreview } from "./MarkdownPreview.tsx";
 import { SpreadsheetPreview } from "./SpreadsheetPreview.tsx";
 import { TextPreview } from "./TextPreview.tsx";
 import { VideoPreview } from "./VideoPreview.tsx";
+import type { PreviewVariant } from "./variant.ts";
 
 /** What a previewed directory's rows need in order to join a flash session. */
 interface DirectoryFlash {
@@ -29,6 +30,7 @@ interface DirectoryFlash {
 const NO_LABELS: ReadonlyMap<number, FlashRowLabel> = new Map();
 
 export interface PreviewPaneProps {
+  readonly variant?: PreviewVariant;
   /**
    * Flash labels for a previewed DIRECTORY's rows, by index.
    *
@@ -81,6 +83,7 @@ export interface PreviewPaneProps {
  * separation is why a preview type added once appeared in both panes.
  */
 export function PreviewPane({
+  variant = "column",
   route,
   path,
   size,
@@ -111,13 +114,21 @@ export function PreviewPane({
 
   return (
     <div
-      className="list preview-pane"
+      className={`list preview-pane${variant === "reader" ? " preview-pane--reader" : ""}`}
       data-testid="column-preview"
       data-kind={route.kind}
       data-rendered={renderAs ?? undefined}
     >
       {error == null ? (
-        body(route, path, size, audioPlaying === true, rendered ? (renderAs ?? null) : null, flash)
+        body(
+          route,
+          path,
+          size,
+          audioPlaying === true,
+          rendered ? (renderAs ?? null) : null,
+          flash,
+          variant,
+        )
       ) : (
         <p className="preview__failed" data-testid="preview-error">
           {error}
@@ -134,9 +145,10 @@ function body(
   audioPlaying: boolean,
   renderAs: RenderableAs | null,
   flash: DirectoryFlash,
+  variant: PreviewVariant,
 ) {
   if (path === null || route.kind === "none") return null;
-  return contents(route, path, size, audioPlaying, renderAs) ?? notice(route, size, flash);
+  return contents(route, path, size, audioPlaying, renderAs, variant) ?? notice(route, size, flash);
 }
 
 /**
@@ -147,13 +159,18 @@ function body(
  * right to push here — "which of three ways to show text" is a decision worth
  * reading on its own.
  */
-function textual(path: string, language: string | null, renderAs: RenderableAs | null) {
-  if (renderAs === "markdown") return <MarkdownPreview path={path} />;
-  if (renderAs === "html") return <HtmlPreview path={path} />;
+function textual(
+  path: string,
+  language: string | null,
+  renderAs: RenderableAs | null,
+  variant: PreviewVariant,
+) {
+  if (renderAs === "markdown") return <MarkdownPreview path={path} variant={variant} />;
+  if (renderAs === "html") return <HtmlPreview path={path} variant={variant} />;
   return language === null ? (
-    <TextPreview path={path} />
+    <TextPreview path={path} variant={variant} />
   ) : (
-    <CodePreview path={path} language={language} />
+    <CodePreview path={path} language={language} variant={variant} />
   );
 }
 
@@ -170,6 +187,7 @@ function contents(
   size: number,
   audioPlaying: boolean,
   renderAs: RenderableAs | null,
+  variant: PreviewVariant,
 ) {
   switch (route.kind) {
     case "image":
@@ -177,7 +195,7 @@ function contents(
     case "document":
       return <DocumentPreview path={path} mime={route.mime} />;
     case "video":
-      return <VideoPreview path={path} mime={route.mime} />;
+      return <VideoPreview path={path} mime={route.mime} variant={variant} />;
     case "audio":
       return <AudioPreview path={path} mime={route.mime} playing={audioPlaying} />;
     case "spreadsheet":
@@ -192,9 +210,9 @@ function contents(
         />
       );
     case "code":
-      return textual(path, route.language, renderAs);
+      return textual(path, route.language, renderAs, variant);
     case "text":
-      return textual(path, null, renderAs);
+      return textual(path, null, renderAs, variant);
     default:
       return null;
   }

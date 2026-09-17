@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { isEscape, useOverlayCloseKeys } from "../../hooks/useOverlayCloseKeys.ts";
 import type { OpsModal } from "../../useFileOps.ts";
 
 /**
@@ -37,13 +38,7 @@ function Dialog({
   onConfirm(): void;
   readonly children?: React.ReactNode;
 }) {
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onCancel]);
+  useOverlayCloseKeys(onCancel, isEscape);
 
   return (
     <div className="overlay" data-testid={testId}>

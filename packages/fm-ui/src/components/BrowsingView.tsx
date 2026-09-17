@@ -23,7 +23,7 @@ export function BrowsingView({
   model: OverviewModel;
   onOpen(path: string): void;
   matches: ReadonlySet<number>;
-  preview: NonNullable<MillerColumnsProps["preview"]>;
+  preview: Exclude<MillerColumnsProps["preview"], undefined>;
   flashLabels: NonNullable<MillerColumnsProps["flashLabels"]>;
   flashActive: boolean;
   onVisibleRange: NonNullable<MillerColumnsProps["onVisibleRange"]>;

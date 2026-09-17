@@ -5,7 +5,7 @@ import {
   FOREIGN_DOCUMENT_TOKENS,
   SCROLLBAR_RULES,
 } from "@symmetria/fm-core/scrollbar";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 /**
  * Every colour comes from a declared token.
@@ -116,6 +116,18 @@ describe("the palette", () => {
   });
 });
 
+it("spec: declares one reader inset token and uses it for the full-window panel", async () => {
+  const tokens = await readFile(TOKENS, "utf8");
+  const sheet = await readFile(join(RENDERER, "styles.css"), "utf8");
+  const declarations = [...tokens.matchAll(/^\s*--reader-inset:\s*([^;]+);/gm)];
+  const readerRule = /^\.reader\s*\{[^}]*\}/m.exec(sheet)?.[0] ?? "";
+
+  expect(declarations).toHaveLength(1);
+  expect(declarations[0]?.[1]?.trim()).not.toBe("");
+  expect(readerRule).toContain("position: absolute");
+  expect(readerRule).toContain("inset: var(--reader-inset)");
+});
+
 /**
  * Every `selector { … }` block in a sheet, as sorted declaration lists.
  *
@@ -133,10 +145,83 @@ function rulesIn(css: string): Map<string, string[]> {
       .map((one) => one.trim().replace(/\s+/g, " "))
       .filter((one) => one !== "")
       .sort();
-    rules.set((match[1] ?? "").trim(), declarations);
+    // The selector is flattened too, so a key never depends on where the
+    // stylesheet happens to wrap a comma-separated list. A lookup that carried
+    // a literal newline failed as an opaque "expected [] to contain" the moment
+    // the file was reformatted, and pointed at the wrong file while doing it.
+    rules.set((match[1] ?? "").trim().replace(/\s+/g, " "), declarations);
   }
   return rules;
 }
+
+/**
+ * The reader's own rules, parsed once.
+ *
+ * The parse is the expensive part and `styles.css` cannot change during a run,
+ * so these five read one shared map rather than re-reading and re-parsing the
+ * whole sheet each.
+ */
+describe("the reader's stylesheet", () => {
+  let sheetRules: Map<string, string[]>;
+
+  beforeAll(async () => {
+    sheetRules = rulesIn(await readFile(join(RENDERER, "styles.css"), "utf8"));
+  });
+
+  it("guard: the shared pane and viewer rules fill the reader's flex column", () => {
+    expect(sheetRules.get(".reader")).toEqual(
+      expect.arrayContaining(["display: flex", "flex-direction: column", "min-height: 0"]),
+    );
+    for (const selector of [".list", ".preview"]) {
+      expect(sheetRules.get(selector)).toEqual(
+        expect.arrayContaining(["flex: 1", "min-height: 0"]),
+      );
+    }
+    expect(sheetRules.get(".preview--document embed")).toEqual(
+      expect.arrayContaining(["flex: 1", "min-height: 0"]),
+    );
+  });
+
+  it("guard: the reader keeps the truncation notice visible above scrolled text", () => {
+    expect(sheetRules.get(".preview-pane--reader .preview__truncated")).toEqual(
+      expect.arrayContaining(["position: sticky", "bottom: 0", "background: var(--background)"]),
+    );
+  });
+
+  it("guard: truncation notices become sticky only inside the reader", () => {
+    const stickyNotices = [...sheetRules].filter(
+      ([selector, declarations]) =>
+        selector.includes(".preview__truncated") && declarations.includes("position: sticky"),
+    );
+    expect(stickyNotices.length).toBeGreaterThan(0);
+    for (const [selectors] of stickyNotices) {
+      for (const selector of selectors.split(",")) {
+        expect(selector.trim().startsWith(".preview-pane--reader ")).toBe(true);
+      }
+    }
+  });
+
+  it("guard: images remain contained at their natural aspect ratio", () => {
+    const media = sheetRules.get(".preview--image img, .preview--video video") ?? [];
+
+    expect(media).toContain("max-width: 100%");
+    expect(media).toContain("max-height: 100%");
+    expect(media).toContain("object-fit: contain");
+  });
+
+  it("spec: every reader-specific selector is rooted in the reader preview class", () => {
+    const readerRules = [...sheetRules].filter(([selector]) =>
+      selector.includes(".preview-pane--reader"),
+    );
+
+    expect(readerRules.length).toBeGreaterThan(0);
+    for (const [selector] of readerRules) {
+      for (const member of selector.split(",")) {
+        expect(member.trim().startsWith(".preview-pane--reader")).toBe(true);
+      }
+    }
+  });
+});
 
 /** The value `tokens.css` declares for one custom property. */
 function declaredValue(tokens: string, name: string): string | undefined {

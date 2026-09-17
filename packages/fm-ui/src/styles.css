@@ -270,6 +270,15 @@ body {
   background: var(--overlay-scrim);
 }
 
+.reader {
+  position: absolute;
+  inset: var(--reader-inset);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .overlay__panel {
   max-height: 80vh;
   min-width: 420px;
@@ -361,6 +370,40 @@ kbd {
 .preview-pane {
   display: flex;
   flex-direction: column;
+}
+
+/* The reader is the whole window while it is open, so the focused panel and
+   the focused scroll surface need no ring to show where focus is; the browser's
+   default outline drew a frame around the entire reader.
+
+   `:focus-visible` matches a strict subset of `:focus`, so it needs no line of
+   its own. Do NOT merge these two rules into one selector list either:
+   `theme.test.ts` requires every comma member of a selector containing
+   `.preview-pane--reader` to start with it. */
+.reader:focus {
+  outline: none;
+}
+
+.preview-pane--reader [data-scrolls]:focus {
+  outline: none;
+}
+
+.reader__header {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--reader-header-gap);
+  padding: var(--reader-header-padding);
+  color: var(--muted-foreground);
+  background: var(--background);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.reader__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--foreground);
 }
 
 .preview {
@@ -1260,4 +1303,27 @@ kbd {
   padding: 0 4px;
   font-size: 10px;
   line-height: 1.5;
+}
+
+/* The shared .list and .preview rules already fill the reader's flex column. */
+.preview-pane--reader .preview--text,
+.preview-pane--reader .preview--code,
+.preview-pane--reader .preview--markdown {
+  overflow: auto;
+}
+
+/* The focused reader container owns native keyboard scrolling. */
+.preview-pane--reader .preview__body {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.preview-pane--reader .preview__markdown-body {
+  flex: 0 0 auto;
+}
+
+.preview-pane--reader .preview__truncated {
+  position: sticky;
+  bottom: 0;
+  background: var(--background);
 }
