@@ -112,6 +112,13 @@ async function measure() {
     throw new Error("PDF failed to load");
   }
   async function sample(mode, round) {
+    assert.equal(
+      await window.webContents.executeJavaScript(
+        "document.querySelectorAll('[data-testid=reader]').length",
+      ),
+      mode === "reader" ? 1 : 0,
+      `Expected ${mode} mode before sampling`,
+    );
     const frame = await ready();
     const documentFrame = frame.frames[0];
     const dimensions = await frame.executeJavaScript(`(() => {
@@ -148,7 +155,7 @@ async function measure() {
           active = false; observer.disconnect(); gaps.sort((a,b) => a-b);
           resolve({elapsedMs: performance.now()-start, frames: gaps.length,
             p95Ms: gaps[Math.floor(gaps.length*.95)], maxMs: gaps.at(-1),
-            over33ms: gaps.filter(gap => gap>33.4).length, longTasks, travel, maxScroll,
+            over33ms: gaps.filter(gap => Math.round(gap * 10) / 10 > 33.4).length, longTasks, travel, maxScroll,
             scrollHeight: scroller.scrollHeight, viewport: [innerWidth, innerHeight], dpr: devicePixelRatio,
             documentScrollbar: getComputedStyle(scroller,'::-webkit-scrollbar').width});
         }, 150);
@@ -170,19 +177,36 @@ async function measure() {
         (await window.webContents.capturePage()).toPNG(),
       );
   }
-  async function toggleReader() {
+  async function toggleReader(mode) {
+    const previous = viewer();
     await window.webContents.executeJavaScript(
       "window.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true}))",
     );
-    await delay(150);
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const readerCount = await window.webContents.executeJavaScript(
+        "document.querySelectorAll('[data-testid=reader]').length",
+      );
+      const current = viewer();
+      if (
+        readerCount === (mode === "reader" ? 1 : 0) &&
+        current &&
+        current !== previous &&
+        !window.webContents.mainFrame.framesInSubtree.includes(previous)
+      ) {
+        await ready();
+        return;
+      }
+      await delay(100);
+    }
+    throw new Error(`PDF viewer did not remount in ${mode} mode`);
   }
   try {
     window.webContents.send("symmetria-fm:open-path", { path: join(scratch, "fixtures") });
     for (let round = 0; round < 3; round++) {
       await sample("column", round);
-      await toggleReader();
+      await toggleReader("reader");
       await sample("reader", round);
-      await toggleReader();
+      await toggleReader("column");
     }
     assert.equal(
       await window.webContents.executeJavaScript(

@@ -83,10 +83,16 @@ uses an offscreen graphics path; the device name is not proof of GPU acceleratio
 
 Medians across three runs per mode:
 
-- Native scrollbars, column: 10.51 s workload time, 33.4 ms p95 frame interval, 24 intervals above 33.4 ms.
-- Native scrollbars, reader: 13.15 s workload time, 50.0 ms p95 frame interval, 88 intervals above 33.4 ms.
-- Shared scrollbars, column: 9.91 s workload time, 33.4 ms p95 frame interval, 15 intervals above 33.4 ms.
-- Shared scrollbars, reader: 11.56 s workload time, 33.4 ms p95 frame interval, 29 intervals above 33.4 ms.
+- Native scrollbars, column: 10.51 s workload time, 33.4 ms p95 frame interval.
+- Native scrollbars, reader: 13.15 s workload time, 50.0 ms p95 frame interval.
+- Shared scrollbars, column: 9.91 s workload time, 33.4 ms p95 frame interval.
+- Shared scrollbars, reader: 11.56 s workload time, 33.4 ms p95 frame interval.
+
+The historical JSON retains `over33ms` counts, but those counts are unreliable:
+the original comparison split equal 33.4 ms intervals through floating-point
+noise. The harness now rounds to 0.1 ms before comparison. Do not compare the
+historical counts with corrected runs. The harness also asserts each preview
+mode and waits for a new PDF frame after every transition.
 
 All six styled samples verified `6px` scrollbars in both the thumbnail and native
 document panes. Repeated Ctrl+Enter transitions returned to the Miller column.
