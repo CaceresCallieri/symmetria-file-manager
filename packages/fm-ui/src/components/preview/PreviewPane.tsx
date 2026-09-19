@@ -3,6 +3,7 @@ import { humanSize } from "@symmetria/fm-core/format";
 import type { PreviewRoute, RenderableAs } from "@symmetria/fm-core/preview/route";
 import { FileIcon } from "@symmetria/fm-search/ui";
 import { useCallback, useEffect, useState } from "react";
+import { ClipboardIndicator } from "../ClipboardIndicator.tsx";
 import { ROW_HEIGHT, type VisibleRange } from "../FileList.tsx";
 import { flashStateOf } from "../FileRow.tsx";
 import { FlashName, type FlashRowLabel } from "../FlashName.tsx";
@@ -148,7 +149,9 @@ function body(
   variant: PreviewVariant,
 ) {
   if (path === null || route.kind === "none") return null;
-  return contents(route, path, size, audioPlaying, renderAs, variant) ?? notice(route, size, flash);
+  return (
+    contents(route, path, size, audioPlaying, renderAs, variant) ?? notice(route, path, size, flash)
+  );
 }
 
 /**
@@ -232,6 +235,7 @@ function contents(
  * `false` for both would imply a cursor could live here.
  */
 interface DirectoryListingProps {
+  readonly path: string;
   readonly entries: readonly EntrySummary[];
   /** How many the directory really holds. The listing itself is capped. */
   readonly total: number;
@@ -282,7 +286,7 @@ function useListingRange(
   return attach;
 }
 
-function DirectoryListing({ entries, total, flash }: DirectoryListingProps) {
+function DirectoryListing({ path, entries, total, flash }: DirectoryListingProps) {
   const attach = useListingRange(entries.length, flash.onVisibleRange);
   const hidden = total - entries.length;
 
@@ -307,6 +311,7 @@ function DirectoryListing({ entries, total, flash }: DirectoryListingProps) {
                 <span className="row__name">
                   <FlashName name={entry.name} flash={label} />
                 </span>
+                <ClipboardIndicator directory={path} name={entry.name} />
               </div>
             );
           })}
@@ -318,9 +323,16 @@ function DirectoryListing({ entries, total, flash }: DirectoryListingProps) {
 }
 
 /** The branches that describe the entry instead of showing it. */
-function notice(route: PreviewRoute, size: number, flash: DirectoryFlash) {
+function notice(route: PreviewRoute, path: string, size: number, flash: DirectoryFlash) {
   if (route.kind === "directory") {
-    return <DirectoryListing entries={route.entries} total={route.entryCount} flash={flash} />;
+    return (
+      <DirectoryListing
+        path={path}
+        entries={route.entries}
+        total={route.entryCount}
+        flash={flash}
+      />
+    );
   }
 
   // Naming what is missing is a different statement from showing a size and

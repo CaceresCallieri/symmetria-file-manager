@@ -17,6 +17,7 @@ export interface VisibleRange {
 }
 
 export interface FileListProps {
+  readonly directory?: string;
   readonly entries: readonly FsEntry[];
   readonly cursorIndex: number;
   readonly testId: string;
@@ -120,6 +121,7 @@ function useVisibleRangeReport(
 }
 
 export function FileList({
+  directory,
   entries,
   cursorIndex,
   testId,
@@ -140,7 +142,6 @@ export function FileList({
   // exists. That also removes a blank first frame in production, not only in a
   // headless test where `getBoundingClientRect` never reports a size.
   const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
-  const attach = useCallback((node: HTMLDivElement | null) => setScrollElement(node), []);
 
   // Always mount the cursor row, whether or not it falls in the visible window.
   //
@@ -232,7 +233,7 @@ export function FileList({
   }
 
   return (
-    <div data-testid={testId} ref={attach} className="list">
+    <div data-testid={testId} ref={setScrollElement} className="list">
       <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
         {virtualizer.getVirtualItems().map((item) => {
           const entry = entries[item.index];
@@ -254,6 +255,7 @@ export function FileList({
             >
               <FileRow
                 entry={entry}
+                directory={directory}
                 isCursor={isCursor}
                 isMarked={selection.has(entry.name)}
                 isMatch={matches?.has(item.index) === true}

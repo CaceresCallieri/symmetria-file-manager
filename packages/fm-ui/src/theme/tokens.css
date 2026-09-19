@@ -55,6 +55,10 @@
   --icon-pink: #d39ab8;
   --icon-muted: #a8adb8;
 
+  /* Match the fixed clipboard colors in Qt's FmTheme.indicator. */
+  --clipboard-yank: #4caf7d;
+  --clipboard-cut: #e57373;
+
   /* ── Meaning ──────────────────────────────────────────────────────────── */
   --primary: oklch(57.1% 0.21 264);
   --destructive: oklch(63.7% 0.208 25.3);

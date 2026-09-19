@@ -115,6 +115,7 @@ function routeKey(
   context: KeyContext,
   flash: KeyDispatchOptions["onFlashKey"],
 ): KeyOutcome {
+  if (nativeOpsDialogKey(event, mode)) return { kind: "notOurs" };
   if (nativePdfControlKey(event, mode)) return { kind: "notOurs" };
   // Tree toolbar controls retain native activation. Otherwise Enter on Include
   // opened the selected file and prevented the focused button's default action.
@@ -123,6 +124,16 @@ function routeKey(
   const outcome = handleKey(key, mode, context);
   if (outcome.kind !== "flash" || flash?.(event) !== false) return outcome;
   return handleKey(key, { ...mode, flashActive: false }, context);
+}
+
+/** The modal gate must preserve native button activation and focus navigation. */
+function nativeOpsDialogKey(event: KeyboardEvent, mode: CascadeMode): boolean {
+  if (!mode.modalOpen || !(event.target instanceof Element)) return false;
+  if (!event.target.closest(".ops-dialog")) return false;
+  if (event.ctrlKey || event.altKey || event.metaKey) return false;
+  return (
+    event.key === "Tab" || (isPlainActivation(event) && event.target.closest("button") !== null)
+  );
 }
 
 /** PDF controls use native activation and Tab navigation in both preview modes. */

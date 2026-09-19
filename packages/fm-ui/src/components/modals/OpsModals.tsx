@@ -30,26 +30,37 @@ function Dialog({
   testId,
   onCancel,
   onConfirm,
+  focusConfirm = true,
   children,
 }: {
   readonly title: string;
   readonly testId: string;
   onCancel(): void;
   onConfirm(): void;
+  readonly focusConfirm?: boolean;
   readonly children?: React.ReactNode;
 }) {
   useOverlayCloseKeys(onCancel, isEscape);
+  const confirmButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (focusConfirm) confirmButton.current?.focus();
+  }, [focusConfirm]);
 
   return (
     <div className="overlay" data-testid={testId}>
-      <div className="overlay__panel">
+      <div className="overlay__panel ops-dialog">
         <h2>{title}</h2>
         {children}
         <div className="dialog__actions">
           <button type="button" onClick={onCancel}>
             Cancel
           </button>
-          <button type="button" data-testid="dialog-confirm" onClick={onConfirm}>
+          <button
+            ref={confirmButton}
+            type="button"
+            data-testid="dialog-confirm"
+            onClick={onConfirm}
+          >
             Confirm
           </button>
         </div>
@@ -91,7 +102,13 @@ function NameDialog({
   }, [selectTo]);
 
   return (
-    <Dialog title={title} testId={testId} onCancel={onCancel} onConfirm={() => onConfirm(name)}>
+    <Dialog
+      title={title}
+      testId={testId}
+      onCancel={onCancel}
+      onConfirm={() => onConfirm(name)}
+      focusConfirm={false}
+    >
       <input
         ref={field}
         value={name}
