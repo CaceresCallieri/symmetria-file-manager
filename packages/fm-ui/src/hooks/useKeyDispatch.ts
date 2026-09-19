@@ -115,6 +115,7 @@ function routeKey(
   context: KeyContext,
   flash: KeyDispatchOptions["onFlashKey"],
 ): KeyOutcome {
+  if (nativePdfControlKey(event, mode)) return { kind: "notOurs" };
   // Tree toolbar controls retain native activation. Otherwise Enter on Include
   // opened the selected file and prevented the focused button's default action.
   if (nativeControlActivation(event, context, mode)) return { kind: "notOurs" };
@@ -122,6 +123,16 @@ function routeKey(
   const outcome = handleKey(key, mode, context);
   if (outcome.kind !== "flash" || flash?.(event) !== false) return outcome;
   return handleKey(key, { ...mode, flashActive: false }, context);
+}
+
+/** PDF controls use native activation and Tab navigation in both preview modes. */
+function nativePdfControlKey(event: KeyboardEvent, mode: CascadeMode): boolean {
+  if (mode.flashActive || mode.chordPrefix) return false;
+  if (!(event.target instanceof Element)) return false;
+  if (!event.target.closest(".preview--document")) return false;
+  if ([event.ctrlKey, event.altKey, event.metaKey].some(Boolean)) return false;
+  if (event.key === "Tab") return true;
+  return isPlainActivation(event) && event.target.closest("button") !== null;
 }
 
 function nativeControlActivation(event: KeyboardEvent, context: KeyContext, mode: CascadeMode) {

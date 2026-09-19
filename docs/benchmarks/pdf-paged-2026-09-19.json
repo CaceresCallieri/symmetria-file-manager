@@ -1,0 +1,218 @@
+{
+  "method": "One 20-second PDF.js expanded-reader capture with the original 17-page Bancor PDF. Same laptop and 600 virtual finger-axis updates as the native capture. Paged preview has no thumbnail sidebar, so fit-width pages are larger. Trace category configuration differs from the first native capture. This is an exploratory comparison, not a controlled engine speed ratio or displayed FPS measurement.",
+  "traceCapture": "capture-My30Wa",
+  "electron": "41.5.0",
+  "chromium": "146.0.7680.216",
+  "frames": [
+    {
+      "role": "application",
+      "processId": 1217287,
+      "metrics": {
+        "activeJsFrameGaps": {
+          "count": 1230,
+          "maxMs": 145.5,
+          "p50Ms": 12.10000000000582,
+          "p95Ms": 18.19999999999709
+        },
+        "dpr": 1.600000023841858,
+        "elapsedMs": 20001.19999998808,
+        "finalTop": 0,
+        "focusChanges": 0,
+        "initialTop": 0,
+        "jsFrameGaps": {
+          "count": 1979,
+          "maxMs": 145.5,
+          "p50Ms": 12.099999999991269,
+          "p95Ms": 12.200000000011642
+        },
+        "longTasks": [],
+        "observedPages": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9"
+        ],
+        "peakCanvasCount": 4,
+        "peakCanvasPixels": 13405972,
+        "reader": true,
+        "scrollEvents": 1178,
+        "scrollHeight": 14856,
+        "scrollbarWidth": "thin",
+        "travel": 23520,
+        "viewport": [
+          1600,
+          964
+        ],
+        "visibility": "visible",
+        "wheelDispatchDelay": {
+          "count": 574,
+          "maxMs": 26.100000023841858,
+          "p50Ms": 6.300000011920929,
+          "p95Ms": 13.700000047683716
+        },
+        "wheelEvents": 574,
+        "zoom": null
+      }
+    }
+  ],
+  "traceBufferUsage": {
+    "percentage": 0.5237718820571899,
+    "value": 0
+  },
+  "comparisonNativeCapture": "capture-xBYEMh",
+  "limitations": [
+    "Captures include tracing and sampling overhead.",
+    "No physical touchpad or browser comparison.",
+    "Canvas counts and pixels are sampled at scroll events and can miss intervening peaks.",
+    "Only page canvases and per-page decoded resources are evicted. Document data and shared PDF.js resources remain resident."
+  ],
+  "nativeRepeat": {
+    "traceCapture": "capture-nMyomc",
+    "frames": [
+      {
+        "role": "application",
+        "processId": 1217287,
+        "metrics": {
+          "activeJsFrameGaps": {
+            "count": 0,
+            "maxMs": null,
+            "p50Ms": null,
+            "p95Ms": null
+          },
+          "dpr": 1.600000023841858,
+          "elapsedMs": 20000.899999976158,
+          "finalTop": 0,
+          "focusChanges": 0,
+          "initialTop": 0,
+          "jsFrameGaps": {
+            "count": 3300,
+            "maxMs": 6.400000000023283,
+            "p50Ms": 6.099999999976717,
+            "p95Ms": 6.100000000005821
+          },
+          "longTasks": [],
+          "observedPages": [],
+          "peakCanvasCount": 0,
+          "peakCanvasPixels": 0,
+          "reader": true,
+          "scrollEvents": 0,
+          "scrollHeight": 964,
+          "scrollbarWidth": "auto",
+          "travel": 0,
+          "viewport": [
+            1600,
+            964
+          ],
+          "visibility": "visible",
+          "wheelDispatchDelay": {
+            "count": 0,
+            "maxMs": null,
+            "p50Ms": null,
+            "p95Ms": null
+          },
+          "wheelEvents": 0,
+          "zoom": null
+        }
+      },
+      {
+        "role": "viewer",
+        "processId": 1222845,
+        "metrics": {
+          "activeJsFrameGaps": {
+            "count": 0,
+            "maxMs": null,
+            "p50Ms": null,
+            "p95Ms": null
+          },
+          "dpr": 1.600000023841858,
+          "elapsedMs": 20000.799999952316,
+          "finalTop": 0,
+          "focusChanges": 0,
+          "initialTop": 0,
+          "jsFrameGaps": {
+            "count": 3300,
+            "maxMs": 6.5,
+            "p50Ms": 6.099999999998545,
+            "p95Ms": 6.100000000002183
+          },
+          "longTasks": [],
+          "observedPages": [],
+          "peakCanvasCount": 0,
+          "peakCanvasPixels": 0,
+          "reader": false,
+          "scrollEvents": 0,
+          "scrollHeight": 851,
+          "scrollbarWidth": "auto",
+          "travel": 0,
+          "viewport": [
+            1559,
+            851
+          ],
+          "visibility": "visible",
+          "wheelDispatchDelay": {
+            "count": 0,
+            "maxMs": null,
+            "p50Ms": null,
+            "p95Ms": null
+          },
+          "wheelEvents": 0,
+          "zoom": 0.4875486381322957
+        }
+      },
+      {
+        "role": "document",
+        "processId": 1222858,
+        "metrics": {
+          "activeJsFrameGaps": {
+            "count": 199,
+            "maxMs": 139.40000000000146,
+            "p50Ms": 90.89999999999964,
+            "p95Ms": 127.29999999999927
+          },
+          "dpr": 1.600000023841858,
+          "elapsedMs": 20000.799999952316,
+          "finalTop": 0,
+          "focusChanges": 0,
+          "initialTop": 0,
+          "jsFrameGaps": {
+            "count": 922,
+            "maxMs": 139.40000000000146,
+            "p50Ms": 6.099999999998545,
+            "p95Ms": 103.10000000000218
+          },
+          "longTasks": [],
+          "observedPages": [],
+          "peakCanvasCount": 0,
+          "peakCanvasPixels": 0,
+          "reader": false,
+          "scrollEvents": 175,
+          "scrollHeight": 12049,
+          "scrollbarWidth": "auto",
+          "travel": 23648.75,
+          "viewport": [
+            1259,
+            795
+          ],
+          "visibility": "visible",
+          "wheelDispatchDelay": {
+            "count": 163,
+            "maxMs": 60.5,
+            "p50Ms": 13.600000023841858,
+            "p95Ms": 24.900000035762787
+          },
+          "wheelEvents": 163,
+          "zoom": null
+        }
+      }
+    ],
+    "traceBufferUsage": {
+      "percentage": 0.9391415119171143,
+      "value": 0
+    }
+  }
+}

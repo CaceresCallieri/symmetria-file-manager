@@ -20,7 +20,6 @@ import { BRIDGE_KEY, type Bridge } from "@symmetria/fm-core/bridge";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DocumentPreview } from "../../src/components/preview/DocumentPreview.tsx";
 import * as imageModule from "../../src/components/preview/ImagePreview.tsx";
 import { ImagePreview } from "../../src/components/preview/ImagePreview.tsx";
 import { PreviewPane } from "../../src/components/preview/PreviewPane.tsx";
@@ -273,15 +272,5 @@ describe("the extracted preview-URL hook", () => {
 
     const image = await screen.findByTestId("preview-image-element");
     expect(image.getAttribute("src")).toBe(TOKEN_URL);
-  });
-
-  it("still resolves the document preview's URL", async () => {
-    // Untested before this phase, and the one consumer whose URL must come from
-    // this scheme for a reason of Chromium's: its viewer refuses a `blob:` from
-    // a custom scheme and resolves the embed to an error page, invisibly.
-    render(<DocumentPreview path="/home/jc/paper.pdf" mime="application/pdf" />);
-
-    const embed = await screen.findByTestId("preview-document-embed");
-    expect(embed.getAttribute("src")).toBe(TOKEN_URL);
   });
 });

@@ -4,6 +4,16 @@
   // Every entry here was added because an observed finding proved it was
   // needed, per the catalog's rule. None is speculative.
 
+  // PDF.js constructs this factory and invokes fetch from its external worker
+  // transport. The JPEG2000 regression checks exercise that call. Keep this
+  // exception confined to the adapter; all other dead-code rules still apply.
+  "overrides": [
+    {
+      "files": ["packages/fm-ui/src/components/preview/pdf/binaryAssets.ts"],
+      "rules": { "unused-class-members": "off" }
+    }
+  ],
+
   // `ignorePatterns` removes files from analysis ENTIRELY — discovery, parsing,
   // resolution and the module graph. Reserved for trees fallow cannot parse or
   // must not reason about.

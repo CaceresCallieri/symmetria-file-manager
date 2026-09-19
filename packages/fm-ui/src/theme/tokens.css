@@ -145,6 +145,8 @@
   --scrollbar-track: transparent;
   --scrollbar-thumb: rgb(255 255 255 / 8%);
   --scrollbar-thumb-hover: rgb(255 255 255 / 12%);
+  --pdf-scrollbar-thumb: rgb(255 255 255 / 35%);
+  --pdf-page-placeholder: #666;
 
   /* ── Geometry ─────────────────────────────────────────────────────────── */
   --row-height: 24px;

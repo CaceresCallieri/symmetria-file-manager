@@ -115,7 +115,7 @@ const PDF_VIEWER_HOST = "mhjfbmdgcfjbbpaeojofohoefgiehjai";
  * so the URL parser reports its origin as the string `"null"` — and comparing
  * against that would match every opaque origin there is.
  */
-export function isBuiltInPdfViewer(url: URL): boolean {
+function isBuiltInPdfViewer(url: URL): boolean {
   return url.protocol === PDF_VIEWER_PROTOCOL && url.host === PDF_VIEWER_HOST;
 }
 

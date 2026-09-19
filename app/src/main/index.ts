@@ -16,7 +16,6 @@ import { app, BrowserWindow, ipcMain, session } from "electron";
 import { writeToFifo } from "./fifo.ts";
 import { refuseDocumentRequestsOffScheme, refuseNavigationAwayFromApp } from "./frameNavigation.ts";
 import { createResidency } from "./lifecycle.ts";
-import { stylePdfScrollbars } from "./pdfScrollbars.ts";
 import {
   createPickerHost,
   type OpenPickerWindow,
@@ -92,7 +91,6 @@ interface StartedWindow {
 
 function createWindow(): StartedWindow {
   const window = new BrowserWindow(buildWindowOptions());
-  stylePdfScrollbars(window.webContents);
 
   // A previewed page may be loaded and may not go anywhere afterwards. The
   // preview frame's own permission list stops a form submit and a popup and
@@ -624,7 +622,6 @@ async function reportAndQuit(window: BrowserWindow, socketPath: string): Promise
 function pickerWindowFactory(transport: ElectronTransport, registry: Registry): OpenPickerWindow {
   return (command, title) => {
     const dialog = new BrowserWindow(pickerWindowOptions(title));
-    stylePdfScrollbars(dialog.webContents);
     // The same rule as the browse window: a dialog previews files too.
     refuseNavigationAwayFromApp(dialog.webContents);
 

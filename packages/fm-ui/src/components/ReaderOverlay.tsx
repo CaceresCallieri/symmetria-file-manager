@@ -2,7 +2,6 @@ import { humanSize } from "@symmetria/fm-core/format";
 import type { PreviewTarget } from "@symmetria/fm-core/preview/route";
 import { useRef } from "react";
 import { useDialogFocus } from "../hooks/useDialogFocus.ts";
-import { useEmbedFocusGuard } from "../hooks/useEmbedFocusGuard.ts";
 import { isEscape, useOverlayCloseKeys } from "../hooks/useOverlayCloseKeys.ts";
 import { PreviewPane, type PreviewPaneProps } from "./preview/PreviewPane.tsx";
 
@@ -35,7 +34,6 @@ export function ReaderOverlay({ pane, description, onClose }: ReaderOverlayProps
   const panel = useRef<HTMLDivElement>(null);
   useDialogFocus(panel);
   useOverlayCloseKeys(onClose, closesReader, { consume: true });
-  useEmbedFocusGuard(panel);
 
   // The header names the file, so it is a better label than a fixed string —
   // but it is only in the document once there is something to describe.
