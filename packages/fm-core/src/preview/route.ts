@@ -247,7 +247,7 @@ export function languageFor(name: string): string | null {
   return LANGUAGES.get(lower.slice(dot + 1)) ?? null;
 }
 
-/** Types Chromium's own viewer renders better than anything we would write. */
+/** PDF types handled by the page viewer, including MIME descendants. */
 function isDocument(tables: MimeTables, mime: string): boolean {
   return mime === "application/pdf" || inheritsFrom(tables, mime, "application/pdf");
 }

@@ -60,36 +60,6 @@ it("guard: closing the reader restores silent autoplaying column video without c
   expect(columnVideo.hasAttribute("controls")).toBe(false);
 });
 
-it("regression: focus that leaves the page into the PDF embed comes back to the reader", async () => {
-  installFilePreview(NOTES, "application/pdf", "%PDF-1.7");
-  const reader = await openReader();
-  const embed = await within(reader).findByTestId("preview-document-embed");
-  // A plugin that takes keyboard focus makes the embed the active element and
-  // blurs the window; from there no key would reach the reader's Escape.
-  embed.tabIndex = 0;
-  embed.focus();
-  expect(document.activeElement).toBe(embed);
-  fireEvent.blur(window);
-  await waitFor(() => expect(document.activeElement).toBe(reader));
-  fireEvent.keyDown(window, { key: "Escape" });
-  await waitFor(() => expect(screen.queryByTestId("reader")).toBeNull());
-});
-
-it("guard: the reader preserves the column PDF route and embed source", async () => {
-  installFilePreview(NOTES, "application/pdf", "%PDF-1.7");
-  await moveToNotes();
-  const columnEmbed = await screen.findByTestId("preview-document-embed");
-  const source = columnEmbed.getAttribute("src");
-  expect(source).toBe("symmetria-fm://app/__preview/%2Fhome%2Fjc%2Fnotes.txt");
-  expect(screen.getByTestId("column-preview").dataset.kind).toBe("document");
-
-  fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
-  const reader = await screen.findByTestId("reader");
-  expect(within(reader).getByTestId("column-preview").dataset.kind).toBe("document");
-  const readerEmbed = await within(reader).findByTestId("preview-document-embed");
-  expect(readerEmbed.getAttribute("src")).toBe(source);
-});
-
 it.each([
   ["image", "/home/jc/pictures", "shot.png", "0 B", "image/png", false],
   ["markdown", "/home/jc/projects", "beta.md", "13 B", "text/markdown", true],

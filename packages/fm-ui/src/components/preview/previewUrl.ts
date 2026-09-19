@@ -13,10 +13,8 @@ import { previewDirectoryUrl, previewUrl } from "../../bridge.ts";
  * hands back an address for it, so nothing here touches the disk and nothing
  * copies a file across the process boundary.
  *
- * Two consumers need it to be exactly this and not a blob: Chromium's document
- * viewer refuses a `blob:` whose origin is a custom scheme — the embed resolves
- * to an error page, invisibly — and a media element streams from a URL rather
- * than holding the whole file in memory.
+ * Media elements stream through the authorized URL. The PDF worker receives
+ * bytes fetched from the same URL, without exposing filesystem paths to it.
  *
  * It lives in a module of its own because four components share it now. A hook
  * that stays inside one of its own consumers is the shape that produces a

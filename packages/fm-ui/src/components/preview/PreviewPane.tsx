@@ -193,7 +193,7 @@ function contents(
     case "image":
       return <ImagePreview path={path} mime={route.mime} />;
     case "document":
-      return <DocumentPreview path={path} mime={route.mime} />;
+      return <DocumentPreview path={path} variant={variant} />;
     case "video":
       return <VideoPreview path={path} mime={route.mime} variant={variant} />;
     case "audio":

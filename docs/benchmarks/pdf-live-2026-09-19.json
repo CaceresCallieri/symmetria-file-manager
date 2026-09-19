@@ -1,0 +1,158 @@
+{
+  "method": "One 20-second expanded-reader capture with the Bancor PDF on the laptop. A Wayland virtual pointer requested 600 finger-axis updates at 25 ms intervals, reversing every 150 updates. Instrumentation and compositor inertia affect the workload. Not a browser comparison.",
+  "frames": [
+    {
+      "role": "application",
+      "processId": 1132304,
+      "metrics": {
+        "activeJsFrameGaps": {
+          "count": 0,
+          "maxMs": null,
+          "p50Ms": null,
+          "p95Ms": null
+        },
+        "dpr": 1.600000023841858,
+        "elapsedMs": 20003,
+        "finalTop": 0,
+        "focusChanges": 1,
+        "initialTop": 0,
+        "jsFrameGaps": {
+          "count": 3294,
+          "maxMs": 12.19999999999709,
+          "p50Ms": 6.099999999991269,
+          "p95Ms": 6.100000000005821
+        },
+        "longTasks": [],
+        "reader": true,
+        "scrollEvents": 0,
+        "scrollHeight": 964,
+        "travel": 0,
+        "viewport": [
+          1600,
+          964
+        ],
+        "visibility": "visible",
+        "wheelDispatchDelay": {
+          "count": 0,
+          "maxMs": null,
+          "p50Ms": null,
+          "p95Ms": null
+        },
+        "wheelEvents": 0,
+        "zoom": null
+      }
+    },
+    {
+      "role": "viewer",
+      "processId": 1134045,
+      "metrics": {
+        "activeJsFrameGaps": {
+          "count": 0,
+          "maxMs": null,
+          "p50Ms": null,
+          "p95Ms": null
+        },
+        "dpr": 1.600000023841858,
+        "elapsedMs": 20003.80000001192,
+        "finalTop": 0,
+        "focusChanges": 0,
+        "initialTop": 0,
+        "jsFrameGaps": {
+          "count": 3294,
+          "maxMs": 12.200000000004366,
+          "p50Ms": 6.099999999998545,
+          "p95Ms": 6.100000000005821
+        },
+        "longTasks": [],
+        "reader": false,
+        "scrollEvents": 0,
+        "scrollHeight": 888,
+        "travel": 0,
+        "viewport": [
+          1559,
+          888
+        ],
+        "visibility": "visible",
+        "wheelDispatchDelay": {
+          "count": 0,
+          "maxMs": null,
+          "p50Ms": null,
+          "p95Ms": null
+        },
+        "wheelEvents": 0,
+        "zoom": 0.4875486381322957
+      }
+    },
+    {
+      "role": "document",
+      "processId": 1134061,
+      "metrics": {
+        "activeJsFrameGaps": {
+          "count": 269,
+          "maxMs": 169.90000000000146,
+          "p50Ms": 84.80000000000291,
+          "p95Ms": 133.29999999999563
+        },
+        "dpr": 1.600000023841858,
+        "elapsedMs": 20076.69999998808,
+        "finalTop": 7306.875,
+        "focusChanges": 0,
+        "initialTop": 0,
+        "jsFrameGaps": {
+          "count": 685,
+          "maxMs": 169.90000000000146,
+          "p50Ms": 6.099999999998545,
+          "p95Ms": 115.09999999999854
+        },
+        "longTasks": [],
+        "reader": false,
+        "scrollEvents": 180,
+        "scrollHeight": 12049,
+        "travel": 24984.375,
+        "viewport": [
+          1259,
+          832
+        ],
+        "visibility": "visible",
+        "wheelDispatchDelay": {
+          "count": 964,
+          "maxMs": 260.89999997615814,
+          "p50Ms": 44.200000047683716,
+          "p95Ms": 111.90000003576279
+        },
+        "wheelEvents": 964,
+        "zoom": null
+      }
+    }
+  ],
+  "pdfMainThread": {
+    "totalTaskMs": 17052.591,
+    "paintTaskCount": 179,
+    "paintTaskMs": 16486.098,
+    "maxPaintTaskMs": 158.531,
+    "paintTaskCpuMs": 16184.589,
+    "over50msPaintTasks": 168
+  },
+  "traceCapture": "capture-xBYEMh",
+  "electron": "41.5.0",
+  "chromium": "146.0.7680.216",
+  "compositorRefreshHz": 165,
+  "gpuFeatures": {
+    "2d_canvas": "enabled",
+    "direct_rendering_display_compositor": "disabled_off_ok",
+    "gpu_compositing": "enabled",
+    "multiple_raster_threads": "enabled_on",
+    "opengl": "enabled_on",
+    "rasterization": "enabled",
+    "raw_draw": "disabled_off_ok",
+    "skia_graphite": "disabled_off",
+    "trees_in_viz": "disabled_off",
+    "video_decode": "enabled",
+    "video_encode": "disabled_software",
+    "vulkan": "disabled_off",
+    "webgl": "enabled",
+    "webgpu": "enabled",
+    "webgpu_on_vk_via_gl_interop": "disabled_off",
+    "webnn": "disabled_off"
+  }
+}
