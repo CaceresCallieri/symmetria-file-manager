@@ -117,3 +117,21 @@ export const FOREIGN_DOCUMENT_TOKENS = `
  * same grant as the page, for no gain over 400 bytes inline.
  */
 export const FOREIGN_DOCUMENT_STYLE = `<style>${FOREIGN_DOCUMENT_TOKENS}${SCROLLBAR_RULES}</style>`;
+
+/**
+ * PDF chrome shares the panel surface, with brighter thumbs beside white pages.
+ * The panel's 8% thumb proved too faint in the PDF viewer. Keep this contrast
+ * adjustment local to PDFs instead of restoring the shared low-opacity thumb.
+ */
+export const PDF_DOCUMENT_TOKENS = `${FOREIGN_DOCUMENT_TOKENS}
+:root {
+  --scrollbar-thumb: rgb(255 255 255 / 35%);
+  --scrollbar-thumb-hover: rgb(255 255 255 / 50%);
+  --viewer-pdf-toolbar-background-color: var(--scrollbar-track);
+  --viewer-side-background-color: var(--scrollbar-track);
+}
+
+html, body {
+  background-color: var(--scrollbar-track);
+}
+`;

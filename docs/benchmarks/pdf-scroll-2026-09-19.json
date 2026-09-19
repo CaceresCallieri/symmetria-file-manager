@@ -1,0 +1,388 @@
+{
+  "native": {
+    "versions": {
+      "node": "24.15.0",
+      "acorn": "8.16.0",
+      "ada": "3.4.4",
+      "amaro": "1.1.8",
+      "ares": "1.34.6",
+      "brotli": "1.0.9",
+      "cldr": "47.0",
+      "icu": "77.1",
+      "llhttp": "9.3.1",
+      "merve": "1.2.2",
+      "modules": "145",
+      "napi": "10",
+      "nbytes": "0.1.3",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.68.0",
+      "openssl": "0.0.0",
+      "simdjson": "4.5.0",
+      "simdutf": "7.7.0",
+      "sqlite": "3.51.3",
+      "tz": "2025b",
+      "undici": "7.24.4",
+      "unicode": "16.0",
+      "uv": "1.51.0",
+      "uvwasi": "0.0.23",
+      "v8": "14.6.202.34-electron.0",
+      "zlib": "1.3.1",
+      "zstd": "1.6.0",
+      "electron": "41.5.0",
+      "chrome": "146.0.7680.216"
+    },
+    "cpu": "AMD Ryzen 7 8700G w/ Radeon 780M Graphics",
+    "native": true,
+    "trace": false,
+    "gpu": {
+      "auxAttributes": {
+        "amdSwitchable": false,
+        "canSupportThreadedTextureMailbox": false,
+        "glImplementationParts": "(gl=none,angle=none)",
+        "glResetNotificationStrategy": 0,
+        "hardwareSupportsVulkan": false,
+        "inProcessGpu": true,
+        "initializationTime": 0,
+        "isAsan": false,
+        "isClangCoverage": false,
+        "jpegDecodeAcceleratorSupported": false,
+        "optimus": false,
+        "passthroughCmdDecoder": false,
+        "sandboxed": false,
+        "skiaBackendType": "None",
+        "subpixelFontRendering": true,
+        "targetCpuBits": 64,
+        "visibilityCallbackCallCount": 0
+      },
+      "gpuDevice": [
+        {
+          "active": true,
+          "deviceId": 5567,
+          "gpuPreference": 0,
+          "vendorId": 4098
+        }
+      ]
+    },
+    "results": [
+      {
+        "mode": "column",
+        "round": 0,
+        "thumbnailScrollbar": "auto",
+        "zoom": 0.1766839378238342,
+        "documentScrollbar": "auto",
+        "dpr": 1,
+        "elapsedMs": 10499.800000011921,
+        "frames": 487,
+        "longTasks": [],
+        "maxMs": 66.69999999999993,
+        "maxScroll": 2245,
+        "over33ms": 18,
+        "p95Ms": 33.399999999999636,
+        "scrollHeight": 3285,
+        "travel": 14190,
+        "viewport": [
+          356,
+          1040
+        ]
+      },
+      {
+        "mode": "reader",
+        "round": 0,
+        "thumbnailScrollbar": "auto",
+        "zoom": 0.8756476683937824,
+        "documentScrollbar": "auto",
+        "dpr": 1,
+        "elapsedMs": 13181.5,
+        "frames": 486,
+        "longTasks": [],
+        "maxMs": 50.100000000000364,
+        "maxScroll": 14400,
+        "over33ms": 92,
+        "p95Ms": 50,
+        "scrollHeight": 16282,
+        "travel": 14400,
+        "viewport": [
+          1705,
+          1086
+        ]
+      },
+      {
+        "mode": "column",
+        "round": 1,
+        "thumbnailScrollbar": "auto",
+        "zoom": 0.1766839378238342,
+        "documentScrollbar": "auto",
+        "dpr": 1,
+        "elapsedMs": 10511.099999964237,
+        "frames": 487,
+        "longTasks": [],
+        "maxMs": 50,
+        "maxScroll": 2245,
+        "over33ms": 33,
+        "p95Ms": 33.40000000000009,
+        "scrollHeight": 3285,
+        "travel": 14190,
+        "viewport": [
+          356,
+          1040
+        ]
+      },
+      {
+        "mode": "reader",
+        "round": 1,
+        "thumbnailScrollbar": "auto",
+        "zoom": 0.8756476683937824,
+        "documentScrollbar": "auto",
+        "dpr": 1,
+        "elapsedMs": 13131.200000047684,
+        "frames": 486,
+        "longTasks": [],
+        "maxMs": 50.100000000000364,
+        "maxScroll": 14400,
+        "over33ms": 88,
+        "p95Ms": 50,
+        "scrollHeight": 16282,
+        "travel": 14400,
+        "viewport": [
+          1705,
+          1086
+        ]
+      },
+      {
+        "mode": "column",
+        "round": 2,
+        "thumbnailScrollbar": "auto",
+        "zoom": 0.1766839378238342,
+        "documentScrollbar": "auto",
+        "dpr": 1,
+        "elapsedMs": 10505,
+        "frames": 486,
+        "longTasks": [],
+        "maxMs": 66.70000000000005,
+        "maxScroll": 2245,
+        "over33ms": 24,
+        "p95Ms": 33.399999999999864,
+        "scrollHeight": 3285,
+        "travel": 14190,
+        "viewport": [
+          356,
+          1040
+        ]
+      },
+      {
+        "mode": "reader",
+        "round": 2,
+        "thumbnailScrollbar": "auto",
+        "zoom": 0.8756476683937824,
+        "documentScrollbar": "auto",
+        "dpr": 1,
+        "elapsedMs": 13153.300000011921,
+        "frames": 486,
+        "longTasks": [],
+        "maxMs": 50.100000000000364,
+        "maxScroll": 14400,
+        "over33ms": 88,
+        "p95Ms": 50,
+        "scrollHeight": 16282,
+        "travel": 14400,
+        "viewport": [
+          1705,
+          1086
+        ]
+      }
+    ]
+  },
+  "styled": {
+    "versions": {
+      "node": "24.15.0",
+      "acorn": "8.16.0",
+      "ada": "3.4.4",
+      "amaro": "1.1.8",
+      "ares": "1.34.6",
+      "brotli": "1.0.9",
+      "cldr": "47.0",
+      "icu": "77.1",
+      "llhttp": "9.3.1",
+      "merve": "1.2.2",
+      "modules": "145",
+      "napi": "10",
+      "nbytes": "0.1.3",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.68.0",
+      "openssl": "0.0.0",
+      "simdjson": "4.5.0",
+      "simdutf": "7.7.0",
+      "sqlite": "3.51.3",
+      "tz": "2025b",
+      "undici": "7.24.4",
+      "unicode": "16.0",
+      "uv": "1.51.0",
+      "uvwasi": "0.0.23",
+      "v8": "14.6.202.34-electron.0",
+      "zlib": "1.3.1",
+      "zstd": "1.6.0",
+      "electron": "41.5.0",
+      "chrome": "146.0.7680.216"
+    },
+    "cpu": "AMD Ryzen 7 8700G w/ Radeon 780M Graphics",
+    "native": false,
+    "trace": false,
+    "gpu": {
+      "auxAttributes": {
+        "amdSwitchable": false,
+        "canSupportThreadedTextureMailbox": false,
+        "glImplementationParts": "(gl=none,angle=none)",
+        "glResetNotificationStrategy": 0,
+        "hardwareSupportsVulkan": false,
+        "inProcessGpu": true,
+        "initializationTime": 0,
+        "isAsan": false,
+        "isClangCoverage": false,
+        "jpegDecodeAcceleratorSupported": false,
+        "optimus": false,
+        "passthroughCmdDecoder": false,
+        "sandboxed": false,
+        "skiaBackendType": "None",
+        "subpixelFontRendering": true,
+        "targetCpuBits": 64,
+        "visibilityCallbackCallCount": 0
+      },
+      "gpuDevice": [
+        {
+          "active": true,
+          "deviceId": 5567,
+          "gpuPreference": 0,
+          "vendorId": 4098
+        }
+      ]
+    },
+    "results": [
+      {
+        "mode": "column",
+        "round": 0,
+        "thumbnailScrollbar": "6px",
+        "zoom": 0.18134715025906736,
+        "documentScrollbar": "6px",
+        "dpr": 1,
+        "elapsedMs": 9912.199999988079,
+        "frames": 486,
+        "longTasks": [],
+        "maxMs": 33.5,
+        "maxScroll": 2332,
+        "over33ms": 18,
+        "p95Ms": 33.399999999999636,
+        "scrollHeight": 3372,
+        "travel": 14352,
+        "viewport": [
+          356,
+          1040
+        ]
+      },
+      {
+        "mode": "reader",
+        "round": 0,
+        "thumbnailScrollbar": "6px",
+        "zoom": 0.8803108808290155,
+        "documentScrollbar": "6px",
+        "dpr": 1,
+        "elapsedMs": 11590.600000023842,
+        "frames": 486,
+        "longTasks": [],
+        "maxMs": 50.09999999999991,
+        "maxScroll": 14400,
+        "over33ms": 26,
+        "p95Ms": 33.40000000000009,
+        "scrollHeight": 16369,
+        "travel": 14400,
+        "viewport": [
+          1705,
+          1086
+        ]
+      },
+      {
+        "mode": "column",
+        "round": 1,
+        "thumbnailScrollbar": "6px",
+        "zoom": 0.18134715025906736,
+        "documentScrollbar": "6px",
+        "dpr": 1,
+        "elapsedMs": 9917.400000035763,
+        "frames": 486,
+        "longTasks": [],
+        "maxMs": 33.400000000000546,
+        "maxScroll": 2332,
+        "over33ms": 12,
+        "p95Ms": 33.399999999999636,
+        "scrollHeight": 3372,
+        "travel": 14352,
+        "viewport": [
+          356,
+          1040
+        ]
+      },
+      {
+        "mode": "reader",
+        "round": 1,
+        "thumbnailScrollbar": "6px",
+        "zoom": 0.8803108808290155,
+        "documentScrollbar": "6px",
+        "dpr": 1,
+        "elapsedMs": 11561.199999988079,
+        "frames": 486,
+        "longTasks": [],
+        "maxMs": 50,
+        "maxScroll": 14400,
+        "over33ms": 39,
+        "p95Ms": 33.40000000000009,
+        "scrollHeight": 16369,
+        "travel": 14400,
+        "viewport": [
+          1705,
+          1086
+        ]
+      },
+      {
+        "mode": "column",
+        "round": 2,
+        "thumbnailScrollbar": "6px",
+        "zoom": 0.18134715025906736,
+        "documentScrollbar": "6px",
+        "dpr": 1,
+        "elapsedMs": 9902.400000035763,
+        "frames": 486,
+        "longTasks": [],
+        "maxMs": 33.5,
+        "maxScroll": 2332,
+        "over33ms": 15,
+        "p95Ms": 33.399999999999636,
+        "scrollHeight": 3372,
+        "travel": 14352,
+        "viewport": [
+          356,
+          1040
+        ]
+      },
+      {
+        "mode": "reader",
+        "round": 2,
+        "thumbnailScrollbar": "6px",
+        "zoom": 0.8803108808290155,
+        "documentScrollbar": "6px",
+        "dpr": 1,
+        "elapsedMs": 11553.199999988079,
+        "frames": 487,
+        "longTasks": [],
+        "maxMs": 33.5,
+        "maxScroll": 14400,
+        "over33ms": 29,
+        "p95Ms": 33.40000000000009,
+        "scrollHeight": 16369,
+        "travel": 14400,
+        "viewport": [
+          1705,
+          1086
+        ]
+      }
+    ]
+  }
+}
