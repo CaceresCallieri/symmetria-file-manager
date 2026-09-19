@@ -1,10 +1,12 @@
 import type { FsEntry } from "@symmetria/fm-core/entry";
 
 import { FileIcon } from "@symmetria/fm-search/ui";
+import { ClipboardIndicator } from "./ClipboardIndicator.tsx";
 import { FlashName, type FlashRowLabel } from "./FlashName.tsx";
 
 export interface FileRowProps {
   readonly entry: FsEntry;
+  readonly directory?: string | undefined;
   readonly isCursor: boolean;
   /** Marked for a file operation. Distinct from the cursor, which is where you are. */
   readonly isMarked?: boolean;
@@ -104,6 +106,7 @@ export function flashStateOf(active: boolean, dimmed: boolean): "match" | "dim" 
 
 export function FileRow({
   entry,
+  directory,
   isCursor,
   isMarked = false,
   isMatch = false,
@@ -147,6 +150,7 @@ export function FileRow({
       <span className="row__name">
         <FlashName name={entry.name} flash={flash} />
       </span>
+      <ClipboardIndicator directory={directory} name={entry.name} />
       {entry.isSymlink ? <span className="row__link">→</span> : null}
     </div>
   );

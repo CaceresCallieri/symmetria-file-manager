@@ -17,6 +17,7 @@ import {
 import { FinderOverlay } from "@symmetria/fm-search/ui";
 import { useEffect, useMemo, useRef } from "react";
 import { BrowsingView } from "./components/BrowsingView.tsx";
+import { ClipboardIndicators } from "./components/ClipboardIndicator.tsx";
 import { FinderPreview } from "./components/FinderPreview.tsx";
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
@@ -414,6 +415,8 @@ export function App(props: AppProps = {}) {
     onFlashKey: flash.onKey,
   });
 
+  const { onOpenFile = ops.openAbsolute } = props;
+
   /**
    * A click in the parent column: go to that sibling directory.
    *
@@ -424,7 +427,7 @@ export function App(props: AppProps = {}) {
   const leaveTo = (name: string) => tabs.navigate(joinPath(parentOf(tabs.pane.path), name));
 
   return (
-    <>
+    <ClipboardIndicators clipboard={ops.clipboard}>
       {/* A named helper for a two-term boolean: it keeps `App` under the
         cognitive-complexity bound the health gate enforces. Do not inline it. */}
       <main className="app" inert={columnsAreInert(overview.root, modes.readerOpen)}>
@@ -439,7 +442,7 @@ export function App(props: AppProps = {}) {
           tabs={tabs}
           tree={tree}
           model={overview.treeModel}
-          onOpen={props.onOpenFile ?? ops.openAbsolute}
+          onOpen={onOpenFile}
           matches={search.matches}
           preview={previewPanes.column}
           flashLabels={millerFlash.labels}
@@ -498,7 +501,7 @@ export function App(props: AppProps = {}) {
         onNavigate={tabs.navigate}
         onReveal={tabs.reveal}
       />
-    </>
+    </ClipboardIndicators>
   );
 }
 

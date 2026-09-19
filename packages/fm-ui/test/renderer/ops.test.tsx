@@ -124,6 +124,7 @@ describe("conflicts", () => {
 
     const dialog = await screen.findByTestId("modal-conflict");
     expect(within(dialog).getByTestId("conflict-list").textContent).toContain("notes.txt");
+    expect(document.activeElement).toBe(within(dialog).getByTestId("dialog-confirm"));
   });
 
   it("retries with overwrite once the operator confirms", async () => {
@@ -165,6 +166,30 @@ describe("trash", () => {
     expect(within(dialog).getByTestId("delete-list").textContent).toContain("notes.txt");
     expect(dialog.textContent).toMatch(/recoverable/i);
     expect(log.ops).toEqual([]);
+    expect(document.activeElement).toBe(within(dialog).getByTestId("dialog-confirm"));
+  });
+
+  it("preserves native button activation and keeps Tab inside the dialog", async () => {
+    await opened();
+    await onNotes();
+    fireEvent.keyDown(window, { key: "d" });
+    const dialog = await screen.findByTestId("modal-delete");
+    const confirm = within(dialog).getByTestId("dialog-confirm");
+    for (const key of ["Enter", " "]) {
+      expect(fireEvent.keyDown(confirm, { key })).toBe(true);
+    }
+    expect(fireEvent.keyDown(confirm, { key: "Tab", shiftKey: true })).toBe(true);
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    expect(fireEvent.keyDown(confirm, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(cancel);
+    expect(fireEvent.keyDown(cancel, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(confirm);
+    expect(fireEvent.keyDown(confirm, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(cancel);
+    expect(fireEvent.keyDown(cancel, { key: "Enter" })).toBe(true);
+    fireEvent.click(cancel);
+    await waitFor(() => expect(screen.queryByTestId("modal-delete")).toBeNull());
+    expect(log.ops).toEqual([]);
   });
 
   it("trashes on confirmation", async () => {
@@ -189,6 +214,7 @@ describe("rename", () => {
     fireEvent.keyDown(window, { key: "r" });
 
     const field = await screen.findByTestId("dialog-name");
+    expect(document.activeElement).toBe(field);
     expect((field as HTMLInputElement).value).toBe("notes.txt");
     expect((field as HTMLInputElement).selectionEnd).toBe("notes".length);
   });
@@ -276,6 +302,21 @@ describe("opening", () => {
 });
 
 describe("the modal gate", () => {
+  it.each(["r", "a"])("includes the name input in the %s dialog focus cycle", async (key) => {
+    await opened();
+    await onNotes();
+    fireEvent.keyDown(window, { key });
+    const field = await screen.findByTestId("dialog-name");
+    const dialog = screen.getByRole("dialog");
+    const confirm = within(dialog).getByRole("button", { name: "Confirm" });
+    expect(document.activeElement).toBe(field);
+    expect(fireEvent.keyDown(field, { key: "Tab" })).toBe(true);
+    expect(fireEvent.keyDown(field, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(confirm);
+    expect(fireEvent.keyDown(confirm, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(field);
+  });
+
   it("stops the keyboard reaching the pane while a dialog is open", async () => {
     await opened();
     await onNotes();

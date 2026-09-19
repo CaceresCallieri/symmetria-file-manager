@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 
 import { isEscape, useOverlayCloseKeys } from "../../hooks/useOverlayCloseKeys.ts";
 import type { OpsModal } from "../../useFileOps.ts";
@@ -24,32 +24,67 @@ export interface OpsModalsProps {
   onConfirmOverwrite(): void;
 }
 
+/** Wrap only at the boundaries; the browser moves between the other controls. */
+function keepDialogFocus(event: KeyboardEvent<HTMLDivElement>): void {
+  if (event.key !== "Tab" || event.ctrlKey || event.altKey || event.metaKey) return;
+  const controls = event.currentTarget.querySelectorAll<HTMLElement>(
+    "input:not(:disabled), button:not(:disabled)",
+  );
+  const first = controls[0];
+  const last = controls[controls.length - 1];
+  const boundary = event.shiftKey ? first : last;
+  if (event.target !== boundary) return;
+
+  // Unrestricted Tab left focus behind the modal, where the key cascade
+  // swallowed subsequent Tab presses. Keep both boundaries inside the dialog.
+  event.preventDefault();
+  const destination = event.shiftKey ? last : first;
+  destination?.focus();
+}
+
 /** A dialog shell: a title, whatever it asks, and its own keyboard handling. */
 function Dialog({
   title,
   testId,
   onCancel,
   onConfirm,
+  focusConfirm = true,
   children,
 }: {
   readonly title: string;
   readonly testId: string;
   onCancel(): void;
   onConfirm(): void;
+  readonly focusConfirm?: boolean;
   readonly children?: React.ReactNode;
 }) {
   useOverlayCloseKeys(onCancel, isEscape);
+  const confirmButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (focusConfirm) confirmButton.current?.focus();
+  }, [focusConfirm]);
 
   return (
     <div className="overlay" data-testid={testId}>
-      <div className="overlay__panel">
+      <div
+        className="overlay__panel ops-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onKeyDown={keepDialogFocus}
+      >
         <h2>{title}</h2>
         {children}
         <div className="dialog__actions">
           <button type="button" onClick={onCancel}>
             Cancel
           </button>
-          <button type="button" data-testid="dialog-confirm" onClick={onConfirm}>
+          <button
+            ref={confirmButton}
+            type="button"
+            data-testid="dialog-confirm"
+            onClick={onConfirm}
+          >
             Confirm
           </button>
         </div>
@@ -91,7 +126,13 @@ function NameDialog({
   }, [selectTo]);
 
   return (
-    <Dialog title={title} testId={testId} onCancel={onCancel} onConfirm={() => onConfirm(name)}>
+    <Dialog
+      title={title}
+      testId={testId}
+      onCancel={onCancel}
+      onConfirm={() => onConfirm(name)}
+      focusConfirm={false}
+    >
       <input
         ref={field}
         value={name}

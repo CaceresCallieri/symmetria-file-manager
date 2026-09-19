@@ -1,5 +1,6 @@
 import type { FsEntry } from "@symmetria/fm-core/entry";
 import type { FlashColumn } from "@symmetria/fm-core/flash/labels";
+import { parentOf } from "@symmetria/fm-core/pane";
 import { useCallback } from "react";
 
 import type { ColumnLabels } from "../useFlash.ts";
@@ -25,6 +26,7 @@ function useReporter(
 }
 
 interface ParentColumnProps {
+  readonly directory: string;
   readonly entries: readonly FsEntry[];
   /** Which entry it sits on — the directory we are inside. */
   readonly cursorName: string;
@@ -62,6 +64,7 @@ interface ParentColumnProps {
  * conditional wiring was most of that one's branching.
  */
 function ParentColumn({
+  directory,
   entries,
   cursorName,
   onLeaveTo,
@@ -77,6 +80,7 @@ function ParentColumn({
 
   return (
     <FileList
+      directory={directory}
       entries={entries}
       cursorIndex={cursorIndex}
       testId="column-parent"
@@ -134,6 +138,7 @@ export interface MillerColumnsProps {
  * shows through.
  */
 interface CurrentColumnProps {
+  readonly directory: string;
   readonly entries: readonly FsEntry[];
   readonly cursorIndex: number;
   readonly selection: ReadonlySet<string>;
@@ -156,6 +161,7 @@ interface CurrentColumnProps {
 function CurrentColumn(props: CurrentColumnProps) {
   return (
     <FileList
+      directory={props.directory}
       entries={props.entries}
       cursorIndex={props.cursorIndex}
       testId="column-current"
@@ -251,6 +257,7 @@ export function MillerColumns({
   return (
     <div className="columns" data-path={path}>
       <ParentColumn
+        directory={parentOf(path)}
         entries={parentEntries}
         cursorName={parentCursorName}
         onLeaveTo={onLeaveTo}
@@ -259,6 +266,7 @@ export function MillerColumns({
         onVisibleRange={reportParent}
       />
       <CurrentColumn
+        directory={path}
         entries={entries}
         cursorIndex={cursorIndex}
         selection={selection}
