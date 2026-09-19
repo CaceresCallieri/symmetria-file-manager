@@ -169,18 +169,23 @@ describe("trash", () => {
     expect(document.activeElement).toBe(within(dialog).getByTestId("dialog-confirm"));
   });
 
-  it("preserves native Enter, Space and Tab on the focused dialog buttons", async () => {
+  it("preserves native button activation and keeps Tab inside the dialog", async () => {
     await opened();
     await onNotes();
     fireEvent.keyDown(window, { key: "d" });
     const dialog = await screen.findByTestId("modal-delete");
     const confirm = within(dialog).getByTestId("dialog-confirm");
-    for (const key of ["Enter", " ", "Tab"]) {
+    for (const key of ["Enter", " "]) {
       expect(fireEvent.keyDown(confirm, { key })).toBe(true);
     }
     expect(fireEvent.keyDown(confirm, { key: "Tab", shiftKey: true })).toBe(true);
     const cancel = within(dialog).getByRole("button", { name: "Cancel" });
-    cancel.focus();
+    expect(fireEvent.keyDown(confirm, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(cancel);
+    expect(fireEvent.keyDown(cancel, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(confirm);
+    expect(fireEvent.keyDown(confirm, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(cancel);
     expect(fireEvent.keyDown(cancel, { key: "Enter" })).toBe(true);
     fireEvent.click(cancel);
     await waitFor(() => expect(screen.queryByTestId("modal-delete")).toBeNull());
@@ -297,6 +302,21 @@ describe("opening", () => {
 });
 
 describe("the modal gate", () => {
+  it.each(["r", "a"])("includes the name input in the %s dialog focus cycle", async (key) => {
+    await opened();
+    await onNotes();
+    fireEvent.keyDown(window, { key });
+    const field = await screen.findByTestId("dialog-name");
+    const dialog = screen.getByRole("dialog");
+    const confirm = within(dialog).getByRole("button", { name: "Confirm" });
+    expect(document.activeElement).toBe(field);
+    expect(fireEvent.keyDown(field, { key: "Tab" })).toBe(true);
+    expect(fireEvent.keyDown(field, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(confirm);
+    expect(fireEvent.keyDown(confirm, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(field);
+  });
+
   it("stops the keyboard reaching the pane while a dialog is open", async () => {
     await opened();
     await onNotes();
