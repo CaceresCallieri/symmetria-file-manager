@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-// Build first: NODE_ENV=production pnpm --filter @symmetria/fm-app build
-// Then: node app/scripts/package-release.mjs /absolute/new/release-directory
+// Build and package: node app/scripts/package-release.mjs /absolute/new/release-directory
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,9 +12,24 @@ const destination = process.argv[2];
 if (!destination || !isAbsolute(destination)) {
   throw new Error("Supply an absolute path to a new release directory.");
 }
-// Refuse an existing directory so packaging cannot overwrite a running release.
-await mkdir(destination);
+// Validate before building so an invalid destination cannot replace the bundle.
+const existingDestination = await lstat(destination).catch((error) => {
+  if (error.code !== "ENOENT") throw error;
+  return null;
+});
+if (existingDestination) throw new Error("The release destination must not exist.");
+if (!(await stat(dirname(destination))).isDirectory()) {
+  throw new Error("The release destination's parent must be an existing directory.");
+}
 const appDirectory = join(repository, "app");
+execFileSync("pnpm", ["run", "build"], {
+  cwd: appDirectory,
+  env: { ...process.env, NODE_ENV: "production" },
+  timeout: 180_000,
+  stdio: "inherit",
+});
+// Keep mkdir exclusive if another caller creates the destination during the build.
+await mkdir(destination);
 const appRequire = createRequire(join(appDirectory, "package.json"));
 const manifest = JSON.parse(await readFile(join(appDirectory, "package.json"), "utf8"));
 const copiedPackages = new Map();
@@ -61,6 +75,22 @@ async function copyRuntimePackage(name, resolver, optional = false) {
   await copyDependencyGroup(dependencyRequire, true, metadata.optionalDependencies);
 }
 
+function releaseLauncher(checks, command) {
+  return `#!/bin/sh
+set -eu
+release=$(dirname "$(dirname "$(readlink -f "$0")")")
+require_release_path() {
+  if ! test "$1" "$release/$2"; then
+    printf 'ERROR: Release %s is missing or invalid: %s\\n' "$3" "$release/$2" >&2
+    exit 78
+  fi
+}
+require_release_path -x runtime/electron 'Electron runtime'
+${checks}
+exec /usr/bin/env ${command} "$@"
+`;
+}
+
 await cp(join(appDirectory, "dist-electron"), join(destination, "app/dist-electron"), {
   recursive: true,
   dereference: true,
@@ -81,6 +111,7 @@ for (const relative of [
   "assets/symmetria-fm.png",
   "app/bin/symmetria-fm-electron-cli.mjs",
   "app/scripts/verify-release.mjs",
+  "app/scripts/release-desktop-entry.mjs",
   "install-electron-release.sh",
 ]) {
   await cp(join(repository, relative), join(destination, relative), { recursive: true });
@@ -88,11 +119,22 @@ for (const relative of [
 await mkdir(join(destination, "bin"));
 await writeFile(
   join(destination, "bin/symmetria-fm-electron"),
-  '#!/bin/sh\nset -eu\nrelease=$(dirname "$(dirname "$(readlink -f "$0")")")\nexec /usr/bin/env -u ELECTRON_RUN_AS_NODE "$release/runtime/electron" "$release/app" "$@"\n',
+  releaseLauncher(
+    "require_release_path -d app 'application directory'\nrequire_release_path -f app/dist-electron/main/index.js 'main bundle'",
+    '-u ELECTRON_RUN_AS_NODE "$release/runtime/electron" "$release/app"',
+  ),
+  { mode: 0o755 },
+);
+await writeFile(
+  join(destination, "bin/symmetria-fm-electron-cli"),
+  releaseLauncher(
+    "require_release_path -f app/bin/symmetria-fm-electron-cli.mjs 'CLI script'",
+    'ELECTRON_RUN_AS_NODE=1 "$release/runtime/electron" "$release/app/bin/symmetria-fm-electron-cli.mjs"',
+  ),
   { mode: 0o755 },
 );
 await writeFile(
   join(destination, "release.json"),
-  `${JSON.stringify({ revision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repository, encoding: "utf8" }).trim(), platform: process.platform, architecture: process.arch, runtimePackages: Object.fromEntries(copiedPackages) }, null, 2)}\n`,
+  `${JSON.stringify({ revision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repository, encoding: "utf8" }).trim(), dirty: execFileSync("git", ["status", "--porcelain"], { cwd: repository, encoding: "utf8" }).trim().length > 0, platform: process.platform, architecture: process.arch, runtimePackages: Object.fromEntries(copiedPackages) }, null, 2)}\n`,
 );
 console.log(`Release: ${destination}`);

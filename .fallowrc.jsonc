@@ -81,6 +81,7 @@
     // Release tools run directly during packaging and installation.
     "app/scripts/package-release.mjs",
     "app/scripts/verify-release.mjs",
+    "app/scripts/release-desktop-entry.mjs",
     "app/test/**/*.ts",
     // Two more entry points a person or a unit runs directly, so nothing in
     // the module graph imports either.

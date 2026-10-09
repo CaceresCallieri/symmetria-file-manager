@@ -6,14 +6,13 @@ Comment=Keyboard-first file manager, Electron build
 # second process that finds the socket already claimed and exits — the whole
 # point of a resident daemon is that opening a folder reaches the one already
 # running, in the window the user already has their tabs in.
-# By NAME, not by absolute path, and that is forced rather than chosen: a
-# desktop entry has no home specifier — the field codes are %f %F %u %U %d %D
-# %n %N %i %c %k %v %m and nothing else — so `%h/.local/bin/...` would be a
-# literal, and a hardcoded /home/<user> path is worse. It therefore depends on
-# the launcher's PATH including ~/.local/bin. `TryExec` is what makes that
-# visible: a launcher hides the entry when it cannot resolve, instead of
-# offering something that fails silently on click. The install script warns
-# when the directory is off PATH.
+# Development integration uses the command name because this shared template
+# cannot contain a user's home path. It depends on the session PATH including
+# ~/.local/bin. TryExec hides the entry when the launcher cannot resolve the
+# command. The development installer warns when the directory is off PATH.
+# The release installer generates a desktop entry with absolute Exec and
+# TryExec paths for the target user. Desktop entries support absolute paths,
+# but have no field code that expands the user's home directory.
 TryExec=symmetria-fm-electron-cli
 # %f and not %u: the tool takes a plain absolute path and would pass a file://
 # URI through verbatim.

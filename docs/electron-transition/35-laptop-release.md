@@ -7,7 +7,8 @@ integration with `install-desktop-integration.sh`: that script installs a
 worktree for development. Use the release installer instead.
 
 Keep the current release until a replacement passes the repository checks and
-the release checks. This policy does not automatically deploy feature edits.
+the release checks. Updates are manual: the agent installs a new release only
+when the operator requests an update. This policy does not deploy feature edits.
 The installer retains previous releases and integration backups. It restores
 the previous integration if the replacement daemon fails to accept a command.
 It restarts only `symmetria-fm-electron.service`. Never restart the Qt daemon as
@@ -19,24 +20,30 @@ Run the repository suite as `pnpm -r test`. Run the change-scoped deterministic
 checks in `AGENTS.md`. Package after the suite because the suite overwrites the
 bundle with a development build.
 
+Set `LAPTOP` to the laptop's SSH user and full tailnet host name. Obtain the
+full host name from `tailscale status` before transfer.
+
 ```bash
 # The destination must not exist. The command builds a production bundle.
 pnpm --filter @symmetria/fm-app release:pack /tmp/symmetria-fm-release
-node /tmp/symmetria-fm-release/app/scripts/verify-release.mjs
+ELECTRON_RUN_AS_NODE=1 /tmp/symmetria-fm-release/runtime/electron \
+  /tmp/symmetria-fm-release/app/scripts/verify-release.mjs
 
 tar -C /tmp/symmetria-fm-release -czf /tmp/symmetria-fm-release.tar.gz .
 sha256sum /tmp/symmetria-fm-release.tar.gz
+LAPTOP='jc@<laptop-tailnet-host>'
 rsync -a --partial-dir=.rsync-partial /tmp/symmetria-fm-release.tar.gz \
-  jc@arch-laptop.tail2106c5.ts.net:/home/jc/Downloads/
-ssh jc@arch-laptop.tail2106c5.ts.net \
+  "$LAPTOP:/home/jc/Downloads/"
+ssh "$LAPTOP" \
   'sha256sum /home/jc/Downloads/symmetria-fm-release.tar.gz'
 ```
 
 Compare the hashes before installation. Extract into a new staging directory,
-then run its installer. The laptop requires `node` and `xvfb-run` for the release
-checks. The installed application carries its own Electron runtime and native
-finder dependencies. It does not need pnpm, a source checkout, or a build step
-when it starts.
+then run its installer. The laptop requires `xvfb-run` for the release checks.
+The installed application carries its own Electron runtime and native finder
+dependencies. The CLI and the bootstrap installer use bundled Electron in Node
+mode (`ELECTRON_RUN_AS_NODE=1`). System Node and pnpm are needed only on the build
+machine. The laptop does not need a source checkout or a build step at startup.
 
 ```bash
 mkdir /home/jc/Downloads/symmetria-fm-release

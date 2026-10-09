@@ -32,7 +32,9 @@ repo="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 applications="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 units="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 bindir="$HOME/.local/bin"
-icons="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/256x256/apps"
+icon_theme="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor"
+icons="$icon_theme/512x512/apps"
+old_icon="$icon_theme/256x256/apps/symmetria-fm-electron.png"
 
 mkdir -p "$applications" "$units" "$bindir" "$icons"
 
@@ -77,6 +79,9 @@ case ":$PATH:" in
 esac
 
 link "$repo/assets/symmetria-fm.png" "$icons/symmetria-fm-electron.png"
+if [[ -L "$old_icon" && "$(readlink "$old_icon")" == "$repo/assets/symmetria-fm.png" ]]; then
+  rm "$old_icon"
+fi
 
 echo "Registering the unit (this starts nothing):"
 # Both of these are non-disruptive. `daemon-reload` re-reads unit files and
