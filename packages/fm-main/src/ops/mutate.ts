@@ -149,12 +149,15 @@ async function moveEntry(source: string, target: string, overwrite: boolean): Pr
  * like it does.
  */
 export async function createEntry(path: string, kind: "file" | "directory"): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
   if (kind === "directory") {
-    await mkdir(path, { recursive: true });
+    // Recursive mkdir on the final target accepted existing folders, so create
+    // closed its dialog without an error. Only parents are idempotent; plain
+    // mkdir rejects an existing final target with the original EEXIST error.
+    await mkdir(path);
     return;
   }
 
-  await mkdir(dirname(path), { recursive: true });
   // `wx` fails when the file is already there rather than truncating it. An
   // accidental second Enter on the create dialog must not empty a file.
   await writeFile(path, "", { flag: "wx" });

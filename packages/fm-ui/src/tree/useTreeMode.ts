@@ -1,9 +1,10 @@
 import type { CursorEntry, KeyContext } from "@symmetria/fm-core/keys/types";
 import { isAncestorPath } from "@symmetria/fm-core/overview/model";
-import { cursorEntry, joinPath } from "@symmetria/fm-core/pane";
+import { cursorEntry, joinPath, parentOf } from "@symmetria/fm-core/pane";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type FlashPort, useFlashPort } from "../flash/useFlashPort.ts";
 import type { OverviewModel } from "../overview/useOverview.ts";
+import type { FileOps } from "../useFileOps.ts";
 import type { Tabs } from "../useTabs.ts";
 import { type TreeRecord, TreeStateCache } from "./state.ts";
 
@@ -103,6 +104,19 @@ export function useTreeMode(tabs: Tabs) {
     open,
     external,
     reveal: (path: string) => handler.current?.reveal(path),
+    requestCreate: (ops: FileOps, model: OverviewModel) => {
+      const origin = handler.current;
+      if (root === null || entry === null || origin === null) return;
+      ops.requestCreate({
+        directory: entry.isDirectory ? entry.path : parentOf(entry.path),
+        onCreated: (path) => {
+          // The controller identity changes when its tree/tab unmounts or remounts.
+          if (handler.current !== origin) return;
+          model.refresh?.();
+          origin.reveal(path);
+        },
+      });
+    },
     cancel: () => handler.current?.cancel(),
     command: (command: TreeCommand) => handler.current?.command(command),
   };
@@ -112,6 +126,7 @@ export function treeKeyContext(
   context: KeyContext,
   tree: ReturnType<typeof useTreeMode>,
   model: OverviewModel,
+  ops: FileOps,
 ): KeyContext {
   if (tree.root === null || context.view === "overview") return context;
   return {
@@ -127,6 +142,7 @@ export function treeKeyContext(
     },
     actions: {
       ...context.actions,
+      createEntry: () => tree.requestCreate(ops, model),
       startSearch: () => tree.command("search"),
       nextMatch: () => tree.command("search-next"),
       previousMatch: () => tree.command("search-previous"),

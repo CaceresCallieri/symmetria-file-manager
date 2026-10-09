@@ -3,7 +3,7 @@ import type { Result, TransferMode } from "@symmetria/fm-core/contract";
 import { isFailure } from "@symmetria/fm-core/contract";
 import type { CopyTarget } from "@symmetria/fm-core/keys/types";
 import { cursorEntry, entryAt, joinPath } from "@symmetria/fm-core/pane";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   cancelTransfer,
@@ -43,6 +43,11 @@ interface Clipboard {
   readonly mode: TransferMode;
 }
 
+export interface CreateTarget {
+  readonly directory: string;
+  onCreated?(path: string): void;
+}
+
 export type OpsModal =
   | { readonly kind: "none" }
   | { readonly kind: "delete"; readonly paths: readonly string[] }
@@ -59,7 +64,7 @@ export type OpsModal =
        */
       readonly selectTo: number;
     }
-  | { readonly kind: "create" }
+  | { readonly kind: "create"; readonly target: CreateTarget }
   | {
       readonly kind: "conflict";
       readonly conflicts: readonly string[];
@@ -87,7 +92,7 @@ export interface FileOps {
   paste(): void;
   requestDelete(): void;
   requestRename(withExtension: boolean): void;
-  requestCreate(): void;
+  requestCreate(target?: CreateTarget): void;
   open(): void;
   /** Hand the entry at this index to the desktop, whatever is marked. */
   openAt(index: number): void;
@@ -114,6 +119,48 @@ function stemLength(name: string): number {
   return dot > 0 ? dot : name.length;
 }
 
+/** The create dialog owns its destination, pending request, and completion callback. */
+function useCreateConfirmation(
+  modal: OpsModal,
+  setModal: (modal: OpsModal) => void,
+  setMessage: (message: string) => void,
+) {
+  const activeModal = useRef<OpsModal | null>(modal);
+  const pendingCreate = useRef<OpsModal | null>(null);
+  useEffect(() => {
+    activeModal.current = modal;
+    return () => {
+      activeModal.current = null;
+    };
+  }, [modal]);
+
+  return useCallback(
+    (name: string) => {
+      if (modal.kind !== "create" || pendingCreate.current === modal) return;
+      // A trailing separator is how the create dialog says "a directory" —
+      // the same convention a shell uses, and it needs no second control.
+      const kind = name.endsWith("/") ? "directory" : "file";
+      const trimmed = name.replace(/\/+$/, "");
+      if (trimmed === "") return;
+
+      const path = joinPath(modal.target.directory, trimmed);
+      pendingCreate.current = modal;
+      void createPath({ path, kind }).then((reply) => {
+        if (pendingCreate.current === modal) pendingCreate.current = null;
+        // A cancelled dialog's reply must not close or report into a newer dialog.
+        if (activeModal.current !== modal) return;
+        if (isFailure(reply)) {
+          setMessage(reply.error.message);
+          return;
+        }
+        setModal({ kind: "none" });
+        modal.target.onCreated?.(path);
+      });
+    },
+    [modal, setModal, setMessage],
+  );
+}
+
 let nextTransfer = 0;
 
 export function useFileOps(tabs: Tabs): FileOps {
@@ -121,6 +168,7 @@ export function useFileOps(tabs: Tabs): FileOps {
   const [clipboard, setClipboard] = useState<Clipboard | null>(null);
   const [progress, setProgress] = useState<TransferProgressState | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const confirmCreate = useCreateConfirmation(modal, setModal, setMessage);
 
   const pane = tabs.pane;
 
@@ -257,25 +305,6 @@ export function useFileOps(tabs: Tabs): FileOps {
     [modal],
   );
 
-  const confirmCreate = useCallback(
-    (name: string) => {
-      // A trailing separator is how the create dialog says "a directory" —
-      // the same convention a shell uses, and it needs no second control.
-      const kind = name.endsWith("/") ? "directory" : "file";
-      const trimmed = name.replace(/\/+$/, "");
-      if (trimmed === "") return;
-
-      void createPath({ path: joinPath(pane.path, trimmed), kind }).then((reply) => {
-        if (isFailure(reply)) {
-          setMessage(reply.error.message);
-          return;
-        }
-        setModal({ kind: "none" });
-      });
-    },
-    [pane.path],
-  );
-
   const confirmDelete = useCallback(() => {
     if (modal.kind !== "delete") return;
     const paths = modal.paths;
@@ -303,7 +332,7 @@ export function useFileOps(tabs: Tabs): FileOps {
       if (targets.length > 0) setModal({ kind: "delete", paths: targets });
     },
     requestRename,
-    requestCreate: () => setModal({ kind: "create" }),
+    requestCreate: (target = { directory: pane.path }) => setModal({ kind: "create", target }),
     openAbsolute: openOne,
     open: () => {
       const target = targets[0];

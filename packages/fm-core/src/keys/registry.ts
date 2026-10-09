@@ -790,6 +790,7 @@ function isRenderable(ctx: KeyContext): boolean {
 }
 
 const TREE_SHARED = new Set([
+  "op.create",
   "search.start",
   "match.next",
   "match.prev",

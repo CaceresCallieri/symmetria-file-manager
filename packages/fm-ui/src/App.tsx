@@ -398,6 +398,7 @@ export function App(props: AppProps = {}) {
     overview,
     state,
     actions,
+    ops,
   );
   useBrowsingTransitions(tree.id, modes.reset, search.cancel, tree.cancel, millerFlash.clear);
   useBrowsingTransitions(context.view, millerFlash.clear);
@@ -541,6 +542,7 @@ function browsingContext(
   overview: ReturnType<typeof useOverviewMode>,
   state: KeyContext["state"],
   actions: KeyContext["actions"],
+  ops: FileOps,
 ) {
   const toggleView = () => {
     if (pickerActive) return;
@@ -561,7 +563,7 @@ function browsingContext(
       },
     },
   };
-  return treeKeyContext(base, tree, overview.model);
+  return treeKeyContext(base, tree, overview.model, ops);
 }
 
 function useProjectViews(tabs: Tabs) {

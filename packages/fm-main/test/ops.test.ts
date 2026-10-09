@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -263,10 +263,55 @@ describe("create", () => {
     expect(await readFile(join(root, "kept.txt"), "utf8")).toBe("important");
   });
 
-  it("is content for a directory that already exists", async () => {
-    await mkdir(join(root, "there"));
-    await expect(createEntry(join(root, "there"), "directory")).resolves.toBeUndefined();
+  it("tree-create P2-1: rejects an existing directory and preserves its contents", async () => {
+    const existing = await tree("there");
+    await expect(createEntry(existing, "directory")).rejects.toMatchObject({
+      code: "EEXIST",
+      syscall: "mkdir",
+      path: existing,
+    });
+    expect(await names(existing)).toEqual(["nested", "top.txt"]);
+    expect(await readFile(join(existing, "nested", "deep.txt"), "utf8")).toBe("deep");
+    expect(await readFile(join(existing, "top.txt"), "utf8")).toBe("top");
   });
+
+  it("tree-create P2-1: rejects a file at the final directory target without changing its contents", async () => {
+    const existing = join(root, "kept.txt");
+    await writeFile(existing, "important");
+    await expect(createEntry(existing, "directory")).rejects.toMatchObject({ code: "EEXIST" });
+    expect(await readFile(existing, "utf8")).toBe("important");
+  });
+
+  it.each(["file", "directory"] as const)(
+    "tree-create P2-1: preserves a blocking parent file when creating a %s",
+    async (kind) => {
+      const parent = join(root, "parent.txt");
+      await writeFile(parent, "important");
+      await expect(createEntry(join(parent, "nested", "child"), kind)).rejects.toMatchObject({
+        code: "ENOTDIR",
+      });
+      expect(await readFile(parent, "utf8")).toBe("important");
+    },
+  );
+
+  it.skipIf(process.getuid?.() === 0)(
+    "tree-create P2-1: returns the real permission error for a directory create without writing",
+    async () => {
+      const locked = join(root, "locked");
+      await mkdir(locked);
+      await chmod(locked, 0o500);
+      try {
+        await expect(createEntry(join(locked, "denied"), "directory")).rejects.toMatchObject({
+          code: "EACCES",
+          syscall: "mkdir",
+          path: join(locked, "denied"),
+        });
+        expect(await names(locked)).toEqual([]);
+      } finally {
+        await chmod(locked, 0o700);
+      }
+    },
+  );
 });
 
 describe("rename", () => {
