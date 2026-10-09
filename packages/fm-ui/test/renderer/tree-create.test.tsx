@@ -2,55 +2,20 @@
  * @vitest-environment happy-dom
  * UI entry point: App. Tree create must reach the existing file-operation bridge.
  */
-import type { CreateRequest, Result } from "@symmetria/fm-core/contract";
 import type { CursorEntry } from "@symmetria/fm-core/keys/types";
-import { parentOf } from "@symmetria/fm-core/pane";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useLayoutEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { App } from "../../src/App.tsx";
 import type { TreeRow } from "../../src/tree/model.ts";
 import { useTreeController } from "../../src/tree/useTreeController.ts";
 import type { TreePort } from "../../src/tree/useTreeMode.ts";
 import { deferred } from "./deferred.ts";
-import { installTreeBridge, openTree, treeEntry, treeKey, treeRow } from "./tree-support.ts";
+import { openCreateTree, openTree, treeEntry, treeKey, treeRow } from "./tree-support.ts";
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
-
-async function openCreateTree(root = "/home/jc") {
-  const log = installTreeBridge();
-  if (root === "/") log.entries.set("/", [treeEntry("home", "directory")]);
-  const create = vi.fn(async ({ path, kind }: CreateRequest): Promise<Result<null>> => {
-    const parent = parentOf(path);
-    const entries = log.entries.get(parent);
-    const name = path.slice(parent === "/" ? 1 : parent.length + 1);
-    if (!entries) {
-      return { ok: false, error: { code: "write_failed", message: "permission denied" } };
-    }
-    if (entries.some((entry) => entry.name === name)) {
-      return {
-        ok: false,
-        error: {
-          code: "write_failed",
-          message: `EEXIST: file already exists, ${kind === "directory" ? "mkdir" : "open"} '${path}'`,
-        },
-      };
-    }
-    log.entries.set(parent, [...entries, treeEntry(name, kind)]);
-    if (kind === "directory") log.entries.set(path, []);
-    return { ok: true, value: null };
-  });
-  Object.assign(window.symmetriaFm ?? {}, { create });
-  render(<App startPath={root} />);
-  await waitFor(() => expect(screen.getAllByTestId("row").length).toBeGreaterThan(0));
-  treeKey("e", true);
-  await screen.findByRole("tree");
-  await waitFor(() => treeRow(root));
-  return { ...log, create };
-}
 
 async function createField() {
   treeKey("a");

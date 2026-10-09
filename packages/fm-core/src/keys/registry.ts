@@ -766,8 +766,8 @@ export const TREE_ONLY: readonly Binding[] = [
   {
     id: "tree.refreshAll",
     keys: ["r"],
-    mods: "Shift",
-    keycap: "⇧R",
+    mods: "Ctrl",
+    keycap: "⌃r",
     label: "Refresh tree",
     icon: "refresh",
     group: "View",
@@ -791,6 +791,15 @@ function isRenderable(ctx: KeyContext): boolean {
 
 const TREE_SHARED = new Set([
   "op.create",
+  "op.delete",
+  "op.rename",
+  "clip.yank",
+  "clip.cut",
+  "clip.paste",
+  "clip.pasteCtrl",
+  "sel.toggle",
+  "sel.clear",
+  "chord.copy",
   "search.start",
   "match.next",
   "match.prev",
@@ -806,6 +815,7 @@ const TREE_SHARED = new Set([
   "help.open",
 ]);
 const TREE_MILLER = new Set([
+  "miller.renameExt",
   "miller.overview",
   "miller.toggleHidden",
   "miller.tabNew",

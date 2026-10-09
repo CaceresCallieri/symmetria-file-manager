@@ -2,6 +2,7 @@
  * @vitest-environment happy-dom
  *
  * The file operations, driven from the keys that invoke them.
+ * Every UI spec mounts App, the application entry point.
  *
  * `ops.test.ts` proves the mutations against a real filesystem. This proves the
  * application reaches them: which entries an operation acts on, which dialog
@@ -64,6 +65,20 @@ describe("what an operation acts on", () => {
 });
 
 describe("the clipboard", () => {
+  it("tree-operations Miller guard preserves destination marks after copy paste", async () => {
+    await opened();
+    await onNotes();
+    fireEvent.keyDown(window, { key: "y" });
+    fireEvent.keyDown(window, { key: " " });
+    expect(screen.getByTestId("column-current").querySelectorAll("[data-marked]")).toHaveLength(1);
+
+    fireEvent.keyDown(window, { key: "p" });
+
+    await waitFor(() => expect(log.ops).toContain("copy /home/jc/notes.txt -> /home/jc"));
+    await waitFor(() => expect(screen.getByTestId("pane-message").textContent).toContain("copied"));
+    expect(screen.getByTestId("column-current").querySelectorAll("[data-marked]")).toHaveLength(1);
+  });
+
   it("copies with y and pastes into the current directory", async () => {
     await opened();
     await onNotes();
@@ -205,6 +220,23 @@ describe("trash", () => {
 });
 
 describe("rename", () => {
+  it("tree-operations Miller guard preserves unrelated marks after cursor rename", async () => {
+    await opened();
+    fireEvent.keyDown(window, { key: " " });
+    await waitFor(() => expect(cursorIn("column-current")).toContain("notes.txt"));
+    fireEvent.keyDown(window, { key: "r" });
+    const field = await screen.findByTestId("dialog-name");
+    fireEvent.change(field, { target: { value: "renamed.txt" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    await waitFor(() => expect(screen.queryByTestId("modal-rename")).toBeNull());
+    expect(log.ops).toContain("rename /home/jc/notes.txt -> renamed.txt");
+    expect(screen.getByTestId("status-bar").textContent).toContain("1 selected");
+    fireEvent.keyDown(window, { key: "c" });
+    fireEvent.keyDown(window, { key: "c" });
+    await waitFor(() => expect(log.ops).toContain("clipboard text /home/jc/projects"));
+  });
+
   it("opens with the stem selected, not the extension", async () => {
     // The extension is almost never what changes, and skipping past it every
     // time is the friction `⇧R` exists to opt out of.

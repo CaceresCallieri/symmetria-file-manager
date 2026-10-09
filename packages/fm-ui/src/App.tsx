@@ -348,7 +348,7 @@ export function App(props: AppProps = {}) {
   // key action table. The URL cannot change for this window's lifetime.
   const request = useMemo(() => pickerRequest(props.picker), [props.picker]);
   const picker = usePicker(request, tabs);
-  const ops = useFileOps(tabs);
+  const ops = useFileOps(tabs, tree.key);
   const search = useSearch({
     entries: tabs.pane.entries,
     cursorIndex: tabs.pane.cursorIndex,
@@ -454,7 +454,7 @@ export function App(props: AppProps = {}) {
         />
         <WhichKeyOverlay
           prefix={modes.chordPrefix}
-          cursorIsImage={state.cursorEntry?.isImage === true}
+          cursorIsImage={context.state.cursorEntry?.isImage === true}
           bookmarks={browsingBookmarks(context, bookmarks.byLetter)}
         />
         {/* One bar, and nothing above it that comes and goes. The search field
@@ -462,10 +462,15 @@ export function App(props: AppProps = {}) {
           search pushed the columns down and a copy starting pushed them up.
           Both now live inside the bar, which has a fixed height. */}
         <StatusBar
-          summary={treeSummary(tree.root, overview.model, tabs.showHidden)}
+          summary={treeSummary(
+            tree.root,
+            overview.model,
+            tabs.showHidden,
+            context.state.selectedCount,
+          )}
           picker={picker.chrome}
           entryCount={tabs.pane.entries.length}
-          selectedCount={state.selectedCount}
+          selectedCount={context.state.selectedCount}
           sort={tabs.sort}
           reverse={tabs.reverse}
           showHidden={tabs.showHidden}
@@ -494,7 +499,7 @@ export function App(props: AppProps = {}) {
       <Overlays
         modes={modes}
         context={context}
-        bookmarks={bookmarks.byLetter}
+        bookmarks={browsingBookmarks(context, bookmarks.byLetter)}
         directory={tabs.pane.path}
         renderDocuments={tabs.renderDocuments}
         pane={previewPanes.reader}
@@ -549,6 +554,8 @@ function browsingContext(
     search.cancel();
     modes.reset();
     tree.cancel();
+    // Ctrl+E is an idempotent open. Toggling here broke the existing entry guard.
+    // Escape and the Miller control close tree mode.
     tree.open();
   };
   const base: KeyContext = {

@@ -133,14 +133,27 @@ describe("view scoping", () => {
     expect(tree.every((binding) => [...CORE, ...TREE_ONLY, ...MILLER_ONLY].includes(binding))).toBe(
       true,
     );
-    // Tree create reuses op.create; the other file operations remain outside tree mode.
+    // The brief expands tree operations while keeping History and Tools scoped to Miller.
     expect(
       tree
-        .filter((binding) => binding.id !== "op.create")
-        .some((binding) =>
-          ["File", "Clipboard", "Selection", "History", "Tools"].includes(binding.group),
-        ),
-    ).toBe(false);
+        .filter((binding) => ["File", "Clipboard", "Selection"].includes(binding.group))
+        .map((binding) => binding.id)
+        .sort(),
+    ).toEqual(
+      [
+        "clip.cut",
+        "clip.paste",
+        "clip.pasteCtrl",
+        "clip.yank",
+        "miller.renameExt",
+        "op.create",
+        "op.delete",
+        "op.rename",
+        "sel.clear",
+        "sel.toggle",
+      ].sort(),
+    );
+    expect(tree.some((binding) => ["History", "Tools"].includes(binding.group))).toBe(false);
     expect(tree.some((binding) => binding.id === "tree.toggleGitignore")).toBe(false);
   });
 

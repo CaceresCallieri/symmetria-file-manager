@@ -1,7 +1,9 @@
+import type { CreateRequest, Result } from "@symmetria/fm-core/contract";
 import type { OverviewEntry, OverviewRequest } from "@symmetria/fm-core/overview/contract";
+import { parentOf } from "@symmetria/fm-core/pane";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createElement } from "react";
-import { vi } from "vitest";
+import { expect, vi } from "vitest";
 import { App, type AppProps } from "../../src/App.tsx";
 import { installBridge } from "./support.ts";
 
@@ -77,4 +79,36 @@ export async function openTree(extra: ReturnType<typeof treeEntry>[] = []) {
   await screen.findByRole("tree");
   await waitFor(() => treeRow("/home/jc/src"));
   return log;
+}
+
+export async function openCreateTree(root = "/home/jc", extra: readonly OverviewEntry[] = []) {
+  const log = installTreeBridge(extra);
+  if (root === "/") log.entries.set("/", [treeEntry("home", "directory")]);
+  const create = vi.fn(async ({ path, kind }: CreateRequest): Promise<Result<null>> => {
+    const parent = parentOf(path);
+    const entries = log.entries.get(parent);
+    const name = path.slice(parent === "/" ? 1 : parent.length + 1);
+    if (!entries) {
+      return { ok: false, error: { code: "write_failed", message: "permission denied" } };
+    }
+    if (entries.some((entry) => entry.name === name)) {
+      return {
+        ok: false,
+        error: {
+          code: "write_failed",
+          message: `EEXIST: file already exists, ${kind === "directory" ? "mkdir" : "open"} '${path}'`,
+        },
+      };
+    }
+    log.entries.set(parent, [...entries, treeEntry(name, kind)]);
+    if (kind === "directory") log.entries.set(path, []);
+    return { ok: true, value: null };
+  });
+  Object.assign(window.symmetriaFm ?? {}, { create });
+  render(createElement<AppProps>(App, { startPath: root }));
+  await waitFor(() => expect(screen.getAllByTestId("row").length).toBeGreaterThan(0));
+  treeKey("e", true);
+  await screen.findByRole("tree");
+  await waitFor(() => treeRow(root));
+  return { ...log, create };
 }

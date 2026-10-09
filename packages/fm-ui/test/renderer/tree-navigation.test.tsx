@@ -11,7 +11,7 @@ function selected() {
   return screen.getByRole("tree").querySelector<HTMLElement>('[aria-selected="true"]');
 }
 
-it("supports the complete structural keyboard table without leaving the root", async () => {
+it("tree-operations AC6 refresh: preserves the structural keyboard table with Ctrl+R refresh", async () => {
   const log = await openTree([treeEntry(".hidden")]);
   fireEvent.click(treeRow("/home/jc/notes.txt"));
   treeKey("Home");
@@ -38,7 +38,7 @@ it("supports the complete structural keyboard table without leaving the root", a
   fireEvent.keyDown(window, { key: "H", shiftKey: true });
   await waitFor(() => expect(treeRow("/home/jc/.hidden")).toBeTruthy());
   const reads = log.overview.mock.calls.length;
-  fireEvent.keyDown(window, { key: "R", shiftKey: true });
+  fireEvent.keyDown(window, { key: "r", ctrlKey: true });
   await waitFor(() => expect(log.overview.mock.calls.length).toBeGreaterThan(reads));
   expect(log.open).not.toHaveBeenCalled();
 });

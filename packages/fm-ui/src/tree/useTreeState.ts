@@ -98,6 +98,24 @@ export function useTreeState(root: string, model: OverviewModel, record: TreeRec
     reveal,
     toggle,
     preset,
+    toggleMark: (path: string) =>
+      setShape((previous) => {
+        if (path === root || !rows.some((row) => row.path === path)) return previous;
+        const marks = new Set(previous.marks);
+        if (marks.has(path)) marks.delete(path);
+        else marks.add(path);
+        return { ...previous, marks };
+      }),
+    clearMarks: (paths?: readonly string[]) =>
+      setShape((previous) => {
+        const marks = new Set(
+          [...(previous.marks ?? [])].filter(
+            (path) =>
+              paths !== undefined && !paths.some((removed) => isAncestorPath(removed, path)),
+          ),
+        );
+        return marks.size === (previous.marks?.size ?? 0) ? previous : { ...previous, marks };
+      }),
     chooseSearch: (path: string) => {
       setTemporaryPath(path);
       select(path);

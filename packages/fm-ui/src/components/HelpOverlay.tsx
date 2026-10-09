@@ -79,24 +79,14 @@ export function HelpOverlay({ context, bookmarks, onClose }: HelpOverlayProps) {
           );
         })}
 
-        {context.view === "tree" ? (
-          <section data-testid="help-group-Chords">
-            <h3>Chords</h3>
-            {CHORD_GROUPS.get("g")?.binds.map((entry) => (
-              <div key={entry.key} className="help-row" data-testid="help-row">
-                <kbd>g{entry.key}</kbd>
-                <span>{entry.label}</span>
-              </div>
-            ))}
-          </section>
-        ) : null}
-        {context.view === "miller" ? (
+        {context.view !== "overview" ? (
           <>
             <section data-testid="help-group-Chords">
               <h3>Chords</h3>
               {[...CHORD_GROUPS].map(([prefix]) => {
                 // `groupFor` is shared with the which-key HUD, so the cheat sheet
                 // and the popup cannot come to disagree about what `g` offers.
+                if (context.view === "tree" && prefix === ",") return null;
                 const shown = groupFor(prefix, cursorIsImage, bookmarks);
                 if (shown === undefined) return null;
                 return (
@@ -118,15 +108,17 @@ export function HelpOverlay({ context, bookmarks, onClose }: HelpOverlayProps) {
               })}
             </section>
 
-            <section data-testid="help-group-Modes">
-              <h3>Modes</h3>
-              {MODES.map((mode) => (
-                <div key={mode.keycap} className="help-row" data-testid="help-row">
-                  <kbd>{mode.keycap}</kbd>
-                  <span>{mode.label}</span>
-                </div>
-              ))}
-            </section>
+            {context.view === "miller" ? (
+              <section data-testid="help-group-Modes">
+                <h3>Modes</h3>
+                {MODES.map((mode) => (
+                  <div key={mode.keycap} className="help-row" data-testid="help-row">
+                    <kbd>{mode.keycap}</kbd>
+                    <span>{mode.label}</span>
+                  </div>
+                ))}
+              </section>
+            ) : null}
           </>
         ) : null}
       </div>
