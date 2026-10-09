@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -65,6 +65,23 @@ describe("the command-line tool", () => {
     expect(out.code).toBe(0);
     expect(seen).toEqual(["/home/jc/Downloads"]);
     await claim.value.close();
+  });
+
+  it("opens the home folder when the desktop entry supplies no path", async () => {
+    const socket = join(dir, "d.sock");
+    const seen: string[] = [];
+    const claim = await claimSocket(socket, async (command) => {
+      if (command.cmd === "open") seen.push(command.path);
+      return { ok: true, value: null };
+    });
+    expect(claim.ok).toBe(true);
+    if (!claim.ok) return;
+    try {
+      expect((await cli(["open"], socket)).code).toBe(0);
+      expect(seen).toEqual([homedir()]);
+    } finally {
+      await claim.value.close();
+    }
   });
 
   it("exits 1 when the daemon rejects the command", async () => {

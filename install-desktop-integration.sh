@@ -32,8 +32,9 @@ repo="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 applications="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 units="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 bindir="$HOME/.local/bin"
+icons="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/256x256/apps"
 
-mkdir -p "$applications" "$units" "$bindir"
+mkdir -p "$applications" "$units" "$bindir" "$icons"
 
 link() {
   # `-n` so a re-run replaces the link rather than creating one INSIDE the
@@ -74,6 +75,8 @@ case ":$PATH:" in
   *":$bindir:"*) ;;
   *) echo "NOTE: $bindir is not on this shell's PATH; the .desktop entry needs it on the session PATH." >&2 ;;
 esac
+
+link "$repo/assets/symmetria-fm.png" "$icons/symmetria-fm-electron.png"
 
 echo "Registering the unit (this starts nothing):"
 # Both of these are non-disruptive. `daemon-reload` re-reads unit files and

@@ -9,6 +9,7 @@
   "desktopName": "symmetria-fm-electron.desktop",
   "scripts": {
     "build": "node scripts/build.mjs && vite build",
+    "release:pack": "NODE_ENV=production pnpm run build && node scripts/package-release.mjs",
     "test": "vitest run",
     "start": "node scripts/start.mjs",
     "dev": "node scripts/build.mjs && vite build && node scripts/start.mjs"

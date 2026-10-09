@@ -18,11 +18,6 @@ TryExec=symmetria-fm-electron-cli
 # %f and not %u: the tool takes a plain absolute path and would pass a file://
 # URI through verbatim.
 Exec=symmetria-fm-electron-cli open %f
-# DEFERRED, deliberately, and said here so it does not read as an oversight:
-# no asset with this name exists yet, so a launcher falls back to a generic
-# icon. The Qt build's `assets/symmetria-fm.png` is the obvious source when
-# somebody wants one, but sharing its NAME would make a launcher show one
-# entry for two applications that are deliberately distinct.
 Icon=symmetria-fm-electron
 Type=Application
 Categories=System;FileTools;FileManager;

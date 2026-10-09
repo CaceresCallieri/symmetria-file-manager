@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createConnection } from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
@@ -36,7 +36,7 @@ function socketPath() {
 
 const USAGE = `symmetria-fm-electron-cli — talk to the running file manager
 
-  open <absolute-path>    open that directory as a tab, and go to it
+  open [absolute-path]    open that directory, or your home folder
   createPicker '<json>'   open a file dialog answering the given fifo
   closePicker '<json>'    dismiss the dialog answering that fifo
 
@@ -123,8 +123,8 @@ function pickerPayload(cmd, json) {
 
 function payloadFor(cmd, args) {
   if (cmd === "open") {
-    const path = args[0];
-    if (path === undefined || path === "") {
+    const path = args[0] ?? homedir();
+    if (path === "") {
       fail(`open needs a path\n\n${USAGE}`);
     }
     return { cmd: "open", path };
