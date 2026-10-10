@@ -29,6 +29,7 @@
   --glass-background: color-mix(in srgb, var(--glass-surface) 80%, transparent);
   --glass-border: rgb(255 255 255 / 5%);
   --glass-highlight: rgb(255 255 255 / 3%);
+  --glass-filter: blur(16px) saturate(1.08);
 
   /* ── Text ─────────────────────────────────────────────────────────────── */
   /* neutral-100 */
@@ -44,6 +45,11 @@
   --accent: rgb(255 255 255 / 8%);
   /* What dims the window behind a dialog. */
   --overlay-scrim: rgb(0 0 0 / 60%);
+
+  /* Input and action rules need more contrast than the 5–6% glass edges. */
+  --dialog-border: color-mix(in srgb, var(--foreground) 15%, transparent);
+  /* The Quiet confirm action uses a neutral fill, independent of blue primary. */
+  --dialog-confirm: color-mix(in srgb, var(--foreground) 88%, var(--background));
 
   /* File-type colours stay softer than search and flash labels. */
   --icon-blue: #89b4e8;
@@ -222,4 +228,12 @@
   /* ── Type ─────────────────────────────────────────────────────────────── */
   --font-sans: Rubik, system-ui, sans-serif;
   --font-mono: "CaskaydiaCove NF", ui-monospace, monospace;
+}
+
+/* Both glass consumers honor the same transparency preference. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-background: var(--glass-surface);
+    --glass-filter: none;
+  }
 }

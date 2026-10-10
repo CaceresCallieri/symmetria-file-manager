@@ -3,6 +3,7 @@ import { parentOf } from "@symmetria/fm-core/pane";
 import type { TreeRow } from "./model.ts";
 
 export interface TreeShape {
+  marks?: ReadonlySet<string>;
   selected: string;
   collapsed: ReadonlySet<string>;
   preset: "expanded" | "collapsed" | null;

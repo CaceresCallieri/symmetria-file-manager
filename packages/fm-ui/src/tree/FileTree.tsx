@@ -1,5 +1,5 @@
 import { defaultRangeExtractor, type Range, useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useId, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useState } from "react";
 import { PathBar } from "../components/PathBar.tsx";
 import { INITIAL_RECT, observeWithFallback } from "../components/virtualize.ts";
 import { ViewportFlash } from "../flash/ViewportFlash.tsx";
@@ -20,6 +20,7 @@ import { useTreeWidth } from "./useTreeWidth.ts";
 import "./tree.css";
 
 const ROW_HEIGHT = 24;
+const EMPTY_MARKS: ReadonlySet<string> = new Set();
 
 export function FileTree({
   root,
@@ -127,12 +128,25 @@ export function FileTree({
   };
   useTreeController(
     port,
-    { command, reveal: state.reveal, cancel: reset },
+    {
+      command,
+      reveal: state.reveal,
+      cancel: reset,
+      // During refresh the displayed fallback can differ from shape.selected.
+      // Mark the published row so Space cannot mark a removed, invisible path.
+      toggleMark: () => {
+        if (current) state.toggleMark(current.path);
+      },
+      clearMarks: state.clearMarks,
+    },
     current,
     search.active,
     search.matchCount,
     viewport,
   );
+  useLayoutEffect(() => {
+    port.marks?.(state.shape.marks ?? EMPTY_MARKS);
+  }, [port.marks, state.shape.marks]);
   const width = useTreeWidth(rows, viewport);
   return (
     <section className="file-tree" aria-label="Project file tree">
@@ -183,6 +197,7 @@ export function FileTree({
                   key={row.path}
                   row={row}
                   selected={row.path === current?.path}
+                  marked={state.shape.marks?.has(row.path) ?? false}
                   matched={
                     flash.active ? flash.matches.has(row.path) : search.matches.has(row.path)
                   }

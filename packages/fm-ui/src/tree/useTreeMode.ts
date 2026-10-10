@@ -1,11 +1,15 @@
 import type { CursorEntry, KeyContext } from "@symmetria/fm-core/keys/types";
 import { isAncestorPath } from "@symmetria/fm-core/overview/model";
-import { cursorEntry, joinPath } from "@symmetria/fm-core/pane";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { cursorEntry, joinPath, parentOf } from "@symmetria/fm-core/pane";
+import { useEffect, useState } from "react";
+import type { OperationTarget } from "../fileOps/targets.ts";
 import { type FlashPort, useFlashPort } from "../flash/useFlashPort.ts";
 import type { OverviewModel } from "../overview/useOverview.ts";
+import type { FileOps } from "../useFileOps.ts";
 import type { Tabs } from "../useTabs.ts";
+import { captureTreeTarget } from "./operationTarget.ts";
 import { type TreeRecord, TreeStateCache } from "./state.ts";
+import { useTreePort } from "./useTreePort.ts";
 
 export type TreeCommand =
   | "search"
@@ -28,9 +32,12 @@ export interface TreeController {
   command(command: TreeCommand): void;
   reveal(path: string): void;
   cancel(): void;
+  toggleMark?(): void;
+  clearMarks?(paths?: readonly string[]): void;
 }
 export interface TreePort {
   flash?: FlashPort;
+  marks?(paths: ReadonlySet<string>): void;
   search?(state: { active: boolean; count: number }): void;
   connect(handler: TreeController): () => void;
   select(entry: CursorEntry): void;
@@ -43,20 +50,14 @@ interface TreeTab {
 
 export function useTreeMode(tabs: Tabs) {
   const flash = useFlashPort();
-  const [search, setSearch] = useState({ active: false, count: 0 });
   const id = tabs.views[tabs.activeIndex]?.id ?? "";
   const [views, setViews] = useState<ReadonlyMap<string, TreeTab>>(new Map());
   const [cache] = useState(() => new TreeStateCache());
   const tab = views.get(id);
   const root = tab?.active ? tab.root : null;
-  const [entry, setEntry] = useState<CursorEntry | null>(null);
-  const handler = useRef<TreeController | null>(null);
-  const connect = useCallback((next: TreeController) => {
-    handler.current = next;
-    return () => {
-      if (handler.current === next) handler.current = null;
-    };
-  }, []);
+  const key = JSON.stringify([id, root, tabs.showHidden]);
+  const record = root === null ? null : cache.get(id, root, tabs.showHidden);
+  const { entry, marks, search, handler, owner, port } = useTreePort(key, flash.port);
   const ids = tabs.views.map((view) => view.id).join("\0");
   useEffect(() => {
     const alive = ids.split("\0");
@@ -94,15 +95,43 @@ export function useTreeMode(tabs: Tabs) {
     onFlashKey: flash.onKey,
     entry,
     id,
-    key: JSON.stringify([id, root, tabs.showHidden]),
-    record: root === null ? null : cache.get(id, root, tabs.showHidden),
-    port: { connect, select: setEntry, flash: flash.port, search: setSearch } satisfies TreePort,
+    key,
+    record,
+    marks,
+    toggleMark: () => handler.current?.toggleMark?.(),
+    clearMarks: () => handler.current?.clearMarks?.(),
+    operationTarget: (model: OverviewModel): OperationTarget | null => {
+      const origin = handler.current;
+      return captureTreeTarget({
+        root,
+        entry,
+        marks,
+        record,
+        controller: origin,
+        isCurrent: () => owner.current === key && handler.current === origin,
+        refresh: () => model.refresh?.(),
+      });
+    },
+    port,
     newTab: () => tabs.open(root ?? tabs.pane.path),
     toggleHidden: tabs.toggleHidden,
     close,
     open,
     external,
     reveal: (path: string) => handler.current?.reveal(path),
+    requestCreate: (ops: FileOps, model: OverviewModel) => {
+      const origin = handler.current;
+      if (root === null || entry === null || origin === null) return;
+      ops.requestCreate({
+        directory: entry.isDirectory ? entry.path : parentOf(entry.path),
+        onCreated: (path) => {
+          // The controller identity changes when its tree/tab unmounts or remounts.
+          if (handler.current !== origin) return;
+          model.refresh?.();
+          origin.reveal(path);
+        },
+      });
+    },
     cancel: () => handler.current?.cancel(),
     command: (command: TreeCommand) => handler.current?.command(command),
   };
@@ -112,8 +141,13 @@ export function treeKeyContext(
   context: KeyContext,
   tree: ReturnType<typeof useTreeMode>,
   model: OverviewModel,
+  ops: FileOps,
 ): KeyContext {
   if (tree.root === null || context.view === "overview") return context;
+  const withTarget = (run: (target: OperationTarget) => void) => () => {
+    const target = tree.operationTarget(model);
+    if (target !== null) run(target);
+  };
   return {
     ...context,
     view: "tree",
@@ -121,12 +155,27 @@ export function treeKeyContext(
     state: {
       ...context.state,
       cursorEntry: tree.entry,
-      selectedCount: 0,
+      selectedCount: tree.marks.size,
       searchActive: tree.search.active,
       matchCount: tree.search.count,
     },
     actions: {
       ...context.actions,
+      createEntry: () => tree.requestCreate(ops, model),
+      trash: withTarget(ops.requestDelete),
+      rename: (fullName) => withTarget((target) => ops.requestRename(fullName, target))(),
+      yank: withTarget(ops.yank),
+      cut: withTarget(ops.cut),
+      paste: withTarget(ops.paste),
+      copyToClipboard: (kind) => withTarget((target) => ops.copyToClipboard(kind, target))(),
+      toggleSelection: () => {
+        ops.clearMessage();
+        tree.toggleMark();
+      },
+      clearSelection: () => {
+        ops.clearMessage();
+        tree.clearMarks();
+      },
       startSearch: () => tree.command("search"),
       nextMatch: () => tree.command("search-next"),
       previousMatch: () => tree.command("search-previous"),

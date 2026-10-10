@@ -1,7 +1,8 @@
-import { cp, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { TransferMode } from "@symmetria/fm-core/contract";
+import { isAncestorPath } from "@symmetria/fm-core/overview/model";
 
 /**
  * Copying, moving, creating and renaming — in this process, not through a shell.
@@ -54,18 +55,56 @@ async function exists(path: string): Promise<boolean> {
 function wouldRecurse(source: string, destination: string): boolean {
   const from = resolve(source);
   const into = resolve(destination);
-  return into === from || into.startsWith(`${from}/`);
+  return isAncestorPath(from, into);
 }
 
-function refuseRecursion(
+/** Resolve existing directory aliases without requiring copy destinations to exist. */
+async function physicalDirectory(path: string): Promise<string> {
+  const absolute = resolve(path);
+  try {
+    return await realpath(absolute);
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+    const parent = dirname(absolute);
+    if (parent === absolute) throw error;
+    // Copy historically creates missing destination directories. Resolve their
+    // nearest existing parent and preserve the missing suffix for the same behavior.
+    return join(await physicalDirectory(parent), basename(absolute));
+  }
+}
+
+async function validateTransfer(
   sources: readonly string[],
   destination: string,
   mode: TransferMode,
-): void {
+): Promise<void> {
+  const names = new Set<string>();
+  const physicalDestination = await physicalDirectory(destination);
   for (const source of sources) {
-    if (wouldRecurse(source, destination)) {
+    const name = basename(source);
+    // Cross-folder marks can share a basename. POSIX rename would replace the
+    // first moved entry with the second, so refuse the entire batch up front.
+    if (names.has(name))
+      throw new Error(`cannot ${mode} two entries named ${name} into one folder`);
+    names.add(name);
+    // A same-parent overwrite targets the source itself. Validate every final
+    // target before the batch starts; moveEntry removes overwrite targets.
+    const target = join(destination, basename(source));
+    if (resolve(source) === resolve(target) || wouldRecurse(source, destination)) {
       throw new Error(`cannot ${mode} ${basename(source)} into itself`);
     }
+    // Resolving only final inode equality missed aliased descendants and allowed
+    // overwrite to remove nested data before rename failed. Resolve the source
+    // parent, not its final symlink entry, to keep symlink transfers as entries.
+    const physicalSource = join(await physicalDirectory(dirname(source)), name);
+    if (wouldRecurse(physicalSource, physicalDestination))
+      throw new Error(`cannot ${mode} ${name} into itself`);
+    const from = await lstat(source);
+    const into = await lstat(target).catch(() => null);
+    // Lexical equality missed directory symlink aliases. lstat preserves entry
+    // semantics while detecting the same inode through an aliased parent path.
+    if (into && from.dev === into.dev && from.ino === into.ino)
+      throw new Error(`cannot ${mode} ${name} into itself`);
   }
 }
 
@@ -88,7 +127,7 @@ async function collisions(sources: readonly string[], destination: string): Prom
 export async function transfer(options: TransferOptions): Promise<TransferOutcome> {
   const { sources, destination, mode, overwrite, signal, onProgress } = options;
 
-  refuseRecursion(sources, destination, mode);
+  await validateTransfer(sources, destination, mode);
 
   if (!overwrite) {
     const conflicts = await collisions(sources, destination);
@@ -149,12 +188,15 @@ async function moveEntry(source: string, target: string, overwrite: boolean): Pr
  * like it does.
  */
 export async function createEntry(path: string, kind: "file" | "directory"): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
   if (kind === "directory") {
-    await mkdir(path, { recursive: true });
+    // Recursive mkdir on the final target accepted existing folders, so create
+    // closed its dialog without an error. Only parents are idempotent; plain
+    // mkdir rejects an existing final target with the original EEXIST error.
+    await mkdir(path);
     return;
   }
 
-  await mkdir(dirname(path), { recursive: true });
   // `wx` fails when the file is already there rather than truncating it. An
   // accidental second Enter on the create dialog must not empty a file.
   await writeFile(path, "", { flag: "wx" });

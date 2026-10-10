@@ -1,4 +1,14 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -41,6 +51,18 @@ async function names(dir: string): Promise<string[]> {
 }
 
 describe("copy", () => {
+  it.each([false, true])(
+    "tree-operations review P1-1 guard: copy overwrite=%s retains missing-destination creation",
+    async (overwrite) => {
+      const source = join(root, "keep.txt");
+      await writeFile(source, "source bytes");
+      const destination = join(root, "missing", "nested");
+      await transfer({ sources: [source], destination, mode: "copy", overwrite });
+      expect(await readFile(join(destination, "keep.txt"), "utf8")).toBe("source bytes");
+      expect(await readFile(source, "utf8")).toBe("source bytes");
+    },
+  );
+
   it("duplicates a directory and everything under it", async () => {
     const source = await tree("source");
     const destination = join(root, "into");
@@ -78,6 +100,24 @@ describe("copy", () => {
 });
 
 describe("move", () => {
+  it.each([false, true])(
+    "tree-operations review P1-1 guard: move overwrite=%s retains missing-destination refusal",
+    async (overwrite) => {
+      const source = join(root, "keep.txt");
+      await writeFile(source, "source bytes");
+      await expect(
+        transfer({
+          sources: [source],
+          destination: join(root, "missing"),
+          mode: "move",
+          overwrite,
+        }),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await readFile(source, "utf8")).toBe("source bytes");
+      expect(await names(root)).toEqual(["keep.txt"]);
+    },
+  );
+
   it("moves the entries and leaves nothing behind", async () => {
     const source = await tree("source");
     const destination = join(root, "into");
@@ -167,6 +207,183 @@ describe("conflicts", () => {
 });
 
 describe("refusals", () => {
+  it("tree-operations review P1-1 guard: filesystem-root recursion refuses before reading or copying entries", async () => {
+    await expect(
+      transfer({
+        sources: ["/"],
+        destination: root,
+        mode: "copy",
+        overwrite: false,
+        signal: AbortSignal.abort(),
+      }),
+    ).rejects.toThrow(/into itself/);
+    expect(await names(root)).toEqual([]);
+  });
+
+  it.each(["copy", "move"] as const)(
+    "tree-operations review P1-1 guard: %s preserves a final source symlink as an entry",
+    async (mode) => {
+      const real = await tree("real");
+      const source = join(root, "link");
+      await symlink(real, source);
+      await transfer({
+        sources: [source],
+        destination: join(real, "nested"),
+        mode,
+        overwrite: false,
+      });
+      expect((await stat(real)).isDirectory()).toBe(true);
+      const { lstat } = await import("node:fs/promises");
+      expect((await lstat(join(real, "nested", "link"))).isSymbolicLink()).toBe(true);
+      expect(await readFile(join(real, "top.txt"), "utf8")).toBe("top");
+    },
+  );
+
+  it.each([
+    ["copy", false],
+    ["copy", true],
+    ["move", false],
+    ["move", true],
+  ] as const)(
+    "tree-operations review P1-1 descendant: refuses aliased recursion %s overwrite=%s before any batch mutation",
+    async (mode, overwrite) => {
+      const real = join(root, "real");
+      const source = join(real, "folder");
+      const nested = join(source, "sub", "folder");
+      await mkdir(nested, { recursive: true });
+      await writeFile(join(nested, "keep.txt"), "nested bytes");
+      await writeFile(join(source, "source.txt"), "source bytes");
+      const earlier = join(root, "earlier.txt");
+      await writeFile(earlier, "earlier bytes");
+      const alias = join(root, "alias");
+      await symlink(real, alias);
+      const destination = join(alias, "folder", "sub");
+      const reply = await transfer({
+        sources: [earlier, source],
+        destination,
+        mode,
+        overwrite,
+      }).then(
+        () => null,
+        (error: unknown) => error,
+      );
+
+      expect(await readFile(join(nested, "keep.txt"), "utf8").catch(() => null)).toBe(
+        "nested bytes",
+      );
+      expect(await readFile(join(source, "source.txt"), "utf8").catch(() => null)).toBe(
+        "source bytes",
+      );
+      expect(await readFile(earlier, "utf8").catch(() => null)).toBe("earlier bytes");
+      expect(await names(join(source, "sub"))).toEqual(["folder"]);
+      expect(reply).toMatchObject({ message: expect.stringMatching(/into itself/) });
+    },
+  );
+
+  it.each([
+    ["copy", false],
+    ["copy", true],
+    ["move", false],
+    ["move", true],
+  ] as const)(
+    "tree-operations review P0-1: refuses duplicate-basename %s overwrite=%s before any batch mutation",
+    async (mode, overwrite) => {
+      const left = join(root, "left");
+      const right = join(root, "right");
+      const destination = join(root, "into");
+      await Promise.all([mkdir(left), mkdir(right), mkdir(destination)]);
+      const leftSource = join(left, "README.md");
+      const rightSource = join(right, "README.md");
+      const sources = [leftSource, rightSource];
+      await writeFile(leftSource, "left bytes");
+      await writeFile(rightSource, "right bytes");
+      if (overwrite) await writeFile(join(destination, "README.md"), "destination bytes");
+      const reply = await transfer({ sources, destination, mode, overwrite }).then(
+        () => null,
+        (error: unknown) => error,
+      );
+
+      expect(await readFile(leftSource, "utf8").catch(() => null)).toBe("left bytes");
+      expect(await readFile(rightSource, "utf8").catch(() => null)).toBe("right bytes");
+      expect(await names(destination)).toEqual(overwrite ? ["README.md"] : []);
+      if (overwrite)
+        expect(await readFile(join(destination, "README.md"), "utf8")).toBe("destination bytes");
+      expect(reply).toMatchObject({
+        message: expect.stringMatching(/two entries named README\.md/),
+      });
+    },
+  );
+
+  it.each([
+    ["copy", false],
+    ["copy", true],
+    ["move", false],
+    ["move", true],
+  ] as const)(
+    "tree-operations review P1-1: refuses directory-alias %s overwrite=%s before any batch mutation",
+    async (mode, overwrite) => {
+      const real = join(root, "real");
+      const destination = join(root, "alias");
+      await mkdir(real);
+      await symlink(real, destination);
+      const earlier = join(root, "earlier.txt");
+      const source = join(real, "keep.txt");
+      await writeFile(earlier, "earlier bytes");
+      await writeFile(source, "the only copy");
+      const reply = await transfer({
+        sources: [earlier, source],
+        destination,
+        mode,
+        overwrite,
+      }).then(
+        () => null,
+        (error: unknown) => error,
+      );
+
+      expect(await readFile(source, "utf8").catch(() => null)).toBe("the only copy");
+      expect(await readFile(earlier, "utf8").catch(() => null)).toBe("earlier bytes");
+      expect(await names(real)).toEqual(["keep.txt"]);
+      expect(reply).toMatchObject({ message: expect.stringMatching(/into itself/) });
+    },
+  );
+
+  it.each([
+    ["copy", false],
+    ["copy", true],
+    ["move", false],
+    ["move", true],
+  ] as const)(
+    "tree-operations native safety: refuses same-parent %s overwrite=%s before changing source bytes",
+    async (mode, overwrite) => {
+      const source = join(root, "keep.txt");
+      await writeFile(source, "the only copy");
+      const reply = await transfer({ sources: [source], destination: root, mode, overwrite }).then(
+        () => null,
+        (error: unknown) => error,
+      );
+      const bytes = await readFile(source, "utf8").catch(() => null);
+      expect(bytes).toBe("the only copy");
+      expect(reply).toMatchObject({ message: expect.stringMatching(/into itself/) });
+    },
+  );
+
+  it("tree-operations native safety: refuses a later self-target before mutating an earlier source in the batch", async () => {
+    const source = await tree("source");
+    const unsafe = join(root, "keep.txt");
+    await writeFile(unsafe, "keep");
+    await expect(
+      transfer({
+        sources: [join(source, "top.txt"), unsafe],
+        destination: root,
+        mode: "move",
+        overwrite: true,
+      }),
+    ).rejects.toThrow(/into itself/);
+    expect(await readFile(unsafe, "utf8")).toBe("keep");
+    expect(await readFile(join(source, "top.txt"), "utf8")).toBe("top");
+    expect(await names(root)).not.toContain("top.txt");
+  });
+
   it("refuses to put a directory inside itself", async () => {
     // `cp -r a a/b` is an infinite tree, and `mv` refuses it outright.
     const source = await tree("source");
@@ -263,10 +480,55 @@ describe("create", () => {
     expect(await readFile(join(root, "kept.txt"), "utf8")).toBe("important");
   });
 
-  it("is content for a directory that already exists", async () => {
-    await mkdir(join(root, "there"));
-    await expect(createEntry(join(root, "there"), "directory")).resolves.toBeUndefined();
+  it("tree-create P2-1: rejects an existing directory and preserves its contents", async () => {
+    const existing = await tree("there");
+    await expect(createEntry(existing, "directory")).rejects.toMatchObject({
+      code: "EEXIST",
+      syscall: "mkdir",
+      path: existing,
+    });
+    expect(await names(existing)).toEqual(["nested", "top.txt"]);
+    expect(await readFile(join(existing, "nested", "deep.txt"), "utf8")).toBe("deep");
+    expect(await readFile(join(existing, "top.txt"), "utf8")).toBe("top");
   });
+
+  it("tree-create P2-1: rejects a file at the final directory target without changing its contents", async () => {
+    const existing = join(root, "kept.txt");
+    await writeFile(existing, "important");
+    await expect(createEntry(existing, "directory")).rejects.toMatchObject({ code: "EEXIST" });
+    expect(await readFile(existing, "utf8")).toBe("important");
+  });
+
+  it.each(["file", "directory"] as const)(
+    "tree-create P2-1: preserves a blocking parent file when creating a %s",
+    async (kind) => {
+      const parent = join(root, "parent.txt");
+      await writeFile(parent, "important");
+      await expect(createEntry(join(parent, "nested", "child"), kind)).rejects.toMatchObject({
+        code: "ENOTDIR",
+      });
+      expect(await readFile(parent, "utf8")).toBe("important");
+    },
+  );
+
+  it.skipIf(process.getuid?.() === 0)(
+    "tree-create P2-1: returns the real permission error for a directory create without writing",
+    async () => {
+      const locked = join(root, "locked");
+      await mkdir(locked);
+      await chmod(locked, 0o500);
+      try {
+        await expect(createEntry(join(locked, "denied"), "directory")).rejects.toMatchObject({
+          code: "EACCES",
+          syscall: "mkdir",
+          path: join(locked, "denied"),
+        });
+        expect(await names(locked)).toEqual([]);
+      } finally {
+        await chmod(locked, 0o700);
+      }
+    },
+  );
 });
 
 describe("rename", () => {

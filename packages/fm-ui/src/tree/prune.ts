@@ -12,11 +12,15 @@ export function pruneTreeShape(
     const kept = new Set([...paths].filter((path) => !removed(path, root, folders)));
     return kept.size === paths.size ? paths : kept;
   };
+  const marks = shape.marks === undefined ? undefined : prune(shape.marks);
   const collapsed = prune(shape.collapsed);
   const checkpoint = shape.checkpoint === null ? null : prune(shape.checkpoint);
-  return collapsed === shape.collapsed && checkpoint === shape.checkpoint
-    ? shape
-    : { ...shape, collapsed, checkpoint };
+  if (marks === shape.marks && collapsed === shape.collapsed && checkpoint === shape.checkpoint)
+    return shape;
+  const pruned = { ...shape, collapsed, checkpoint };
+  // Explicit undefined broke the optional state contract. Preserve omitted marks.
+  if (marks !== undefined) pruned.marks = marks;
+  return pruned;
 }
 function removed(
   path: string,

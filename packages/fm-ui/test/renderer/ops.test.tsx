@@ -2,13 +2,14 @@
  * @vitest-environment happy-dom
  *
  * The file operations, driven from the keys that invoke them.
+ * Every UI spec mounts App, the application entry point.
  *
  * `ops.test.ts` proves the mutations against a real filesystem. This proves the
  * application reaches them: which entries an operation acts on, which dialog
  * gates it, and what the clipboard does afterwards.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../../src/App.tsx";
 import { type BridgeLog, cursorIn, installBridge, namesIn } from "./support.ts";
@@ -64,6 +65,20 @@ describe("what an operation acts on", () => {
 });
 
 describe("the clipboard", () => {
+  it("tree-operations Miller guard preserves destination marks after copy paste", async () => {
+    await opened();
+    await onNotes();
+    fireEvent.keyDown(window, { key: "y" });
+    fireEvent.keyDown(window, { key: " " });
+    expect(screen.getByTestId("column-current").querySelectorAll("[data-marked]")).toHaveLength(1);
+
+    fireEvent.keyDown(window, { key: "p" });
+
+    await waitFor(() => expect(log.ops).toContain("copy /home/jc/notes.txt -> /home/jc"));
+    await waitFor(() => expect(screen.getByTestId("pane-message").textContent).toContain("copied"));
+    expect(screen.getByTestId("column-current").querySelectorAll("[data-marked]")).toHaveLength(1);
+  });
+
   it("copies with y and pastes into the current directory", async () => {
     await opened();
     await onNotes();
@@ -124,7 +139,29 @@ describe("conflicts", () => {
 
     const dialog = await screen.findByTestId("modal-conflict");
     expect(within(dialog).getByTestId("conflict-list").textContent).toContain("notes.txt");
+    expect(within(dialog).getByRole("button", { name: "Replace" })).toBe(
+      within(dialog).getByTestId("dialog-confirm"),
+    );
     expect(document.activeElement).toBe(within(dialog).getByTestId("dialog-confirm"));
+  });
+
+  it("keeps repeated conflict names distinct without reconciliation warnings", async () => {
+    const errors = vi.spyOn(console, "error");
+    try {
+      await opened();
+      await onNotes();
+      log.conflictNext(["notes.txt", "notes.txt"]);
+      fireEvent.keyDown(window, { key: "y" });
+      fireEvent.keyDown(window, { key: "p" });
+      const dialog = await screen.findByTestId("modal-conflict");
+      expect(within(dialog).getAllByRole("listitem")).toHaveLength(2);
+      expect(errors).not.toHaveBeenCalled();
+      fireEvent.keyDown(window, { key: "Escape" });
+      await waitFor(() => expect(screen.queryByTestId("modal-conflict")).toBeNull());
+      expect(log.ops.filter((op) => op.endsWith("!"))).toEqual([]);
+    } finally {
+      errors.mockRestore();
+    }
   });
 
   it("retries with overwrite once the operator confirms", async () => {
@@ -163,8 +200,15 @@ describe("trash", () => {
     fireEvent.keyDown(window, { key: "d" });
 
     const dialog = await screen.findByTestId("modal-delete");
-    expect(within(dialog).getByTestId("delete-list").textContent).toContain("notes.txt");
+    expect(
+      within(within(dialog).getByTestId("delete-list"))
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["notes.txt"]);
     expect(dialog.textContent).toMatch(/recoverable/i);
+    expect(within(dialog).getByRole("button", { name: "Move to trash" })).toBe(
+      within(dialog).getByTestId("dialog-confirm"),
+    );
     expect(log.ops).toEqual([]);
     expect(document.activeElement).toBe(within(dialog).getByTestId("dialog-confirm"));
   });
@@ -180,14 +224,42 @@ describe("trash", () => {
     }
     expect(fireEvent.keyDown(confirm, { key: "Tab", shiftKey: true })).toBe(true);
     const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    const entries = within(dialog).getByRole("list", { name: "Entries to move to trash" });
     expect(fireEvent.keyDown(confirm, { key: "Tab" })).toBe(false);
-    expect(document.activeElement).toBe(cancel);
-    expect(fireEvent.keyDown(cancel, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(entries);
+    for (const key of ["ArrowDown", "PageDown", "End", " "]) {
+      expect(fireEvent.keyDown(entries, { key })).toBe(true);
+    }
+    expect(fireEvent.keyDown(entries, { key: "Tab", shiftKey: true })).toBe(false);
     expect(document.activeElement).toBe(confirm);
-    expect(fireEvent.keyDown(confirm, { key: "Tab" })).toBe(false);
-    expect(document.activeElement).toBe(cancel);
+    entries.focus();
+    expect(fireEvent.keyDown(entries, { key: "Tab" })).toBe(true);
+    // happy-dom does not perform native Tab movement; simulate the browser step.
+    cancel.focus();
+    expect(fireEvent.keyDown(cancel, { key: "Tab", shiftKey: true })).toBe(true);
     expect(fireEvent.keyDown(cancel, { key: "Enter" })).toBe(true);
     fireEvent.click(cancel);
+    await waitFor(() => expect(screen.queryByTestId("modal-delete")).toBeNull());
+    expect(log.ops).toEqual([]);
+  });
+
+  it("restores Tab navigation after focus lands on the dialog panel", async () => {
+    await opened();
+    await onNotes();
+    fireEvent.keyDown(window, { key: "d" });
+    await screen.findByTestId("modal-delete");
+    const panel = screen.getByRole("dialog");
+    const confirm = within(panel).getByTestId("dialog-confirm");
+    const entries = within(panel).getByRole("list");
+
+    panel.focus();
+    expect(document.activeElement).toBe(panel);
+    expect(fireEvent.keyDown(panel, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(entries);
+    panel.focus();
+    expect(fireEvent.keyDown(panel, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(confirm);
+    fireEvent.keyDown(panel, { key: "Escape" });
     await waitFor(() => expect(screen.queryByTestId("modal-delete")).toBeNull());
     expect(log.ops).toEqual([]);
   });
@@ -205,6 +277,23 @@ describe("trash", () => {
 });
 
 describe("rename", () => {
+  it("tree-operations Miller guard preserves unrelated marks after cursor rename", async () => {
+    await opened();
+    fireEvent.keyDown(window, { key: " " });
+    await waitFor(() => expect(cursorIn("column-current")).toContain("notes.txt"));
+    fireEvent.keyDown(window, { key: "r" });
+    const field = await screen.findByTestId("dialog-name");
+    fireEvent.change(field, { target: { value: "renamed.txt" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    await waitFor(() => expect(screen.queryByTestId("modal-rename")).toBeNull());
+    expect(log.ops).toContain("rename /home/jc/notes.txt -> renamed.txt");
+    expect(screen.getByTestId("status-bar").textContent).toContain("1 selected");
+    fireEvent.keyDown(window, { key: "c" });
+    fireEvent.keyDown(window, { key: "c" });
+    await waitFor(() => expect(log.ops).toContain("clipboard text /home/jc/projects"));
+  });
+
   it("opens with the stem selected, not the extension", async () => {
     // The extension is almost never what changes, and skipping past it every
     // time is the friction `⇧R` exists to opt out of.
@@ -308,7 +397,7 @@ describe("the modal gate", () => {
     fireEvent.keyDown(window, { key });
     const field = await screen.findByTestId("dialog-name");
     const dialog = screen.getByRole("dialog");
-    const confirm = within(dialog).getByRole("button", { name: "Confirm" });
+    const confirm = within(dialog).getByRole("button", { name: key === "r" ? "Rename" : "Create" });
     expect(document.activeElement).toBe(field);
     expect(fireEvent.keyDown(field, { key: "Tab" })).toBe(true);
     expect(fireEvent.keyDown(field, { key: "Tab", shiftKey: true })).toBe(false);

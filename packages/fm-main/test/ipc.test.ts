@@ -141,6 +141,25 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+it("tree-create P2-1: returns the real existing-folder failure through the create IPC handler", async () => {
+  const ipc = fakeIpc();
+  const registry = createRegistry(ipc, { previewUrlFor });
+  const original = await readFile(join(root, "alpha.txt"), "utf8");
+  try {
+    const reply = await ipc.invoke(CHANNELS.create, { path: root, kind: "directory" });
+    expect(reply).toEqual({
+      ok: false,
+      error: {
+        code: "write_failed",
+        message: `EEXIST: file already exists, mkdir '${root}'`,
+      },
+    });
+    expect(await readFile(join(root, "alpha.txt"), "utf8")).toBe(original);
+  } finally {
+    registry.dispose();
+  }
+});
+
 describe("the bridge returns what the main process produced", () => {
   it("lists a directory", async () => {
     const ipc = fakeIpc();

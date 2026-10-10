@@ -89,10 +89,11 @@ it("activates the exact selected file once for Enter and once for double click",
   expect(log.open).toHaveBeenLastCalledWith({ path: "/home/jc/notes.txt" });
 });
 
-it("blocks unsupported tree actions and keeps picker windows in Miller", async () => {
+it("tree-operations guard: blocks unrelated tree actions and keeps picker windows in Miller", async () => {
   const log = await openTree();
   fireEvent.click(treeRow("/home/jc/src/beta.ts"));
-  for (const key of ["d", "r", "y", "x", "p", " "]) treeKey(key);
+  for (const key of ["S", "D", "w", "z"])
+    fireEvent.keyDown(window, { key, shiftKey: key === key.toUpperCase() });
   expect(log.trash).not.toHaveBeenCalled();
   expect(log.clipboard).not.toHaveBeenCalled();
   expect(screen.queryByRole("dialog")).toBeNull();

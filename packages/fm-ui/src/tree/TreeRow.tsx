@@ -1,9 +1,12 @@
+import { parentOf } from "@symmetria/fm-core/pane";
 import { FileIcon } from "@symmetria/fm-search/ui";
+import { ClipboardIndicator } from "../components/ClipboardIndicator.tsx";
 import { isTreeDirectory, type TreeRow as TreeRowModel, treeItemId } from "./model.ts";
 
 export function TreeRow({
   row,
   selected,
+  marked = false,
   matched = false,
   top,
   select,
@@ -13,6 +16,7 @@ export function TreeRow({
 }: {
   row: TreeRowModel;
   selected: boolean;
+  marked?: boolean;
   matched?: boolean;
   top: number;
   select(): void;
@@ -34,6 +38,7 @@ export function TreeRow({
       aria-expanded={directory ? row.expanded : undefined}
       aria-selected={selected}
       data-path={row.path}
+      data-marked={marked || undefined}
       data-search-match={matched}
       data-coverage={row.status}
       className="tree-row"
@@ -61,6 +66,7 @@ export function TreeRow({
         <span className="tree-disclosure" />
       )}
       <FileIcon name={row.name} kind={row.kind} />
+      <ClipboardIndicator directory={parentOf(row.path)} name={row.name} />
       <span className="tree-name">{row.name}</span>
       <TreeCoverage row={row} include={include} />
     </div>

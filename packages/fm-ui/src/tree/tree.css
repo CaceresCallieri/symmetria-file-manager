@@ -167,3 +167,10 @@
 .tree-search[data-flash-hidden="true"] {
   visibility: hidden;
 }
+
+.tree-row[data-marked] {
+  color: var(--marked);
+}
+.tree-row[data-marked] .file-icon {
+  color: inherit;
+}
