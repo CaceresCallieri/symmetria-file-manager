@@ -252,23 +252,18 @@
   position: relative;
   display: flex;
 }
+/* The shared glass recipe in styles.css owns the background and backdrop filter.
+ * A background here would override it because this stylesheet loads later. */
 .overview-minimap-surface {
   position: absolute;
   top: 16px;
   right: 16px;
   z-index: 1;
-  background: var(--glass-surface);
   box-shadow:
     0 0 0 1px var(--glass-border),
     inset 0 1px var(--glass-highlight);
   border-radius: var(--radius-sm);
   overflow: hidden;
-}
-@supports (backdrop-filter: blur(16px)) {
-  .overview-minimap-surface {
-    background: var(--glass-background);
-    backdrop-filter: var(--glass-filter);
-  }
 }
 .minimap-geometry > rect {
   fill: var(--muted-foreground);

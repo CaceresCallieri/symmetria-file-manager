@@ -1,5 +1,5 @@
 import { basename } from "@symmetria/fm-core/pane";
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 
 import { isEscape, useOverlayCloseKeys } from "../../hooks/useOverlayCloseKeys.ts";
 import type { OpsModal } from "../../useFileOps.ts";
@@ -25,18 +25,18 @@ export interface OpsModalsProps {
   onConfirmOverwrite(): void;
 }
 
-/** Wrap only at the boundaries; the browser moves between the other controls. */
+/** Wrap from the panel or a boundary; the browser moves between other controls. */
 function keepDialogFocus(event: KeyboardEvent<HTMLDivElement>): void {
   if (event.key !== "Tab" || event.ctrlKey || event.altKey || event.metaKey) return;
-  // A bounded entry list needs a Tab stop. A controls-only trap skipped the
-  // list and let keyboard focus leave the dialog after clicking the scroller.
+  // The panel and entry list keep focus inside after a click. Tab from the
+  // panel enters at the first control; Shift+Tab enters at the last control.
   const controls = event.currentTarget.querySelectorAll<HTMLElement>(
     'input:not(:disabled), button:not(:disabled), [tabindex="0"]',
   );
   const first = controls[0];
   const last = controls[controls.length - 1];
   const boundary = event.shiftKey ? first : last;
-  if (event.target !== boundary) return;
+  if (event.target !== boundary && event.target !== event.currentTarget) return;
 
   // Unrestricted Tab left focus behind the modal, where the key cascade
   // swallowed subsequent Tab presses. Keep both boundaries inside the dialog.
@@ -53,6 +53,7 @@ function Dialog({
   onCancel,
   onConfirm,
   focusConfirm = true,
+  describedBy,
   children,
 }: {
   readonly title: string;
@@ -61,9 +62,11 @@ function Dialog({
   onCancel(): void;
   onConfirm(): void;
   readonly focusConfirm?: boolean;
+  readonly describedBy?: string;
   readonly children?: React.ReactNode;
 }) {
   useOverlayCloseKeys(onCancel, isEscape);
+  const titleId = useId();
   const confirmButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (focusConfirm) confirmButton.current?.focus();
@@ -75,19 +78,21 @@ function Dialog({
         className="overlay__panel ops-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
+        aria-describedby={describedBy}
+        tabIndex={-1}
         onKeyDown={keepDialogFocus}
       >
-        <h2>{title}</h2>
+        <h2 id={titleId}>{title}</h2>
         <div className="dialog__body">{children}</div>
         <div className="dialog__actions">
-          <button className="dialog__cancel" type="button" onClick={onCancel}>
+          <button className="dialog__button dialog__cancel" type="button" onClick={onCancel}>
             Cancel
           </button>
           <button
             ref={confirmButton}
             type="button"
-            className="dialog__confirm"
+            className="dialog__button dialog__confirm"
             data-testid="dialog-confirm"
             onClick={onConfirm}
           >
@@ -119,6 +124,7 @@ function NameDialog({
   onCancel(): void;
   onConfirm(name: string): void;
 }) {
+  const hintId = useId();
   const [name, setName] = useState(initial);
   const field = useRef<HTMLInputElement | null>(null);
 
@@ -145,6 +151,8 @@ function NameDialog({
       <input
         ref={field}
         aria-label="Name"
+        aria-describedby={hint === undefined ? undefined : hintId}
+        className="dialog__name"
         value={name}
         data-testid="dialog-name"
         onChange={(event) => setName(event.target.value)}
@@ -152,29 +160,39 @@ function NameDialog({
           if (event.key === "Enter") onConfirm(name);
         }}
       />
-      {hint === undefined ? null : <p className="dialog__hint">{hint}</p>}
+      {hint === undefined ? null : (
+        <p id={hintId} className="dialog__hint">
+          {hint}
+        </p>
+      )}
     </Dialog>
   );
 }
 
+/** Entries can be full trash paths or conflict names supplied by the bridge. */
 function EntryList({
-  paths,
+  entries,
+  label,
   testId,
 }: {
-  readonly paths: readonly string[];
+  readonly entries: readonly string[];
+  readonly label: string;
   readonly testId: string;
 }) {
   return (
     <ul
       className="dialog__entries"
       data-testid={testId}
-      aria-label="Entries"
+      aria-label={label}
       // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users need to focus and scroll every entry before confirmation.
       tabIndex={0}
       data-scrolls="true"
     >
-      {paths.map((path) => (
-        <li key={path}>{basename(path)}</li>
+      {entries.map((entry, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: Confirmation snapshots never reorder, and repeated destination names need distinct keys.
+        <li key={`${index}:${entry}`} title={entry}>
+          {basename(entry)}
+        </li>
       ))}
     </ul>
   );
@@ -182,6 +200,7 @@ function EntryList({
 
 export function OpsModals(props: OpsModalsProps) {
   const { modal, onCancel } = props;
+  const hintId = useId();
 
   if (modal.kind === "delete") {
     return (
@@ -195,10 +214,13 @@ export function OpsModals(props: OpsModalsProps) {
         testId="modal-delete"
         onCancel={onCancel}
         onConfirm={props.onConfirmDelete}
+        describedBy={hintId}
       >
-        <EntryList paths={modal.paths} testId="delete-list" />
+        <EntryList entries={modal.paths} label="Entries to move to trash" testId="delete-list" />
         {/* Not a delete. It goes to the desktop trash and comes back from it. */}
-        <p className="dialog__hint">Recoverable from the desktop trash.</p>
+        <p id={hintId} className="dialog__hint">
+          Recoverable from the desktop trash.
+        </p>
       </Dialog>
     );
   }
@@ -240,9 +262,14 @@ export function OpsModals(props: OpsModalsProps) {
         testId="modal-conflict"
         onCancel={onCancel}
         onConfirm={props.onConfirmOverwrite}
+        describedBy={hintId}
       >
-        <EntryList paths={modal.conflicts} testId="conflict-list" />
-        <p className="dialog__hint">
+        <EntryList
+          entries={modal.conflicts}
+          label="Entries already at the destination"
+          testId="conflict-list"
+        />
+        <p id={hintId} className="dialog__hint">
           Nothing was transferred. Replace overwrites existing content.
         </p>
       </Dialog>

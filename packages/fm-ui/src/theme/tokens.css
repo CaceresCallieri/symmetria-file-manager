@@ -46,9 +46,10 @@
   /* What dims the window behind a dialog. */
   --overlay-scrim: rgb(0 0 0 / 60%);
 
-  --dialog-surface: var(--glass-surface);
+  /* Input and action rules need more contrast than the 5–6% glass edges. */
   --dialog-border: color-mix(in srgb, var(--foreground) 15%, transparent);
-  --dialog-primary: color-mix(in srgb, var(--foreground) 88%, var(--background));
+  /* The Quiet confirm action uses a neutral fill, independent of blue primary. */
+  --dialog-confirm: color-mix(in srgb, var(--foreground) 88%, var(--background));
 
   /* File-type colours stay softer than search and flash labels. */
   --icon-blue: #89b4e8;

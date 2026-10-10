@@ -9,7 +9,7 @@
  * gates it, and what the clipboard does afterwards.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../../src/App.tsx";
 import { type BridgeLog, cursorIn, installBridge, namesIn } from "./support.ts";
@@ -145,6 +145,25 @@ describe("conflicts", () => {
     expect(document.activeElement).toBe(within(dialog).getByTestId("dialog-confirm"));
   });
 
+  it("keeps repeated conflict names distinct without reconciliation warnings", async () => {
+    const errors = vi.spyOn(console, "error");
+    try {
+      await opened();
+      await onNotes();
+      log.conflictNext(["notes.txt", "notes.txt"]);
+      fireEvent.keyDown(window, { key: "y" });
+      fireEvent.keyDown(window, { key: "p" });
+      const dialog = await screen.findByTestId("modal-conflict");
+      expect(within(dialog).getAllByRole("listitem")).toHaveLength(2);
+      expect(errors).not.toHaveBeenCalled();
+      fireEvent.keyDown(window, { key: "Escape" });
+      await waitFor(() => expect(screen.queryByTestId("modal-conflict")).toBeNull());
+      expect(log.ops.filter((op) => op.endsWith("!"))).toEqual([]);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
   it("retries with overwrite once the operator confirms", async () => {
     await opened();
     await onNotes();
@@ -181,7 +200,11 @@ describe("trash", () => {
     fireEvent.keyDown(window, { key: "d" });
 
     const dialog = await screen.findByTestId("modal-delete");
-    expect(within(dialog).getByTestId("delete-list").textContent).toContain("notes.txt");
+    expect(
+      within(within(dialog).getByTestId("delete-list"))
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["notes.txt"]);
     expect(dialog.textContent).toMatch(/recoverable/i);
     expect(within(dialog).getByRole("button", { name: "Move to trash" })).toBe(
       within(dialog).getByTestId("dialog-confirm"),
@@ -201,7 +224,7 @@ describe("trash", () => {
     }
     expect(fireEvent.keyDown(confirm, { key: "Tab", shiftKey: true })).toBe(true);
     const cancel = within(dialog).getByRole("button", { name: "Cancel" });
-    const entries = within(dialog).getByRole("list", { name: "Entries" });
+    const entries = within(dialog).getByRole("list", { name: "Entries to move to trash" });
     expect(fireEvent.keyDown(confirm, { key: "Tab" })).toBe(false);
     expect(document.activeElement).toBe(entries);
     for (const key of ["ArrowDown", "PageDown", "End", " "]) {
@@ -209,11 +232,34 @@ describe("trash", () => {
     }
     expect(fireEvent.keyDown(entries, { key: "Tab", shiftKey: true })).toBe(false);
     expect(document.activeElement).toBe(confirm);
+    entries.focus();
     expect(fireEvent.keyDown(entries, { key: "Tab" })).toBe(true);
+    // happy-dom does not perform native Tab movement; simulate the browser step.
     cancel.focus();
     expect(fireEvent.keyDown(cancel, { key: "Tab", shiftKey: true })).toBe(true);
     expect(fireEvent.keyDown(cancel, { key: "Enter" })).toBe(true);
     fireEvent.click(cancel);
+    await waitFor(() => expect(screen.queryByTestId("modal-delete")).toBeNull());
+    expect(log.ops).toEqual([]);
+  });
+
+  it("restores Tab navigation after focus lands on the dialog panel", async () => {
+    await opened();
+    await onNotes();
+    fireEvent.keyDown(window, { key: "d" });
+    await screen.findByTestId("modal-delete");
+    const panel = screen.getByRole("dialog");
+    const confirm = within(panel).getByTestId("dialog-confirm");
+    const entries = within(panel).getByRole("list");
+
+    panel.focus();
+    expect(document.activeElement).toBe(panel);
+    expect(fireEvent.keyDown(panel, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(entries);
+    panel.focus();
+    expect(fireEvent.keyDown(panel, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(confirm);
+    fireEvent.keyDown(panel, { key: "Escape" });
     await waitFor(() => expect(screen.queryByTestId("modal-delete")).toBeNull());
     expect(log.ops).toEqual([]);
   });

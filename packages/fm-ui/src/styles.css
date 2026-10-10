@@ -822,18 +822,26 @@ kbd {
   padding: 24px 24px 18px;
   border-color: var(--glass-border);
   border-radius: 10px;
-  background: var(--dialog-surface);
   box-shadow: inset 0 1px var(--glass-highlight);
   font-size: 13px;
   line-height: 1.5;
 }
 
-/* Use the same restrained glass as the overview, with an opaque fallback. */
+/* Use one glass recipe for both surfaces, including the opaque fallback. */
+.overview-minimap-surface,
+.ops-dialog {
+  background: var(--glass-surface);
+}
 @supports (backdrop-filter: blur(16px)) {
+  .overview-minimap-surface,
   .ops-dialog {
     background: var(--glass-background);
     backdrop-filter: var(--glass-filter);
   }
+}
+
+.ops-dialog:focus {
+  outline: none;
 }
 
 .ops-dialog h2 {
@@ -867,14 +875,14 @@ kbd {
   outline-offset: 3px;
 }
 
-.ops-dialog .dialog__hint {
+.dialog__hint {
   margin: 14px 0 0;
   color: var(--muted-foreground);
   font-size: 12px;
   line-height: 1.5;
 }
 
-.ops-dialog input {
+.ops-dialog .dialog__name {
   padding: 9px 0;
   border: 0;
   border-bottom: 1px solid var(--dialog-border);
@@ -884,12 +892,12 @@ kbd {
   font-size: 13px;
 }
 
-.ops-dialog input:focus {
-  outline: none;
+.ops-dialog .dialog__name:focus {
+  outline: 1px solid transparent;
   border-bottom-color: var(--foreground);
 }
 
-.ops-dialog .dialog__actions {
+.dialog__actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -899,7 +907,8 @@ kbd {
   border-top: 1px solid var(--dialog-border);
 }
 
-.ops-dialog .dialog__actions button {
+.dialog__button {
+  cursor: pointer;
   min-height: 36px;
   padding: 8px 12px;
   border: 0;
@@ -908,32 +917,32 @@ kbd {
   font-size: 12px;
 }
 
-.ops-dialog .dialog__actions .dialog__cancel {
+.dialog__cancel {
   padding-left: 0;
   background: none;
   color: var(--muted-foreground);
 }
 
-.ops-dialog .dialog__cancel:hover {
+.dialog__cancel:hover {
   color: var(--foreground);
 }
 
-.ops-dialog .dialog__confirm {
-  background: var(--dialog-primary);
+.dialog__confirm {
+  background: var(--dialog-confirm);
   color: var(--background);
 }
 
-.ops-dialog .dialog__confirm:hover {
+.dialog__confirm:hover {
   background: var(--foreground);
 }
 
-.ops-dialog .dialog__actions button:focus-visible {
+.dialog__button:focus-visible {
   outline: 1px solid var(--foreground);
   outline-offset: 3px;
 }
 
 @media (pointer: coarse) {
-  .ops-dialog .dialog__actions button {
+  .dialog__button {
     min-height: 44px;
   }
 }
