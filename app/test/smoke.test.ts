@@ -251,6 +251,7 @@ interface Residency {
   readonly scrollWasNonZero: boolean;
   readonly quitRanAfterRequest: boolean;
   readonly survivedRendererClose: boolean;
+  readonly reopenedViaCommand: boolean;
 }
 
 describe("the window closes without ending the program", () => {
@@ -307,6 +308,7 @@ describe("the window closes without ending the program", () => {
     // every tab and be left with a daemon reporting success to commands it had
     // nowhere to run. The renderer now asks the main process to hide instead.
     expect(residency.survivedRendererClose).toBe(true);
+    expect(residency.reopenedViaCommand).toBe(true);
   });
 
   it("can still be quit deliberately", () => {

@@ -73,11 +73,9 @@ repository, linked onto the PATH by the install script. Nothing needs to launch
 it by hand: the systemd unit starts it at login, and after that the workspace is
 where you go.
 
-**Nothing raises the window.** That is the point of a named workspace rather than
-a scratchpad: the operator switches to where the window lives, using their own
-key and their own `switch_workspace.sh`. The application never calls `show()` or
-`focus()`, so Wayland's activation-token problem — which the research calls the
-hardest problem in this design — is deleted rather than solved.
+The workspace binding switches to the file manager workspace. A desktop launch
+or a folder-open command also shows the resident window if a close hid it. The
+window rule continues to place that window on `name:files` silently.
 
 A scratchpad was considered and rejected, and not by us: `workspaces.conf`
 records that the app-owned workspaces "used to be special workspaces (overlays
@@ -85,6 +83,9 @@ toggled on top of the current one) and became normal workspaces so their windows
 stay visible and countable in the bar."
 
 ## Applying it
+
+For the laptop, use the independent release installation described in
+`35-laptop-release.md`. The worktree installer below is for development.
 
 ```bash
 ./install-desktop-integration.sh    # links the entry, the unit and the CLI; enables the unit

@@ -179,6 +179,7 @@ interface ResidencyReport {
   readonly quitRanAfterRequest: boolean;
   /** True when a close driven from PAGE code also hid rather than destroyed. */
   readonly survivedRendererClose: boolean;
+  readonly reopenedViaCommand: boolean;
 }
 
 /**
@@ -302,6 +303,7 @@ async function measureResidency(
       scrollWasNonZero: before.scroll > 0,
       quitRanAfterRequest: false,
       survivedRendererClose,
+      reopenedViaCommand: false,
     };
   }
 
@@ -309,6 +311,9 @@ async function measureResidency(
   window.show();
   await delay(300);
   const after = await read();
+  window.hide();
+  await sendCommand(socketPath, { cmd: "open", path: app.getPath("home") });
+  const reopenedViaCommand = window.isVisible();
 
   return {
     windowsBeforeClose,
@@ -324,6 +329,7 @@ async function measureResidency(
     scrollWasNonZero: before.scroll > 0,
     quitRanAfterRequest: await canStillQuit(),
     survivedRendererClose,
+    reopenedViaCommand,
   };
 }
 
@@ -769,6 +775,8 @@ function socketCommandHandler(window: BrowserWindow, pickers: PickerHost): Comma
     if (window.isDestroyed()) {
       return failure("write_failed", "the file manager has no window to open it in");
     }
+    // A close hides the resident window. A desktop launch must show it again.
+    window.show();
     window.webContents.send(PUSH_CHANNELS.openPath, { path: command.path });
     return { ok: true, value: null };
   };
