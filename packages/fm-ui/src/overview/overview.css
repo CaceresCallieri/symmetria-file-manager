@@ -267,7 +267,7 @@
 @supports (backdrop-filter: blur(16px)) {
   .overview-minimap-surface {
     background: var(--glass-background);
-    backdrop-filter: blur(16px) saturate(1.08);
+    backdrop-filter: var(--glass-filter);
   }
 }
 .minimap-geometry > rect {

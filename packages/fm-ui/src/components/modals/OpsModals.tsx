@@ -1,3 +1,4 @@
+import { basename } from "@symmetria/fm-core/pane";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 
 import { isEscape, useOverlayCloseKeys } from "../../hooks/useOverlayCloseKeys.ts";
@@ -27,8 +28,10 @@ export interface OpsModalsProps {
 /** Wrap only at the boundaries; the browser moves between the other controls. */
 function keepDialogFocus(event: KeyboardEvent<HTMLDivElement>): void {
   if (event.key !== "Tab" || event.ctrlKey || event.altKey || event.metaKey) return;
+  // A bounded entry list needs a Tab stop. A controls-only trap skipped the
+  // list and let keyboard focus leave the dialog after clicking the scroller.
   const controls = event.currentTarget.querySelectorAll<HTMLElement>(
-    "input:not(:disabled), button:not(:disabled)",
+    'input:not(:disabled), button:not(:disabled), [tabindex="0"]',
   );
   const first = controls[0];
   const last = controls[controls.length - 1];
@@ -45,6 +48,7 @@ function keepDialogFocus(event: KeyboardEvent<HTMLDivElement>): void {
 /** A dialog shell: a title, whatever it asks, and its own keyboard handling. */
 function Dialog({
   title,
+  confirmLabel,
   testId,
   onCancel,
   onConfirm,
@@ -52,6 +56,7 @@ function Dialog({
   children,
 }: {
   readonly title: string;
+  readonly confirmLabel: string;
   readonly testId: string;
   onCancel(): void;
   onConfirm(): void;
@@ -74,18 +79,19 @@ function Dialog({
         onKeyDown={keepDialogFocus}
       >
         <h2>{title}</h2>
-        {children}
+        <div className="dialog__body">{children}</div>
         <div className="dialog__actions">
-          <button type="button" onClick={onCancel}>
+          <button className="dialog__cancel" type="button" onClick={onCancel}>
             Cancel
           </button>
           <button
             ref={confirmButton}
             type="button"
+            className="dialog__confirm"
             data-testid="dialog-confirm"
             onClick={onConfirm}
           >
-            Confirm
+            {confirmLabel}
           </button>
         </div>
       </div>
@@ -96,6 +102,7 @@ function Dialog({
 /** A dialog whose answer is a name the user types. */
 function NameDialog({
   title,
+  confirmLabel,
   testId,
   initial,
   selectTo,
@@ -104,6 +111,7 @@ function NameDialog({
   onConfirm,
 }: {
   readonly title: string;
+  readonly confirmLabel: string;
   readonly testId: string;
   readonly initial: string;
   readonly selectTo: number;
@@ -128,6 +136,7 @@ function NameDialog({
   return (
     <Dialog
       title={title}
+      confirmLabel={confirmLabel}
       testId={testId}
       onCancel={onCancel}
       onConfirm={() => onConfirm(name)}
@@ -135,6 +144,7 @@ function NameDialog({
     >
       <input
         ref={field}
+        aria-label="Name"
         value={name}
         data-testid="dialog-name"
         onChange={(event) => setName(event.target.value)}
@@ -147,22 +157,46 @@ function NameDialog({
   );
 }
 
+function EntryList({
+  paths,
+  testId,
+}: {
+  readonly paths: readonly string[];
+  readonly testId: string;
+}) {
+  return (
+    <ul
+      className="dialog__entries"
+      data-testid={testId}
+      aria-label="Entries"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users need to focus and scroll every entry before confirmation.
+      tabIndex={0}
+      data-scrolls="true"
+    >
+      {paths.map((path) => (
+        <li key={path}>{basename(path)}</li>
+      ))}
+    </ul>
+  );
+}
+
 export function OpsModals(props: OpsModalsProps) {
   const { modal, onCancel } = props;
 
   if (modal.kind === "delete") {
     return (
       <Dialog
-        title={`Trash ${modal.paths.length} ${modal.paths.length === 1 ? "entry" : "entries"}?`}
+        title={
+          modal.paths.length === 1
+            ? "Move to trash?"
+            : `Move ${modal.paths.length} entries to trash?`
+        }
+        confirmLabel="Move to trash"
         testId="modal-delete"
         onCancel={onCancel}
         onConfirm={props.onConfirmDelete}
       >
-        <ul data-testid="delete-list">
-          {modal.paths.map((path) => (
-            <li key={path}>{path.split("/").pop()}</li>
-          ))}
-        </ul>
+        <EntryList paths={modal.paths} testId="delete-list" />
         {/* Not a delete. It goes to the desktop trash and comes back from it. */}
         <p className="dialog__hint">Recoverable from the desktop trash.</p>
       </Dialog>
@@ -173,6 +207,7 @@ export function OpsModals(props: OpsModalsProps) {
     return (
       <NameDialog
         title="Rename"
+        confirmLabel="Rename"
         testId="modal-rename"
         initial={modal.name}
         selectTo={modal.selectTo}
@@ -186,6 +221,7 @@ export function OpsModals(props: OpsModalsProps) {
     return (
       <NameDialog
         title="New file or folder"
+        confirmLabel="Create"
         testId="modal-create"
         initial=""
         selectTo={0}
@@ -199,17 +235,16 @@ export function OpsModals(props: OpsModalsProps) {
   if (modal.kind === "conflict") {
     return (
       <Dialog
-        title="Already there"
+        title={`Replace existing ${modal.conflicts.length === 1 ? "entry" : "entries"}?`}
+        confirmLabel="Replace"
         testId="modal-conflict"
         onCancel={onCancel}
         onConfirm={props.onConfirmOverwrite}
       >
-        <ul data-testid="conflict-list">
-          {modal.conflicts.map((name) => (
-            <li key={name}>{name}</li>
-          ))}
-        </ul>
-        <p className="dialog__hint">Confirm to replace. Nothing has been transferred yet.</p>
+        <EntryList paths={modal.conflicts} testId="conflict-list" />
+        <p className="dialog__hint">
+          Nothing was transferred. Replace overwrites existing content.
+        </p>
       </Dialog>
     );
   }

@@ -804,15 +804,8 @@ kbd {
   color: var(--destructive);
 }
 
-.dialog__actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 12px;
-}
-
-.dialog__actions button,
 .overlay__panel input {
+  width: 100%;
   padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -821,19 +814,128 @@ kbd {
   font: inherit;
 }
 
-.dialog__actions button:focus {
-  outline: 2px solid var(--foreground);
-  outline-offset: 2px;
-  background: var(--accent);
+.ops-dialog {
+  width: 420px;
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  padding: 24px 24px 18px;
+  border-color: var(--glass-border);
+  border-radius: 10px;
+  background: var(--dialog-surface);
+  box-shadow: inset 0 1px var(--glass-highlight);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.overlay__panel input {
-  width: 100%;
+/* Use the same restrained glass as the overview, with an opaque fallback. */
+@supports (backdrop-filter: blur(16px)) {
+  .ops-dialog {
+    background: var(--glass-background);
+    backdrop-filter: var(--glass-filter);
+  }
 }
 
-.dialog__hint {
-  margin: 8px 0 0;
+.ops-dialog h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+}
+
+.dialog__body {
+  margin-top: 18px;
+}
+
+.dialog__entries {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(28vh, 180px);
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.dialog__entries:focus-visible {
+  outline: 1px solid var(--foreground);
+  outline-offset: 3px;
+}
+
+.ops-dialog .dialog__hint {
+  margin: 14px 0 0;
   color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ops-dialog input {
+  padding: 9px 0;
+  border: 0;
+  border-bottom: 1px solid var(--dialog-border);
+  border-radius: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.ops-dialog input:focus {
+  outline: none;
+  border-bottom-color: var(--foreground);
+}
+
+.ops-dialog .dialog__actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 22px;
+  padding-top: 12px;
+  border-top: 1px solid var(--dialog-border);
+}
+
+.ops-dialog .dialog__actions button {
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 5px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.ops-dialog .dialog__actions .dialog__cancel {
+  padding-left: 0;
+  background: none;
+  color: var(--muted-foreground);
+}
+
+.ops-dialog .dialog__cancel:hover {
+  color: var(--foreground);
+}
+
+.ops-dialog .dialog__confirm {
+  background: var(--dialog-primary);
+  color: var(--background);
+}
+
+.ops-dialog .dialog__confirm:hover {
+  background: var(--foreground);
+}
+
+.ops-dialog .dialog__actions button:focus-visible {
+  outline: 1px solid var(--foreground);
+  outline-offset: 3px;
+}
+
+@media (pointer: coarse) {
+  .ops-dialog .dialog__actions button {
+    min-height: 44px;
+  }
 }
 
 /*

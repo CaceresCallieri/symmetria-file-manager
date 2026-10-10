@@ -139,6 +139,9 @@ describe("conflicts", () => {
 
     const dialog = await screen.findByTestId("modal-conflict");
     expect(within(dialog).getByTestId("conflict-list").textContent).toContain("notes.txt");
+    expect(within(dialog).getByRole("button", { name: "Replace" })).toBe(
+      within(dialog).getByTestId("dialog-confirm"),
+    );
     expect(document.activeElement).toBe(within(dialog).getByTestId("dialog-confirm"));
   });
 
@@ -180,6 +183,9 @@ describe("trash", () => {
     const dialog = await screen.findByTestId("modal-delete");
     expect(within(dialog).getByTestId("delete-list").textContent).toContain("notes.txt");
     expect(dialog.textContent).toMatch(/recoverable/i);
+    expect(within(dialog).getByRole("button", { name: "Move to trash" })).toBe(
+      within(dialog).getByTestId("dialog-confirm"),
+    );
     expect(log.ops).toEqual([]);
     expect(document.activeElement).toBe(within(dialog).getByTestId("dialog-confirm"));
   });
@@ -195,12 +201,17 @@ describe("trash", () => {
     }
     expect(fireEvent.keyDown(confirm, { key: "Tab", shiftKey: true })).toBe(true);
     const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    const entries = within(dialog).getByRole("list", { name: "Entries" });
     expect(fireEvent.keyDown(confirm, { key: "Tab" })).toBe(false);
-    expect(document.activeElement).toBe(cancel);
-    expect(fireEvent.keyDown(cancel, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(entries);
+    for (const key of ["ArrowDown", "PageDown", "End", " "]) {
+      expect(fireEvent.keyDown(entries, { key })).toBe(true);
+    }
+    expect(fireEvent.keyDown(entries, { key: "Tab", shiftKey: true })).toBe(false);
     expect(document.activeElement).toBe(confirm);
-    expect(fireEvent.keyDown(confirm, { key: "Tab" })).toBe(false);
-    expect(document.activeElement).toBe(cancel);
+    expect(fireEvent.keyDown(entries, { key: "Tab" })).toBe(true);
+    cancel.focus();
+    expect(fireEvent.keyDown(cancel, { key: "Tab", shiftKey: true })).toBe(true);
     expect(fireEvent.keyDown(cancel, { key: "Enter" })).toBe(true);
     fireEvent.click(cancel);
     await waitFor(() => expect(screen.queryByTestId("modal-delete")).toBeNull());
@@ -340,7 +351,7 @@ describe("the modal gate", () => {
     fireEvent.keyDown(window, { key });
     const field = await screen.findByTestId("dialog-name");
     const dialog = screen.getByRole("dialog");
-    const confirm = within(dialog).getByRole("button", { name: "Confirm" });
+    const confirm = within(dialog).getByRole("button", { name: key === "r" ? "Rename" : "Create" });
     expect(document.activeElement).toBe(field);
     expect(fireEvent.keyDown(field, { key: "Tab" })).toBe(true);
     expect(fireEvent.keyDown(field, { key: "Tab", shiftKey: true })).toBe(false);
