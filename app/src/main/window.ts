@@ -6,8 +6,13 @@ import type { BrowserWindowConstructorOptions } from "electron";
  * The first paint happens before any stylesheet loads. Without a background
  * colour that first frame is white, which on a near-black application reads as
  * a flash every time a window opens.
+ *
+ * Fully transparent since the Atmosphere design: the window is `transparent`
+ * so the compositor's blur shows through the renderer's 88% fill
+ * (`app/src/renderer/atmosphere.css`). A transparent first frame is not white
+ * either, so the flash stays prevented. It was `#0b0b0b` before.
  */
-export const WINDOW_BACKGROUND = "#0b0b0b";
+export const WINDOW_BACKGROUND = "#00000000";
 
 /** Where the preload bundle lands, relative to the built main bundle. */
 function preloadPath(): string {
@@ -34,6 +39,8 @@ export function buildWindowOptions(): BrowserWindowConstructorOptions {
     minWidth: 640,
     minHeight: 400,
     show: false,
+    // Atmosphere: Hyprland's blur shows through the renderer's 88% fill.
+    transparent: true,
     backgroundColor: WINDOW_BACKGROUND,
     autoHideMenuBar: true,
     webPreferences: {

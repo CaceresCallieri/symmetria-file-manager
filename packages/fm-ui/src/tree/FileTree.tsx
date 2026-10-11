@@ -1,7 +1,6 @@
-import { defaultRangeExtractor, type Range, useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useId, useLayoutEffect, useState } from "react";
+import { useId, useLayoutEffect, useState } from "react";
 import { PathBar } from "../components/PathBar.tsx";
-import { INITIAL_RECT, observeWithFallback } from "../components/virtualize.ts";
+import { useRowVirtualizer } from "../components/useRowVirtualizer.ts";
 import { ViewportFlash } from "../flash/ViewportFlash.tsx";
 import type { OverviewModel } from "../overview/useOverview.ts";
 import { LoadedPathSearch } from "../search/LoadedPathSearch.tsx";
@@ -19,7 +18,6 @@ import { useTreeState } from "./useTreeState.ts";
 import { useTreeWidth } from "./useTreeWidth.ts";
 import "./tree.css";
 
-const ROW_HEIGHT = 24;
 const EMPTY_MARKS: ReadonlySet<string> = new Set();
 
 export function FileTree({
@@ -47,21 +45,10 @@ export function FileTree({
     rows.findIndex((row) => row.path === selected),
   );
   const current = rows[cursor];
-  const rangeExtractor = useCallback(
-    (range: Range) => {
-      const shown = defaultRangeExtractor(range);
-      return shown.includes(cursor) ? shown : [...shown, cursor].sort((a, b) => a - b);
-    },
-    [cursor],
-  );
-  const virtualizer = useVirtualizer({
+  const { virtualizer, rowHeight } = useRowVirtualizer({
     count: rows.length,
-    getScrollElement: () => viewport,
-    estimateSize: () => ROW_HEIGHT,
-    overscan: 8,
-    initialRect: INITIAL_RECT,
-    observeElementRect: observeWithFallback,
-    rangeExtractor,
+    scrollElement: viewport,
+    cursorIndex: cursor,
     getItemKey: (index) => rows[index]?.path ?? index,
   });
   // The virtualizer initializes native scroll during its layout effect. Restoring
@@ -74,6 +61,7 @@ export function FileTree({
     record,
     model.loading || resolvingReveal,
     setSelected,
+    rowHeight,
   );
   const activate = (index: number) => {
     const row = rows[index];

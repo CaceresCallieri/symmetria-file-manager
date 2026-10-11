@@ -1,0 +1,6 @@
+/* Every face is vendored next to this file (fontsource, OFL), so the
+   prototypes render identically offline — as a packaged Electron app would. */
+@font-face { font-family: "Geist"; src: url("fonts/geist-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: block; }
+@font-face { font-family: "Geist Mono"; src: url("fonts/geist-mono-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: block; }
+@font-face { font-family: "Instrument Sans"; src: url("fonts/instrument-sans-latin-wght-normal.woff2") format("woff2"); font-weight: 400 700; font-display: block; }
+@font-face { font-family: "Fragment Mono"; src: url("fonts/fragment-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: block; }

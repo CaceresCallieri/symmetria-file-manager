@@ -58,3 +58,39 @@ export function humanAge(timestampMs: number, nowMs: number): string {
   }
   return "just now";
 }
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/**
+ * When something happened, as a listing column reads it.
+ *
+ * Absolute where `humanAge` is relative: a column of ages shifts under the
+ * reader as time passes, a column of dates does not. Today and yesterday carry
+ * a time, the five days before them a weekday (never one that could also mean
+ * today or yesterday), this year a month and day, older a month and year. Zero reads as unknown, for the reason `humanAge` gives. A
+ * time after today (a clock that disagrees) reads as a plain date, never as
+ * "Today".
+ *
+ * Day boundaries are calendar midnights in local time, not multiples of 24
+ * hours back from now: on the day after a daylight-saving change, yesterday is
+ * 23 or 25 hours long.
+ */
+export function humanDate(timestampMs: number, nowMs: number): string {
+  if (timestampMs <= 0) return "—";
+  const date = new Date(timestampMs);
+  const now = new Date(nowMs);
+  const midnight = (daysBack: number) =>
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack).getTime();
+  const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+
+  if (timestampMs < midnight(-1)) {
+    if (timestampMs >= midnight(0)) return `Today, ${time}`;
+    if (timestampMs >= midnight(1)) return `Yesterday, ${time}`;
+    if (timestampMs >= midnight(6)) return `${WEEKDAYS[date.getDay()]}, ${time}`;
+  }
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${MONTHS[date.getMonth()]} ${date.getDate()}`;
+  }
+  return `${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+}

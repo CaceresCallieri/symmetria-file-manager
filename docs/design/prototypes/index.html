@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
+  <title>Symmetria FM — redesign directions</title>
+  <link rel="stylesheet" href="shared/fonts.css" />
+  <style>
+    :root { --bg: #09090a; --fg: #ededee; --fg-2: #a1a1a6; --fg-3: #6e6e74; --line: rgb(255 255 255 / 8%); --card: #111113; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 "Geist", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    main { max-width: 1240px; margin: 0 auto; padding: 64px 28px 96px; }
+    .eyebrow { font: 500 12px "Geist Mono", monospace; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
+    h1 { font-size: clamp(32px, 5vw, 52px); line-height: 1.05; letter-spacing: -0.035em; font-weight: 650; margin: 12px 0 18px; }
+    h2 { font-size: 22px; letter-spacing: -0.02em; font-weight: 600; margin: 72px 0 8px; }
+    .lede { max-width: 68ch; color: var(--fg-2); font-size: 17px; }
+    p { color: var(--fg-2); max-width: 70ch; }
+    strong { color: var(--fg); font-weight: 600; }
+    code, kbd { font: 12.5px "Geist Mono", monospace; }
+    kbd { padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); background: rgb(255 255 255 / 4%); color: var(--fg); }
+
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 22px; }
+    figure { margin: 0; }
+    .shot { display: block; width: 100%; border-radius: 12px; border: 1px solid var(--line); background: #000; }
+    figcaption { font-size: 13px; color: var(--fg-3); margin-top: 8px; }
+
+    .issues { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 22px; padding: 0; list-style: none; counter-reset: issue; }
+    .issues li { counter-increment: issue; padding: 16px 18px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); font-size: 14px; color: var(--fg-2); }
+    .issues li::before { content: counter(issue, decimal-leading-zero); display: block; font: 500 11px "Geist Mono", monospace; color: var(--fg-3); margin-bottom: 6px; }
+    .issues b { display: block; color: var(--fg); font-weight: 600; margin-bottom: 2px; }
+
+    .direction { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 32px; align-items: start; margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--line); }
+    .direction:first-of-type { border-top: 0; }
+    .direction .shots { display: grid; gap: 10px; }
+    .direction .shots .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .letter { font: 600 13px "Geist Mono", monospace; color: var(--fg-3); }
+    .direction h3 { font-size: 30px; letter-spacing: -0.03em; font-weight: 650; margin: 2px 0 6px; }
+    .pitch { color: var(--fg); font-size: 16px; margin: 0 0 14px; }
+    .traits { list-style: none; padding: 0; margin: 0 0 18px; display: grid; gap: 7px; font-size: 14px; color: var(--fg-2); }
+    .traits li { padding-left: 16px; position: relative; }
+    .traits li::before { content: ""; position: absolute; left: 0; top: 0.7em; width: 6px; height: 1.5px; background: var(--fg-3); }
+    .meta { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13px; margin: 0 0 20px; }
+    .meta dt { color: var(--fg-3); }
+    .meta dd { margin: 0; color: var(--fg-2); }
+    .open { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px; border-radius: 10px; background: var(--fg); color: var(--bg); font-weight: 600; font-size: 14px; text-decoration: none; }
+    .open:hover { background: #fff; }
+    .swatches { display: flex; gap: 6px; margin: 0 0 18px; }
+    .swatches span { width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--line); }
+
+    .shared { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 18px; }
+    .shared div { padding: 16px 18px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; color: var(--fg-2); }
+    .shared b { display: block; color: var(--fg); font-weight: 600; margin-bottom: 4px; }
+    .keys { columns: 3 220px; font-size: 14px; color: var(--fg-2); margin-top: 16px; }
+    .keys div { break-inside: avoid; padding: 4px 0; }
+    .keys kbd { margin-right: 4px; }
+    @media (max-width: 860px) { .compare, .direction { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">Symmetria File Manager · Electron · design exploration · 11 Oct 2026</div>
+  <h1>A more professional<br />file manager</h1>
+  <p class="lede">Two working prototypes, not mockups. The chosen design is written down in <code>docs/design/atmosphere-design-system.md</code>. Atmosphere is the lead, revised to a neutral black-and-white theme; Studio stays as the alternative. Instrument was dropped. Each one runs the same keyboard map, the same mock file system and the same previews, so the only difference you compare is the design. Open one, then drive it with <kbd>j</kbd> <kbd>k</kbd> <kbd>h</kbd> <kbd>l</kbd>.</p>
+
+  <h2>Where the app is today</h2>
+  <div class="compare">
+    <figure><img class="shot" src="shots/current.jpg" alt="Current Miller view" loading="lazy" /><figcaption>Miller view (current Electron build)</figcaption></figure>
+    <figure><img class="shot" src="shots/current-overview.jpg" alt="Current folder overview" loading="lazy" /><figcaption>Folder overview (current Electron build)</figcaption></figure>
+  </div>
+  <ul class="issues">
+    <li><b>The type is large and has no hierarchy</b>Every name is 16px Rubik, at one weight and one colour, in all three columns. The eye cannot tell where you are from where you came from.</li>
+    <li><b>No metadata</b>A file manager answers "how big?" and "how old?". Today the rows show names only, and the preview of a file shows no kind, size, date or permissions.</li>
+    <li><b>The cursor is weak</b>An 8% grey fill on near-black. It is the most important element on screen and the hardest to see.</li>
+    <li><b>The chrome has no shape</b>The breadcrumb, the status line and the overview controls are plain text. Nothing looks clickable, so the app reads as unfinished.</li>
+    <li><b>Black cards on black</b>Three panes with near-invisible edges, separated by thin gaps. They neither join into one surface nor stand apart as cards.</li>
+    <li><b>The overview is dense but flat</b>Cards, paths and links all have the same weight. The focused card and its links do not stand out.</li>
+  </ul>
+
+  <h2>The directions</h2>
+  <p>Both fix the six problems above. They differ in personality.</p>
+
+  <section class="direction">
+    <div class="shots">
+      <img class="shot" src="shots/atmosphere.jpg" alt="Atmosphere, neutral revision" loading="lazy" />
+      <div class="row2"><img class="shot" src="shots/atmosphere-overview.jpg" alt="Atmosphere overview on a colourful wallpaper" loading="lazy" /><img class="shot" src="shots/atmosphere-daylight.jpg" alt="Atmosphere on a light wallpaper" loading="lazy" /></div>
+    </div>
+    <div>
+      <div class="letter">Leading · revised</div>
+      <h3>Atmosphere</h3>
+      <p class="pitch">Frosted glass on the Hyprland desktop, now in black and white.</p>
+      <div class="swatches"><span style="background:#0e0e0f"></span><span style="background:#2a2a2b"></span><span style="background:#9c9c9c"></span><span style="background:#f4f4f4"></span><span style="background:oklch(66% 0.16 258)"></span></div>
+      <ul class="traits">
+        <li><strong>No tint.</strong> Every glass surface blurs the wallpaper in greyscale (<code>saturate(0)</code>), so a sunset wallpaper and a grey one give the same neutral window. Only brightness passes through.</li>
+        <li><strong>Colour means something.</strong> Blue is selection and focus. Green, red and amber are utilities: yanked, cut or destructive, git-modified. Nothing else has a hue.</li>
+        <li><strong>Monochrome icons.</strong> Folders are bright, files are dim. Pinned folders are monograms, not coloured dots.</li>
+        <li><strong>More information per row:</strong> size and modified date. The date hides first when the column gets narrow.</li>
+        <li>Icon rail, pill tabs and breadcrumb, a hero preview, and a floating status bar, as before.</li>
+      </ul>
+      <dl class="meta"><dt>Type</dt><dd>Instrument Sans 13.5px · Fragment Mono for numbers</dd><dt>Density</dt><dd>31px rows</dd><dt>Try</dt><dd><kbd>W</kbd> cycles four wallpapers: Dunes, Graphite, Aurora, Daylight</dd></dl>
+      <a class="open" href="atmosphere/index.html">Open Atmosphere →</a>
+    </div>
+  </section>
+
+  <section class="direction">
+    <div class="shots">
+      <img class="shot" src="shots/studio.jpg" alt="Studio direction" loading="lazy" />
+      <div class="row2"><img class="shot" src="shots/studio-overview.jpg" alt="Studio overview" loading="lazy" /><img class="shot" src="shots/studio-light.jpg" alt="Studio light theme" loading="lazy" /></div>
+    </div>
+    <div>
+      <div class="letter">Alternative</div>
+      <h3>Studio</h3>
+      <p class="pitch">Real desktop software, in the same family as Mesura Code.</p>
+      <div class="swatches"><span style="background:#0b0b0c"></span><span style="background:#131315"></span><span style="background:#a1a1a6"></span><span style="background:#ededee"></span><span style="background:oklch(64% 0.17 262)"></span></div>
+      <ul class="traits">
+        <li>Neutral near-black, with Mesura Code's blue as the only accent. Blue means "focus".</li>
+        <li>One continuous surface split by hairlines, plus a sidebar with places, pinned folders and disk usage.</li>
+        <li>Toolbar with back and forward, a breadcrumb with clickable segments, a search field and a view switch.</li>
+        <li>The preview is an inspector: identity, a grid of properties, then the content.</li>
+        <li>Has a light theme (<kbd>T</kbd>), because Mesura Code has one.</li>
+      </ul>
+      <dl class="meta"><dt>Type</dt><dd>Geist 13px · Geist Mono for keys</dd><dt>Density</dt><dd>28px rows</dd><dt>Best if</dt><dd>you want the FM and Mesura Code to feel like one product</dd></dl>
+      <a class="open" href="studio/index.html">Open Studio →</a>
+    </div>
+  </section>
+
+
+
+  <h2>What both share</h2>
+  <p>These parts belong to the design system whichever direction wins.</p>
+  <div class="shared">
+    <div><b>A real type scale</b>13px interface text, 11–12px metadata with tabular figures, 11px labels. Today everything is 16px.</div>
+    <div><b>Metadata in every row</b>Size or item count, and modified date. Columns hide the date first when they get narrow.</div>
+    <div><b>A file inspector</b>Kind, size, line count, dimensions or duration, full date, permissions, git state. Then the content.</div>
+    <div><b>Dim the parent, light the present</b>The parent column is quieter than the current one. The cursor in the current column carries the accent.</div>
+    <div><b>Modes in the status bar</b>Normal, Search, Select. A progress bar for copies and moves. Messages replace the counts, with no layout shift.</div>
+    <div><b>Dialogs with clear outcomes</b>The items are listed, the destructive button is red, and every button shows its key.</div>
+    <div><b>The editor's syntax colours</b>Code previews keep the Wine palette, so the preview matches NeoVim.</div>
+    <div><b>Vendored fonts</b>Every typeface ships in the app (116 KB for both directions), so nothing depends on system fonts.</div>
+  </div>
+
+  <h2>Try these keys</h2>
+  <div class="keys">
+    <div><kbd>j</kbd><kbd>k</kbd> move · <kbd>h</kbd><kbd>l</kbd> parent / open</div>
+    <div><kbd>g</kbd> then a letter: go to a place</div>
+    <div><kbd>Space</kbd> mark · <kbd>Esc</kbd> clear</div>
+    <div><kbd>y</kbd> yank · <kbd>x</kbd> cut · <kbd>p</kbd> paste (shows progress)</div>
+    <div><kbd>d</kbd> trash dialog · <kbd>r</kbd> rename dialog</div>
+    <div><kbd>/</kbd> search · <kbd>n</kbd><kbd>N</kbd> next / previous</div>
+    <div><kbd>Ctrl+E</kbd> file tree: <kbd>h</kbd><kbd>l</kbd> collapse / expand, <kbd>o</kbd> toggle, <kbd>Esc</kbd> back</div>
+    <div><kbd>Ctrl+O</kbd> overview: <kbd>j</kbd><kbd>k</kbd> cards, <kbd>f</kbd> fit, <kbd>+</kbd><kbd>-</kbd> zoom, drag to pan</div>
+    <div><kbd>.</kbd> hidden files · <kbd>s</kbd> sort · <kbd>?</kbd> all shortcuts</div>
+    <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> tabs, <kbd>W</kbd> wallpaper, <kbd>V</kbd> glass mode (Atmosphere) · <kbd>T</kbd> light theme (Studio)</div>
+  </div>
+  <p style="margin-top:24px">Good places to look: <code>~/Downloads</code> (start), <kbd>g</kbd><kbd>s</kbd> for a repository with git states, <kbd>g</kbd><kbd>w</kbd> for image previews, and <code>~/Downloads/audios</code> for the audio player.</p>
+</main>
+</body>
+</html>

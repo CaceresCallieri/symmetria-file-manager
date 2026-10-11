@@ -1,7 +1,7 @@
 import { type CascadeMode, handleKey, type KeyOutcome } from "@symmetria/fm-core/keys/cascade";
 import { matchBinding } from "@symmetria/fm-core/keys/dispatch";
 import type { KeyContext, KeyEvent } from "@symmetria/fm-core/keys/types";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 /**
  * Route every key press through the ported cascade.
@@ -57,7 +57,19 @@ function targetScrolls(event: KeyboardEvent): boolean {
   return surface !== null && SCROLL_KEYS.has(event.key);
 }
 
-export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions): void {
+/**
+ * Run one key through the cascade on a pointer control's behalf, and say
+ * whether a binding ran.
+ *
+ * The header's buttons call this rather than the actions behind them, so a
+ * click is gated exactly as its key is: a dialog swallows it, the picker
+ * refuses the overview and a new tab, and `/` in the overview opens the
+ * overview's own search. Calling `actions.startSearch` directly opened the
+ * browsing search under the inert overview, where nothing could reach it.
+ */
+export type PressKey = (key: KeyEvent) => boolean;
+
+export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions): PressKey {
   // The listener is attached once and reads through a ref.
   //
   // Re-attaching on every state change would be correct but wasteful, and it
@@ -106,6 +118,15 @@ export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  // True only when a binding RAN. A dialog, a pending chord, flash or the
+  // picker pre-pass also consume a key, but nothing happened, and a caller that
+  // read "consumed" as "done" queued its next step behind a swallowed click.
+  return useCallback(
+    (key: KeyEvent) =>
+      handleKey(key, latest.current.mode, latest.current.context).kind === "dispatched",
+    [],
+  );
 }
 
 function routeKey(

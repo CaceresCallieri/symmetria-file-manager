@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
+  <title>C · Atmosphere — Symmetria FM redesign</title>
+  <link rel="stylesheet" href="../shared/fonts.css" />
+  <link rel="stylesheet" href="../shared/base.css" />
+  <link rel="stylesheet" href="../shared/syntax.css" />
+  <link rel="stylesheet" href="atmosphere.css" />
+</head>
+<body>
+  <script type="module">
+    import { mount } from "../shared/app.js";
+    mount({
+      id: "atmosphere",
+      name: "Atmosphere",
+      sidebar: true,
+      tabs: true,
+      dateStyle: "friendly",
+      currentMeta: ["size", "date"],
+      previewProps: true,
+      wallpaper: 0,
+      wallpapers: [[0, "Dunes"], ["graphite", "Graphite"], [1, "Aurora"], ["daylight", "Daylight"]],
+      homeLabel: "Home",
+    });
+  </script>
+</body>
+</html>

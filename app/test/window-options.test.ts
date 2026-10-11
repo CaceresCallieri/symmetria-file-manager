@@ -32,7 +32,7 @@ describe("buildWindowOptions", () => {
     expect(webPreferences?.preload).not.toBe("");
   });
 
-  it("stays hidden until it has painted, over a non-white background", () => {
+  it("stays hidden until it has painted, over a transparent background", () => {
     const options = buildWindowOptions();
 
     // `show: false` plus a `ready-to-show` handler is what avoids a white
@@ -40,7 +40,10 @@ describe("buildWindowOptions", () => {
     // first paint is white even when the window is shown late.
     expect(options.show).toBe(false);
     expect(options.backgroundColor).toBe(WINDOW_BACKGROUND);
-    expect(WINDOW_BACKGROUND).toMatch(/^#[0-9a-f]{6}$/);
+    // Fully transparent, never white: the window is see-through so the
+    // compositor's blur reaches the renderer's translucent fill.
+    expect(options.transparent).toBe(true);
+    expect(WINDOW_BACKGROUND).toBe("#00000000");
   });
 });
 

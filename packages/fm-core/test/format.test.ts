@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { humanAge, humanSize } from "../src/format.ts";
+import { humanAge, humanDate, humanSize } from "../src/format.ts";
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -72,5 +72,51 @@ describe("humanAge", () => {
     // A clock that disagrees with a file server, or a leap-second smear, puts a
     // modification time ahead of now. "in 4s ago" is worse than "just now".
     expect(humanAge(now + 10 * MINUTE, now)).toBe("just now");
+  });
+});
+
+describe("humanDate", () => {
+  // Local wall-clock times, so the assertions hold in any time zone the suite
+  // runs in. Saturday 11 October 2026, 14:30.
+  const now = new Date(2026, 9, 11, 14, 30).getTime();
+  const at = (month: number, day: number, hour = 9, minute = 5, year = 2026) =>
+    new Date(year, month, day, hour, minute).getTime();
+
+  it("gives today and yesterday a time", () => {
+    expect(humanDate(at(9, 11, 0, 0), now)).toBe("Today, 00:00");
+    expect(humanDate(at(9, 10, 23, 59), now)).toBe("Yesterday, 23:59");
+  });
+
+  it("gives the five days before yesterday a weekday", () => {
+    expect(humanDate(at(9, 9), now)).toBe("Fri, 09:05");
+    expect(humanDate(at(9, 5), now)).toBe("Mon, 09:05");
+  });
+
+  it("never names a weekday that could also mean this week's", () => {
+    // Saturday a week ago: "Sat" would read as today.
+    expect(humanDate(at(9, 4), now)).toBe("Oct 4");
+  });
+
+  it("gives a month and day this year, and a month and year before it", () => {
+    expect(humanDate(at(0, 2), now)).toBe("Jan 2");
+    expect(humanDate(at(11, 31, 9, 5, 2025), now)).toBe("Dec 2025");
+  });
+
+  it("reads zero as unknown", () => {
+    expect(humanDate(0, now)).toBe("—");
+  });
+
+  it("does not call a time after today 'Today'", () => {
+    expect(humanDate(at(9, 12, 8), now)).toBe("Oct 12");
+  });
+
+  it("counts calendar days, not 24-hour spans, across a clock change", () => {
+    // Europe's clocks go back on Sunday 25 October 2026, so in a zone that
+    // follows them that day is 25 hours long, and a fixed 24-hour step back
+    // from Monday's midnight lands at 01:00 on Sunday. Its first hour then read
+    // as "Sun, 00:30" instead of "Yesterday". In a zone without the change both
+    // forms agree; run the suite with TZ=Europe/Madrid to exercise it.
+    const monday = new Date(2026, 9, 26, 0, 30).getTime();
+    expect(humanDate(new Date(2026, 9, 25, 0, 30).getTime(), monday)).toBe("Yesterday, 00:30");
   });
 });

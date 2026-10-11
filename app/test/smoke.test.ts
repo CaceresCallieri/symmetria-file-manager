@@ -126,11 +126,12 @@ describe("the application boots", () => {
     // Accept and Cancel; `listingRead` and `listingWrite` when the sort order
     // gained a file to live in; `previewDirectoryUrl` when a rendered document
     // needed to reach the images beside it; `searchStart`, `searchQuery` and
-    // `searchRelease` when the file finder gained its index; and `searchRecord`
+    // `searchRelease` when the file finder gained its index; `searchRecord`
     // when the finder began attributing a chosen file to the query that found
-    // it. This assertion caught each addition before anything else did — the
-    // whole suite compiled and every package's own tests passed — which is the
-    // whole reason it is an exact string.
+    // it; and `diskUsage` and `places` when the rail gained its disk meter and
+    // its user directories. This assertion caught each addition before
+    // anything else did — the whole suite compiled and every package's own
+    // tests passed — which is the whole reason it is an exact string.
     //
     // RUN THIS SUITE WITH `pnpm -r test`, never with `vitest` from the
     // repository root. The root has no vitest config, so the app's own
@@ -138,7 +139,7 @@ describe("the application boots", () => {
     // run, and this assertion then reads a stale build and passes against code
     // that is no longer there. It did exactly that for three phases.
     expect(report.bridgeKeys).toBe(
-      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,clipboard,create,describe,frecent,hideWindow,list,listingRead,listingWrite,onChanged,onListBatch,onOpenPath,onTransferProgress,open,overview,pickerCancel,pickerConfirm,previewDirectoryUrl,previewUrl,readText,rename,searchQuery,searchRecord,searchRelease,searchStart,transfer,trash,unwatch,version,watch",
+      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,clipboard,create,describe,diskUsage,frecent,hideWindow,list,listingRead,listingWrite,onChanged,onListBatch,onOpenPath,onTransferProgress,open,overview,pickerCancel,pickerConfirm,places,previewDirectoryUrl,previewUrl,readText,rename,searchQuery,searchRecord,searchRelease,searchStart,transfer,trash,unwatch,version,watch",
     );
   });
 
@@ -164,6 +165,7 @@ describe("the application boots", () => {
 interface RowLayout {
   readonly fittingIconLeft: number;
   readonly overflowingIconLeft: number;
+  readonly fittingMarkWidth: number;
   readonly overflowingMarkWidth: number;
   readonly overflowingLinkWidth: number;
   readonly overflowingLinkText: string;
@@ -200,8 +202,12 @@ describe("a row whose name is too wide for its column", () => {
     expect(layout.nameClipped).toBe(true);
   });
 
-  it("keeps the eight pixels of the leading mark", () => {
-    expect(layout.overflowingMarkWidth).toBe(8);
+  it("keeps the leading mark at the width a fitting row gives it", () => {
+    // Compared with the fitting row, not with a literal 8: the width is the
+    // host's choice. `styles.css` gives it 8px; the standalone's Atmosphere
+    // sheet shows marking as a row fill and gives it none. What must hold in
+    // every host is that a long name does not take the box's width away.
+    expect(layout.overflowingMarkWidth).toBe(layout.fittingMarkWidth);
   });
 
   it("still draws the trailing symlink arrow", () => {

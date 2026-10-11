@@ -11,6 +11,8 @@ export type RenderMode = "rendered" | "source";
 
 export interface StatusBarProps {
   readonly summary?: ReactNode;
+  /** What the mode pill says. Absent means `normal`. */
+  readonly mode?: BarMode;
   /**
    * The dialog chrome, or null in the browse window.
    *
@@ -85,9 +87,11 @@ export function StatusBar({
   flash = null,
   transient,
   summary,
+  mode = "normal",
 }: StatusBarProps) {
   return (
     <footer data-testid="status-bar" className="status-bar">
+      <span className="status-bar__mode" data-mode={mode} data-label={MODE_LABEL[mode]} />
       {search === null ? (
         <>
           {picker === null ? null : (
@@ -140,6 +144,21 @@ export function StatusBar({
     </footer>
   );
 }
+
+/*
+ * Atmosphere: the mode pill at the bar's left edge. `styles.css` hides it, so
+ * the Mesura Code layer is unchanged; the standalone's Atmosphere stylesheet
+ * shows it. `App` derives the mode from the ACTIVE view's state, not from this
+ * bar's props: the tree's search and flash never reach the bar.
+ */
+export type BarMode = "normal" | "search" | "flash" | "select" | "overview";
+const MODE_LABEL = {
+  normal: "Normal",
+  search: "Search",
+  flash: "Flash",
+  select: "Select",
+  overview: "Overview",
+} satisfies Record<BarMode, string>;
 
 /**
  * What the bar is showing, once the search field has declined it.

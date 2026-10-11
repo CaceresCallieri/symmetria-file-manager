@@ -1,0 +1,1137 @@
+/*
+ * Atmosphere — the standalone window's design. Standalone only.
+ *
+ * Spec: docs/design/atmosphere-design-system.md. Reference prototype:
+ * docs/design/prototypes/atmosphere/. Imported by `main.tsx` AFTER the package
+ * sheets, so it wins by order over `styles.css` and `tokens.css`; it overrides
+ * their tokens and restyles their classes, and shows the markup `styles.css`
+ * hides by default (row size and date, the mode pill, the preview head).
+ *
+ * Why it lives in `app/src/renderer` and not in `packages/fm-ui`: Mesura Code
+ * vendors `packages/` but not `app/`, and its layer keeps its own minimal look
+ * (see "Host profiles" in the spec). A rule placed in `styles.css` instead
+ * reaches Mesura Code at its next subtree pull.
+ *
+ * One value is deliberately NOT here: `--row-height`. `main.tsx` sets it from
+ * the same number it passes to `App`, because the virtualisers place rows by
+ * arithmetic and the two must never disagree.
+ */
+
+@font-face {
+  font-family: "Instrument Sans";
+  src: url("./fonts/instrument-sans-latin-wght-normal.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: block;
+}
+@font-face {
+  font-family: "Fragment Mono";
+  src: url("./fonts/fragment-mono-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-display: block;
+}
+
+/* ── Tokens ───────────────────────────────────────────────────────────────── */
+:root {
+  --font-sans: "Instrument Sans", system-ui, sans-serif;
+  --font-mono: "Fragment Mono", ui-monospace, monospace;
+
+  /* The window fill. Hyprland blurs the desktop behind a transparent window
+     but cannot desaturate it, so this alpha is the only lever against a
+     wallpaper's tint. 88% is the operator's choice (2026-10-11). */
+  --atmo-window: rgb(14 14 15 / 88%);
+  --atmo-pane: rgb(255 255 255 / 3.5%);
+  --atmo-pane-preview: rgb(0 0 0 / 26%);
+  --atmo-pop: rgb(26 26 27 / 94%);
+  --atmo-well: rgb(0 0 0 / 26%);
+  --atmo-edge: rgb(255 255 255 / 8%);
+  --atmo-edge-2: rgb(255 255 255 / 13%);
+  --atmo-shine: inset 0 1px 0 rgb(255 255 255 / 7%);
+  --atmo-faint: rgb(244 244 244 / 40%);
+  --atmo-file: rgb(244 244 244 / 55%);
+  --atmo-blue: oklch(66% 0.16 258);
+  --atmo-blue-ink: oklch(82% 0.08 258);
+  --atmo-blue-soft: color-mix(in oklab, var(--atmo-blue) 20%, transparent);
+  --atmo-blue-faint: color-mix(in oklab, var(--atmo-blue) 11%, transparent);
+  --atmo-amber: #f0b44c;
+  /* The cursor row, shared by the Miller columns and the tree: raised white
+     glass. A static fill — no row may animate (see `FileRow.tsx`). */
+  --atmo-cursor-fill: linear-gradient(100deg, rgb(255 255 255 / 15%), rgb(255 255 255 / 8%));
+  --atmo-cursor-lift:
+    inset 0 1px 0 rgb(255 255 255 / 14%), inset 0 0 0 1px rgb(255 255 255 / 6%),
+    0 6px 18px rgb(0 0 0 / 22%);
+
+  --background: rgb(14 14 15);
+  --foreground: #f4f4f4;
+  --muted-foreground: rgb(244 244 244 / 64%);
+  --border: var(--atmo-edge);
+  --muted: rgb(255 255 255 / 5%);
+  --accent: rgb(255 255 255 / 9%);
+  --card: var(--atmo-pane);
+  --popover: var(--atmo-pop);
+  --primary: var(--atmo-blue);
+  --destructive: #ff5f66;
+  --clipboard-yank: #73cf98;
+  --clipboard-cut: #ff5f66;
+  --marked: var(--atmo-blue-ink);
+  --search-match: var(--atmo-blue-faint);
+  --dialog-border: var(--atmo-edge-2);
+  --dialog-confirm: #f4f4f4;
+  --overlay-scrim: rgb(0 0 0 / 40%);
+
+  /* Monochrome icons: every type tint collapses to the file grey. */
+  --icon-blue: var(--atmo-file);
+  --icon-cyan: var(--atmo-file);
+  --icon-yellow: var(--atmo-file);
+  --icon-green: var(--atmo-file);
+  --icon-orange: var(--atmo-file);
+  --icon-purple: var(--atmo-file);
+  --icon-pink: var(--atmo-file);
+  --icon-muted: var(--atmo-file);
+
+  --radius: 18px;
+  --radius-sm: 11px;
+  --status-bar-height: 38px;
+  --toolbar-inset: 4px;
+}
+
+/* ── Window ───────────────────────────────────────────────────────────────── */
+/* The BrowserWindow is transparent (see app/src/main/window.ts); the fill
+   lives on the window wrapper so Hyprland's blur shows through it. The four
+   layout numbers are tokens because the overview layer, which is fixed to the
+   viewport rather than nested in this grid, must line up with the content. */
+:root {
+  --atmo-pad: 12px;
+  --atmo-header-h: 40px;
+  --atmo-rail-w: 64px;
+  --atmo-gap: 10px;
+}
+html,
+body {
+  background: transparent;
+}
+body {
+  font-size: 13.5px;
+  -webkit-font-smoothing: antialiased;
+}
+#root {
+  display: flex;
+}
+.atmo-window {
+  flex: 1;
+  display: grid;
+  grid-template-rows: var(--atmo-header-h) minmax(0, 1fr);
+  gap: var(--atmo-gap);
+  min-width: 0;
+  padding: var(--atmo-gap) var(--atmo-pad) var(--atmo-pad) 0;
+  background: var(--atmo-window);
+}
+.atmo-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: var(--atmo-rail-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+}
+/* `main` is the body's second column. The rail is its sibling, not its child,
+   so the rail stays clickable while the overview makes `main` inert. */
+.app--atmosphere {
+  position: relative;
+  height: auto;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  background: none;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+.atmo-header {
+  container: atmo-header / inline-size;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding-left: var(--atmo-pad);
+}
+.atmo-icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 99px;
+  background: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.atmo-icon-button:hover {
+  background: rgb(255 255 255 / 7%);
+  color: var(--foreground);
+}
+.atmo-icon-button[aria-pressed="true"] {
+  background: rgb(255 255 255 / 13%);
+  color: var(--foreground);
+  box-shadow: var(--atmo-shine);
+}
+.atmo-tabs,
+.atmo-views {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 99px;
+  background: var(--atmo-well);
+  box-shadow: inset 0 0 0 1px var(--atmo-edge);
+}
+.atmo-tabs .atmo-icon-button,
+.atmo-views .atmo-icon-button {
+  width: 30px;
+  height: 28px;
+}
+.atmo-tabs {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.atmo-tabs .tab-bar {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0;
+  gap: 4px;
+  overflow: hidden;
+}
+.tab {
+  flex: 0 1 auto;
+  min-width: 56px;
+  height: 28px;
+  gap: 4px;
+  padding: 0 8px 0 12px;
+  border-radius: 99px;
+  background: none;
+  color: var(--atmo-faint);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.tab:hover {
+  color: var(--foreground);
+}
+.tab--active {
+  background: rgb(255 255 255 / 12%);
+  color: var(--foreground);
+  font-weight: 500;
+  box-shadow:
+    var(--atmo-shine),
+    0 2px 10px rgb(0 0 0 / 20%);
+}
+.tab__name {
+  max-width: 140px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tab__close {
+  opacity: 0.45;
+}
+.atmo-history {
+  display: flex;
+  flex: none;
+}
+.atmo-crumbs {
+  container: atmo-crumbs / inline-size;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.atmo-crumbs .path-bar {
+  gap: 0;
+  padding: 0;
+  align-items: center;
+  white-space: nowrap;
+}
+.crumb {
+  padding: 6px 9px;
+  border-radius: 99px;
+  color: var(--atmo-faint);
+  font-weight: 500;
+}
+.crumb--clickable:hover {
+  color: var(--foreground);
+  background: rgb(255 255 255 / 5%);
+}
+.crumb--current {
+  color: var(--foreground);
+  font-weight: 500;
+  background: rgb(255 255 255 / 9%);
+  box-shadow: var(--atmo-shine);
+}
+/* A long path elides its leading segments and keeps the current one whole. */
+.atmo-crumbs .crumb {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.atmo-crumbs .crumb--current {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+/* Narrow: only the parent and the current folder, behind an ellipsis. A
+   leading segment squeezed to its padding reads as a stray letter. */
+@container atmo-crumbs (width < 320px) {
+  .atmo-crumbs .crumb:not(.crumb--current, :nth-last-child(2)) {
+    display: none;
+  }
+  .atmo-crumbs .path-bar:has(.crumb:nth-child(3))::before {
+    content: "…";
+    padding: 0 4px 0 6px;
+    color: var(--atmo-faint);
+  }
+}
+@container atmo-crumbs (width < 180px) {
+  .atmo-crumbs .crumb:not(.crumb--current) {
+    display: none;
+  }
+}
+.atmo-search {
+  display: flex;
+  align-items: center;
+  flex: 0 1 220px;
+  gap: 8px;
+  min-width: 150px;
+  height: 34px;
+  padding: 0 7px 0 13px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--atmo-well);
+  box-shadow: inset 0 0 0 1px var(--atmo-edge);
+  color: var(--atmo-faint);
+  font: inherit;
+  cursor: pointer;
+}
+.atmo-search:hover {
+  color: var(--muted-foreground);
+}
+.atmo-search kbd {
+  margin-left: auto;
+  border-radius: 99px;
+}
+
+/* The header gives up its least-used parts first: the search label, then
+   help, then history. Each one keeps its key (`/`, `?`, `⇧S` / `⇧D`), so
+   nothing becomes unreachable. */
+@container atmo-header (width < 1080px) {
+  .atmo-search {
+    flex: none;
+    justify-content: center;
+    width: 34px;
+    min-width: 0;
+    padding: 0;
+  }
+  .atmo-search :is(span, kbd) {
+    display: none;
+  }
+}
+@container atmo-header (width < 860px) {
+  .atmo-header > .atmo-icon-button:last-child {
+    display: none;
+  }
+  .tab__name {
+    max-width: 96px;
+  }
+}
+@container atmo-header (width < 720px) {
+  .atmo-history {
+    display: none;
+  }
+}
+
+/* ── Rail ─────────────────────────────────────────────────────────────────── */
+.atmo-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding-top: 2px;
+}
+.atmo-rail-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.atmo-rail-section + .atmo-rail-section {
+  width: 32px;
+  padding-top: 14px;
+  border-top: 1px solid var(--atmo-edge);
+}
+.atmo-rail-item {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: var(--atmo-faint);
+  cursor: pointer;
+}
+.atmo-rail-item:hover {
+  background: rgb(255 255 255 / 5%);
+  color: var(--foreground);
+}
+.atmo-rail-item[aria-current="page"] {
+  background: rgb(255 255 255 / 11%);
+  color: var(--foreground);
+  box-shadow: var(--atmo-shine);
+}
+.atmo-monogram {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 7%);
+  box-shadow: inset 0 0 0 1px var(--atmo-edge);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+}
+.atmo-rail-item[aria-current="page"] .atmo-monogram {
+  background: var(--foreground);
+  color: #111;
+}
+.atmo-rail-tip {
+  position: absolute;
+  left: 52px;
+  top: 50%;
+  z-index: 40;
+  padding: 6px 10px;
+  border-radius: 9px;
+  background: var(--atmo-pop);
+  box-shadow:
+    inset 0 0 0 1px var(--atmo-edge-2),
+    0 8px 24px rgb(0 0 0 / 35%);
+  color: var(--foreground);
+  font-size: 12.5px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-4px, -50%);
+  transition:
+    opacity 0.12s,
+    transform 0.12s;
+}
+.atmo-rail-item:hover .atmo-rail-tip {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+/* The disk meter: pinned to the rail's foot, level with the status bar. */
+.atmo-rail {
+  min-height: 0;
+}
+.atmo-disk {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  height: var(--status-bar-height);
+  margin-top: auto;
+  cursor: default;
+}
+.atmo-disk-bar {
+  appearance: none;
+  display: block;
+  width: 24px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 10%);
+}
+.atmo-disk-bar::-webkit-meter-bar {
+  height: 4px;
+  border: 0;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 10%);
+}
+/* With no `low` / `high`, Chromium always draws the optimum value; the level
+   is `data-level`, decided in `AtmosphereChrome.tsx` with inclusive bounds. */
+.atmo-disk-bar::-webkit-meter-optimum-value {
+  border-radius: 99px;
+  background: rgb(244 244 244 / 72%);
+}
+.atmo-disk[data-level="warn"] .atmo-disk-bar::-webkit-meter-optimum-value {
+  background: var(--atmo-amber);
+}
+.atmo-disk[data-level="full"] .atmo-disk-bar::-webkit-meter-optimum-value {
+  background: var(--destructive);
+}
+.atmo-disk .atmo-rail-tip kbd {
+  margin-left: 6px;
+}
+
+/* ── Scrollbars ───────────────────────────────────────────────────────────── */
+/* Chromium paints a scrollbar along the scroller's whole padding edge and does
+   not clip it to `border-radius`, so on an 18px card the thumb ran out through
+   both curves. The thumb floats instead: a 4px bar inside a 10px lane (the
+   transparent border is the inset from the card's edge), and the track's
+   margin keeps it on the straight part of the side. 14px clears the curve at
+   that inset with room to spare. Do not fix this by dropping the radius. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  margin: 14px;
+}
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 99px;
+  background-clip: padding-box;
+  background-color: rgb(255 255 255 / 12%);
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(255 255 255 / 22%);
+}
+
+/* ── Panes: glass cards ───────────────────────────────────────────────────── */
+.columns {
+  gap: 8px;
+}
+.list {
+  border: 0;
+  border-radius: 18px;
+  padding: 8px;
+  background: var(--atmo-pane);
+  box-shadow:
+    inset 0 0 0 1px var(--atmo-edge),
+    var(--atmo-shine);
+}
+.columns > :first-child {
+  background: rgb(255 255 255 / 2%);
+}
+.columns > :nth-child(2) {
+  container-type: inline-size;
+}
+.columns > :last-child {
+  background: var(--atmo-pane-preview);
+}
+
+/* ── Rows ─────────────────────────────────────────────────────────────────── */
+.row {
+  gap: 10px;
+  padding: 0 10px;
+  border-radius: 11px;
+}
+.row[data-kind="directory"] .row__name {
+  font-weight: 500;
+}
+.file-icon {
+  color: var(--atmo-file);
+}
+.file-icon[data-icon="folder"],
+.row--cursor .file-icon {
+  color: var(--foreground);
+}
+.columns > :first-child .row {
+  color: var(--muted-foreground);
+}
+.columns > :first-child .file-icon[data-icon="folder"] {
+  color: var(--muted-foreground);
+}
+
+/* The cursor: raised white glass in the current column, flat in the parent. */
+.row--cursor {
+  background: var(--atmo-cursor-fill);
+  box-shadow: var(--atmo-cursor-lift);
+}
+.columns > :first-child .row--cursor {
+  background: rgb(255 255 255 / 7%);
+  box-shadow: none;
+}
+
+.row--marked {
+  background: var(--atmo-blue-faint);
+}
+.row--marked.row--cursor {
+  background: linear-gradient(100deg, var(--atmo-blue-soft), var(--atmo-blue-faint));
+}
+.row__mark {
+  flex-basis: 0;
+  overflow: hidden;
+}
+
+/* Yanked / cut: a dot at the row's right edge instead of a full-height strip. */
+.row__clipboard {
+  inset: 50% 4px auto auto;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  opacity: 1;
+  box-shadow: 0 0 8px var(--clipboard-yank);
+}
+.row__clipboard[data-clipboard="move"] {
+  box-shadow: 0 0 8px var(--clipboard-cut);
+}
+
+/* Size and date, current column only. The name takes the free width, so the
+   two columns line up at the right edge. */
+.columns > :nth-child(2) .row__name {
+  flex: 1 1 auto;
+}
+.columns > :nth-child(2) .row__meta {
+  display: inline;
+  flex: 0 0 auto;
+  font: 11px var(--font-mono);
+  color: var(--atmo-faint);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.row__meta::after {
+  content: attr(data-value);
+}
+.columns > :nth-child(2) .row__size {
+  width: 72px;
+}
+.columns > :nth-child(2) .row__date {
+  width: 112px;
+  padding-right: 6px;
+}
+.columns > :nth-child(2) .row--cursor .row__meta {
+  color: var(--muted-foreground);
+}
+@container (max-width: 380px) {
+  .columns > :nth-child(2) .row__date {
+    display: none;
+  }
+}
+@container (max-width: 250px) {
+  .row__meta::after {
+    content: attr(data-value);
+  }
+  .columns > :nth-child(2) .row__size {
+    display: none;
+  }
+}
+
+/* ── Preview ──────────────────────────────────────────────────────────────── */
+.preview-pane {
+  padding: 12px 14px;
+}
+.preview__body,
+.preview__body.hljs {
+  border-radius: 14px;
+  background: rgb(0 0 0 / 34%);
+  box-shadow: inset 0 0 0 1px var(--atmo-edge);
+  font-size: 11.5px;
+  line-height: 1.75;
+}
+.preview__markdown-body {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted-foreground);
+}
+.preview__markdown-body h1,
+.preview__markdown-body h2,
+.preview__markdown-body h3 {
+  color: var(--foreground);
+  letter-spacing: -0.015em;
+}
+
+/* ── Status bar: floating ─────────────────────────────────────────────────── */
+.status-bar {
+  padding: 0 12px;
+  border-radius: 14px;
+  background: var(--atmo-well);
+  box-shadow: inset 0 0 0 1px var(--atmo-edge);
+  font-size: 12.5px;
+  color: var(--atmo-faint);
+}
+
+/* ── Overlays ─────────────────────────────────────────────────────────────── */
+.overlay {
+  backdrop-filter: blur(6px) saturate(0);
+}
+.overlay__panel,
+.ops-dialog,
+.which-key {
+  border: 0;
+  border-radius: 24px;
+  background: var(--atmo-pop);
+  backdrop-filter: blur(40px) saturate(0) brightness(0.8);
+  box-shadow:
+    inset 0 0 0 1px var(--atmo-edge-2),
+    var(--atmo-shine),
+    0 30px 90px rgb(0 0 0 / 50%);
+}
+.which-key {
+  border-radius: 18px;
+  padding: 10px 14px;
+}
+.dialog__button {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 99px;
+}
+.dialog__cancel {
+  background: rgb(255 255 255 / 7%);
+  box-shadow:
+    inset 0 0 0 1px var(--atmo-edge),
+    var(--atmo-shine);
+}
+.dialog__confirm {
+  color: #111;
+}
+.ops-dialog .dialog__name {
+  border-radius: 12px;
+}
+.ops-dialog .dialog__name:focus {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px var(--atmo-blue),
+    0 0 0 4px var(--atmo-blue-faint);
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 7%);
+  box-shadow: inset 0 0 0 1px var(--atmo-edge);
+}
+
+/* ── Status bar: mode pill ────────────────────────────────────────────────── */
+.app--atmosphere .status-bar__mode {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 7px;
+  height: 26px;
+  margin-left: -6px;
+  padding: 0 11px 0 9px;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 7%);
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+.app--atmosphere .status-bar__mode::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+}
+.app--atmosphere .status-bar__mode:is([data-mode="search"], [data-mode="flash"])::before {
+  background: var(--atmo-blue);
+  box-shadow: 0 0 8px var(--atmo-blue);
+}
+.app--atmosphere .status-bar__mode::after {
+  content: attr(data-label);
+}
+.app--atmosphere .status-bar__mode[data-mode="select"] {
+  background: var(--atmo-blue-soft);
+  color: var(--atmo-blue-ink);
+}
+.app--atmosphere .status-bar__mode[data-mode="select"]::before {
+  background: var(--atmo-blue);
+  box-shadow: 0 0 8px var(--atmo-blue);
+}
+.search__sigil {
+  color: var(--atmo-blue-ink);
+}
+
+/* ── Preview: identity head ───────────────────────────────────────────────── */
+.app--atmosphere .preview-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px 14px;
+  flex: none;
+  align-items: center;
+  padding: 8px 6px 14px;
+}
+.preview-head__icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  background: rgb(255 255 255 / 7%);
+  box-shadow:
+    inset 0 0 0 1px var(--atmo-edge),
+    var(--atmo-shine);
+}
+.preview-head__icon .file-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--foreground);
+}
+.preview-head__title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.preview-head__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.preview-head__kind {
+  color: var(--atmo-faint);
+  font-size: 12.5px;
+}
+.preview-head__chips {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+.preview-head__chips > div {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  max-width: 100%;
+  padding: 5px 11px;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 5%);
+  box-shadow: inset 0 0 0 1px var(--atmo-edge);
+  font-size: 12px;
+}
+.preview-head__chips dt {
+  color: var(--atmo-faint);
+}
+.preview-head__chips dd {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-head__path dd {
+  direction: rtl;
+  font: 11px var(--font-mono);
+  color: var(--muted-foreground);
+}
+.preview-pane--reader .preview-head {
+  display: none;
+}
+
+/* ── File tree: tree card beside a preview card ──────────────────────────── */
+.tree-split {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 8px;
+  min-height: 0;
+}
+.tree-split > .file-tree {
+  border-radius: 18px;
+  background: var(--atmo-pane);
+  box-shadow:
+    inset 0 0 0 1px var(--atmo-edge),
+    var(--atmo-shine);
+  overflow: hidden;
+}
+.tree-split > .list {
+  background: var(--atmo-pane-preview);
+}
+.tree-toolbar {
+  min-height: 48px;
+  gap: 10px;
+  padding: 0 10px 0 18px;
+  color: var(--atmo-faint);
+}
+.tree-toolbar > strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.tree-scope {
+  font: 11px var(--font-mono);
+}
+.file-tree button,
+.overview button {
+  height: 30px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 7%);
+  box-shadow:
+    inset 0 0 0 1px var(--atmo-edge),
+    var(--atmo-shine);
+  color: var(--foreground);
+  font-weight: 500;
+}
+.file-tree button:hover,
+.overview button:hover {
+  background: rgb(255 255 255 / 12%);
+}
+.tree-toolbar summary,
+.overview-toolbar summary {
+  padding: 6px 12px;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 5%);
+  box-shadow: inset 0 0 0 1px var(--atmo-edge);
+  color: var(--foreground);
+  cursor: pointer;
+  list-style: none;
+}
+.tree-expansion-menu,
+.overview-popover {
+  border: 0;
+  border-radius: 16px;
+  background: var(--atmo-pop);
+  box-shadow:
+    inset 0 0 0 1px var(--atmo-edge-2),
+    0 18px 50px rgb(0 0 0 / 45%);
+}
+.tree-breadcrumb {
+  padding: 0 18px 8px;
+  font-size: 12px;
+}
+.tree-breadcrumb .crumb {
+  padding: 3px 7px;
+}
+.tree-viewport {
+  padding: 0 8px 8px;
+}
+.tree-row {
+  left: 8px;
+  right: 8px;
+  height: var(--row-height);
+  gap: 8px;
+  padding-left: 8px;
+  border-radius: 11px;
+  font-size: 13.5px;
+}
+.tree-row[aria-selected="true"] {
+  background: var(--atmo-cursor-fill);
+  box-shadow: var(--atmo-cursor-lift);
+}
+.tree-row[aria-selected="true"] .file-icon {
+  color: var(--foreground);
+}
+.file-tree .tree-disclosure {
+  height: auto;
+  padding: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--atmo-faint);
+}
+.tree-guides {
+  background: repeating-linear-gradient(
+    to right,
+    rgb(255 255 255 / 9%) 0,
+    rgb(255 255 255 / 9%) 1px,
+    transparent 1px,
+    transparent 14px
+  );
+}
+.tree-row[data-marked] {
+  background: var(--atmo-blue-faint);
+}
+
+/* ── Overview: one glass surface over the content area ───────────────────── */
+/* Fixed to the viewport by its own sheet; these insets place it exactly over
+   the content column, so the header and the status bar stay visible. */
+.overview {
+  inset: calc(var(--atmo-gap) * 2 + var(--atmo-header-h)) var(--atmo-pad)
+    calc(var(--atmo-pad) + var(--status-bar-height) + 8px) var(--atmo-rail-w);
+  border-radius: 18px;
+  background: rgb(0 0 0 / 16%);
+  box-shadow: inset 0 0 0 1px var(--atmo-edge);
+  overflow: hidden;
+}
+/* `main` is inert exactly while the overview or the reader covers it. Hide
+   the columns underneath then, so the overview's glass shows the desktop
+   blur rather than a ghost of the listing. The status bar stays. */
+.app--atmosphere[inert] :is(.columns, .tree-split, .which-key) {
+  visibility: hidden;
+}
+.overview-toolbar {
+  height: 52px;
+  gap: 10px;
+  padding: 0 10px 0 18px;
+  border-bottom: 1px solid var(--atmo-edge);
+}
+.overview-toolbar > strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.overview-toolbar > span {
+  font: 11px var(--font-mono);
+  color: var(--atmo-faint);
+}
+.overview-camera-controls {
+  height: 52px;
+  gap: 6px;
+}
+.overview-camera-controls > span {
+  min-width: 44px;
+  font: 11px var(--font-mono);
+  color: var(--muted-foreground);
+  text-align: center;
+}
+.overview-camera-controls > button[aria-label^="Zoom"] {
+  width: 32px;
+  padding: 0;
+}
+.overview .overview-minimap-toggle {
+  width: 34px;
+  height: 30px;
+  border-radius: 99px;
+}
+.connected-groups {
+  background: radial-gradient(circle, rgb(255 255 255 / 7%) 1px, transparent 1.4px) 0 0 / 26px 26px;
+}
+.folder-group {
+  border: 0;
+  border-radius: 18px;
+  background: rgb(26 26 27 / 92%);
+  box-shadow:
+    inset 0 0 0 1px var(--atmo-edge-2),
+    var(--atmo-shine),
+    0 16px 40px rgb(0 0 0 / 30%);
+  overflow: hidden;
+}
+.folder-group header {
+  padding: 12px 12px 2px 14px;
+}
+.folder-group .folder-group-name {
+  height: auto;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  font-weight: 600;
+}
+.folder-group .folder-group-name:hover {
+  background: transparent;
+}
+.folder-group header > button:not(.folder-group-name) {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--atmo-faint);
+}
+.folder-ancestors {
+  padding: 0 14px 6px;
+  font: 10.5px var(--font-mono);
+  color: var(--atmo-faint);
+}
+.folder-entries {
+  padding: 2px 8px 10px;
+}
+.folder-group .overview-row {
+  height: auto;
+  min-height: 27px;
+  padding: 4px 8px;
+  border-radius: 9px;
+  box-shadow: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-weight: 400;
+}
+.folder-group .overview-row:hover {
+  background: rgb(255 255 255 / 5%);
+}
+.folder-group [data-selected="true"] {
+  background: linear-gradient(100deg, rgb(255 255 255 / 15%), rgb(255 255 255 / 8%));
+  color: var(--foreground);
+}
+.folder-status {
+  margin: 4px 14px;
+  font-size: 12.5px;
+  color: var(--atmo-faint);
+}
+.folder-load {
+  margin: 4px 14px 14px;
+}
+.overview-edge {
+  fill: rgb(255 255 255 / 45%);
+  stroke: rgb(255 255 255 / 16%);
+}
+.overview-edge.active {
+  fill: rgb(255 255 255 / 75%);
+  stroke: rgb(255 255 255 / 55%);
+}
+.overview-minimap-surface {
+  top: 14px;
+  right: 14px;
+  border-radius: 14px;
+  background: var(--atmo-pop);
+  box-shadow: inset 0 0 0 1px var(--atmo-edge-2);
+}
+.minimap-viewport {
+  stroke: rgb(255 255 255 / 60%);
+}
+.overview-search {
+  border-radius: 14px;
+  background: var(--atmo-pop);
+  box-shadow: inset 0 0 0 1px var(--atmo-edge-2);
+}
+
+/* ── Help sheet: groups side by side ─────────────────────────────────────── */
+/* The help sheet only: the operation dialogs share `.overlay__panel`. */
+[data-testid="help-overlay"] .overlay__panel {
+  max-height: 82vh;
+  width: min(980px, 92vw);
+  padding: 22px 26px;
+  columns: 3 260px;
+  column-gap: 32px;
+}
+.overlay__head {
+  column-span: all;
+  margin-bottom: 8px;
+}
+.overlay__head button {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 7%);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12px;
+}
+.overlay__panel section {
+  break-inside: avoid;
+  margin-bottom: 14px;
+}
+.overlay__panel h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--atmo-faint);
+}
+.overlay__head h2 {
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: -0.015em;
+}
+.help-row {
+  break-inside: avoid;
+  padding: 4px 0;
+  color: var(--muted-foreground);
+}
+
+/* ── Which-key: floating above the status bar ────────────────────────────── */
+.app--atmosphere .which-key {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--status-bar-height) + 16px);
+  z-index: 15;
+  max-width: min(640px, 90%);
+  transform: translateX(-50%);
+}

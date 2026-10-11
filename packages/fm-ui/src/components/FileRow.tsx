@@ -1,4 +1,5 @@
 import type { FsEntry } from "@symmetria/fm-core/entry";
+import { humanDate, humanSize } from "@symmetria/fm-core/format";
 
 import { FileIcon } from "@symmetria/fm-search/ui";
 import { ClipboardIndicator } from "./ClipboardIndicator.tsx";
@@ -152,6 +153,17 @@ export function FileRow({
       </span>
       <ClipboardIndicator directory={directory} name={entry.name} />
       {entry.isSymlink ? <span className="row__link">→</span> : null}
+      {/* Atmosphere: size and date columns. `styles.css` hides
+          them, so the Mesura Code host is unchanged; the standalone's
+          `atmosphere.css` shows them. The values are attributes drawn with
+          `attr()`, so a row's text stays its name — tests and any lookup by
+          text read the name alone. A directory's size is its inode, not its
+          contents, so it is left blank rather than shown as 4.0 kB. */}
+      <span
+        className="row__meta row__size"
+        data-value={entry.kind === "directory" ? "" : humanSize(entry.size)}
+      />
+      <span className="row__meta row__date" data-value={humanDate(entry.modifiedMs, Date.now())} />
     </div>
   );
 }

@@ -237,6 +237,8 @@ export interface ListAsk {
 
 export interface BridgeLog {
   readonly listed: string[];
+  /** Every path the disk meter asked about, when `diskUsage` is offered. */
+  readonly diskAsks: string[];
   /** Every directory the finder asked to open an index over. */
   readonly searchStarts: string[];
   /** Every query the finder actually sent, after its debounce. */
@@ -415,10 +417,21 @@ export interface BridgeOptions {
    * flight are decided by whichever finishes last.
    */
   readonly slowFirstListingWrite?: boolean;
+  /**
+   * What `diskUsage` answers, in bytes. Absent means the bridge has no
+   * `diskUsage` at all, which is how a host that cannot measure looks.
+   */
+  readonly diskUsage?: { readonly total: number; readonly free: number };
+  /**
+   * What `places` answers. Absent means the bridge has no `places`, which is
+   * how a host that cannot resolve user directories looks.
+   */
+  readonly places?: readonly { readonly kind: string; readonly path: string }[];
 }
 
 export function installBridge(options: BridgeOptions = {}): BridgeLog {
   const listed: string[] = [];
+  const diskAsks: string[] = [];
   const searchStarts: string[] = [];
   const searchQueries: string[] = [];
   const searchRecords: { query: string; chosenPath: string }[] = [];
@@ -802,11 +815,23 @@ export function installBridge(options: BridgeOptions = {}): BridgeLog {
       return () => listeners.delete(listener);
     },
   };
+  const places = options.places;
+  if (places !== undefined) {
+    bridge.places = () => Promise.resolve({ ok: true as const, value: { places } });
+  }
+  const usage = options.diskUsage;
+  if (usage !== undefined) {
+    bridge.diskUsage = (request) => {
+      diskAsks.push((request as { path: string }).path);
+      return Promise.resolve({ ok: true as const, value: usage });
+    };
+  }
 
   Object.defineProperty(window, BRIDGE_KEY, { value: bridge, configurable: true, writable: true });
 
   return {
     listed,
+    diskAsks,
     searchStarts,
     searchQueries,
     searchRecords,
