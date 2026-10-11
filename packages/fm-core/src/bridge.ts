@@ -97,3 +97,18 @@ export interface Bridge {
   /** Receive a path the daemon was asked, from outside, to open. */
   onOpenPath(listener: (event: unknown) => void): Unsubscribe;
 }
+
+/**
+ * What the daemon pushes on `onOpenPath`: a directory to show, and optionally
+ * one entry in it to put the cursor on.
+ *
+ * `reveal` is what "Show in folder" needs. The main process decides it,
+ * because only the main process can ask the disk whether a path is a file;
+ * the renderer has no filesystem.
+ */
+export interface ExternalOpen {
+  /** The directory to show. */
+  readonly path: string;
+  /** An absolute path directly inside `path` for the cursor, or null. */
+  readonly reveal: string | null;
+}

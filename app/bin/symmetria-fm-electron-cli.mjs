@@ -36,7 +36,10 @@ function socketPath() {
 
 const USAGE = `symmetria-fm-electron-cli — talk to the running file manager
 
-  open [absolute-path]    open that directory, or your home folder
+  open [absolute-path]    open that directory, or your home folder; a file
+                          opens its folder with the cursor on it
+  reveal <absolute-path>  open the item's folder with the cursor on it, even
+                          when the item is a directory ("Show in folder")
   createPicker '<json>'   open a file dialog answering the given fifo
   closePicker '<json>'    dismiss the dialog answering that fifo
 
@@ -128,6 +131,15 @@ function payloadFor(cmd, args) {
       fail(`open needs a path\n\n${USAGE}`);
     }
     return { cmd: "open", path };
+  }
+
+  if (cmd === "reveal") {
+    // No default here: revealing "home" would mean nothing anybody asked for.
+    const path = args[0];
+    if (path === undefined || path === "") {
+      fail(`reveal needs a path\n\n${USAGE}`);
+    }
+    return { cmd: "reveal", path };
   }
 
   if (cmd === "createPicker" || cmd === "closePicker") {

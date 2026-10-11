@@ -22,8 +22,18 @@ import {
  * afterwards, and the looser of the two copies is the one an attacker uses.
  */
 
+/**
+ * Show a path in the file manager's window.
+ *
+ * - `open` shows a directory. A FILE is shown inside its folder with the cursor
+ *   on it, because a file cannot be listed and there is nothing else useful a
+ *   request to open one could mean.
+ * - `reveal` always shows the item inside its parent with the cursor on it,
+ *   directories included. It is what `org.freedesktop.FileManager1.ShowItems`
+ *   asks for — "Show in folder" from a browser.
+ */
 export interface OpenCommand {
-  readonly cmd: "open";
+  readonly cmd: "open" | "reveal";
   /** Absolute, NUL-free, within the kernel's length limit. */
   readonly path: string;
 }
@@ -204,10 +214,10 @@ export const decodeDaemonCommand: Decoder<DaemonCommand> = (raw) => {
   // unrecognised command that fell through to one of these would run something
   // the caller did not ask for, and one that was silently ignored would report
   // success for work nobody did.
-  if (cmd === "open") {
+  if (cmd === "open" || cmd === "reveal") {
     const path = decodePath(raw.path);
     if (isFailure(path)) return path;
-    return success({ cmd: "open", path: path.value });
+    return success({ cmd, path: path.value });
   }
 
   if (cmd === "createPicker") {

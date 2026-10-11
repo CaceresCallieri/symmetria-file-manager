@@ -1,0 +1,16 @@
+[Unit]
+Description=org.freedesktop.FileManager1 for the Symmetria File Manager (Electron build)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+# Started by D-Bus activation (org.freedesktop.FileManager1.service), the first
+# time an application asks to "Show in folder".
+Type=dbus
+BusName=org.freedesktop.FileManager1
+Environment=SYMMETRIA_FILEMANAGER1_CLI=%h/.local/bin/symmetria-fm-electron-cli
+ExecStart=%h/.local/share/symmetria/portal-venv/bin/python3 %h/.local/share/symmetria/symmetria_filemanager1.py
+Restart=on-failure
+# 69 means another file manager holds the name. Retrying cannot succeed until
+# it quits, and a restart loop would only fill the journal.
+RestartPreventExitStatus=69

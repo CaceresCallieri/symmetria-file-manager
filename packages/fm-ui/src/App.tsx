@@ -375,12 +375,18 @@ export function App(props: AppProps = {}) {
   // Wired here rather than inside `useTabs`, and the placement is the point:
   // `useTabs` owns the tab collection, while composing an external event source
   // onto it is this component's job.
-  useExternalOpen((path) => {
-    search.cancel();
-    modes.reset();
-    millerFlash.clear();
-    overview.close();
-    tree.external(path);
+  useExternalOpen({
+    openAt: (path) => {
+      search.cancel();
+      modes.reset();
+      millerFlash.clear();
+      overview.close();
+      tree.external(path);
+    },
+    reveal: tabs.reveal,
+    activePath: tabs.pane.path,
+    showHidden: tabs.showHidden,
+    toggleHidden: tabs.toggleHidden,
   });
 
   // The preview is resolved BEFORE the key actions, not after, because one of

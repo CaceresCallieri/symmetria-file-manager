@@ -96,6 +96,51 @@ already in the dotfiles, so all that remains is to start the daemon — which
 happens by itself at the next login, or immediately with
 `systemctl --user start symmetria-fm-electron.service`.
 
+## "Show in folder": `org.freedesktop.FileManager1`
+
+Chromium, Electron apps, Firefox and Zen implement "Show in folder" by calling
+`ShowItems` on the session bus name `org.freedesktop.FileManager1`. Whichever
+program owns that name is the file manager that opens. Nautilus owns it until
+something else does.
+
+`portal/symmetria_filemanager1.py` takes the name and turns each call into one
+command-line call: `ShowItems` and `ShowItemProperties` become `reveal <path>`,
+and `ShowFolders` becomes `open <path>`. Everything else is decided in the
+daemon:
+
+- **`reveal`** shows the item inside its parent with the cursor on it, even
+  when the item is a directory. **`open`** of a file does the same, because a
+  file cannot be listed. Only the main process can ask whether a path is a
+  file, so `app/src/main/externalOpen.ts` decides. The window then reuses a tab
+  already on that folder, or opens one.
+- **The daemon focuses its own window through Hyprland** after every `open`
+  or `reveal` (`app/src/main/windowFocus.ts`). This was measured: without it,
+  the folder opened on the `files` workspace while the user stayed where they
+  were, because Hyprland's `misc:focus_on_activate` is off. The window is
+  found by its pid, which is the Electron main process, and by a title that is
+  not the picker's.
+
+```bash
+./portal/install-filemanager1.sh   # per user, no sudo; needs the portal venv
+```
+
+It installs the script, the `symmetria-fm-filemanager1.service` user unit,
+and a D-Bus activation file in `$XDG_DATA_HOME/dbus-1/services`. That
+directory takes precedence over Nautilus's `/usr/share` file, so the bus starts
+this service, but only while the name is free. **A running Nautilus keeps the
+name.** The service then exits 69 and the unit does not restart. Quit Nautilus
+(`nautilus -q`) and start the unit again. The installer says so when it sees
+another owner.
+
+Check it with:
+
+```bash
+busctl --user status org.freedesktop.FileManager1 | grep -E '^(Comm|Unit)='
+gdbus call --session --dest org.freedesktop.FileManager1 \
+  --object-path /org/freedesktop/FileManager1 \
+  --method org.freedesktop.FileManager1.ShowItems "['file://$HOME/.bashrc']" ''
+```
+
 ## Two things the unit learned the hard way
 
 Both were found the first time it was started for real, and both are in the unit

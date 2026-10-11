@@ -36,6 +36,10 @@ import { buildWindowOptions } from "./window.ts";
  * every save dialog is dragged onto the file manager's workspace, away from the
  * application that asked for it. Change it in the dotfiles at the same time or
  * not at all.
+ *
+ * The placement rule in `pickerPlacement.ts`, which floats the picker over its
+ * caller, matches this prefix too. It reads the constant, so it follows a
+ * change on its own; the dotfiles do not.
  */
 export const PICKER_TITLE_PREFIX = "Choose a file";
 

@@ -13,8 +13,10 @@ import { electronIpcSurface } from "@symmetria/fm-main/ipc/electronSurface";
 import { createRegistry, type Registry } from "@symmetria/fm-main/ipc/register";
 import { closeAllSearchIndices } from "@symmetria/fm-main/search";
 import { app, BrowserWindow, ipcMain, session } from "electron";
+import { externalOpenFor, isDirectoryOnDisk } from "./externalOpen.ts";
 import { writeToFifo } from "./fifo.ts";
 import { refuseDocumentRequestsOffScheme, refuseNavigationAwayFromApp } from "./frameNavigation.ts";
+import { hyprlandSenderFor } from "./hyprland.ts";
 import { createResidency } from "./lifecycle.ts";
 import {
   createPickerHost,
@@ -23,9 +25,11 @@ import {
   type PickerHostOptions,
   pickerWindowOptions,
 } from "./picker.ts";
+import { type PickerPlacer, pickerPlacer } from "./pickerPlacement.ts";
 import { APP_ENTRY_URL, handleAppScheme, previewUrlFor, registerAppScheme } from "./protocol.ts";
 import { type CommandHandler, claimSocket, daemonSocketPath, sendCommand } from "./socket.ts";
-import { buildWindowOptions } from "./window.ts";
+import { buildWindowOptions, WINDOW_MINIMUM_SIZE } from "./window.ts";
+import { type WindowFocuser, windowFocuser } from "./windowFocus.ts";
 
 // Must happen before the app is ready. See `protocol.ts` for why the renderer
 // is not served over `file://`.
@@ -627,8 +631,16 @@ async function reportAndQuit(window: BrowserWindow, socketPath: string): Promise
  * gives: that module must stay free of a runtime Electron import so its
  * decisions are testable without a display.
  */
-function pickerWindowFactory(transport: ElectronTransport, registry: Registry): OpenPickerWindow {
+function pickerWindowFactory(
+  transport: ElectronTransport,
+  registry: Registry,
+  placePicker: PickerPlacer,
+): OpenPickerWindow {
   return (command, title) => {
+    // Started FIRST, while the application that asked still has focus: that
+    // focused window is how the placement finds the caller. Constructing a
+    // hidden window takes no focus, but nothing is gained by asking later.
+    const placement = placePicker();
     const dialog = new BrowserWindow(pickerWindowOptions(title));
     // The same rule as the browse window: a dialog previews files too.
     refuseNavigationAwayFromApp(dialog.webContents);
@@ -658,7 +670,21 @@ function pickerWindowFactory(transport: ElectronTransport, registry: Registry): 
     // Destroyed, not hidden. The residency interception in `createWindow`
     // deliberately does NOT apply here: a dialog that hid itself would keep a
     // caller blocked on a FIFO forever with nothing on screen to answer it.
-    dialog.once("ready-to-show", () => dialog.show());
+    //
+    // Shown only once the placement has settled, because showing is what maps
+    // the window, and the compositor applies the placement rule at map time. A
+    // rule set after the map would leave the picker where it first appeared.
+    // `placePicker` never rejects and is bounded, so this cannot strand a
+    // dialog off screen.
+    dialog.once("ready-to-show", () => {
+      void placement.then((area) => {
+        if (dialog.isDestroyed()) return;
+        // The compositor sizes the window from the rule. Sizing it here as well
+        // makes the first frame render at that size instead of reflowing.
+        if (area !== null) dialog.setSize(area.width, area.height);
+        dialog.show();
+      });
+    });
 
     // A renderer that dies takes its window with it, and Electron will not
     // close the window on its own — it raises this and leaves a live
@@ -769,7 +795,11 @@ function pickerLifetimeOptions(): PickerHostOptions {
  * branching on the exit code — the portal backend does exactly this — was told
  * the path had opened when nothing had. Verification caught it.
  */
-function socketCommandHandler(window: BrowserWindow, pickers: PickerHost): CommandHandler {
+function socketCommandHandler(
+  window: BrowserWindow,
+  pickers: PickerHost,
+  focusWindow: WindowFocuser,
+): CommandHandler {
   return async (command) => {
     if (command.cmd === "createPicker") return pickers.create(command);
     if (command.cmd === "closePicker") return pickers.close(command);
@@ -777,9 +807,13 @@ function socketCommandHandler(window: BrowserWindow, pickers: PickerHost): Comma
     if (window.isDestroyed()) {
       return failure("write_failed", "the file manager has no window to open it in");
     }
+    const target = await externalOpenFor(command, isDirectoryOnDisk);
     // A close hides the resident window. A desktop launch must show it again.
     window.show();
-    window.webContents.send(PUSH_CHANNELS.openPath, { path: command.path });
+    window.webContents.send(PUSH_CHANNELS.openPath, target);
+    // Not awaited: the caller asked for a path to be shown, and it has been.
+    // Moving the user to it is a courtesy the reply must not wait on.
+    void focusWindow();
     return { ok: true, value: null };
   };
 }
@@ -842,7 +876,15 @@ app.whenReady().then(async () => {
     return { ok: true, value: null };
   });
 
-  const openPickerWindow = pickerWindowFactory(transport, registry);
+  // One Hyprland connection decision for the whole process, shared by the
+  // picker's placement and the focus an `open` asks for.
+  const hyprland = hyprlandSenderFor(process.env, app.commandLine.getSwitchValue("ozone-platform"));
+
+  const openPickerWindow = pickerWindowFactory(
+    transport,
+    registry,
+    pickerPlacer(hyprland, WINDOW_MINIMUM_SIZE),
+  );
 
   // The real writer. Every way out of a dialog ends in this call, because the
   // application that asked for a file is blocked reading that pipe.
@@ -873,7 +915,10 @@ app.whenReady().then(async () => {
   });
 
   const socketPath = daemonSocketPath();
-  const claimed = await claimSocket(socketPath, socketCommandHandler(window, pickers));
+  const claimed = await claimSocket(
+    socketPath,
+    socketCommandHandler(window, pickers, windowFocuser(hyprland, process.pid)),
+  );
 
   if (!claimed.ok) {
     // Another daemon already owns the path, so this process has nothing to do.

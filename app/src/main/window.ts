@@ -14,6 +14,22 @@ import type { BrowserWindowConstructorOptions } from "electron";
  */
 export const WINDOW_BACKGROUND = "#00000000";
 
+/**
+ * The Wayland app id of every window this daemon opens.
+ *
+ * Chromium sets it from `desktopName` in `app/package.json`, once per process,
+ * so the browse window and every picker share it. `pickerPlacement.test.ts`
+ * asserts it equals the desktop name.
+ */
+export const WINDOW_CLASS = "symmetria-fm-electron";
+
+/**
+ * The smallest a window may be. Exported because the picker's placement
+ * honours it too: a picker sized to 90% of a narrow caller must not ask the
+ * compositor for less than the window itself accepts.
+ */
+export const WINDOW_MINIMUM_SIZE = { width: 640, height: 400 };
+
 /** Where the preload bundle lands, relative to the built main bundle. */
 function preloadPath(): string {
   return fileURLToPath(new URL("../preload/index.cjs", import.meta.url));
@@ -36,8 +52,8 @@ export function buildWindowOptions(): BrowserWindowConstructorOptions {
   return {
     width: 1200,
     height: 800,
-    minWidth: 640,
-    minHeight: 400,
+    minWidth: WINDOW_MINIMUM_SIZE.width,
+    minHeight: WINDOW_MINIMUM_SIZE.height,
     show: false,
     // Atmosphere: Hyprland's blur shows through the renderer's 88% fill.
     transparent: true,

@@ -28,6 +28,19 @@ describe("decodeDaemonCommand", () => {
     expect(out.value.path).toBe("/home/jc/Downloads");
   });
 
+  it("accepts a reveal with the same path rules as an open", () => {
+    // `reveal` is what "Show in folder" sends. It must get exactly the rules
+    // an open gets: a looser second arm would be the hole.
+    const out = decodeDaemonCommand({ cmd: "reveal", path: "/home/jc/Downloads/report.pdf" });
+    expect(isFailure(out)).toBe(false);
+    if (isFailure(out) || out.value.cmd !== "reveal") return;
+    expect(out.value.path).toBe("/home/jc/Downloads/report.pdf");
+
+    expect(isFailure(decodeDaemonCommand({ cmd: "reveal", path: "Downloads" }))).toBe(true);
+    expect(isFailure(decodeDaemonCommand({ cmd: "reveal", path: "/tmp/a\0b" }))).toBe(true);
+    expect(isFailure(decodeDaemonCommand({ cmd: "reveal" }))).toBe(true);
+  });
+
   it("refuses a relative path", () => {
     // The daemon has no working directory the caller could mean, so a relative
     // path can only be a mistake or an attempt to reach somewhere unintended.
