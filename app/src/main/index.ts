@@ -13,8 +13,10 @@ import { electronIpcSurface } from "@symmetria/fm-main/ipc/electronSurface";
 import { createRegistry, type Registry } from "@symmetria/fm-main/ipc/register";
 import { closeAllSearchIndices } from "@symmetria/fm-main/search";
 import { app, BrowserWindow, ipcMain, session } from "electron";
+import { externalOpenFor, isDirectoryOnDisk } from "./externalOpen.ts";
 import { writeToFifo } from "./fifo.ts";
 import { refuseDocumentRequestsOffScheme, refuseNavigationAwayFromApp } from "./frameNavigation.ts";
+import { hyprlandSenderFor } from "./hyprland.ts";
 import { createResidency } from "./lifecycle.ts";
 import {
   createPickerHost,
@@ -27,6 +29,7 @@ import { type PickerPlacer, pickerPlacer } from "./pickerPlacement.ts";
 import { APP_ENTRY_URL, handleAppScheme, previewUrlFor, registerAppScheme } from "./protocol.ts";
 import { type CommandHandler, claimSocket, daemonSocketPath, sendCommand } from "./socket.ts";
 import { buildWindowOptions, WINDOW_MINIMUM_SIZE } from "./window.ts";
+import { type WindowFocuser, windowFocuser } from "./windowFocus.ts";
 
 // Must happen before the app is ready. See `protocol.ts` for why the renderer
 // is not served over `file://`.
@@ -790,7 +793,11 @@ function pickerLifetimeOptions(): PickerHostOptions {
  * branching on the exit code — the portal backend does exactly this — was told
  * the path had opened when nothing had. Verification caught it.
  */
-function socketCommandHandler(window: BrowserWindow, pickers: PickerHost): CommandHandler {
+function socketCommandHandler(
+  window: BrowserWindow,
+  pickers: PickerHost,
+  focusWindow: WindowFocuser,
+): CommandHandler {
   return async (command) => {
     if (command.cmd === "createPicker") return pickers.create(command);
     if (command.cmd === "closePicker") return pickers.close(command);
@@ -798,9 +805,13 @@ function socketCommandHandler(window: BrowserWindow, pickers: PickerHost): Comma
     if (window.isDestroyed()) {
       return failure("write_failed", "the file manager has no window to open it in");
     }
+    const target = await externalOpenFor(command, isDirectoryOnDisk);
     // A close hides the resident window. A desktop launch must show it again.
     window.show();
-    window.webContents.send(PUSH_CHANNELS.openPath, { path: command.path });
+    window.webContents.send(PUSH_CHANNELS.openPath, target);
+    // Not awaited: the caller asked for a path to be shown, and it has been.
+    // Moving the user to it is a courtesy the reply must not wait on.
+    void focusWindow();
     return { ok: true, value: null };
   };
 }
@@ -863,14 +874,14 @@ app.whenReady().then(async () => {
     return { ok: true, value: null };
   });
 
+  // One Hyprland connection decision for the whole process, shared by the
+  // picker's placement and the focus an `open` asks for.
+  const hyprland = hyprlandSenderFor(process.env, app.commandLine.getSwitchValue("ozone-platform"));
+
   const openPickerWindow = pickerWindowFactory(
     transport,
     registry,
-    pickerPlacer(
-      process.env,
-      app.commandLine.getSwitchValue("ozone-platform"),
-      WINDOW_MINIMUM_SIZE,
-    ),
+    pickerPlacer(hyprland, WINDOW_MINIMUM_SIZE),
   );
 
   // The real writer. Every way out of a dialog ends in this call, because the
@@ -902,7 +913,10 @@ app.whenReady().then(async () => {
   });
 
   const socketPath = daemonSocketPath();
-  const claimed = await claimSocket(socketPath, socketCommandHandler(window, pickers));
+  const claimed = await claimSocket(
+    socketPath,
+    socketCommandHandler(window, pickers, windowFocuser(hyprland, process.pid)),
+  );
 
   if (!claimed.ok) {
     // Another daemon already owns the path, so this process has nothing to do.

@@ -33,6 +33,26 @@ export function hyprlandSocketPath(env: Record<string, string | undefined>): str
   return join(runtime, "hypr", signature, ".socket.sock");
 }
 
+/**
+ * The sender for THIS process's Hyprland, or null when its windows are not
+ * Hyprland's to manage.
+ *
+ * Null when the session is not Hyprland, and when Chromium runs on X11. The
+ * second is not hypothetical: every launch the tests, the benches and the
+ * release check make is `--ozone-platform=x11` under `xvfb-run`, and those
+ * processes inherit the developer's `HYPRLAND_INSTANCE_SIGNATURE`. An X window
+ * on a virtual display is not Hyprland's, and a test must not rewrite a rule or
+ * move focus in the session somebody is using.
+ */
+export function hyprlandSenderFor(
+  env: Record<string, string | undefined>,
+  ozonePlatform: string,
+): HyprlandSend | null {
+  const socketPath = hyprlandSocketPath(env);
+  if (socketPath === null || ozonePlatform === "x11") return null;
+  return hyprlandSender(socketPath);
+}
+
 /** One request with its own time limit. */
 export type HyprlandSend = (request: string, timeoutMs: number) => Promise<string | null>;
 

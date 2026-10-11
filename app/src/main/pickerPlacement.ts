@@ -1,12 +1,8 @@
 import { isRecord } from "@symmetria/fm-core/contract";
 
-import {
-  type HyprlandRequest,
-  hyprlandSender,
-  hyprlandSocketPath,
-  withDeadline,
-} from "./hyprland.ts";
+import { type HyprlandRequest, type HyprlandSend, withDeadline } from "./hyprland.ts";
 import { PICKER_TITLE_PREFIX } from "./picker.ts";
+import { WINDOW_CLASS } from "./window.ts";
 
 /**
  * Open the picker over the window that asked for it.
@@ -64,16 +60,6 @@ export interface CallerArea {
 
 /** How much of the caller the picker covers, on each axis. */
 const PICKER_COVERAGE = 0.9;
-
-/**
- * The Wayland app id of every window this daemon opens.
- *
- * Chromium sets it from `desktopName` in `app/package.json`, once per process,
- * which is why the rule also matches on the title: the browse window carries
- * the same class and must never be floated. `pickerPlacement.test.ts` asserts
- * this equals the desktop name.
- */
-export const PICKER_WINDOW_CLASS = "symmetria-fm-electron";
 
 /**
  * The Hyprland rule this daemon owns. One name, rewritten for every picker.
@@ -273,7 +259,9 @@ export function pickerArea(caller: CallerArea, minimum: Size): Area {
 export function pickerRuleRequests(area: Area, monitorName: string): readonly string[] {
   return [
     DISABLE_RULE,
-    `keyword ${PICKER_RULE}:match:class ^(${PICKER_WINDOW_CLASS})$`,
+    // The class alone would also match the browse window, which carries the
+    // same one; the title is what tells the picker apart.
+    `keyword ${PICKER_RULE}:match:class ^(${WINDOW_CLASS})$`,
     `keyword ${PICKER_RULE}:match:title ^(${PICKER_TITLE_PREFIX}.*)$`,
     `keyword ${PICKER_RULE}:float on`,
     `keyword ${PICKER_RULE}:dim_around on`,
@@ -342,23 +330,11 @@ export type PickerPlacer = () => Promise<Area | null>;
 const unplaced: PickerPlacer = async () => null;
 
 /**
- * The placer for this process.
- *
- * Disabled when the session is not Hyprland, and when Chromium runs on X11.
- * The second is not hypothetical: every launch the tests, the benches and the
- * release check make is `--ozone-platform=x11` under `xvfb-run`, and those
- * processes inherit the developer's `HYPRLAND_INSTANCE_SIGNATURE`. An X window
- * on a virtual display is not Hyprland's to place, and a test must not rewrite
- * a rule in the session somebody is using.
+ * The placer for this process: a no-op where `hyprlandSenderFor` found no
+ * Hyprland to talk to.
  */
-export function pickerPlacer(
-  env: Record<string, string | undefined>,
-  ozonePlatform: string,
-  minimum: Size,
-): PickerPlacer {
-  const socketPath = hyprlandSocketPath(env);
-  if (socketPath === null || ozonePlatform === "x11") return unplaced;
-  const send = hyprlandSender(socketPath);
+export function pickerPlacer(send: HyprlandSend | null, minimum: Size): PickerPlacer {
+  if (send === null) return unplaced;
   const cleanup: HyprlandRequest = (request) => send(request, CLEANUP_TIMEOUT_MS);
   // A fresh budget for every picker, started when that picker is requested.
   return () => placePicker({ request: withDeadline(send, PLACEMENT_BUDGET_MS), cleanup }, minimum);

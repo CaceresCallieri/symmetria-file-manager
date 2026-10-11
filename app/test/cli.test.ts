@@ -84,6 +84,26 @@ describe("the command-line tool", () => {
     }
   });
 
+  it("delivers a reveal, and refuses one without a path", async () => {
+    const socket = join(dir, "d.sock");
+    const seen: string[] = [];
+    const claim = await claimSocket(socket, async (command) => {
+      if (command.cmd === "reveal") seen.push(command.path);
+      return { ok: true, value: null };
+    });
+    expect(claim.ok).toBe(true);
+    if (!claim.ok) return;
+    try {
+      expect((await cli(["reveal", "/home/jc/Downloads/report.pdf"], socket)).code).toBe(0);
+      expect(seen).toEqual(["/home/jc/Downloads/report.pdf"]);
+      // Unlike `open`, a reveal has no sensible default to fall back to.
+      expect((await cli(["reveal"], socket)).code).toBe(1);
+      expect(seen).toHaveLength(1);
+    } finally {
+      await claim.value.close();
+    }
+  });
+
   it("exits 1 when the daemon rejects the command", async () => {
     const socket = join(dir, "d.sock");
     const claim = await claimSocket(socket, async () => ({
