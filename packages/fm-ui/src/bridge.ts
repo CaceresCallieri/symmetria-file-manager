@@ -1,5 +1,10 @@
 import type { Bookmark } from "@symmetria/fm-core/bookmarks";
-import { BRIDGE_KEY, type Bridge, type Unsubscribe } from "@symmetria/fm-core/bridge";
+import {
+  BRIDGE_KEY,
+  type Bridge,
+  type ExternalOpen,
+  type Unsubscribe,
+} from "@symmetria/fm-core/bridge";
 import {
   type ChangedEvent,
   type ClipboardRequest,
@@ -30,6 +35,7 @@ import {
 } from "@symmetria/fm-core/contract";
 import type { ListingOptions } from "@symmetria/fm-core/listingOptions";
 import { decodeOverviewReply, type OverviewReply } from "@symmetria/fm-core/overview/contract";
+import { parentOf } from "@symmetria/fm-core/pane";
 
 /**
  * The renderer's side of the bridge: untyped in, typed out.
@@ -392,7 +398,7 @@ export async function pickerCancel(request: { readonly fifo: string }): Promise<
  * main process decoded it already: this edge is where every other reply is
  * validated, and a channel exempt from that is the one nobody thinks about.
  */
-export function onOpenPath(onPath: (path: string) => void): Unsubscribe {
+export function onOpenPath(onOpen: (request: ExternalOpen) => void): Unsubscribe {
   const bridge = getBridge();
   if (bridge === null) return () => undefined;
 
@@ -400,7 +406,13 @@ export function onOpenPath(onPath: (path: string) => void): Unsubscribe {
     if (!isRecord(raw)) return;
     const path = raw.path;
     if (typeof path !== "string" || path === "") return;
-    onPath(path);
+    // A reveal that is not directly inside `path` is dropped, and the open
+    // still happens: the folder is the request, the cursor a refinement of it.
+    const reveal =
+      typeof raw.reveal === "string" && raw.reveal !== path && parentOf(raw.reveal) === path
+        ? raw.reveal
+        : null;
+    onOpen({ path, reveal });
   });
 }
 

@@ -4,16 +4,23 @@
  * A directory another program asked this window to show.
  *
  * The daemon relays a path over its socket and the interface has to act on it.
- * What is guarded here is the SUBSCRIPTION, because that is where the cost
+ * Two things are guarded here. The SUBSCRIPTION, because that is where the cost
  * hides: the preload removes and re-adds a native IPC listener on every
  * subscribe, so a handler whose identity changes each render turns one
- * subscription into one per cursor move.
+ * subscription into one per cursor move. And the REVEAL, which is what "Show in
+ * folder" sends: the folder opens and the cursor lands on the named entry.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { App } from "../../src/App.tsx";
 import { type BridgeLog, installBridge, namesIn } from "./support.ts";
+
+/** The name of the row the cursor is on in the current column. */
+function cursorName(): string {
+  const row = screen.getByTestId("column-current").querySelector('[data-cursor="true"]');
+  return row?.textContent ?? "";
+}
 
 let log: BridgeLog;
 
@@ -57,5 +64,58 @@ describe("subscribing to the daemon's open requests", () => {
 
     await waitFor(() => expect(screen.getAllByTestId("tab")).toHaveLength(2));
     expect(log.listed).toContain("/home/jc/work");
+  });
+});
+
+describe("revealing an entry, as Show in folder asks", () => {
+  it("opens the folder in a new tab with the cursor on the file", async () => {
+    await opened();
+
+    await act(async () => {
+      log.emitOpenPath("/home/jc/projects", "/home/jc/projects/beta.md");
+    });
+
+    await waitFor(() => expect(screen.getAllByTestId("tab")).toHaveLength(2));
+    await waitFor(() => expect(cursorName()).toContain("beta.md"));
+  });
+
+  it("moves the cursor in the tab already on that folder, without a second tab", async () => {
+    // The home tab is active and its cursor starts on `projects`, the first row.
+    await opened();
+    expect(cursorName()).toContain("projects");
+
+    await act(async () => {
+      log.emitOpenPath("/home/jc", "/home/jc/todo.txt");
+    });
+
+    await waitFor(() => expect(cursorName()).toContain("todo.txt"));
+    expect(screen.queryAllByTestId("tab")).toHaveLength(0);
+  });
+
+  it("turns hidden files on to reveal a dotfile, which would otherwise be filtered out", async () => {
+    await opened();
+    expect(log.listAsks.at(-1)?.showHidden).toBe(false);
+
+    await act(async () => {
+      log.emitOpenPath("/home/jc/dotted", "/home/jc/dotted/.secret");
+    });
+
+    await waitFor(() => expect(cursorName()).toContain(".secret"));
+    expect(log.listingWrites.at(-1)?.showHidden).toBe(true);
+    const dotted = log.listAsks.filter((ask) => ask.path === "/home/jc/dotted");
+    expect(dotted.at(-1)?.showHidden).toBe(true);
+  });
+
+  it("still opens the folder when the reveal is not inside it", async () => {
+    // A reveal the decoder must drop: it names a file somewhere else. The
+    // folder is the request; a bad refinement must not cost the whole of it.
+    await opened();
+
+    await act(async () => {
+      log.emitOpenPath("/home/jc/projects", "/home/jc/notes.txt");
+    });
+
+    await waitFor(() => expect(screen.getAllByTestId("tab")).toHaveLength(2));
+    await waitFor(() => expect(cursorName()).toContain("alpha"));
   });
 });

@@ -6,17 +6,21 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { hyprlandSender, hyprlandSocketPath, withDeadline } from "../src/main/hyprland.ts";
+import {
+  hyprlandSender,
+  hyprlandSenderFor,
+  hyprlandSocketPath,
+  withDeadline,
+} from "../src/main/hyprland.ts";
 import { PICKER_TITLE_PREFIX } from "../src/main/picker.ts";
 import {
   decodeCallerArea,
-  PICKER_WINDOW_CLASS,
   pickerArea,
   pickerPlacer,
   pickerRuleRequests,
   placePicker,
 } from "../src/main/pickerPlacement.ts";
-import { WINDOW_MINIMUM_SIZE } from "../src/main/window.ts";
+import { WINDOW_CLASS, WINDOW_MINIMUM_SIZE } from "../src/main/window.ts";
 
 /**
  * The picker opens over the window that asked for it.
@@ -182,7 +186,7 @@ describe("the rule", () => {
 
   it("matches only the picker: this app's class AND the picker's title", () => {
     expect(rule).toContain(
-      `keyword windowrule[symmetria-fm-picker]:match:class ^(${PICKER_WINDOW_CLASS})$`,
+      `keyword windowrule[symmetria-fm-picker]:match:class ^(${WINDOW_CLASS})$`,
     );
     expect(rule).toContain(
       `keyword windowrule[symmetria-fm-picker]:match:title ^(${PICKER_TITLE_PREFIX}.*)$`,
@@ -217,7 +221,7 @@ describe("the rule", () => {
     // Chromium takes the Wayland app id from `desktopName`. Drift here and the
     // rule silently stops matching the picker.
     const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-    expect(`${PICKER_WINDOW_CLASS}.desktop`).toBe(manifest.desktopName);
+    expect(`${WINDOW_CLASS}.desktop`).toBe(manifest.desktopName);
   });
 });
 
@@ -460,33 +464,35 @@ describe("against a real socket", () => {
 
   it("pickerPlacer reaches a Hyprland it finds, so the guards below face a live one", async () => {
     const env = await hyprlandAt(() => "ok");
-    await pickerPlacer(env, "wayland", MINIMUM)();
+    await pickerPlacer(hyprlandSenderFor(env, "wayland"), MINIMUM)();
     expect(connectionCount).toBeGreaterThan(0);
   });
 
   it("pickerPlacer never connects for an X11 window, which is how every test launch runs", async () => {
     const env = await hyprlandAt(() => "ok");
-    expect(await pickerPlacer(env, "x11", MINIMUM)()).toBeNull();
+    expect(await pickerPlacer(hyprlandSenderFor(env, "x11"), MINIMUM)()).toBeNull();
     expect(connectionCount).toBe(0);
   });
 
   it("pickerPlacer does nothing outside Hyprland", async () => {
     await hyprlandAt(() => "ok");
-    expect(await pickerPlacer({ XDG_RUNTIME_DIR: dir }, "wayland", MINIMUM)()).toBeNull();
+    expect(
+      await pickerPlacer(hyprlandSenderFor({ XDG_RUNTIME_DIR: dir }, "wayland"), MINIMUM)(),
+    ).toBeNull();
     expect(connectionCount).toBe(0);
   });
 
   it("pickerPlacer opens unplaced, promptly, when the socket is not there", async () => {
     const env = { HYPRLAND_INSTANCE_SIGNATURE: "absent", XDG_RUNTIME_DIR: dir };
     const started = Date.now();
-    expect(await pickerPlacer(env, "wayland", MINIMUM)()).toBeNull();
+    expect(await pickerPlacer(hyprlandSenderFor(env, "wayland"), MINIMUM)()).toBeNull();
     expect(Date.now() - started).toBeLessThan(1_000);
   });
 
   it("pickerPlacer gives up within ONE budget when Hyprland never answers", async () => {
     const env = await hyprlandAt(() => null);
     const started = Date.now();
-    expect(await pickerPlacer(env, "wayland", MINIMUM)()).toBeNull();
+    expect(await pickerPlacer(hyprlandSenderFor(env, "wayland"), MINIMUM)()).toBeNull();
     // 300 ms of budget plus 150 ms for the switch-off; the slack is for a busy box.
     expect(Date.now() - started).toBeLessThan(750);
   });

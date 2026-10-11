@@ -1,0 +1,6 @@
+[D-BUS Service]
+Name=org.freedesktop.FileManager1
+# The user session bus starts the systemd unit. `Exec` is required by the file
+# format and is never run while SystemdService is set.
+Exec=/bin/false
+SystemdService=symmetria-fm-filemanager1.service

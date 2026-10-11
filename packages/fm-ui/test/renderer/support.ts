@@ -71,6 +71,8 @@ const TREE = new Map([
   // the home directory above: adding an entry there shifts every index after
   // it, and the whole suite counts `j` presses from the top.
   ["/home/jc/pictures", [entry("shot.png")]],
+  // Reached only by an external reveal: a folder whose target is a dotfile.
+  ["/home/jc/dotted", [entry("visible.txt"), entry(".secret")]],
   ["/home/jc/many", MANY],
 ]);
 
@@ -298,8 +300,11 @@ export interface BridgeLog {
   readonly pickerConfirms: { fifo: string; paths: string[] }[];
   /** Every cancellation, by the pipe it named. */
   readonly pickerCancels: string[];
-  /** Deliver a path on that channel, as the daemon would. */
-  emitOpenPath(path: string): void;
+  /**
+   * Deliver a path on that channel, as the daemon would. `reveal` is the raw
+   * field, sent as given, so a test can also send one the decoder must drop.
+   */
+  emitOpenPath(path: string, reveal?: unknown): void;
   /**
    * Every listing request in full, not only its path.
    *
@@ -818,8 +823,10 @@ export function installBridge(options: BridgeOptions = {}): BridgeLog {
     openSubscriptions,
     pickerConfirms,
     pickerCancels,
-    emitOpenPath: (path: string) => {
-      for (const listener of openListeners) listener({ path });
+    emitOpenPath: (path: string, reveal?: unknown) => {
+      for (const listener of openListeners) {
+        listener(reveal === undefined ? { path } : { path, reveal });
+      }
     },
     listAsks,
     unwatched,
