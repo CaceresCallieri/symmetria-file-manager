@@ -9,6 +9,13 @@ import type { BrowserWindowConstructorOptions } from "electron";
  */
 export const WINDOW_BACKGROUND = "#0b0b0b";
 
+/**
+ * The smallest a window may be. Exported because the picker's placement
+ * honours it too: a picker sized to 90% of a narrow caller must not ask the
+ * compositor for less than the window itself accepts.
+ */
+export const WINDOW_MINIMUM_SIZE = { width: 640, height: 400 };
+
 /** Where the preload bundle lands, relative to the built main bundle. */
 function preloadPath(): string {
   return fileURLToPath(new URL("../preload/index.cjs", import.meta.url));
@@ -31,8 +38,8 @@ export function buildWindowOptions(): BrowserWindowConstructorOptions {
   return {
     width: 1200,
     height: 800,
-    minWidth: 640,
-    minHeight: 400,
+    minWidth: WINDOW_MINIMUM_SIZE.width,
+    minHeight: WINDOW_MINIMUM_SIZE.height,
     show: false,
     backgroundColor: WINDOW_BACKGROUND,
     autoHideMenuBar: true,
