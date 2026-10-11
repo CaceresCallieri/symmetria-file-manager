@@ -19,6 +19,53 @@ highlighted file; a folder dialog refused a file with Accept greyed out; Escape
 sent `__PICKER_CANCELLED__`; and `p` did not paste, which is the first time the
 ported suppression has ever been reachable.
 
+## Where it opens
+
+On Hyprland the picker floats over the application that asked for it, at 90%
+of that window's size and centred on it. It stays there until the user
+chooses or presses Escape. The operator chose this over a layer surface and
+over a separate full-size window: Electron cannot create a `layer-shell`
+surface, and a layer is anchored to monitor edges and shown on every
+workspace, which is wrong for a dialog that belongs to one window.
+
+`app/src/main/pickerPlacement.ts` does it. Each fact below was measured on
+Hyprland 0.56.2, and each one is a reason the code looks the way it does:
+
+- **The caller is the focused window at request time.** The portal sends an
+  `xdg-foreign` parent handle that Electron cannot import, so the focused
+  window, read from `j/activewindow` before the picker is constructed, stands
+  in for it. With no focused window the picker covers 90% of the focused
+  monitor.
+- **The position is a window rule, applied when the picker maps.** A Wayland
+  client cannot place its own window. The daemon sets the rule, and only then
+  shows the window, because showing is what maps it.
+- **The rule is named, `windowrule[symmetria-fm-picker]`, and rewritten in
+  place.** An anonymous rule per request stays in Hyprland until the next
+  config reload. Every field is written every time, so a reload that deleted
+  the rule cannot leave it partial.
+- **The rule is off while it is rewritten.** Hyprland applies a `[[BATCH]]`
+  request by request with no rollback, so a refused field would leave the
+  other fields applied. The batch starts with `enable false`, and a separate
+  `enable true` follows only when every field was accepted. A placement that
+  gives up for any reason sends `enable false` too, because a rule left on by
+  the PREVIOUS picker would otherwise place this one over the wrong window.
+  Verification observed exactly that before the gate existed.
+- **A rule's `move` is relative to the monitor, and the rule names it.**
+  `at` from `j/activewindow` is global, and on the laptop the panel starts at
+  x=1920. Hyprland maps a window on whichever monitor has focus at map time,
+  so the rule also sets `monitor <caller's monitor>`.
+
+Placement is best effort and shares one 300 ms budget across its three
+requests (query, staged rule, switch-on). The switch-off on giving up has its
+own 150 ms outside that budget, because a spent budget is one of the reasons
+to give up, and a switch-off inside it would never be sent. A dialog therefore
+waits at most 450 ms; a healthy compositor answers in a few milliseconds.
+Outside Hyprland, on X11, with the socket absent, or with a refused keyword,
+the picker opens unplaced at its own 900×600. Every test, bench and release-check
+launch runs `--ozone-platform=x11` and inherits the developer's
+`HYPRLAND_INSTANCE_SIGNATURE`; the X11 check is what keeps those launches from
+rewriting the rule in a live session.
+
 ## What it costs
 
 Two halves, measured separately because nothing can measure them together from
