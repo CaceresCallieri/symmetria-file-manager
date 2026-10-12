@@ -661,6 +661,20 @@ body {
    both buttons at the bar's right end, Cancel quiet, Accept the solid
    foreground pill the operation dialogs use, each showing its key. The keys
    are drawn with `::after` so the buttons' text stays their label. */
+/* One line, always. In a narrow save dialog the name field and both buttons
+   left the summary a sliver, and "176 entries" and "sort: modified ↓" each
+   wrapped onto two or three lines. The summary's items shrink and elide
+   instead; the controls keep their size. */
+.app--atmosphere .status-bar {
+  white-space: nowrap;
+}
+.app--atmosphere
+  .status-bar
+  > :not(.status-bar__mode, .status-bar__accept, .status-bar__cancel, .status-bar__save-name) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .app--atmosphere .status-bar__cancel {
   order: 1;
   margin-left: auto;
