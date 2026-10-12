@@ -1,6 +1,6 @@
 import { isFailure } from "@symmetria/fm-core/contract";
 import { DEFAULT_LISTING_OPTIONS, type ListingOptions } from "@symmetria/fm-core/listingOptions";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { readListingOptions, writeListingOptions } from "./bridge.ts";
 
@@ -18,13 +18,35 @@ import { readListingOptions, writeListingOptions } from "./bridge.ts";
  * differ — and because most stored files hold exactly the default, the common
  * case is no second listing at all.
  */
-export interface StoredOrder {
+interface StoredOrder {
   readonly options: ListingOptions;
   /** Replace the order and write it back. */
   set(options: ListingOptions): void;
 }
 
-export function useListingOptions(): StoredOrder {
+/** A reveal can show hidden files in this window without changing disk preferences. */
+export function useWindowListingOptions() {
+  const stored = useListingOptions();
+  const [temporaryHidden, setTemporaryHidden] = useState(false);
+  const options = useMemo(
+    () => (temporaryHidden ? { ...stored.options, showHidden: true } : stored.options),
+    [stored.options, temporaryHidden],
+  );
+  return {
+    options,
+    setSort: (sort: ListingOptions["sort"], reverse: boolean) =>
+      stored.set({ ...stored.options, sort, reverse }),
+    toggleHidden: () => {
+      setTemporaryHidden(false);
+      stored.set({ ...stored.options, showHidden: !options.showHidden });
+    },
+    showHiddenTemporarily: () => setTemporaryHidden(true),
+    toggleRenderDocuments: () =>
+      stored.set({ ...stored.options, renderDocuments: !options.renderDocuments }),
+  };
+}
+
+function useListingOptions(): StoredOrder {
   const [options, setOptions] = useState<ListingOptions>(DEFAULT_LISTING_OPTIONS);
 
   /**

@@ -426,6 +426,17 @@ export const OVERVIEW_ONLY: readonly Binding[] = [
 ];
 export const MILLER_ONLY: readonly Binding[] = [
   {
+    id: "picker.editPath",
+    keys: ["l"],
+    mods: "Ctrl",
+    keycap: "Ctrl+L",
+    label: "Enter file or folder path",
+    icon: "edit",
+    group: "Navigation",
+    when: (ctx) => ctx.state.picker.active && !ctx.state.picker.saveMode,
+    run: (ctx) => ctx.actions.editPickerPath(),
+  },
+  {
     id: "miller.overview",
     keys: ["o"],
     mods: "Ctrl",

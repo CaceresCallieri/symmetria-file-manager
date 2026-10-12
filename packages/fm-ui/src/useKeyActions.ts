@@ -189,6 +189,7 @@ export function useKeyActions(
       createEntry: () => ops.requestCreate(),
       // The `op.pickerSaveEdit` binding, gated on save mode by the registry.
       editSaveName: () => picker.focusSaveName(),
+      editPickerPath: picker.focusPath,
 
       yank: () => ops.yank(),
       cut: () => ops.cut(),

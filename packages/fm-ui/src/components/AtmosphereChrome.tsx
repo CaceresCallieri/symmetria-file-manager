@@ -32,7 +32,7 @@ import type { PressKey } from "../hooks/useKeyDispatch.ts";
 import { useViewSwitch } from "../hooks/useViewSwitch.ts";
 
 import type { TabView } from "../useTabs.ts";
-import { PathBar } from "./PathBar.tsx";
+import { PathBar, type PathBarProps } from "./PathBar.tsx";
 import { TabBar } from "./TabBar.tsx";
 
 /*
@@ -105,6 +105,7 @@ const HEADER_KEYS = {
 } as const;
 
 export interface AtmosphereHeaderProps {
+  readonly pathEntry?: PathBarProps["pathEntry"];
   readonly views: readonly TabView[];
   readonly activeTab: number;
   onActivateTab(index: number): void;
@@ -143,7 +144,7 @@ export function AtmosphereHeader(props: AtmosphereHeaderProps) {
         </IconButton>
       </div>
       <div className="atmo-crumbs">
-        <PathBar path={props.path} onNavigate={props.onNavigate} />
+        <PathBar pathEntry={props.pathEntry} path={props.path} onNavigate={props.onNavigate} />
       </div>
       <button
         type="button"

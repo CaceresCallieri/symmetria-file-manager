@@ -11,6 +11,23 @@ async function opened() {
   await waitFor(() => expect(hook.result.current.pane.entries.length).toBeGreaterThan(0));
   return { ...hook, log };
 }
+it("keeps pending reveal status paired with the pane snapshot until the read commits", async () => {
+  const { result, log, rerender } = await opened();
+  const release = log.holdNextList("/home/jc", ["notes.txt"]);
+  act(() => {
+    result.current.reveal("/home/jc/notes.txt");
+    rerender();
+  });
+  const waiting = result.current;
+  expect(waiting.revealingPath).toBe("/home/jc/notes.txt");
+  expect(waiting.pane.entries[waiting.pane.cursorIndex]?.name).toBe("projects");
+  await act(async () => release());
+  expect(result.current.revealingPath).toBeNull();
+  expect(result.current.pane.entries[result.current.pane.cursorIndex]?.name).toBe("notes.txt");
+  // A previous render cannot observe completed status with its old cursor.
+  expect(waiting.revealingPath).toBe("/home/jc/notes.txt");
+  expect(waiting.pendingRevealPath()).toBeNull();
+});
 it("preserves the valid same-parent pane when a reveal target is missing", async () => {
   const { result } = await opened();
   act(() => {

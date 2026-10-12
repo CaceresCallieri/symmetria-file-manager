@@ -44,7 +44,7 @@ import {
   updateActivePane,
   updatePaneById,
 } from "./state/tabs.ts";
-import { useListingOptions } from "./useListingOptions.ts";
+import { useWindowListingOptions } from "./useListingOptions.ts";
 
 interface TabErrors {
   /** The message for one tab, or none. `undefined` for no active tab. */
@@ -150,9 +150,12 @@ export interface Tabs {
   readonly renderDocuments: boolean;
   readonly error: string | null;
   readonly loading: boolean;
+  /** The reveal pending when this pane snapshot rendered. */
+  readonly revealingPath: string | null;
 
   setSort(sort: SortMode, reverse: boolean): void;
   toggleHidden(): void;
+  showHiddenTemporarily(): void;
   toggleRenderDocuments(): void;
 
   historyBack(): void;
@@ -616,8 +619,8 @@ export function useTabs(initialPath: string): Tabs {
     release: releaseNavigation,
   } = useNavigationGenerations(activeId);
   const { errorFor, reportError } = useTabErrors();
-  const stored = useListingOptions();
-  const options = stored.options;
+  const listing = useWindowListingOptions();
+  const { options } = listing;
 
   // Read by `loadTab`, which must not depend on the options.
   //
@@ -735,6 +738,7 @@ export function useTabs(initialPath: string): Tabs {
 
   return {
     navigationGeneration,
+    revealingPath: pendingPath(activeId),
     pendingRevealPath: pendingPath.bind(null, activeId),
     pane,
     parentEntries,
@@ -768,10 +772,10 @@ export function useTabs(initialPath: string): Tabs {
     // may call an updater more than once and at a time of its choosing, so a
     // write started from inside one is a side effect with no guarantee about
     // how often it runs — which is exactly what it must not be.
-    setSort: (sort, reverse) => stored.set({ ...options, sort, reverse }),
-    toggleHidden: () => stored.set({ ...options, showHidden: !options.showHidden }),
-    toggleRenderDocuments: () =>
-      stored.set({ ...options, renderDocuments: !options.renderDocuments }),
+    setSort: listing.setSort,
+    toggleHidden: listing.toggleHidden,
+    showHiddenTemporarily: listing.showHiddenTemporarily,
+    toggleRenderDocuments: listing.toggleRenderDocuments,
 
     moveBy: (delta) => changeActive((p) => moveCursor(p, delta)),
     moveTo: (index) => changeActive((p) => moveCursor(p, index - p.cursorIndex)),
