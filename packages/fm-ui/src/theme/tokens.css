@@ -1,7 +1,7 @@
 /*
  * The palette, as tokens.
  *
- * Decision D7: take Mesura Code's dark values as they are. NOT the Qt build's
+ * Palette policy: take Mesura Code's dark values as they are. NOT the earlier implementation's
  * `FmTheme` ladder and NOT Symmetria IDE's — the three products map similar
  * names to different values, and this is a third consumer choosing explicitly
  * rather than inheriting by accident.
@@ -61,7 +61,7 @@
   --icon-pink: #d39ab8;
   --icon-muted: #a8adb8;
 
-  /* Match the fixed clipboard colors in Qt's FmTheme.indicator. */
+  /* Match the fixed clipboard colors in the earlier implementation's FmTheme.indicator. */
   --clipboard-yank: #4caf7d;
   --clipboard-cut: #e57373;
 
@@ -79,7 +79,7 @@
   /*
    * Flash jump, and it is MONOCHROME on purpose.
    *
-   * The Qt build draws the label as a near-white chip with dark ink and the
+   * The earlier implementation draws the label as a near-white chip with dark ink and the
    * matched characters on a much quieter grey, and the operator asked for the
    * same here after seeing a coloured first attempt side by side with it. The
    * accent colour is spoken for — it means "the application is doing
@@ -92,7 +92,7 @@
   --flash-query: rgb(255 255 255 / 18%);
   --flash-label: var(--foreground);
   --flash-label-ink: var(--background);
-  /* The cut/mark indicator. Hardcoded in the Qt build for the same reason it is
+  /* The cut/mark indicator. Hardcoded in the earlier implementation for the same reason it is
      its own token here: an indicator that stops being legible is worse than one
      that does not match. */
   --marked: oklch(75% 0.09 25);
@@ -112,7 +112,7 @@
    *
    * White, because a page that declares no background of its own IS white by
    * every browser's convention, and letting the near-black panel show through
-   * would misrepresent how the document actually looks. The Qt build sets its
+   * would misrepresent how the document actually looks. The earlier implementation sets its
    * web view's background for exactly this reason.
    *
    * It is here rather than written into the rule because `theme.test.ts`
@@ -202,8 +202,8 @@
    * `--finder-list-share` is THE lever on the split, and it is one number on
    * purpose. The user asked for sixty/forty and asked to try fifty/fifty; that
    * second experiment is this line and nothing else. Expressed as a share
-   * rather than as a pixel count deliberately — Qt pins its information panel
-   * at exactly 360 pixels with a hard minimum and maximum because a Qt layout
+   * rather than as a pixel count deliberately — the earlier implementation pins its information panel
+   * at exactly 360 pixels with a hard minimum and maximum because a earlier layout
    * let a long file name blow the panel out and starve the list, and a flex
    * ratio with a zero minimum width on the list cannot fail that way.
    *
@@ -218,7 +218,7 @@
    *
    * The two widths are the empty and answered states. The overlay is narrow
    * until there are results, which is what makes it feel like it grows into its
-   * answer; the Qt original goes from 672 to 1080 pixels for the same reason.
+   * answer; the earlier implementation goes from 672 to 1080 pixels for the same reason.
    */
   --finder-list-share: 0.6;
   --finder-gap: 12px;

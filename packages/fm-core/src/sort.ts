@@ -31,7 +31,7 @@ export function isSortMode(value: unknown): value is SortMode {
 /**
  * Compare two entries under `mode`.
  *
- * **Directories always come first, in every mode.** The Qt version's
+ * **Directories always come first, in every mode.** The earlier implementation's
  * `compareEntries` did the same, and its tree walk depended on it; the columns
  * will too. It is asserted per mode in the tests rather than once, because a
  * mode added later is exactly where this gets forgotten.

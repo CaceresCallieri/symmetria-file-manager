@@ -58,10 +58,10 @@ export function observeWithFallback(
  * A virtualised list of entries.
  *
  * Virtualisation is necessary and **not sufficient**. The measured lesson from
- * the Qt file tree is that the dominant cost was the NUMBER of directories
+ * the earlier file tree is that the dominant cost was the NUMBER of directories
  * expanded, not the cost of rendering each row: a repository went from 3994 ms
  * to 449 ms by expanding three directories instead of a hundred, and row
  * rendering was never the bottleneck. Miller columns are safe by construction —
- * they show three levels and never expand a subtree — and decision D5 removed
+ * they show three levels and never expand a subtree — and the navigation policy removed
  * automatic expansion entirely. This component handles the other half.
  */

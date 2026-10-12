@@ -173,7 +173,7 @@ function paint(canvas: HTMLCanvasElement, bars: Float32Array, playedFraction: nu
  * A sound file drawn as its own shape.
  *
  * ── It repaints on `timeupdate`, deliberately, and NOT on a timer ───────────
- * The Qt build this replaces repaints every 50 ms because QML gives it no
+ * The earlier implementation this replaces repaints every 50 ms because QML gives it no
  * playback event to hang off. The browser fires `timeupdate` about four times a
  * second while playing and NOT AT ALL while paused, which is both cheaper and
  * correct at the ends — a timer keeps waking a paused pane forever. This

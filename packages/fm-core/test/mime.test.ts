@@ -66,7 +66,7 @@ describe("resolveMimeType", () => {
 
   it("follows an alias to its canonical type", () => {
     // The real database renamed `application/x-yaml` to `application/yaml`.
-    // The Qt version's hardcoded list predated that rename, which is why YAML
+    // The earlier implementation's hardcoded list predated that rename, which is why YAML
     // stopped previewing. Aliases are why this must not be a hardcoded list.
     expect(
       resolveMimeType(

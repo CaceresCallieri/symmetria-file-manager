@@ -1,18 +1,9 @@
 /**
  * What a confirmed picker returns, and what its Accept button says.
  *
- * Ported from `confirmPickerSelection` in the Qt build's
- * `FileManagerService.qml`, which is the single source of truth there for both
- * the Enter key and the Accept button. Kept pure and kept HERE, in the package
- * that compiles against no environment, for two reasons: the whole truth table
- * becomes a unit test rather than four rendering tests, and the label, the
- * enabled state and the answer are derived from one function each so they
- * cannot come to disagree.
- *
- * That last point is not hypothetical. In the Qt original the label ladder and
- * the enabled ladder are written out separately in `StatusBar.qml`, and a
- * button that looks pressable and then does nothing is worse than one that is
- * visibly disabled.
+ * Enter and the Accept button use this one decision. Keep the label and
+ * enabled state aligned with the selection result. Save mode takes precedence
+ * over marks because it returns the requested destination rather than a listing row.
  */
 
 /** One row, reduced to the two things a picker decision needs. */
@@ -42,7 +33,7 @@ export type PickerResolution =
 /**
  * The marks this dialog would actually accept.
  *
- * Type-filtered, like the single-cursor branch and for the same reason. The Qt
+ * Type-filtered, like the single-cursor branch and for the same reason. The the earlier implementation
  * build filters at MARK time; this port filters here, which reaches the same
  * place from the other end — a folder marked in a file-only dialog is simply
  * not part of the answer. Without it a caller that asked for files could be
@@ -62,7 +53,7 @@ function joinName(directory: string, name: string): string {
 }
 
 export function resolvePickerSelection(context: PickerSelectionContext): PickerResolution {
-  // **Save mode first, and this DIVERGES from the Qt code on purpose.**
+  // **Save mode first, and this DIVERGES from the earlier implementation on purpose.**
   //
   // `confirmPickerSelection` checks multi-select-with-marks first and save mode
   // second — but the comment directly above that check says "pickerSaveMode and
@@ -73,11 +64,11 @@ export function resolvePickerSelection(context: PickerSelectionContext): PickerR
   // Following the intent, because the alternative is a save dialog that returns
   // marked files instead of the name being typed, and writes to the wrong
   // place. The divergence is unobservable in practice: `SaveFile` in
-  // `portal/symmetria_portal.py` sends `multiple: False`, so no real request
+  // `portal/symmetria_electron_portal.py` sends `multiple: False`, so no real request
   // reaches this fork with both set.
   if (context.saveMode) {
     // A bare directory is a real answer when no name has been given: the portal
-    // appends its own `current_name` — see `SaveFile` in `symmetria_portal.py`,
+    // appends its own `current_name` — see `SaveFile` in `symmetria_electron_portal.py`,
     // which joins when what comes back is a directory.
     const path =
       context.suggestedName === ""
@@ -125,7 +116,7 @@ export function pickerAcceptLabel(context: PickerSelectionContext, acceptLabel: 
   const usable = usableMarks(context);
   if (context.multiple && usable.length > 0) return `Select (${usable.length})`;
 
-  // The Qt build's word. The plan said "Open"; `StatusBar.qml` says "Select",
+  // Use "Select" for a folder picker,
   // and matching the application the operator uses daily is what parity means.
   return "Select";
 }

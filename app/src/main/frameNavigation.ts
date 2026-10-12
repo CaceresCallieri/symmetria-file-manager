@@ -68,11 +68,6 @@ import { APP_SCHEME_PROTOCOL } from "./appScheme.ts";
  * the frame follows the cursor without staleness. The gap is exactly one
  * thing — a deliberate click on a link inside a previewed page.
  *
- * ── This is the Qt build's rule, ported ─────────────────────────────────────
- * `HtmlPreview.qml` answers `onNavigationRequested` by ignoring every request
- * whose type is not the initial typed navigation — "Keep it a preview: allow
- * only the initial local file load; ignore link clicks, form submits, and any
- * hop to another document."
  */
 
 /**

@@ -6,7 +6,7 @@ import { type FlashState, flashKey, newFlashState } from "../src/flash/session.t
 /**
  * One key, one decision.
  *
- * The port of `FlashHandler.handleKey` from the Qt build, as a reducer. The Qt
+ * The port of `FlashHandler.handleKey` from the earlier implementation, as a reducer. The the earlier implementation
  * version writes straight into `WindowState` as it goes; here every branch
  * returns what should happen and the host applies it, which is what lets the
  * whole key table be exercised without a window.
@@ -227,7 +227,7 @@ describe("flashKey — a character outside the basic plane", () => {
     // Review read this branch backwards and reported the opposite defect, but
     // the divergence underneath was real: a surrogate pair reports `.length`
     // 2, so counting units rather than code points would have swallowed a
-    // character the Qt build lets through.
+    // character the earlier implementation lets through.
     const listing = column(["🙂 notes", "plain"]);
     const relabel = (query: string): FlashLabelling => computeFlash(query, listing, 0);
 

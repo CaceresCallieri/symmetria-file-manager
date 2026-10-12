@@ -702,7 +702,7 @@ describe("the bookmark channels", () => {
    * handler with a bad payload, so nothing noticed.
    *
    * Every case points `SYMMETRIA_FM_BOOKMARKS` at a scratch file. The
-   * operator's real store is the one their Qt file manager reads, and a test
+   * operator's real store is the one their the earlier implementation file manager reads, and a test
    * that wrote to it would break a working application.
    */
   let store: string;

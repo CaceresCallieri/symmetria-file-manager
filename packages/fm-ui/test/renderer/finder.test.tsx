@@ -234,7 +234,7 @@ describe("moving through the results", () => {
   });
 
   it("moves with the control pair as well", async () => {
-    // Ctrl+J and Ctrl+K, which is what the Qt finder binds.
+    // Ctrl+J and Ctrl+K, which is what the earlier finder binds.
     await threeShown();
     pressInFinder("j", { ctrlKey: true });
     expect(activeRow()).toContain("b.ts");

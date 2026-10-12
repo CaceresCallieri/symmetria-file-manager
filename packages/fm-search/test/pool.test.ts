@@ -187,7 +187,7 @@ describe("the reply a search returns", () => {
   });
 
   it("says whether the list was truncated, and at what cap", async () => {
-    // The Qt finder shows "200 results" whether there are 200 or 20,000.
+    // The earlier finder shows "200 results" whether there are 200 or 20,000.
     const pool = poolWith([], { value: 0 });
     const reply = await pool.search("/a", "e");
     expect(reply.truncated).toBe(false);

@@ -85,7 +85,7 @@ export function FinderOverlay({ directory, onChoose, onClose, renderPreview }: F
 
   return (
     <div className="overlay">
-      {/* Narrow until there is something to show. The Qt original grows from
+      {/* Narrow until there is something to show. The earlier implementation grows from
           672 to 1080 pixels once results exist, and the growth is what makes
           the surface feel like it is answering rather than waiting. */}
       <div
@@ -117,8 +117,8 @@ export function FinderOverlay({ directory, onChoose, onClose, renderPreview }: F
             overlay stays narrow, which is what makes the surface feel like it
             grows into its answer.
 
-            Qt pins its panel at exactly 360 pixels with a hard minimum AND
-            maximum, because a Qt layout let a long file name blow the panel out
+            the earlier implementation pins its panel at exactly 360 pixels with a hard minimum AND
+            maximum, because a earlier layout let a long file name blow the panel out
             to full width and starve the list. That failure does not carry over:
             a ratio with a zero minimum width on the list is safe by
             construction, so a long path elides instead of pushing. */}
@@ -154,7 +154,7 @@ export function FinderOverlay({ directory, onChoose, onClose, renderPreview }: F
 /**
  * What the overlay says about itself, in one line.
  *
- * The truncation flag is reported rather than swallowed. The Qt finder says
+ * The truncation flag is reported rather than swallowed. The earlier finder says
  * "200 results" whether there are 200 or 20,000, and a count that means two
  * different things is worse than no count.
  */

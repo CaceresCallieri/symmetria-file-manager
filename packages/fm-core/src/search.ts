@@ -6,7 +6,7 @@ import type { FsEntry } from "./entry.ts";
  * ── It marks, it does not filter, and that is a decision ────────────────────
  * `filter.ts` next door already carries a `query` option, so filtering the
  * listing down to the matches would have been less code. It was rejected. The
- * Qt build's `SearchHandler.js` computes the matching INDICES, marks them and
+ * earlier implementation's `SearchHandler.js` computes the matching INDICES, marks them and
  * moves the cursor, leaving every other row on screen — and that is what makes
  * a Miller column worth having, because where a file sits among its neighbours
  * is half of what you are reading. A filtered column answers "here are two

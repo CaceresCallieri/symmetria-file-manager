@@ -207,7 +207,7 @@ export function looksBinary(head: Uint8Array): boolean {
  * **The order is a contract, not a convenience.** `image/svg+xml` inherits from
  * `application/xml`, which inherits from `text/plain`, so an SVG *is* text under
  * the inheritance rules. The image test must run first or every SVG previews as
- * source. The Qt router got this right only because it happened to test
+ * source. The earlier router got this right only because it happened to test
  * `isImage` before falling through to text.
  */
 export function classify(tables: MimeTables, mime: string | null, head: Uint8Array): EntryClass {

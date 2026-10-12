@@ -53,7 +53,7 @@ describe("the FileManager1 registration", () => {
 
   it("points the script at the Electron build's command-line tool, by absolute path", () => {
     // A service's PATH need not contain ~/.local/bin, so the unit names the
-    // tool outright. The Qt build's `symmetria-fm-cli` speaks another protocol.
+    // tool outright.
     expect(field(unit, "Environment")).toBe(
       "SYMMETRIA_FILEMANAGER1_CLI=%h/.local/bin/symmetria-fm-electron-cli",
     );

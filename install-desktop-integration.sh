@@ -7,24 +7,9 @@
 # builds, so they version with it — and this script symlinks them into the
 # places XDG and systemd read. Nothing is duplicated into the dotfiles.
 #
-# That is a deliberate answer to a recorded defect: the Qt build's unit exists
-# in TWO unsynced copies, one here and one in ~/.dotfiles, and they drifted. A
-# symlink cannot drift.
-#
-# WHAT THIS SCRIPT DOES NOT DO, and each omission is deliberate:
-#   * It does not START the service. The Hyprland rules are written but not
-#     applied until the operator reloads, so a daemon started now would map its
-#     window onto whatever workspace they are working on. It starts at their
-#     next login, by which time the compositor knows where to put it.
-#   * It does not touch the compositor. No `hyprctl reload`, no dispatch.
-#   * It does not touch the Qt build, its unit, its socket or its keybinding.
-#
-# The user location is correct here, and that is worth stating because the Qt
-# build does the opposite. CLAUDE.md records that the Qt desktop entry must go
-# to /usr, because a ~/.local/share copy takes XDG precedence and goes stale.
-# That reasoning is about a PACKAGED application with a system install. This one
-# is built from a working tree and has no system install, so /usr would be the
-# stale copy and the user location is the only honest home for it.
+# This installer enables the service without starting it. Apply the compositor
+# rules before starting the daemon so its window opens on the intended workspace.
+# A working tree uses user-level links so the integration follows that tree.
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

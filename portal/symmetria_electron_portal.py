@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 # NOTE: This script is invoked by systemd using the virtualenv Python at
-# ~/.local/share/symmetria/portal-venv/bin/python3 (see install-portal.sh).
+# ~/.local/share/symmetria/portal-venv/bin/python3 (see install-portal-electron.sh).
 # The venv contains dbus-fast; the system Python is never modified.
-"""Symmetria XDG Desktop Portal FileChooser backend.
+"""Electron FileChooser backend for xdg-desktop-portal.
 
-Implements org.freedesktop.impl.portal.FileChooser by delegating to
-the Symmetria File Manager daemon via the symmetria-fm-cli CLI. The
-CLI opens a QLocalSocket to the running symmetria-fm daemon at
-$XDG_RUNTIME_DIR/symmetria-fm.sock and writes a single JSON line
-({"method": "createPicker", "args": {...}}). Communication back from
-the picker still uses a FIFO (named pipe) — same protocol as before.
+The backend sends picker commands through symmetria-fm-electron-cli.
+The picker returns its result through a FIFO.
 """
 
 import asyncio
@@ -39,21 +35,10 @@ FIFO_PREFIX = "/tmp/symmetria-picker-"
 FIFO_TIMEOUT_SECONDS = 300  # 5 minutes max wait for user interaction
 CANCELLED_SENTINEL = "__PICKER_CANCELLED__"
 
-# ── Which file manager this backend drives, and what it calls itself ─────────
-#
-# TWO backends, ONE script. The Qt build and the Electron build differ in
-# exactly two values, so those two come from the environment rather than from a
-# second copy of this file. A copy would drift, and the looser of two copies is
-# the one that matters — this script validates nothing about the FIFO path it
-# creates beyond its own prefix, so a stale copy is a real hazard rather than a
-# tidiness argument.
-#
-# The DEFAULTS are the Qt build's, so its registration behaves exactly as it did
-# before this was parameterised. The Electron registration sets both in its
-# systemd unit; see `xdg-desktop-portal-symmetria-electron.service`.
-FM_CLI = os.environ.get("SYMMETRIA_PORTAL_FM_CLI", "symmetria-fm-cli")
+# Environment overrides allow a service to name its installed CLI explicitly.
+FM_CLI = os.environ.get("SYMMETRIA_PORTAL_FM_CLI", "symmetria-fm-electron-cli")
 BUS_NAME = os.environ.get(
-    "SYMMETRIA_PORTAL_BUS_NAME", "org.freedesktop.impl.portal.desktop.symmetria"
+    "SYMMETRIA_PORTAL_BUS_NAME", "org.freedesktop.impl.portal.desktop.symmetria-electron"
 )
 
 
@@ -149,7 +134,7 @@ class PortalRequest(ServiceInterface):
     The portal router calls Close when the requesting app cancels the dialog
     or exits. Backends MUST export this object — without it the router gets
     a D-Bus error and our picker window leaks open, blocking all subsequent
-    dialog requests (single-picker lock in the daemon's main.qml).
+    dialog requests (single-picker lock in the Electron daemon).
     """
 
     def __init__(self, fifo_path: str):

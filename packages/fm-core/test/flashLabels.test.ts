@@ -10,7 +10,7 @@ import {
 /**
  * Labelling, as a function of characters.
  *
- * The port of `FlashLogic.js` from the Qt build, which is 173 lines of pure
+ * The port of `FlashLogic.js` from the earlier implementation, which is 173 lines of pure
  * JavaScript and the one piece of flash that never needed a window. Every
  * assertion here comes from the plan's acceptance criteria for this phase;
  * where a number is arithmetic over the label pool it is derived in the
@@ -171,7 +171,7 @@ describe("computeFlash — two-character labels", () => {
   });
 
   it("never starts a two-character label with a character that is also a single label", () => {
-    // The rule the Qt source calls CRITICAL: a one-character label resolves
+    // The rule the earlier source calls CRITICAL: a one-character label resolves
     // first, so a two-character label sharing its first character can never be
     // reached.
     const result = computeFlash("x", many, 0);

@@ -41,7 +41,7 @@ describe("decodeSearchReply, on a well-formed reply", () => {
   });
 
   it("carries the truncation flag and the cap", () => {
-    // Criterion 8. The Qt finder says "200 results" whether there are 200 or
+    // Criterion 8. The earlier finder says "200 results" whether there are 200 or
     // 20,000, which is the thing this replaces.
     const decoded = decodeSearchReply({ ...reply, truncated: true });
     expect(decoded.ok && decoded.value.truncated).toBe(true);

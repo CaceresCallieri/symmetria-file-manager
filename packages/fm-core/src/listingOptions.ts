@@ -38,7 +38,7 @@ export const DEFAULT_LISTING_OPTIONS: ListingOptions = {
   reverse: true,
   showHidden: false,
   // Rendering is the default and the key is the escape hatch. This inverts the
-  // Qt build, where source was the default and `Ctrl+R` opted in — its reason
+  // earlier implementation, where source was the default and `Ctrl+R` opted in — its reason
   // was the cost of starting a browser engine per file, which is not a cost
   // here.
   renderDocuments: true,

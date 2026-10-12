@@ -19,10 +19,8 @@ import { readJsonObject, writeJsonObject } from "./jsonStore.ts";
  *
  * ── The path is a parameter, and that is not a testing convenience ──────────
  * A module that derived it at import time would make every test either read or
- * write the operator's real `~/.config/symmetria-fm/bookmarks.json`. The Qt
- * build reached the same conclusion from the other direction: its frecency
- * database honours `SYMMETRIA_FM_FRECENCY_DIR` so its tests can isolate
- * themselves, and so a user can relocate it.
+ * write the operator's real `~/.config/symmetria-fm/bookmarks.json`. A caller
+ * supplies a path so tests use isolated stores and users can relocate the store.
  */
 
 export interface BookmarkLocation {
@@ -34,9 +32,7 @@ export interface BookmarkLocation {
 /**
  * Where the file lives.
  *
- * The same path the Qt build uses, deliberately: on a machine running both
- * while the rewrite is compared against the original, they share one file
- * rather than drifting into two sets of jumps.
+ * Keep the existing configuration path so an installation retains its bookmarks.
  */
 export function bookmarksFilePath({ home, override }: BookmarkLocation): string {
   if (override !== undefined && override !== "") return override;
@@ -66,7 +62,7 @@ export async function loadBookmarks(path: string): Promise<StoredBookmarks> {
  * Write the store, atomically.
  *
  * The rename is `jsonStore.ts`'s; what is here is the shape a bookmark file
- * takes, which the Qt build reads too.
+ * takes.
  */
 export async function saveBookmarks(path: string, bookmarks: BookmarkMap): Promise<void> {
   const asObject: Record<string, { path: string; label: string }> = {};
@@ -80,9 +76,8 @@ export async function saveBookmarks(path: string, bookmarks: BookmarkMap): Promi
 /**
  * The environment variable that relocates the store.
  *
- * Exists for the same two reasons the Qt build's `SYMMETRIA_FM_FRECENCY_DIR`
- * does: a test must never touch the operator's real configuration, and a user
- * may want the file somewhere else.
+ * A test must never touch the operator's real configuration. A user may
+ * also want the file somewhere else.
  */
 const BOOKMARKS_PATH_ENV = "SYMMETRIA_FM_BOOKMARKS";
 

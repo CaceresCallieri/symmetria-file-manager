@@ -51,7 +51,7 @@ describe("VideoPreview", () => {
 
     // `muted` is the one that decides whether anything happens at all:
     // Chromium blocks autoplay with sound, so an unmuted element silently
-    // refuses to start. It is also parity — the Qt original attaches no audio
+    // refuses to start. It is also parity — the earlier implementation attaches no audio
     // output to its player.
     expect(video).toHaveProperty("autoplay", true);
     expect(video).toHaveProperty("loop", true);

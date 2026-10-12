@@ -56,16 +56,6 @@ describe("the desktop entry", () => {
     expect(iniValue(entry, "StartupWMClass")).toBe(IDENTIFIER);
   });
 
-  it("is NOT the Qt build's identifier", () => {
-    // The two applications run side by side until the rewrite reaches parity,
-    // and the operator uses the Qt one every day. Sharing an identifier would
-    // make a compositor rule for one of them match the other.
-    const entry = read(ENTRY);
-
-    expect(iniValue(entry, "StartupWMClass")).not.toBe("symmetria-fm");
-    expect(existsSync(`${repoRoot}symmetria-fm.desktop`)).toBe(true);
-  });
-
   it("names a command-line tool the shell can actually run", () => {
     // The entry's `Exec` runs the tool by name, so the executable bit is part
     // of the contract rather than a detail. It was NOT set: the file was
@@ -99,14 +89,14 @@ describe("the systemd user unit", () => {
     // NOT boilerplate. Hyprland reads this token from /proc/<pid>/environ, so
     // an in-process unset is too late: the daemon's first window after login
     // lands on whatever workspace was active at login instead of its own. The
-    // Qt unit carries the same line for the same measured reason.
+    // earlier unit carries the same line for the same measured reason.
     const unit = read(UNIT);
 
     expect(iniValue(unit, "UnsetEnvironment")).toBe("HL_INITIAL_WORKSPACE_TOKEN");
   });
 
   it("waits for a graphical session, because the daemon paints at start", () => {
-    // The Qt daemon can use `default.target` safely: it opens no window until
+    // The earlier daemon can use `default.target` safely: it opens no window until
     // asked. This one shows a window as soon as it starts, so it needs the
     // Wayland socket immediately — and a unit that starts before the session
     // either dies in a restart loop or serves windows nobody can see.
@@ -169,7 +159,7 @@ describe("the systemd user unit", () => {
   });
 
   it("is the only copy of itself", () => {
-    // Memory records the Qt unit existing in two unsynced copies, one here and
+    // Memory records the earlier unit existing in two unsynced copies, one here and
     // one in the operator's dotfiles, which then drifted. One real file and an
     // install step is the answer; a second copy anywhere is the defect.
     const dotfiles = `${process.env.HOME}/.dotfiles/.config/systemd/user/${UNIT}`;
@@ -302,10 +292,7 @@ describe("the Hyprland fragment", () => {
     expect(fragment()).toMatch(/match:title negative:/);
   });
 
-  it("keeps the Qt build's binding", () => {
-    // Super+E belongs to the Qt file manager, which is still the daily driver.
-    // The Electron one stays on Super+Shift+E until the operator moves it.
-    expect(fragment()).toMatch(/Super\+Shift, E/);
-    expect(fragment()).not.toMatch(/^bind = Super, E/m);
+  it("binds Super+E to the Electron summon script", () => {
+    expect(fragment()).toMatch(/^bind = Super, E, exec, \$hyprScripts\/summon_file_manager\.sh$/m);
   });
 });

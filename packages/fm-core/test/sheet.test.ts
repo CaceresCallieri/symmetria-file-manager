@@ -17,7 +17,7 @@ import {
  * different test.
  *
  * Both halves are done on the WORKER thread deliberately, so the pane that
- * draws a grid does no per-cell work at all — the same decision the Qt build's
+ * draws a grid does no per-cell work at all — the same decision the earlier implementation's
  * `SpreadsheetPreviewModel` records in its own header.
  */
 
@@ -147,10 +147,8 @@ describe("capping the grid", () => {
 });
 
 describe("the caps themselves", () => {
-  it("match the Qt build's, which chose them for the same reason", () => {
-    // `plugin/src/Symmetria/FileManager/Models/spreadsheetpreviewmodel.hpp`
-    // records 200x50: a preview does not need the whole sheet, and the count
-    // bounds both the parse and the number of elements drawn.
+  it("bound the parse and the number of rendered cells", () => {
+    // A preview needs a bounded subset of the sheet.
     expect(MAX_SHEET_ROWS).toBe(200);
     expect(MAX_SHEET_COLUMNS).toBe(50);
   });

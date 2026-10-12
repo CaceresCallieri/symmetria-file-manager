@@ -3,7 +3,7 @@ import { computeFlash, type FlashLabelling, type FlashMatch } from "./labels.ts"
 /**
  * A running flash session, and what each key does to it.
  *
- * The port of `FlashHandler.handleKey` from the Qt build, turned inside out. Qt
+ * The port of `FlashHandler.handleKey` from the earlier implementation, turned inside out. the earlier implementation
  * writes into `WindowState` as it goes and moves the cursor itself; here every
  * branch **reports** what should happen and the host applies it. That is what
  * lets the whole key table be exercised without a window, and it is why
@@ -11,7 +11,7 @@ import { computeFlash, type FlashLabelling, type FlashMatch } from "./labels.ts"
  * host is the only thing that knows where the cursor was.
  *
  * **There is no timer, and there must not be one.** The project documentation
- * claimed a 500 ms chord timeout twice; the Qt source has never had one. A
+ * claimed a 500 ms chord timeout twice; the earlier source has never had one. A
  * pending label waits for the next key, however long that takes.
  */
 
@@ -146,12 +146,12 @@ export function flashKey(
 
   // Anything the browser reports under a name rather than as a character —
   // a function key, an arrow, Tab. This is the DOM's equivalent of the
-  // `event.text === ""` test the Qt version uses.
+  // `event.text === ""` test the earlier implementation uses.
   //
   // Counted by CODE POINT and not by `.length`. A character outside the basic
   // plane — an emoji from a compose key or an input method — arrives as a
   // surrogate pair, so `.length` reports 2 and the plain test would swallow a
-  // character Qt lets through. It cannot be a label, but it can be part of a
+  // character the earlier implementation lets through. It cannot be a label, but it can be part of a
   // name somebody is searching for.
   if ([...key.key].length !== 1) return unchanged(state);
   const char = key.key.toLowerCase();

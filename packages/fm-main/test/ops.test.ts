@@ -459,7 +459,7 @@ describe("cancellation", () => {
 
 describe("create", () => {
   it("creates a file, and the directories above it", async () => {
-    // What `mkdir -p` gave the Qt build, and what makes typing a path into the
+    // What `mkdir -p` gave the earlier implementation, and what makes typing a path into the
     // create dialog do what it looks like it does.
     await createEntry(join(root, "notes", "2026", "august.md"), "file");
 

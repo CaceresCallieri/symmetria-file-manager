@@ -1,13 +1,7 @@
 /**
- * Mapping one engine item into a row.
- *
- * Acceptance criteria 3 and 4. The row shape is modelled on the Qt struct at
- * `plugin/src/Symmetria/FileManager/Models/fuzzyfinder.hpp`, which is the
- * reference for this port.
- *
- * Two things the engine does NOT give us and this has to derive: `fullPath`,
- * which is the search root joined to the relative path, and `isDir`, which is
- * the discriminant of the item union. The Qt struct derives both the same way.
+ * Map one engine item into a finder row.
+ * `fullPath` joins the search root and relative path. `isDir` comes from the
+ * engine item's discriminant. Both fields belong to the row contract.
  */
 import type { DirItem, FileItem, MixedItem, Score } from "@ff-labs/fff-node";
 import { describe, expect, it } from "vitest";
@@ -81,7 +75,7 @@ describe("toRow, for a file", () => {
 
   it("carries the matched positions for the query it was given", () => {
     // Positions are into the RELATIVE PATH, which is what the row renders and
-    // what the Qt build highlights — "src/format.ts", so f=4 m=7 t=9.
+    // what the earlier implementation highlights — "src/format.ts", so f=4 m=7 t=9.
     const row = toRow(fileItem("src/format.ts", "format.ts"), score, ROOT, "fmt");
     expect(row.matchIndices).toEqual([4, 7, 9]);
   });

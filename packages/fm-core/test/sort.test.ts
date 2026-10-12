@@ -23,7 +23,7 @@ const order = (entries: FsEntry[], mode: SortMode, descending = false) =>
   sortEntries(entries, mode, descending).map((e) => e.name);
 
 describe("directories sort before files, in every mode", () => {
-  // The Qt version's tree walk depended on this and so will the columns:
+  // The earlier implementation's tree walk depended on this and so will the columns:
   // `compareEntries` in filesystemmodel.cpp put directories first regardless of
   // the active sort. Asserted per mode rather than once, because a mode added
   // later is exactly where this gets forgotten.

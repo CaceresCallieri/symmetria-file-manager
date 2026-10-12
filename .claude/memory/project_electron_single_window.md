@@ -31,7 +31,7 @@ they existed only on the branch; that is no longer true.
 In `~/.dotfiles`: `0d17e03` and `98ced0c` add the `files` workspace, the routing
 rule and the binds.
 
-This **completed the half of D3** (`docs/electron-transition/15-decisions.md`)
+This **completed the half of the single-window decision** (`docs/electron-transition/15-decisions.md`)
 that had never been implemented: "one window" shipped in the first Electron run,
 "resident" did not — `index.ts` quit on `window-all-closed` under a comment
 citing the very decision it was contradicting. `a9a703a` fixed that.
@@ -92,36 +92,3 @@ must start with "Choose a file" or it lands on the wrong workspace.
 `Restart=always`. It said `1` first, which also matched Node's uncaught-exception
 exit and the launcher's failed build — telling systemd to give up after a real
 crash. Do not simplify these back to 1.
-
-## Still open
-
-- **The picker itself** — window, socket commands, FIFO, portal wiring, dialog
-  chrome. Its keyboard half is already built and unreachable (`PickerState`, the
-  suppression pre-pass, `isSuppressedInPicker`); `useKeyActions.ts` hardcodes
-  `active: false`.
-- **Publishing the packages** to Mesura Code. They exist and are proved
-  importable; how they travel between repositories is open question 3 in the
-  decision log.
-- **An icon.** `symmetria-fm-electron.desktop` names one that does not exist, so
-  launchers fall back to a generic. Deliberate and stated in the file.
-
-## The embedding is a packaging problem, not a rewrite
-
-Inside Mesura Code there is **no second process and no second window** — it is
-itself Electron, so the FM is a React component in its renderer whose privileged
-half registers handlers in its main process. Two properties make that possible
-and both are now pinned by tests rather than holding by accident:
-
-- **`packages/fm-main` names no `BrowserWindow` and no `app` object.** It does
-  import `shell`, `clipboard` and `nativeImage` — process-wide APIs any Electron
-  main process supplies, declared as a peer dependency.
-- **`packages/fm-ui` names no URL scheme.** Preview URLs are built in the main
-  process and cross the bridge as opaque strings.
-
-The split also forced a real decoupling: `createRegistry` used to *import* the
-host's preview-URL builder, so the privileged half could only ever have run in
-this one application. It is injected now, and required rather than defaulted.
-
-See [[project-electron-transition]] for the direction and the research dossier,
-and [[project-electron-v2-backlog]] for what the operator wanted before this run.
-Both of those notes are **untracked in git** — they exist on disk only.

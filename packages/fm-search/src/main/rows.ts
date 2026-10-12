@@ -1,13 +1,7 @@
 /**
- * One engine item, as a row the finder can render.
- *
- * The shape is modelled on the Qt struct at
- * `plugin/src/Symmetria/FileManager/Models/fuzzyfinder.hpp`, which is the
- * reference for this port. Same fields, same names where the language allows.
- *
- * Two fields the engine does NOT give us, derived here exactly as Qt derives
- * them: `fullPath`, which is the search root joined to the relative path, and
- * `isDir`, which is the discriminant of the item union.
+ * Map one engine item into a finder row.
+ * `fullPath` joins the search root and relative path. `isDir` comes from the
+ * engine item's discriminant. Both fields belong to the row contract.
  */
 
 import { join } from "node:path";

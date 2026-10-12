@@ -16,7 +16,7 @@ export interface StatusBarProps {
   /**
    * The dialog chrome, or null in the browse window.
    *
-   * In the status bar rather than in a row of its own, matching the Qt build —
+   * In the status bar rather than in a row of its own, matching the earlier implementation —
    * the operator chose that, and it is what "parity" means to anyone comparing
    * the two side by side.
    */
@@ -41,7 +41,7 @@ export interface StatusBarProps {
    *
    * It has no field of its own — the query is read from the raw key stream —
    * so this bar is the only place it is visible at all. Above the transient
-   * line and below the search field in precedence, which is the Qt order.
+   * line and below the search field in precedence, which is the the earlier implementation order.
    */
   readonly flash?: { readonly query: string } | null;
   /** A failure, a running transfer, or what just happened. */

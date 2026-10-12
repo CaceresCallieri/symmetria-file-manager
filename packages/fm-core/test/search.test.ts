@@ -6,7 +6,7 @@ import { computeMatches, matchAfterReload, nextMatch, previousMatch } from "../s
 /**
  * Searching, as index arithmetic.
  *
- * The whole algorithm, and none of the cursor. `SearchHandler.js` in the Qt
+ * The whole algorithm, and none of the cursor. `SearchHandler.js` in the the earlier implementation
  * build is 49 lines and does exactly this: turn a query and a listing into the
  * indices that match, then step through them. Keeping it free of a pane means
  * the wrapping and the reload case are testable without a window.
@@ -80,7 +80,7 @@ describe("stepping through the matches", () => {
 
 describe("recomputing after the listing reloads", () => {
   /**
-   * The Qt behaviour worth carrying: a watcher refresh or a re-sort must not
+   * The existing behaviour worth carrying: a watcher refresh or a re-sort must not
    * throw the search back to its first match.
    */
   it("keeps the position when the cursor's row is still a match", () => {

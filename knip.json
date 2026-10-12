@@ -37,13 +37,7 @@
       "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"]
     }
   },
-  "ignore": [
-    "plugin/third_party/**",
-    "plugin/build/**",
-    "qml/**",
-    "docs/**",
-    "tools/oxlint/anti-slop/**"
-  ],
+  "ignore": ["docs/**", "tools/oxlint/anti-slop/**"],
   "ignoreDependencies": ["@oxlint/plugins", "@ff-labs/fff-node"],
   "ignoreBinaries": ["systemd-analyze", "xdg-mime"]
 }
