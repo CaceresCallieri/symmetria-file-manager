@@ -1,5 +1,5 @@
 import type { Dirent } from "node:fs";
-import { open, readdir, stat } from "node:fs/promises";
+import { open, readdir, stat, statfs } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { decodeBookmarks } from "@symmetria/fm-core/bookmarks";
 import {
@@ -10,6 +10,7 @@ import {
   decodeClipboardRequest,
   decodeCreateRequest,
   decodeDescribeRequest,
+  decodeDiskUsageRequest,
   decodeListingOptionsWriteRequest,
   decodeListRequest,
   decodeOpenRequest,
@@ -54,6 +55,7 @@ import { operations } from "../ops/index.ts";
 import { frecentDirectories } from "../ops/zoxide.ts";
 import { authorisePreview, authorisePreviewDirectory } from "../previewTokens.ts";
 import { searchPool } from "../search.ts";
+import { userPlaces } from "../xdg.ts";
 import { CHANNELS, REQUEST_CHANNELS } from "./channels.ts";
 
 /**
@@ -675,6 +677,23 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
       return success(null);
     }),
   );
+
+  ipc.handle(
+    CHANNELS.diskUsage,
+    guard(decodeDiskUsageRequest, "read_failed", async (request) => {
+      // One `statfs(2)`, so it is cheap enough to ask on every directory
+      // change: a path on another mount reports that mount's numbers.
+      const measured = await statfs(request.path);
+      return success({
+        total: measured.blocks * measured.bsize,
+        free: measured.bavail * measured.bsize,
+      });
+    }),
+  );
+
+  // A file nobody wrote is the English defaults, and a directory that does not
+  // exist is left out, so this never fails; there is nothing for it to report.
+  ipc.handle(CHANNELS.places, async () => success({ places: await userPlaces() }));
 
   ipc.handle(CHANNELS.frecent, async () => {
     const listed = await frecentDirectories();

@@ -535,6 +535,7 @@ async function reportAndQuit(window: BrowserWindow, socketPath: string): Promise
 
       const original = name.textContent;
       const fittingIconLeft = icon.getBoundingClientRect().left;
+      const fittingMarkWidth = mark.getBoundingClientRect().width;
 
       // The trailing symlink arrow is drawn only for a symlink, and the home
       // directory need not contain one. Added to the real row so it inherits
@@ -556,6 +557,7 @@ async function reportAndQuit(window: BrowserWindow, socketPath: string): Promise
         measured = {
           fittingIconLeft,
           overflowingIconLeft: icon.getBoundingClientRect().left,
+          fittingMarkWidth,
           overflowingMarkWidth: mark.getBoundingClientRect().width,
           overflowingLinkWidth: link.getBoundingClientRect().width,
           // Reported so a mis-escaped literal cannot pass as an arrow. This

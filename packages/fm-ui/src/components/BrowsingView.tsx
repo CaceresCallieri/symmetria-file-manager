@@ -4,8 +4,10 @@ import type { useTreeMode } from "../tree/useTreeMode.ts";
 import type { Tabs } from "../useTabs.ts";
 import { MillerColumns, type MillerColumnsProps } from "./MillerColumns.tsx";
 import { PathBar } from "./PathBar.tsx";
+import { PreviewPane } from "./preview/PreviewPane.tsx";
 
 export function BrowsingView({
+  chrome,
   tabs,
   tree,
   model,
@@ -18,6 +20,8 @@ export function BrowsingView({
   onActivate,
   onLeaveTo,
 }: {
+  /** Atmosphere: see `AppProps.chrome`. */
+  chrome?: "atmosphere" | undefined;
   tabs: Tabs;
   tree: ReturnType<typeof useTreeMode>;
   model: OverviewModel;
@@ -30,8 +34,8 @@ export function BrowsingView({
   onActivate(index: number): void;
   onLeaveTo(name: string): void;
 }) {
-  if (tree.root !== null && tree.record !== null)
-    return (
+  if (tree.root !== null && tree.record !== null) {
+    const fileTree = (
       <FileTree
         key={tree.key}
         root={tree.root}
@@ -42,11 +46,24 @@ export function BrowsingView({
         onMiller={tree.close}
       />
     );
+    // Atmosphere: the standalone shows a preview beside the tree.
+    // Composed here, never inside `FileTree`, so Mesura Code's tree pane stays
+    // a bare tree (docs/design/atmosphere-design-system.md, "Host profiles").
+    if (chrome !== "atmosphere") return fileTree;
+    return (
+      <div className="tree-split">
+        {fileTree}
+        {preview ? <PreviewPane {...preview} /> : <div className="list" />}
+      </div>
+    );
+  }
   return (
     <>
-      <div className="view-control">
-        <PathBar path={tabs.pane.path} onNavigate={tabs.navigate} />
-      </div>
+      {chrome === "atmosphere" ? null : (
+        <div className="view-control">
+          <PathBar path={tabs.pane.path} onNavigate={tabs.navigate} />
+        </div>
+      )}
       <MillerColumns
         path={tabs.pane.path}
         parentEntries={tabs.parentEntries}

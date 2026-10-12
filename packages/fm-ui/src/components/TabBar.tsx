@@ -1,4 +1,14 @@
+import type { MouseEvent } from "react";
+
 import type { TabView } from "../useTabs.ts";
+
+/**
+ * Keep keyboard focus where it was, for the reason a row and a crumb do: the
+ * document-level handler owns the keymap. A focused tab button took Enter for
+ * itself, so in the tree the next Enter re-activated the tab instead of
+ * opening the selected row.
+ */
+const keepFocus = (event: MouseEvent) => event.preventDefault();
 
 export interface TabBarProps {
   readonly visible?: boolean;
@@ -28,13 +38,19 @@ export function TabBar({ views, activeIndex, onActivate, onClose, visible = true
           data-active={index === activeIndex ? "true" : undefined}
           title={view.path}
         >
-          <button type="button" className="tab__name" onClick={() => onActivate(index)}>
+          <button
+            type="button"
+            className="tab__name"
+            onMouseDown={keepFocus}
+            onClick={() => onActivate(index)}
+          >
             {view.name}
           </button>
           <button
             type="button"
             className="tab__close"
             aria-label={`Close ${view.name}`}
+            onMouseDown={keepFocus}
             onClick={() => onClose(index)}
           >
             ×

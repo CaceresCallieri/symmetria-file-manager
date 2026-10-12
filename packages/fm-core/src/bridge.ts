@@ -56,6 +56,19 @@ export interface Bridge {
   clipboard(request: unknown): Promise<Result<unknown>>;
   /** The directories zoxide records this user going to. */
   frecent(request: unknown): Promise<Result<unknown>>;
+  /**
+   * How full the filesystem holding a path is.
+   *
+   * OPTIONAL, unlike every other method: only the standalone's rail draws a
+   * disk meter, and an embedding host that implements this interface itself
+   * (Mesura Code's websocket bridge) must not have to answer it to compile.
+   */
+  diskUsage?(request: unknown): Promise<Result<unknown>>;
+  /**
+   * The user directories that exist (Downloads, Documents, …), resolved from
+   * `user-dirs.dirs`. OPTIONAL for the reason `diskUsage` is.
+   */
+  places?(request: unknown): Promise<Result<unknown>>;
   /** Read the bookmark store, seeding it on a first run. */
   bookmarksRead(request: unknown): Promise<Result<unknown>>;
   /** Replace the bookmark store. */

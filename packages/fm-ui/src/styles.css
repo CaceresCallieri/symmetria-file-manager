@@ -96,6 +96,15 @@ body {
   background: var(--accent);
 }
 
+/* The size and date columns, the status bar's mode pill and the preview head
+   exist in the markup for the standalone's Atmosphere stylesheet, which shows
+   them. Hidden here so every other host (Mesura Code) keeps its layout. */
+.row__meta,
+.status-bar__mode,
+.preview-head {
+  display: none;
+}
+
 /* The mark colour is hardcoded rather than taken from the palette, for the same
    reason the Qt build hardcodes its indicators: a wallpaper-derived scheme can
    land anywhere, and an indicator that stops being legible is worse than one

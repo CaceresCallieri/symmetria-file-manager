@@ -4,9 +4,10 @@ import type { PreviewRoute, RenderableAs } from "@symmetria/fm-core/preview/rout
 import { FileIcon } from "@symmetria/fm-search/ui";
 import { useCallback, useEffect, useState } from "react";
 import { ClipboardIndicator } from "../ClipboardIndicator.tsx";
-import { ROW_HEIGHT, type VisibleRange } from "../FileList.tsx";
+import type { VisibleRange } from "../FileList.tsx";
 import { flashStateOf } from "../FileRow.tsx";
 import { FlashName, type FlashRowLabel } from "../FlashName.tsx";
+import { useRowHeight } from "../rowHeight.ts";
 import { INITIAL_RECT } from "../virtualize.ts";
 import { ArchivePreview } from "./ArchivePreview.tsx";
 import { AudioPreview } from "./AudioPreview.tsx";
@@ -120,6 +121,7 @@ export function PreviewPane({
       data-kind={route.kind}
       data-rendered={renderAs ?? undefined}
     >
+      <PreviewHead route={route} path={path} size={size} />
       {error == null ? (
         body(
           route,
@@ -135,6 +137,101 @@ export function PreviewPane({
           {error}
         </p>
       )}
+    </div>
+  );
+}
+
+/*
+ * Atmosphere: the preview's identity block — icon tile, name, kind · size,
+ * then the facts as chips. `styles.css` hides it, so the Mesura Code layer is
+ * unchanged; the standalone's Atmosphere stylesheet shows it. Only facts the
+ * route already carries: modification time, permissions and line counts need
+ * fields the preview does not have yet.
+ */
+
+function itemCount(count: number): string {
+  return `${count} ${count === 1 ? "item" : "items"}`;
+}
+
+/** MIME families whose own name reads as a noun: "PNG image", "MP4 video". */
+const NAMED_MIME_FAMILIES = new Set(["image", "video", "audio", "text"]);
+
+function mimeLabel(mime: string | null): string {
+  if (mime === null) return "File";
+  const [family = "", subtype = ""] = mime.split("/");
+  const short =
+    subtype
+      .replace(/^(x-|vnd\.)/, "")
+      .split(/[.+]/)[0]
+      ?.toUpperCase() ?? "";
+  return `${short} ${NAMED_MIME_FAMILIES.has(family) ? family : "document"}`.trim();
+}
+
+function kindLabel(route: PreviewRoute): string {
+  switch (route.kind) {
+    case "directory":
+      return "Folder";
+    case "code":
+      return `${route.language.charAt(0).toUpperCase()}${route.language.slice(1)} source`;
+    case "text":
+      return "Plain text";
+    case "archive":
+      return "Archive";
+    case "none":
+      return "";
+    default:
+      return mimeLabel(route.mime);
+  }
+}
+
+function PreviewHead({
+  route,
+  path,
+  size,
+}: {
+  route: PreviewRoute;
+  path: string | null;
+  size: number;
+}) {
+  if (path === null || route.kind === "none") return null;
+  const name = path.slice(path.lastIndexOf("/") + 1) || path;
+  const isDirectory = route.kind === "directory";
+  const kind = kindLabel(route);
+  // The TRUE count, not the length of the capped listing: a folder of 537
+  // reads "537 items" here while its listing below says "and 37 more".
+  const amount =
+    route.kind === "directory"
+      ? { label: "Items", value: String(route.entryCount), summary: itemCount(route.entryCount) }
+      : { label: "Size", value: humanSize(size), summary: humanSize(size) };
+  return (
+    <div className="preview-head">
+      <span className="preview-head__icon">
+        <FileIcon name={name} kind={isDirectory ? "directory" : "file"} />
+      </span>
+      <div className="preview-head__title">
+        <span className="preview-head__name">{name}</span>
+        <span className="preview-head__kind">
+          {kind} · {amount.summary}
+        </span>
+      </div>
+      <dl className="preview-head__chips">
+        <div>
+          <dt>Kind</dt>
+          <dd>{kind}</dd>
+        </div>
+        <div>
+          <dt>{amount.label}</dt>
+          <dd>{amount.value}</dd>
+        </div>
+        <div className="preview-head__path">
+          <dt>Path</dt>
+          {/* Elided from the left by the stylesheet; <bdi> keeps the path's own
+              left-to-right order inside that right-to-left box. */}
+          <dd>
+            <bdi>{path}</bdi>
+          </dd>
+        </div>
+      </dl>
     </div>
   );
 }
@@ -247,8 +344,8 @@ interface DirectoryListingProps {
  *
  * The same question `FileList` asks its virtualiser, answered by arithmetic
  * because this listing has none: every row is in the document and only some are
- * in view. `ROW_HEIGHT` is the virtualiser's own figure, imported rather than
- * repeated, and the viewport falls back to `INITIAL_RECT` for the same reason
+ * in view. The row height is the virtualiser's own figure, read from the same
+ * context rather than repeated, and the viewport falls back to `INITIAL_RECT` for the same reason
  * `observeWithFallback` does — an element that has not laid out measures zero,
  * and zero would say nothing is visible.
  */
@@ -258,6 +355,7 @@ function useListingRange(
 ): (node: HTMLDivElement | null) => void {
   const [element, setElement] = useState<HTMLDivElement | null>(null);
   const attach = useCallback((node: HTMLDivElement | null) => setElement(node), []);
+  const rowHeight = useRowHeight();
 
   useEffect(() => {
     if (element === null || report === undefined) return;
@@ -265,8 +363,8 @@ function useListingRange(
     const send = () => {
       const height = element.clientHeight > 0 ? element.clientHeight : INITIAL_RECT.height;
       report({
-        start: Math.max(0, Math.floor(element.scrollTop / ROW_HEIGHT)),
-        end: Math.min(count - 1, Math.floor((element.scrollTop + height) / ROW_HEIGHT)),
+        start: Math.max(0, Math.floor(element.scrollTop / rowHeight)),
+        end: Math.min(count - 1, Math.floor((element.scrollTop + height) / rowHeight)),
       });
     };
 
@@ -281,7 +379,7 @@ function useListingRange(
       element.removeEventListener("scroll", send);
       observer?.disconnect();
     };
-  }, [element, count, report]);
+  }, [element, count, report, rowHeight]);
 
   return attach;
 }

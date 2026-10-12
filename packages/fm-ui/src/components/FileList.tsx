@@ -1,10 +1,8 @@
 import type { FsEntry } from "@symmetria/fm-core/entry";
-import { defaultRangeExtractor, type Range, useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useEffect, useRef, useState } from "react";
-
+import { useEffect, useRef, useState } from "react";
 import { FileRow } from "./FileRow.tsx";
 import type { FlashRowLabel } from "./FlashName.tsx";
-import { INITIAL_RECT, observeWithFallback } from "./virtualize.ts";
+import { useRowVirtualizer } from "./useRowVirtualizer.ts";
 
 /**
  * The rows a column has on SCREEN, inclusive at both ends.
@@ -86,15 +84,6 @@ export const NO_SELECTION: ReadonlySet<string> = new Set();
 export const NO_FLASH_LABELS: ReadonlyMap<number, FlashRowLabel> = new Map();
 
 /**
- * Row height in pixels. Fixed, so the virtualiser needs no measurement pass.
- *
- * Exported because the previewed directory's listing is NOT virtualised and has
- * to work out its own visible window from the same figure. Two constants that
- * happened to agree would drift the first time a row grew.
- */
-export const ROW_HEIGHT = 24;
-
-/**
  * Tell the caller which rows are on screen, whenever that changes.
  *
  * Takes the virtualiser's OWN range rather than its rendered items: the range
@@ -142,30 +131,10 @@ export function FileList({
   // exists. That also removes a blank first frame in production, not only in a
   // headless test where `getBoundingClientRect` never reports a size.
   const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
-
-  // Always mount the cursor row, whether or not it falls in the visible window.
-  //
-  // Two reasons, and the second is the load-bearing one. It lets the row below
-  // scroll itself into view, and it means the highlight EXISTS even if the
-  // scroll position and the virtualiser ever disagree — the failure mode is
-  // then a row briefly off screen, not a list with no cursor at all.
-  const rangeExtractor = useCallback(
-    (range: Range) => {
-      const visible = defaultRangeExtractor(range);
-      if (cursorIndex < 0 || visible.includes(cursorIndex)) return visible;
-      return [...visible, cursorIndex].sort((a, b) => a - b);
-    },
-    [cursorIndex],
-  );
-
-  const virtualizer = useVirtualizer({
+  const { virtualizer } = useRowVirtualizer({
     count: entries.length,
-    getScrollElement: () => scrollElement,
-    estimateSize: () => ROW_HEIGHT,
-    overscan: 8,
-    initialRect: INITIAL_RECT,
-    observeElementRect: observeWithFallback,
-    rangeExtractor,
+    scrollElement,
+    cursorIndex,
   });
 
   // Follow the cursor by asking the BROWSER to scroll, not by setting the

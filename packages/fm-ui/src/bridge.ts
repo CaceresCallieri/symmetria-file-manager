@@ -10,12 +10,15 @@ import {
   type ClipboardRequest,
   type CreateRequest,
   type DescribeReply,
+  type DiskUsageReply,
   decodeBookmarksReply,
   decodeChangedEvent,
   decodeDescribeReply,
+  decodeDiskUsageReply,
   decodeFrecentReply,
   decodeListingOptionsReply,
   decodeListReply,
+  decodePlacesReply,
   decodePreviewUrlReply,
   decodeReadTextReply,
   decodeRenameReply,
@@ -26,6 +29,7 @@ import {
   isFailure,
   isRecord,
   type ListReply,
+  type PlacesReply,
   type ReadTextReply,
   type RenameReply,
   type Result,
@@ -242,6 +246,37 @@ export async function frecentDirectories(): Promise<Result<FrecentReply>> {
 
   const reply = await bridge.frecent({});
   return isFailure(reply) ? reply : decodeFrecentReply(reply.value);
+}
+
+/**
+ * How full the filesystem holding `path` is.
+ *
+ * A host whose bridge does not offer the method answers a failure, and the
+ * caller draws no meter.
+ */
+export async function diskUsage(path: string): Promise<Result<DiskUsageReply>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("read_failed", MISSING_BRIDGE);
+  if (bridge.diskUsage === undefined)
+    return failure("read_failed", "this host does not measure disk usage");
+
+  const reply = await bridge.diskUsage({ path });
+  return isFailure(reply) ? reply : decodeDiskUsageReply(reply.value);
+}
+
+/**
+ * The user directories that exist, from `user-dirs.dirs`. A host whose bridge
+ * does not offer it answers a failure, and the rail shows Home alone.
+ */
+export async function userPlaces(): Promise<Result<PlacesReply>> {
+  const bridge = getBridge();
+  if (bridge === null) return failure("read_failed", MISSING_BRIDGE);
+  if (bridge.places === undefined) {
+    return failure("read_failed", "this host does not resolve user directories");
+  }
+
+  const reply = await bridge.places({});
+  return isFailure(reply) ? reply : decodePlacesReply(reply.value);
 }
 
 /** Read the head of a file as text. */

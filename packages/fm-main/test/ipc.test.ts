@@ -1,12 +1,14 @@
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-  BookmarksReply,
-  DescribeReply,
-  IpcReply,
-  ListBatch,
-  ListReply,
+import {
+  type BookmarksReply,
+  type DescribeReply,
+  decodeDiskUsageReply,
+  decodePlacesReply,
+  type IpcReply,
+  type ListBatch,
+  type ListReply,
 } from "@symmetria/fm-core/contract";
 
 import type { FsEntry } from "@symmetria/fm-core/entry";
@@ -1022,5 +1024,55 @@ describe("the listing order crosses the boundary", () => {
     expect((read.value as { options: { sort: string } }).options.sort).toBe(
       DEFAULT_LISTING_OPTIONS.sort,
     );
+  });
+});
+
+describe("the disk usage channel", () => {
+  it("measures the filesystem holding a directory", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { previewUrlFor });
+
+    const reply = await ipc.invoke(CHANNELS.diskUsage, { path: root });
+
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    // The reply must survive the renderer's own decoder, which refuses a zero
+    // total and free space larger than the disk.
+    expect(decodeDiskUsageReply(reply.value).ok).toBe(true);
+  });
+
+  it("answers a path that does not exist with a failure value", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { previewUrlFor });
+
+    const reply = await ipc.invoke(CHANNELS.diskUsage, { path: join(root, "missing") });
+
+    expect(reply.ok).toBe(false);
+    if (reply.ok) return;
+    expect(reply.error.code).toBe("read_failed");
+  });
+
+  it("refuses a relative path before touching the filesystem", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { previewUrlFor });
+
+    const reply = await ipc.invoke(CHANNELS.diskUsage, { path: "relative" });
+
+    expect(reply.ok).toBe(false);
+    if (reply.ok) return;
+    expect(reply.error.code).toBe("invalid_request");
+  });
+});
+
+describe("the places channel", () => {
+  it("answers a list the renderer's decoder accepts", async () => {
+    const ipc = fakeIpc();
+    createRegistry(ipc, { previewUrlFor });
+
+    const reply = await ipc.invoke(CHANNELS.places, {});
+
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) return;
+    expect(decodePlacesReply(reply.value).ok).toBe(true);
   });
 });

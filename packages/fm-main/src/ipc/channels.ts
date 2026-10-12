@@ -73,6 +73,10 @@ export const REQUEST_CHANNELS = {
   clipboard: "symmetria-fm:clipboard",
   /** Hand an entry to whatever the desktop says opens it. */
   open: "symmetria-fm:open",
+  /** How full the filesystem holding a path is. */
+  diskUsage: "symmetria-fm:disk-usage",
+  /** The user directories that exist, resolved from `user-dirs.dirs`. */
+  places: "symmetria-fm:places",
   /** Read the bookmark store, seeding it on a first run. */
   bookmarksRead: "symmetria-fm:bookmarks-read",
   /** Replace the bookmark store. */

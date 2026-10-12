@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
+  <title>A · Studio — Symmetria FM redesign</title>
+  <link rel="stylesheet" href="../shared/fonts.css" />
+  <link rel="stylesheet" href="../shared/base.css" />
+  <link rel="stylesheet" href="../shared/syntax.css" />
+  <link rel="stylesheet" href="studio.css" />
+</head>
+<body>
+  <script type="module">
+    import { mount } from "../shared/app.js";
+    mount({
+      id: "studio",
+      name: "Studio",
+      sidebar: true,
+      tabs: false,
+      dateStyle: "friendly",
+      currentMeta: ["size", "date"],
+      previewProps: true,
+      themeToggle: true,
+      wallpaper: 1,
+      homeLabel: "Home",
+    });
+  </script>
+</body>
+</html>

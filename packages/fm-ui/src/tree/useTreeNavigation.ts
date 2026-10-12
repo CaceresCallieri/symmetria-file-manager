@@ -3,7 +3,6 @@ import { useCameraAnimation } from "../overview/useOverviewCamera.ts";
 import type { TreeRow } from "./model.ts";
 import { type TreeAnchor, type TreeRecord, visibleFallback } from "./state.ts";
 
-const TREE_ROW_HEIGHT = 24;
 type Point = { x: number; y: number };
 
 export function useTreeNavigation(
@@ -13,6 +12,7 @@ export function useTreeNavigation(
   record: TreeRecord,
   loading: boolean,
   select: (path: string) => void,
+  rowHeight: number,
 ) {
   const latest = useRef({ viewport, rows, selected, select });
   latest.current = { viewport, rows, selected, select };
@@ -23,10 +23,10 @@ export function useTreeNavigation(
       if (!viewport) return;
       viewport.scrollTop = point.y;
       viewport.scrollLeft = point.x;
-      record.anchor = readAnchor(viewport, rows);
+      record.anchor = readAnchor(viewport, rows, rowHeight);
       if (pending.current?.point.y === point.y) pending.current = null;
     },
-    [record],
+    [record, rowHeight],
   );
   const read = useCallback(
     () => ({ x: viewport?.scrollLeft ?? 0, y: viewport?.scrollTop ?? 0 }),
@@ -43,7 +43,13 @@ export function useTreeNavigation(
     if (!viewport) return;
     const oldRows = previousRows.current;
     if (oldRows === rows) return;
-    const followCursor = shouldFollowCursor(pending.current !== null, selected, oldRows, viewport);
+    const followCursor = shouldFollowCursor(
+      pending.current !== null,
+      selected,
+      oldRows,
+      viewport,
+      rowHeight,
+    );
     cancel();
     const anchor = record.anchor;
     if (awaitingAnchor(anchor, rows, loading)) return;
@@ -52,7 +58,7 @@ export function useTreeNavigation(
       const path = visibleFallback(anchor.path, rows, oldRows);
       write({
         x: anchor.left,
-        y: rows.findIndex((row) => row.path === path) * TREE_ROW_HEIGHT + anchor.offset,
+        y: rows.findIndex((row) => row.path === path) * rowHeight + anchor.offset,
       });
     }
     // Discovery changes row indices. Keep a previously visible cursor visible,
@@ -60,14 +66,14 @@ export function useTreeNavigation(
     // the cursor was already outside the viewport before the discovery batch.
     if (followCursor) {
       const index = rows.findIndex((row) => row.path === selected);
-      write(visiblePoint(read(), index, viewport.clientHeight, rows.length));
+      write(visiblePoint(read(), index, viewport.clientHeight, rows.length, rowHeight));
     }
     if (!loading && !rows.some((row) => row.path === selected)) {
       const fallback = visibleFallback(selected, rows, oldRows);
       previousSelected.current = fallback;
       select(fallback);
     }
-  }, [rows, viewport, selected, select, loading, record, cancel, write, read]);
+  }, [rows, viewport, selected, select, loading, record, cancel, write, read, rowHeight]);
   useLayoutEffect(() => {
     const requested = record.pendingReveal;
     // Discovery can insert rows above an already represented target. Keep the
@@ -85,10 +91,11 @@ export function useTreeNavigation(
         rows.findIndex((row) => row.path === path),
         viewport.clientHeight,
         rows.length,
+        rowHeight,
       ),
     );
     record.pendingReveal = null;
-  }, [viewport, record, rows, loading, cancel, select, write, read]);
+  }, [viewport, record, rows, loading, cancel, select, write, read, rowHeight]);
   useLayoutEffect(() => {
     if (!viewport || !record.restoreAnchor) return;
     const anchor = record.anchor;
@@ -103,19 +110,19 @@ export function useTreeNavigation(
             0,
             rows.findIndex((row) => row.path === visibleFallback(anchor.path, rows)),
           ) *
-            TREE_ROW_HEIGHT +
+            rowHeight +
           anchor.offset,
       });
     previousSelected.current = selected;
     record.restoreAnchor = false;
-  }, [viewport, rows, record, selected, write, loading]);
+  }, [viewport, rows, record, selected, write, loading, rowHeight]);
   useLayoutEffect(() => {
     if (previousSelected.current === selected) return;
     previousSelected.current = selected;
     if (pending.current || !viewport) return;
     const index = rows.findIndex((row) => row.path === selected);
-    write(visiblePoint(read(), index, viewport.clientHeight, rows.length));
-  }, [selected, rows, viewport, write, read]);
+    write(visiblePoint(read(), index, viewport.clientHeight, rows.length, rowHeight));
+  }, [selected, rows, viewport, write, read, rowHeight]);
   useLayoutEffect(() => {
     if (!viewport) return;
     const observer = new ResizeObserver(cancel);
@@ -129,16 +136,17 @@ export function useTreeNavigation(
     if (!viewport) return;
     const currentIndex = pending.current?.index ?? rows.findIndex((row) => row.path === selected);
     const delta =
-      Math.max(1, Math.floor((viewport.clientHeight / TREE_ROW_HEIGHT) * fraction)) * direction;
+      Math.max(1, Math.floor((viewport.clientHeight / rowHeight) * fraction)) * direction;
     const index = Math.max(0, Math.min(rows.length - 1, currentIndex + delta));
     const row = rows[index];
     if (!row) return;
     const start = pending.current?.point ?? read();
     const point = visiblePoint(
-      { x: start.x, y: start.y + (index - currentIndex) * TREE_ROW_HEIGHT },
+      { x: start.x, y: start.y + (index - currentIndex) * rowHeight },
       index,
       viewport.clientHeight,
       rows.length,
+      rowHeight,
     );
     pending.current = { point, index };
     select(row.path);
@@ -150,30 +158,36 @@ export function useTreeNavigation(
     const row = rows[index];
     if (!row || !viewport) return;
     select(row.path);
-    write(visiblePoint(read(), index, viewport.clientHeight, rows.length));
+    write(visiblePoint(read(), index, viewport.clientHeight, rows.length, rowHeight));
   };
   return {
     cancel,
     page,
     jump,
     onScroll: () => {
-      if (viewport) record.anchor = readAnchor(viewport, rows);
+      if (viewport) record.anchor = readAnchor(viewport, rows, rowHeight);
     },
   };
 }
 
-function readAnchor(viewport: HTMLElement, rows: readonly TreeRow[]) {
-  const index = Math.floor(viewport.scrollTop / TREE_ROW_HEIGHT);
+function readAnchor(viewport: HTMLElement, rows: readonly TreeRow[], rowHeight: number) {
+  const index = Math.floor(viewport.scrollTop / rowHeight);
   const row = rows[index];
   return row
-    ? { path: row.path, offset: viewport.scrollTop % TREE_ROW_HEIGHT, left: viewport.scrollLeft }
+    ? { path: row.path, offset: viewport.scrollTop % rowHeight, left: viewport.scrollLeft }
     : null;
 }
 
-function visiblePoint(point: Point, index: number, height: number, count: number): Point {
-  const top = Math.max(0, index) * TREE_ROW_HEIGHT;
-  const y = Math.min(Math.max(point.y, top + TREE_ROW_HEIGHT - height), top);
-  return { x: point.x, y: Math.max(0, Math.min(y, count * TREE_ROW_HEIGHT - height)) };
+function visiblePoint(
+  point: Point,
+  index: number,
+  height: number,
+  count: number,
+  rowHeight: number,
+): Point {
+  const top = Math.max(0, index) * rowHeight;
+  const y = Math.min(Math.max(point.y, top + rowHeight - height), top);
+  return { x: point.x, y: Math.max(0, Math.min(y, count * rowHeight - height)) };
 }
 
 function awaitingAnchor(anchor: TreeAnchor | null, rows: readonly TreeRow[], loading: boolean) {
@@ -185,12 +199,11 @@ function shouldFollowCursor(
   selected: string,
   rows: readonly TreeRow[],
   viewport: HTMLElement,
+  rowHeight: number,
 ) {
   if (paging) return true;
   const index = rows.findIndex((row) => row.path === selected);
   if (index < 0) return false;
-  const top = index * TREE_ROW_HEIGHT;
-  return (
-    top >= viewport.scrollTop && top + TREE_ROW_HEIGHT <= viewport.scrollTop + viewport.clientHeight
-  );
+  const top = index * rowHeight;
+  return top >= viewport.scrollTop && top + rowHeight <= viewport.scrollTop + viewport.clientHeight;
 }

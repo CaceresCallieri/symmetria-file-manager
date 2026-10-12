@@ -15,7 +15,8 @@ import {
   pickerFromSearch,
 } from "@symmetria/fm-core/windowUrl";
 import { FinderOverlay } from "@symmetria/fm-search/ui";
-import { useEffect, useMemo, useRef } from "react";
+import { type ReactNode, useEffect, useMemo, useRef } from "react";
+import { AtmosphereHeader, AtmosphereRail } from "./components/AtmosphereChrome.tsx";
 import { BrowsingView } from "./components/BrowsingView.tsx";
 import { ClipboardIndicators } from "./components/ClipboardIndicator.tsx";
 import { FinderPreview } from "./components/FinderPreview.tsx";
@@ -23,13 +24,14 @@ import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { OpsModals } from "./components/modals/OpsModals.tsx";
 import type { PreviewPaneProps } from "./components/preview/PreviewPane.tsx";
 import { type ReaderDescription, ReaderOverlay } from "./components/ReaderOverlay.tsx";
+import { DEFAULT_ROW_HEIGHT, RowHeightContext } from "./components/rowHeight.ts";
 import type { SearchFieldProps } from "./components/SearchField.tsx";
-import { type RenderMode, StatusBar } from "./components/StatusBar.tsx";
+import { type BarMode, type RenderMode, StatusBar } from "./components/StatusBar.tsx";
 import { TabBar } from "./components/TabBar.tsx";
 import type { TransientLineProps } from "./components/transientLine.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
 import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
-import { useKeyDispatch } from "./hooks/useKeyDispatch.ts";
+import { type PressKey, useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { OverviewLayer } from "./overview/Overview.tsx";
 import { useOverviewMode } from "./overview/useOverviewMode.ts";
 import { treeDirectoryError, treeSummary } from "./tree/TreeSummary.tsx";
@@ -198,6 +200,19 @@ export interface AppProps {
    * are: a test must not depend on the real location.
    */
   readonly picker?: PickerWindowRequest;
+  /**
+   * Atmosphere: the standalone's window chrome — header, rail,
+   * preview beside the tree. Absent means today's layout, which is what the
+   * Mesura Code layer gets. See docs/design/atmosphere-design-system.md.
+   */
+  readonly chrome?: "atmosphere";
+  /**
+   * The height of one list row, in pixels. The host owns it because its
+   * stylesheet draws the rows: this figure and that sheet's `--row-height`
+   * must agree, or rows drift from where the virtualisers place them. Absent
+   * means `DEFAULT_ROW_HEIGHT`, which `tokens.css` and Mesura Code draw.
+   */
+  readonly rowHeight?: number;
 }
 
 /** The dialog request this window carries, or null for the browse window. */
@@ -380,7 +395,11 @@ export function App(props: AppProps = {}) {
   // path, which comes straight from the pane — so there is no cycle, only an
   // order.
   const cursorPath = cursorPathOf(tabs.pane);
-  const previewing = usePreviewPane(cursorPath, tabs.renderDocuments);
+  const atmosphere = props.chrome === "atmosphere";
+  const previewing = usePreviewPane(
+    previewPathFor(atmosphere, tree, cursorPath),
+    tabs.renderDocuments,
+  );
   // After the preview, because a session may label the directory it shows.
   const millerFlash = useFlash(flashHostFor(tabs, previewing.preview, cursorPath));
 
@@ -416,13 +435,22 @@ export function App(props: AppProps = {}) {
     [modes, ops.modal.kind, search.active, flash.active],
   );
 
-  useKeyDispatch({
+  const press = useKeyDispatch({
     mode,
     context,
     onFlashKey: flash.onKey,
   });
 
-  const { onOpenFile = ops.openAbsolute } = props;
+  const { onOpenFile = ops.openAbsolute, rowHeight = DEFAULT_ROW_HEIGHT } = props;
+  const chrome = atmosphereChromeFor(atmosphere, {
+    tabs,
+    context,
+    press,
+    tree,
+    overview,
+    home,
+    bookmarks: bookmarks.byLetter,
+  });
 
   /**
    * A click in the parent column: go to that sibling directory.
@@ -434,86 +462,226 @@ export function App(props: AppProps = {}) {
   const leaveTo = (name: string) => tabs.navigate(joinPath(parentOf(tabs.pane.path), name));
 
   return (
-    <ClipboardIndicators clipboard={ops.clipboard}>
-      {/* A named helper for a two-term boolean: it keeps `App` under the
+    <RowHeightContext value={rowHeight}>
+      <ClipboardIndicators clipboard={ops.clipboard}>
+        <AtmosphereWindow header={chrome.header} rail={chrome.rail}>
+          {/* A named helper for a two-term boolean: it keeps `App` under the
         cognitive-complexity bound the health gate enforces. Do not inline it. */}
-      <main className="app" inert={columnsAreInert(overview.root, modes.readerOpen)}>
-        <TabBar
-          visible={tabs.showBar}
-          views={tabs.views}
-          activeIndex={tabs.activeIndex}
-          onActivate={tabs.activate}
-          onClose={tabs.close}
-        />
-        <BrowsingView
-          tabs={tabs}
-          tree={tree}
-          model={overview.treeModel}
-          onOpen={onOpenFile}
-          matches={search.matches}
-          preview={previewPanes.column}
-          flashLabels={millerFlash.labels}
-          flashActive={millerFlash.active}
-          onVisibleRange={millerFlash.reportVisibleRange}
-          onActivate={(index) => activateAt(tabs, ops, index)}
-          onLeaveTo={leaveTo}
-        />
-        <WhichKeyOverlay
-          prefix={modes.chordPrefix}
-          cursorIsImage={context.state.cursorEntry?.isImage === true}
-          bookmarks={browsingBookmarks(context, bookmarks.byLetter)}
-        />
-        {/* One bar, and nothing above it that comes and goes. The search field
+          <main
+            className={chrome.appClass}
+            inert={columnsAreInert(overview.root, modes.readerOpen)}
+          >
+            <TabBar
+              visible={chrome.classicTabs}
+              views={tabs.views}
+              activeIndex={tabs.activeIndex}
+              onActivate={tabs.activate}
+              onClose={tabs.close}
+            />
+            <BrowsingView
+              chrome={props.chrome}
+              tabs={tabs}
+              tree={tree}
+              model={overview.treeModel}
+              onOpen={onOpenFile}
+              matches={search.matches}
+              preview={previewPanes.column}
+              flashLabels={millerFlash.labels}
+              flashActive={millerFlash.active}
+              onVisibleRange={millerFlash.reportVisibleRange}
+              onActivate={(index) => activateAt(tabs, ops, index)}
+              onLeaveTo={leaveTo}
+            />
+            <WhichKeyOverlay
+              prefix={modes.chordPrefix}
+              cursorIsImage={cursorIsImageIn(context)}
+              bookmarks={browsingBookmarks(context, bookmarks.byLetter)}
+            />
+            {/* One bar, and nothing above it that comes and goes. The search field
           and the transient line were rows of their own here, so opening a
           search pushed the columns down and a copy starting pushed them up.
           Both now live inside the bar, which has a fixed height. */}
-        <StatusBar
-          summary={treeSummary(
-            tree.root,
-            overview.model,
-            tabs.showHidden,
-            context.state.selectedCount,
-          )}
-          picker={picker.chrome}
-          entryCount={tabs.pane.entries.length}
-          selectedCount={context.state.selectedCount}
-          sort={tabs.sort}
-          reverse={tabs.reverse}
-          showHidden={tabs.showHidden}
-          renderMode={renderModeOf(previewing.preview, cursorPath, tabs.renderDocuments)}
-          search={searchChromeOf(search)}
-          flash={flash.chrome}
-          transient={transientOf(tabs, ops, modes, tree.root)}
+            <StatusBar
+              summary={treeSummary(
+                tree.root,
+                overview.model,
+                tabs.showHidden,
+                context.state.selectedCount,
+              )}
+              picker={picker.chrome}
+              entryCount={tabs.pane.entries.length}
+              selectedCount={context.state.selectedCount}
+              sort={tabs.sort}
+              reverse={tabs.reverse}
+              showHidden={tabs.showHidden}
+              renderMode={renderModeOf(previewing.preview, cursorPath, tabs.renderDocuments)}
+              search={searchChromeOf(search)}
+              flash={flash.chrome}
+              transient={transientOf(tabs, ops, modes, tree.root)}
+              mode={barModeOf(context, flash.active)}
+            />
+            <OpsModals
+              modal={ops.modal}
+              onCancel={ops.closeModal}
+              onConfirmDelete={ops.confirmDelete}
+              onConfirmRename={ops.confirmRename}
+              onConfirmCreate={ops.confirmCreate}
+              onConfirmOverwrite={ops.confirmOverwrite}
+            />
+          </main>
+        </AtmosphereWindow>
+        <OverviewLayer
+          root={overview.root}
+          model={overview.model}
+          onClose={overview.close}
+          port={overview.port}
+          minimapVisible={overview.minimapVisible}
+          onToggleMinimap={overview.toggleMinimap}
         />
-        <OpsModals
-          modal={ops.modal}
-          onCancel={ops.closeModal}
-          onConfirmDelete={ops.confirmDelete}
-          onConfirmRename={ops.confirmRename}
-          onConfirmCreate={ops.confirmCreate}
-          onConfirmOverwrite={ops.confirmOverwrite}
+        <Overlays
+          modes={modes}
+          context={context}
+          bookmarks={browsingBookmarks(context, bookmarks.byLetter)}
+          directory={tabs.pane.path}
+          renderDocuments={tabs.renderDocuments}
+          pane={previewPanes.reader}
+          description={previewing.preview.description}
+          onNavigate={tabs.navigate}
+          onReveal={tabs.reveal}
         />
-      </main>
-      <OverviewLayer
-        root={overview.root}
-        model={overview.model}
-        onClose={overview.close}
-        port={overview.port}
-        minimapVisible={overview.minimapVisible}
-        onToggleMinimap={overview.toggleMinimap}
+      </ClipboardIndicators>
+    </RowHeightContext>
+  );
+}
+
+/**
+ * Atmosphere: what the preview describes. In tree mode the
+ * standalone shows a preview beside the tree, so it follows the tree's cursor;
+ * everywhere else it follows the Miller cursor, as before.
+ */
+function previewPathFor(
+  atmosphere: boolean,
+  tree: ReturnType<typeof useTreeMode>,
+  cursorPath: string | null,
+): string | null {
+  if (!atmosphere || tree.root === null) return cursorPath;
+  return tree.entry?.path ?? null;
+}
+
+/** Whether the cursor rests on an image, for the copy chord's image row. */
+function cursorIsImageIn(context: KeyContext): boolean {
+  return context.state.cursorEntry?.isImage === true;
+}
+
+/**
+ * The status bar's mode pill, from the ACTIVE view's state: the tree replaces
+ * `searchActive` and `selectedCount` with its own, and `flashActive` follows
+ * whichever view is showing. The overview keeps its search inside its own
+ * component, so there the pill names the overview rather than guess.
+ */
+function barModeOf(context: KeyContext, flashActive: boolean): BarMode {
+  if (flashActive) return "flash";
+  if (context.view === "overview") return "overview";
+  if (context.state.searchActive) return "search";
+  return context.state.selectedCount > 0 ? "select" : "normal";
+}
+
+/**
+ * Atmosphere: a breadcrumb or rail click. It lands in Columns at that path.
+ *
+ * The tree and the overview are closed first. Navigating the tab under an open
+ * tree changed the header's breadcrumb and the disk meter while the tree stayed
+ * rooted where it was, so the window showed two different places.
+ */
+function navigateFromChrome(
+  path: string,
+  tabs: Tabs,
+  tree: ReturnType<typeof useTreeMode>,
+  overview: ReturnType<typeof useOverviewMode>,
+) {
+  overview.close();
+  tree.close();
+  tabs.navigate(path);
+}
+
+interface AtmosphereChromeSources {
+  readonly tabs: Tabs;
+  readonly context: KeyContext;
+  readonly press: PressKey;
+  readonly tree: ReturnType<typeof useTreeMode>;
+  readonly overview: ReturnType<typeof useOverviewMode>;
+  readonly home: string;
+  readonly bookmarks: ReadonlyMap<string, Bookmark>;
+}
+
+/**
+ * Atmosphere: everything the host profile changes in `App`, decided in one
+ * place. Outside `App` so its branches do not count against the
+ * cognitive-complexity bound the health gate enforces on `App`, which also
+ * counts hooks: that is why the view switch's hook lives in the header.
+ */
+function atmosphereChromeFor(enabled: boolean, sources: AtmosphereChromeSources) {
+  const { tabs, context, press, tree, overview, home, bookmarks } = sources;
+  const navigate = (path: string) => navigateFromChrome(path, tabs, tree, overview);
+  if (!enabled) {
+    return {
+      header: null,
+      rail: null,
+      appClass: "app",
+      classicTabs: tabs.showBar,
+    };
+  }
+  return {
+    header: (
+      <AtmosphereHeader
+        views={tabs.views}
+        activeTab={tabs.activeIndex}
+        onActivateTab={tabs.activate}
+        onCloseTab={tabs.close}
+        path={tabs.pane.path}
+        onNavigate={navigate}
+        view={context.view}
+        press={press}
+        onCloseTree={tree.close}
       />
-      <Overlays
-        modes={modes}
-        context={context}
-        bookmarks={browsingBookmarks(context, bookmarks.byLetter)}
-        directory={tabs.pane.path}
-        renderDocuments={tabs.renderDocuments}
-        pane={previewPanes.reader}
-        description={previewing.preview.description}
-        onNavigate={tabs.navigate}
-        onReveal={tabs.reveal}
+    ),
+    rail: (
+      <AtmosphereRail
+        home={home}
+        path={tabs.pane.path}
+        bookmarks={bookmarks}
+        onNavigate={navigate}
       />
-    </ClipboardIndicators>
+    ),
+    appClass: "app app--atmosphere",
+    classicTabs: false,
+  };
+}
+
+/**
+ * Atmosphere: the header and the rail sit OUTSIDE `main`, because `main` turns
+ * inert while the overview is open, and the view switch and the rail must stay
+ * clickable over it. The rail was inside `main` once, and with the overview
+ * open its buttons could not be clicked at all.
+ */
+function AtmosphereWindow({
+  header,
+  rail,
+  children,
+}: {
+  readonly header: ReactNode;
+  readonly rail: ReactNode;
+  readonly children: ReactNode;
+}) {
+  if (header === null) return <>{children}</>;
+  return (
+    <div className="atmo-window">
+      {header}
+      <div className="atmo-body">
+        {rail}
+        {children}
+      </div>
+    </div>
   );
 }
 

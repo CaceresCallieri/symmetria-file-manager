@@ -247,6 +247,32 @@ export interface FrecentReply {
 }
 
 /**
+ * How full the filesystem holding a path is, in bytes.
+ *
+ * `free` is the space an unprivileged user may still write (`f_bavail`), not
+ * the raw free count: the reserved root blocks are space this user cannot use,
+ * so a meter built on `f_bfree` would read emptier than the disk behaves.
+ */
+export interface DiskUsageReply {
+  readonly total: number;
+  readonly free: number;
+}
+
+/** The user directories the rail offers, by their `user-dirs.dirs` key. */
+export const PLACE_KINDS = ["download", "documents", "pictures", "videos", "music"] as const;
+export type PlaceKind = (typeof PLACE_KINDS)[number];
+
+export interface Place {
+  readonly kind: PlaceKind;
+  readonly path: string;
+}
+
+/** The user directories that exist, resolved from `user-dirs.dirs`. */
+export interface PlacesReply {
+  readonly places: readonly Place[];
+}
+
+/**
  * The listing order, as it crosses the boundary.
  *
  * Wrapped in an object with one field rather than sent bare, so a second thing
@@ -321,6 +347,8 @@ export type IpcReply =
   | Result<BookmarksReply>
   | Result<ListingOptionsReply>
   | Result<FrecentReply>
+  | Result<DiskUsageReply>
+  | Result<PlacesReply>
   | Result<SearchReply>
   | Result<null>;
 
@@ -578,6 +606,44 @@ export const decodeFrecentReply: Decoder<FrecentReply> = (raw) => {
   }
 
   return success({ entries });
+};
+
+/** Which filesystem to measure: the one holding this path. */
+export const decodeDiskUsageRequest: Decoder<{ readonly path: string }> = (raw) =>
+  decodePathOnly(raw);
+
+/** The disk meter's numbers, refused unless both are finite and in order. */
+export const decodeDiskUsageReply: Decoder<DiskUsageReply> = (raw) => {
+  if (!isRecord(raw)) return failure("invalid_reply", "reply must be an object");
+
+  const total = raw["total"];
+  const free = raw["free"];
+  if (typeof total !== "number" || !Number.isFinite(total) || total <= 0) {
+    return failure("invalid_reply", "reply.total must be a positive number");
+  }
+  if (typeof free !== "number" || !Number.isFinite(free) || free < 0 || free > total) {
+    return failure("invalid_reply", "reply.free must be a number between 0 and total");
+  }
+  return success({ total, free });
+};
+
+/**
+ * The rail's places, parsed like every other reply. A malformed row is dropped
+ * rather than failing the list: one bad entry should not cost the other four.
+ */
+export const decodePlacesReply: Decoder<PlacesReply> = (raw) => {
+  if (!isRecord(raw) || !Array.isArray(raw["places"])) {
+    return failure("invalid_reply", "reply.places must be an array");
+  }
+  const places: Place[] = [];
+  for (const row of raw["places"]) {
+    if (!isRecord(row)) continue;
+    const kind = PLACE_KINDS.find((each) => each === row["kind"]);
+    const path = decodePath(row["path"]);
+    if (kind === undefined || isFailure(path)) continue;
+    places.push({ kind, path: path.value });
+  }
+  return success({ places });
 };
 
 export const decodeClipboardRequest: Decoder<ClipboardRequest> = (raw) => {
