@@ -47,7 +47,7 @@ function nextChange(
 
 describe("watchDirectory", () => {
   it("reports a file that grows after the initial listing, with its new size", async () => {
-    // The regression this exists for. Qt's directory watcher omits IN_MODIFY,
+    // The regression this exists for. the earlier implementation's directory watcher omits IN_MODIFY,
     // so a file that grows on disk after it was first listed emitted no event
     // at all — a download streamed straight to its final name sat at 0 bytes
     // with no preview until the user navigated away and back. libuv's watches

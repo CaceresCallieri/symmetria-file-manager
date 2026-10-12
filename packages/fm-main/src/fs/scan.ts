@@ -47,7 +47,7 @@ export async function scanDirectory(path: string, options: ScanOptions = {}): Pr
   for (let offset = 0; offset < dirents.length; offset += BATCH) {
     // The abort seam. Checked before every batch, so an abandoned scan stops
     // dispatching further syscalls instead of running to completion and
-    // throwing the answer away — which is what the Qt version's generation
+    // throwing the answer away — which is what the earlier implementation's generation
     // counters did.
     options.signal?.throwIfAborted();
 

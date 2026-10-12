@@ -66,17 +66,14 @@ const ALREADY_RUNNING = 69;
  * name from the `desktopName` field of `package.json`, which is where
  * `symmetria-fm-electron.desktop` is declared.
  *
- * That identifier is deliberately distinct from the Qt build's `symmetria-fm`
- * so the two applications can run side by side while the rewrite is built. Qt's
- * three-way desktop-entry contract is documented in CLAUDE.md under Service &
- * Portal; the Electron equivalent is four-way, and `desktopName` is one corner.
+ * Keep this identifier in step with the desktop entry and compositor rules.
  */
 app.setName("Symmetria File Manager");
 
 /**
  * Whether a close destroys the window, and it never does until a real quit.
  *
- * This is the residency half of decision D3, which shipped without it: the
+ * This is the residency half of the single-window decision, which shipped without it: the
  * previous version quit the process when the last window closed, under a
  * comment citing the very decision that says one window should stay resident.
  */
@@ -989,7 +986,7 @@ app.whenReady().then(async () => {
 
 // Deliberately empty, and NOT `app.quit()`.
 //
-// This is the residency half of D3. It is also nearly unreachable now: the
+// This is the residency half of the single-window decision. It is also nearly unreachable now: the
 // window hides rather than closing, so nothing gets here except during a real
 // quit, by which point `before-quit` has already run. Kept as a stated no-op so
 // a future reader does not reinstate the quit on the grounds that nothing uses

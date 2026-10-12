@@ -16,14 +16,7 @@ import { failure, isFailure, type Result, success } from "@symmetria/fm-core/con
  * cannot answer a rejection, which is the one thing a portal request needs.
  */
 
-/**
- * NOT `symmetria-fm.sock`.
- *
- * That path belongs to the Qt daemon, which the operator uses every day. The
- * two applications are meant to run side by side until the rewrite reaches
- * parity, so binding the same name would take their working file manager down
- * the first time this one started.
- */
+/** The CLI and daemon must use this same socket basename. */
 const SOCKET_BASENAME = "symmetria-fm-electron.sock";
 
 /** Where the daemon listens. The override exists so tests never touch the real one. */
@@ -55,13 +48,9 @@ const MAX_LINE_BYTES = 64 * 1024;
 /**
  * Is somebody already listening here?
  *
- * **This is the check the Qt build does not do**, and its absence is a real
- * defect rather than a stylistic difference: `server.cpp` calls
- * `QLocalServer::removeServer` unconditionally before listening, with a comment
- * claiming that is safe "because a second instance is rejected after this point
- * by listen()". By that point the remove has already destroyed the live
- * daemon's socket, so the second instance does not lose the race — it wins one
- * it should never have been allowed to enter.
+ * Probe before unlinking: a second instance must not remove a live daemon's
+ * socket and replace the listener. A rejected connection is not proof that
+ * the socket is stale unless its error explicitly identifies that condition.
  */
 function isSocketLive(path: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -77,9 +66,8 @@ function isSocketLive(path: string): Promise<boolean> {
     //
     // Anything else fails CLOSED. The first version treated every error as
     // "dead", which meant an EACCES or EPERM — a socket that is there and
-    // reachable but not by us — would be unlinked and rebound over. That is the
-    // same shape of defect this function exists to close in the Qt build, one
-    // error code narrower. Review found it.
+    // reachable but not by us — would be unlinked and rebound over. Treat only
+    // ENOENT and ECONNREFUSED as proof that no live listener owns the path.
     probe.once("error", (error: NodeJS.ErrnoException) => {
       settle(error.code !== "ENOENT" && error.code !== "ECONNREFUSED");
     });

@@ -163,7 +163,7 @@ function destinationOf(host: FlashHost, column: FlashColumn): string | null {
 /**
  * Everything, until a column says otherwise.
  *
- * A host that never reports gets the Qt behaviour — every match labelled —
+ * A host that never reports gets the existing behaviour — every match labelled —
  * rather than no labels at all. A feature that silently does nothing is the
  * worse failure of the two, and the renderer tests catch a broken wiring
  * anyway, because a label would then appear on a row that is off screen.
@@ -184,7 +184,7 @@ function everywhere(): ColumnRanges {
 /**
  * The candidates a session may label: the rows on screen, and no others.
  *
- * The one place this port departs from the Qt build. Qt labels every match in
+ * The one place this port departs from the earlier implementation. the earlier implementation labels every match in
  * the listing, so it hands out labels nobody can read and spends the
  * single-character pool on them.
  *
@@ -215,7 +215,7 @@ function labelsFor(session: FlashState | null): ColumnLabels {
 
   for (const match of session.labelling.matches) {
     // An unlabelled match has nothing to press, so it is not drawn as a match
-    // and dims with the rest. That is the Qt behaviour and it is the honest
+    // and dims with the rest. That is the existing behaviour and it is the honest
     // one: a highlight offering no key is a highlight that lies.
     if (match.label === "") continue;
     byColumn[match.column].set(match.index, {
@@ -266,7 +266,7 @@ interface UpkeepInputs {
  * arriving. This is not tidiness: a label carries the index it was computed
  * for, and the jump goes to that index, so a session that outlived one
  * inserted row would draw its labels over the wrong names and then move to the
- * wrong file, silently and plausibly. Review found this. The Qt build has the
+ * wrong file, silently and plausibly. Review found this. The earlier implementation has the
  * same gap between two keystrokes and it is worse here, because nothing else
  * rebuilds the candidate list.
  *

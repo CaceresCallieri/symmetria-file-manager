@@ -29,7 +29,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { recordSearchOpen, searchIn, startSearchIndex } from "./bridge.ts";
 
-/** How long typing settles before a search runs. Qt uses the same figure. */
+/** How long typing settles before a search runs. the earlier implementation uses the same figure. */
 export const SEARCH_DEBOUNCE_MS = 100;
 
 export interface Finder {

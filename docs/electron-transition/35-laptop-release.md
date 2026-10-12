@@ -11,8 +11,7 @@ the release checks. Updates are manual: the agent installs a new release only
 when the operator requests an update. This policy does not deploy feature edits.
 The installer retains previous releases and integration backups. It restores
 the previous integration if the replacement daemon fails to accept a command.
-It restarts only `symmetria-fm-electron.service`. Never restart the Qt daemon as
-part of a release installation.
+It restarts only `symmetria-fm-electron.service`.
 
 ## Build and transfer
 

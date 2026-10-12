@@ -6,8 +6,7 @@ This document states what the file manager is for and what it refuses to be. It
 is the place to settle arguments about direction. It is not a plan; the plan lives
 in `docs/electron-transition/`.
 
-Written 2026-08-24, at the point where the project decided to leave Qt for
-Electron.
+Electron is the only implementation.
 
 ---
 
@@ -42,8 +41,7 @@ price of an honest boundary.
 
 ### 2. The host owns policy, the panel owns behaviour
 
-The Qt version arrived at the right seam and it survives the rewrite: the tree
-knows nothing about git. It receives a status provider, an ignored-path set and a
+The tree knows nothing about git. It receives a status provider, an ignored-path set and a
 path filter, each of which may be absent. Absent is always safe.
 
 **Consequence:** no capability is duplicated between the file manager and its
@@ -71,7 +69,7 @@ Not many. Tabs carry the navigation.
 This is a discipline as much as an optimisation. A tool that makes it easy to
 scatter twenty windows encourages scattering twenty windows. Constraining the
 surface constrains the mess — and, as a side effect, makes an Electron application
-cheaper in memory over a working day than a Qt one that invites sprawl.
+bounded in memory over a working day.
 
 ### 5. Borrow rather than build, when the borrowed thing is better
 
@@ -130,11 +128,10 @@ whole shape.
 
 ## Where the project is going, in order
 
-1. **A standalone Electron file manager** that matches what the Qt version really
-   does — which is less than its own documentation claims, and that is a gift.
+1. **A standalone Electron file manager** with an independent release cycle.
 2. **The previews**, ordered by what actually gets opened.
 3. **Search as a shared module**, wrapping `fff`, with content search (grep) — a
-   capability the Qt version never had and the engine already provides.
+   shared by both hosts.
 4. **Git status**, built once, behind the injection seam.
 5. **The embedded surface in Mesura Code**, spending a strict budget of four edits
    in files the upstream fork maintains.

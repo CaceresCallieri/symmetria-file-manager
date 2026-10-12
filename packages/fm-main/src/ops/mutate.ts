@@ -7,7 +7,7 @@ import { isAncestorPath } from "@symmetria/fm-core/overview/model";
 /**
  * Copying, moving, creating and renaming — in this process, not through a shell.
  *
- * The Qt build shelled out for all of it: `cp -r`, `mv`, `touch`, `mkdir -p`,
+ * The earlier implementation shelled out for all of it: `cp -r`, `mv`, `touch`, `mkdir -p`,
  * each through a `QProcess` wrapper, with the result inferred from an exit code.
  * Doing it here is what makes real progress and real cancellation possible at
  * all, and it makes a conflict something to ask about rather than something
@@ -183,7 +183,7 @@ async function moveEntry(source: string, target: string, overwrite: boolean): Pr
 /**
  * Create an empty file or a directory.
  *
- * Parents are created too, which is what `mkdir -p` gave the Qt build and what
+ * Parents are created too, which is what `mkdir -p` gave the earlier implementation and what
  * makes typing `notes/2026/august.md` into the create dialog do what it looks
  * like it does.
  */

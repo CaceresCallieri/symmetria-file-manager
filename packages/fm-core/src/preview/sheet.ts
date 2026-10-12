@@ -7,7 +7,7 @@
  *
  * **Both halves run on the WORKER thread**, which is the point rather than an
  * implementation detail: the pane that draws the grid does no per-cell work at
- * all, and everything it receives is already text. The Qt build's
+ * all, and everything it receives is already text. The earlier implementation's
  * `SpreadsheetPreviewModel` records the same decision for the same reason —
  * its `data()` returns a pre-formatted string and nothing else.
  *
@@ -18,7 +18,7 @@
 /**
  * How much of a sheet a preview shows.
  *
- * 200 by 50, matching the Qt build. A preview does not need the whole sheet,
+ * 200 by 50, matching the earlier implementation. A preview does not need the whole sheet,
  * and the count bounds the parse and the number of elements drawn at once.
  */
 export const MAX_SHEET_ROWS = 200;

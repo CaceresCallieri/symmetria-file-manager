@@ -125,7 +125,7 @@ export function useOverlayList(count: number, onClose: () => void): OverlayList 
       event.preventDefault();
       return true;
     }
-    // Ctrl+J and Ctrl+K beside the arrows: the pair the Qt finder binds, and
+    // Ctrl+J and Ctrl+K beside the arrows: the pair the earlier finder binds, and
     // the pair a hand already on the home row reaches for.
     if (event.key === "ArrowDown" || (event.ctrlKey && event.key === "j")) {
       event.preventDefault();

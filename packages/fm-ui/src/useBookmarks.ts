@@ -10,7 +10,7 @@ import { useFileManagerIo } from "./IoContext.tsx";
  * Loaded once. The main process owns the file — where it is, seeding it on a
  * first run, writing it atomically — and this owns nothing but the copy the
  * keyboard reads. Two windows would each hold their own copy and the last write
- * would win, which is what the Qt build does too and has never mattered: a
+ * would win, which is what the earlier implementation does too and has never mattered: a
  * bookmark is changed a handful of times a year.
  */
 

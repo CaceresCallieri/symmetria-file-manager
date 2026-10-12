@@ -11,7 +11,7 @@ import { useTransfers } from "./fileOps/useTransfers.ts";
 import { useFileManagerIo } from "./IoContext.tsx";
 import type { Tabs } from "./useTabs.ts";
 
-export type { CreateTarget, OpsModal } from "./fileOps/modal.ts";
+export type { OpsModal } from "./fileOps/modal.ts";
 
 /** All views use the same filesystem, clipboard, and confirmation implementations. */
 export interface FileOps {
@@ -39,7 +39,7 @@ export interface FileOps {
 }
 
 /**
- * All views share one resident renderer clipboard. The Qt build spawned a
+ * All views share one resident renderer clipboard. The earlier implementation spawned a
  * Wayland clipboard helper that had to stay alive to serve the selection.
  * That lifetime bug does not exist here. Do NOT port its workaround.
  *

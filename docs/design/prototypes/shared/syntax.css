@@ -1,5 +1,5 @@
 /* Wine — the operator's NeoVim colourscheme, which every preview mirrors
-   (see plugin/.../themes/wine.theme). A direction may re-map the variables,
+   (see assets/themes/wine.theme). A direction may re-map the variables,
    for example for a light theme, but should not invent a second palette. */
 :root {
   --tk-kw: #c28b12; --tk-fn: #fdd888; --tk-type: #c75828; --tk-str: #62ba46;

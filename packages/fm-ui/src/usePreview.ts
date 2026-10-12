@@ -15,7 +15,7 @@ import { useAudioPlayback } from "./useAudioPlayback.ts";
 /**
  * What to show for the entry under the cursor, after it stops moving.
  *
- * **Debounced at 150 milliseconds**, the figure the Qt original used. Holding
+ * **Debounced at 150 milliseconds**, the figure the earlier implementation used. Holding
  * `j` through a directory would otherwise `stat`, resolve a MIME type and read
  * a head for every entry passed over — work for a preview nobody sees, and on a
  * network mount it is work that arrives long after the cursor has left.

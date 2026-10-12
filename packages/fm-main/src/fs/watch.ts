@@ -43,7 +43,7 @@ const COALESCE_MS = 20;
  * per-user watch limit, exhausted at startup by a single pane. Miller columns
  * watch one directory at a time, so recursion buys nothing and costs the budget.
  *
- * **This replaces machinery rather than porting it.** Qt's directory watcher
+ * **This replaces machinery rather than porting it.** the earlier implementation's directory watcher
  * omits `IN_MODIFY` from its inotify mask, so a file that grew on disk after it
  * was first listed emitted no event at all — a download streamed straight to its
  * final name sat at 0 bytes with no preview until the user navigated away and

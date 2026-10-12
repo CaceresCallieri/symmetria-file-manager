@@ -95,7 +95,7 @@ describe("symbol glyphs and the Latin-American layout", () => {
     // The regression this pins. On the Latin-American layout `/` is Shift+7 and
     // `=` is Shift+0, so those events carry Shift. A row declaring `mods: ""`
     // rejects them and the key silently does nothing — which is exactly how
-    // slash-search broke in the Qt build after its registry migration.
+    // slash-search broke in the earlier implementation after its registry migration.
     for (const binding of ALL) {
       const symbols = binding.keys.filter(isSymbolGlyph);
       if (symbols.length === 0) continue;
@@ -162,15 +162,16 @@ describe("view scoping", () => {
     expect(tree.some((binding) => binding.id === "tree.toggleGitignore")).toBe(false);
   });
 
-  it("ports the whole Qt table", () => {
-    // The Qt registry held 54 rows: 28 shared, 20 Miller-only, 6 tree-only. A
+  it("ports the whole the earlier implementation table", () => {
+    // The the earlier implementation registry held 54 rows: 28 shared, 20 Miller-only, 6 tree-only. A
     // count that drifts means a row was dropped in the port rather than
     // deliberately removed.
     // The native machine chooser adds one shared row.
     expect(CORE).toHaveLength(29);
     // The overview adds one row. preview.expand replaces the ported
     // miller.contextMenu row, so that replacement leaves the count unchanged.
-    expect(MILLER_ONLY).toHaveLength(21);
+    // The picker adds Ctrl+L for local path entry.
+    expect(MILLER_ONLY).toHaveLength(22);
     // Tree adds a mode close binding on Escape.
     expect(TREE_ONLY).toHaveLength(10);
   });

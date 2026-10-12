@@ -10,18 +10,8 @@ import {
 /**
  * What a confirmed picker returns.
  *
- * Ported from `confirmPickerSelection` in the Qt build's
- * `FileManagerService.qml`, which is the single source of truth there for both
- * the Enter key and the Accept button. It is four branches in a LOAD-BEARING
- * order, and a pure function is what lets the whole truth table be a unit test
- * rather than four rendering tests.
- *
- * The order matters because save mode and multi-select are ORTHOGONAL: a save
- * dialog ignores marks entirely, so SAVE is checked first. That diverges from
- * the Qt code, which checks marks first — and agrees with the Qt comment
- * directly above it, which says save mode ignores marks. The comment describes
- * the intent; the order below it does something else. See `pickerSelection.ts`
- * for why following the intent is safe: the portal never sends both.
+ * Save mode takes precedence over marks. Enter and the Accept button share
+ * the same selection rule, and the pure function lets the tests cover its truth table.
  */
 
 const BASE: PickerSelectionContext = {
@@ -61,7 +51,7 @@ describe("a multi-select picker", () => {
   });
 
   it("is ignored by a save dialog, even with marks", () => {
-    // Save mode and multi-select are orthogonal in the Qt original, and a save
+    // Save mode and multi-select are orthogonal in the earlier implementation, and a save
     // dialog that returned marked files instead of the filename being typed
     // would write to the wrong place.
     const out = resolvePickerSelection({
@@ -103,7 +93,7 @@ describe("a save picker", () => {
 
   it("returns the bare directory when no name has been given", () => {
     // The portal appends its own `current_name` in that case — see `SaveFile`
-    // in `portal/symmetria_portal.py`, which joins when it gets a directory.
+    // in `portal/symmetria_electron_portal.py`, which joins when it gets a directory.
     const out = resolvePickerSelection({ ...BASE, saveMode: true, suggestedName: "" });
 
     expect(out).toEqual({ kind: "paths", paths: ["/home/jc/Downloads"] });
@@ -204,9 +194,7 @@ describe("the Accept button's label", () => {
   });
 
   it("says Select otherwise", () => {
-    // The Qt build's word, and parity is the point of the phase. The plan said
-    // "Open"; `StatusBar.qml` says "Select", and matching the application the
-    // operator uses every day beats matching my own paraphrase of it.
+    // Keep the operator's established action label, "Select".
     expect(pickerAcceptLabel({ ...BASE, cursorEntry: FILE }, "")).toBe("Select");
   });
 });
@@ -275,7 +263,7 @@ describe("whether the Accept button can be pressed", () => {
   });
 
   it("agrees with what confirming would actually do", () => {
-    // The two used to be written separately in the Qt build and could disagree:
+    // The two used to be written separately in the earlier implementation and could disagree:
     // a button that looks pressable and then does nothing is worse than one
     // that is visibly disabled. Every combination is checked rather than a
     // sample, because the interesting cases are the corners.

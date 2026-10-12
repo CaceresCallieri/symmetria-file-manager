@@ -4,7 +4,7 @@
  * **The topology is measured, not chosen.** Eight indices in eight processes
  * sharing one store all open cleanly; the same eight inside one process do not,
  * because the store refuses a second open in one program. So the unit of
- * isolation is the process and the key is the directory. The Qt build works
+ * isolation is the process and the key is the directory. The earlier implementation works
  * around the same constraint with a single process-wide engine whose base path
  * is swapped — a last-acquire-wins race across windows — and this is the one
  * place the port deliberately departs from it.
@@ -20,7 +20,7 @@
  */
 import type { SearchRow } from "./rows.ts";
 
-/** The cap on returned rows, matching the Qt finder. */
+/** The cap on returned rows, matching the earlier finder. */
 export const MAX_RESULTS = 200;
 
 /** How long an index survives with no search before it is retired. */

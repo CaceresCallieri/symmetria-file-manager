@@ -2,14 +2,7 @@ import type { Bookmark } from "@symmetria/fm-core/bookmarks";
 import type { Bridge, ExternalOpen } from "@symmetria/fm-core/bridge";
 import type { CascadeMode } from "@symmetria/fm-core/keys/cascade";
 import type { KeyContext, ViewKind } from "@symmetria/fm-core/keys/types";
-import {
-  cursorEntry,
-  entryAt,
-  isDirectoryEntry,
-  joinPath,
-  type PaneState,
-  parentOf,
-} from "@symmetria/fm-core/pane";
+import { entryAt, isDirectoryEntry, joinPath, parentOf } from "@symmetria/fm-core/pane";
 import {
   homeFromSearch,
   type PickerWindowRequest,
@@ -33,6 +26,7 @@ import { TabBar } from "./components/TabBar.tsx";
 import type { TransientLineProps } from "./components/transientLine.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
 import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
+import { cursorPathOf } from "./cursorPath.ts";
 import { type PressKey, useKeyDispatch } from "./hooks/useKeyDispatch.ts";
 import { FileManagerIoContext } from "./IoContext.tsx";
 import { OverviewLayer } from "./overview/Overview.tsx";
@@ -73,12 +67,6 @@ function initialPath(override?: string): string {
  */
 function homePath(override?: string): string {
   return override ?? homeFromSearch(window.location.search);
-}
-
-/** The absolute path of the entry under the cursor, or none. */
-function cursorPathOf(pane: PaneState): string | null {
-  const entry = cursorEntry(pane);
-  return entry === null ? null : joinPath(pane.path, entry.name);
 }
 
 /**
@@ -388,7 +376,7 @@ function FileManagerPanel(props: AppProps) {
   // render would defeat every memo inside `usePicker`, and through it the whole
   // key action table. The URL cannot change for this window's lifetime.
   const request = useMemo(() => pickerRequest(props.picker), [props.picker]);
-  const picker = usePicker(request, tabs);
+  const picker = usePicker(request, tabs, home);
   const ops = useFileOps(tabs, tree.key);
   const search = useSearch({
     entries: tabs.pane.entries,
@@ -475,6 +463,7 @@ function FileManagerPanel(props: AppProps) {
     overview,
     home,
     bookmarks: bookmarks.byLetter,
+    pathEntry: picker.pathEntry,
   });
 
   /**
@@ -504,6 +493,7 @@ function FileManagerPanel(props: AppProps) {
               onClose={tabs.close}
             />
             <BrowsingView
+              pathEntry={picker.pathEntry}
               chrome={props.chrome}
               tabs={tabs}
               tree={tree}
@@ -638,6 +628,7 @@ interface AtmosphereChromeSources {
   readonly overview: ReturnType<typeof useOverviewMode>;
   readonly home: string;
   readonly bookmarks: ReadonlyMap<string, Bookmark>;
+  readonly pathEntry: ReturnType<typeof usePicker>["pathEntry"];
 }
 
 /**
@@ -647,7 +638,7 @@ interface AtmosphereChromeSources {
  * counts hooks: that is why the view switch's hook lives in the header.
  */
 function atmosphereChromeFor(enabled: boolean, sources: AtmosphereChromeSources) {
-  const { tabs, context, press, tree, overview, home, bookmarks, extras } = sources;
+  const { tabs, context, press, tree, overview, home, bookmarks, extras, pathEntry } = sources;
   const navigate = (path: string) => navigateFromChrome(path, tabs, tree, overview);
   if (!enabled) {
     return {
@@ -660,6 +651,7 @@ function atmosphereChromeFor(enabled: boolean, sources: AtmosphereChromeSources)
   return {
     header: (
       <AtmosphereHeader
+        pathEntry={pathEntry}
         views={tabs.views}
         activeTab={tabs.activeIndex}
         onActivateTab={tabs.activate}

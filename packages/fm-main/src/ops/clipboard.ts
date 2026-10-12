@@ -9,12 +9,12 @@ import { clipboard, nativeImage } from "electron";
  * without its extension" means lives in one place and is tested without a
  * window.
  *
- * ── Why this fixes a Qt defect by construction ──────────────────────────────
- * The Qt build copies through `wl-copy`, which forks a process to serve the
+ * ── Why this fixes a the earlier implementation defect by construction ──────────────────────────────
+ * The earlier implementation copies through `wl-copy`, which forks a process to serve the
  * selection for as long as it is the owner. That fork dies with the window —
  * the daemon quits by design and systemd kills the cgroup — so a copy made in
  * a window that then closed pasted nothing. Electron's clipboard belongs to the
- * application process and has no such shape. Nothing here reproduces the Qt
+ * application process and has no such shape. Nothing here reproduces the the earlier implementation
  * workaround because nothing needs to.
  */
 

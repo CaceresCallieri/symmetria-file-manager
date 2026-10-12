@@ -81,7 +81,7 @@ export interface PreviewPaneProps {
  *
  * The router decides; this only draws. Keeping the decision out of here is what
  * lets a second consumer — the fuzzy finder's info pane, next — show the same
- * previews without re-deriving which one applies. In the Qt build that
+ * previews without re-deriving which one applies. In the earlier implementation that
  * separation is why a preview type added once appeared in both panes.
  */
 export function PreviewPane({

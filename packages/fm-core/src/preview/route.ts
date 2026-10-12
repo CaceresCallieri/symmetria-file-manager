@@ -4,7 +4,7 @@ import { classify, inheritsFrom, isImageMime, type MimeTables } from "../mime.ts
 /**
  * One decision tree for what to show, shared by every consumer.
  *
- * The Qt original had exactly one router used by both the Miller pane and the
+ * The earlier implementation had exactly one router used by both the Miller pane and the
  * finder's info pane, and the rule that kept it honest was: a preview type
  * added here appears in both, and NO consumer re-implements the routing. The
  * same rule holds here.

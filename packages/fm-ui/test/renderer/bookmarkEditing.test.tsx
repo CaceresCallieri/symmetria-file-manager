@@ -61,7 +61,7 @@ describe("binding a letter with gn", () => {
   });
 
   it("overwrites a letter that is already bound, without asking", async () => {
-    // Qt overwrites silently, and a confirmation inside a two-keystroke chord
+    // the earlier implementation overwrites silently, and a confirmation inside a two-keystroke chord
     // would cost more than the accident it prevents — which is undone by
     // pressing `gn` again on the right directory.
     await opened("/home/jc/projects");

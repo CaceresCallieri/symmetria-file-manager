@@ -214,7 +214,7 @@ function rememberIn(
  * ends on the entry that was labelled rather than at the top.
  *
  * **By name and for a NAMED path, which is what removes a hazard rather than
- * documenting one.** The Qt build writes the destination's cursor and the
+ * documenting one.** The earlier implementation writes the destination's cursor and the
  * departing directory's cursor into one cache, and carries a comment warning
  * that the two calls must happen in a particular order or the second overwrites
  * what the first meant. Here the departing directory's own memory is untouched,

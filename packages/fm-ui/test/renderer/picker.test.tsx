@@ -9,11 +9,18 @@
  * happens to be on, and that the suppression ported with the keyboard registry
  * — inert since the phase that introduced it — is finally live.
  */
+import { BRIDGE_KEY } from "@symmetria/fm-core/bridge";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { App } from "../../src/App.tsx";
-import { type BridgeLog, installBridge, namesIn } from "./support.ts";
+import {
+  type BridgeLog,
+  inertBridge,
+  installBridge,
+  installFilePreview,
+  namesIn,
+} from "./support.ts";
 
 let log: BridgeLog;
 
@@ -243,7 +250,7 @@ describe("Enter inside a dialog", () => {
    * it launched a terminal running an editor on `/etc/xattr.conf` — on the
    * operator's own session that window would have appeared on their desktop.
    *
-   * The Qt build routes Enter through `confirmPickerSelection`, the same
+   * The earlier implementation routes Enter through `confirmPickerSelection`, the same
    * function its Accept button uses, for exactly this reason.
    */
   it("confirms rather than handing the file to another application", async () => {
@@ -316,5 +323,249 @@ describe("a focused dialog button keeps its own Enter", () => {
     expect(fireEvent.keyDown(accept, { key: " " })).toBe(true);
     await act(async () => undefined);
     expect(log.pickerConfirms).toEqual([]);
+  });
+});
+
+describe("entering a picker path", () => {
+  function editPath(value: string) {
+    fireEvent.keyDown(window, { key: "l", ctrlKey: true });
+    const field = screen.getByRole("textbox", { name: "File or folder path" });
+    expect(document.activeElement).toBe(field);
+    fireEvent.change(field, { target: { value } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    return field;
+  }
+
+  it.each([
+    "/home/jc/projects/beta.md",
+    "/home//jc/projects//beta.md",
+    "projects/beta.md",
+    "./projects/./beta.md",
+    "~/projects/beta.md",
+    "file:///home/jc/projects/beta%2Emd",
+  ])("reveals %s and confirms it on the next Enter", async (value) => {
+    await openPicker();
+    editPath(value);
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "File or folder path" })).toBeNull(),
+    );
+    expect(screen.getByTestId("crumb-current").textContent).toBe("projects");
+    expect(log.pickerConfirms).toEqual([]);
+    fireEvent.keyDown(window, { key: "Enter" });
+    await act(async () => undefined);
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/projects/beta.md"]);
+    expect(log.ops.filter((each) => each.startsWith("open "))).toEqual([]);
+  });
+
+  it("validates Ctrl+L paths through the picker connection rather than the ambient bridge", async () => {
+    const connection = window[BRIDGE_KEY];
+    if (!connection) throw new Error("No picker connection");
+    Object.defineProperty(window, BRIDGE_KEY, { configurable: true, value: inertBridge() });
+    render(
+      <App startPath="/home/jc" homePath="/home/jc" picker={requestFor()} bridge={connection} />,
+    );
+    await waitFor(() => expect(namesIn("column-current").length).toBeGreaterThan(0));
+    editPath("/home/jc/projects/beta.md");
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "File or folder path" })).toBeNull(),
+    );
+    fireEvent.keyDown(window, { key: "Enter" });
+    await waitFor(() =>
+      expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/projects/beta.md"]),
+    );
+  });
+
+  it("opens a pasted folder without confirming a file", async () => {
+    await openPicker();
+    editPath("/home/jc/projects/");
+    await waitFor(() => expect(screen.getByTestId("crumb-current").textContent).toBe("projects"));
+    expect(log.pickerConfirms).toEqual([]);
+  });
+
+  it.each([
+    "/does-not-exist",
+    "/home/jc/locked",
+    "https://example.com/file",
+    "file://other-host/tmp/file",
+    "file:///tmp/%ZZ",
+  ])("keeps %s editable and reports the error", async (value) => {
+    await openPicker();
+    const field = editPath(value);
+    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    expect(document.activeElement).toBe(field);
+    expect(namesIn("column-current")).toContain("notes.txt");
+    expect(log.pickerConfirms).toEqual([]);
+  });
+
+  it("leaves the path field with Escape and keeps the picker open", async () => {
+    await openPicker();
+    fireEvent.click(screen.getByRole("button", { name: "Enter file or folder path (Ctrl+L)" }));
+    const field = screen.getByRole("textbox", { name: "File or folder path" });
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(screen.queryByRole("textbox", { name: "File or folder path" })).toBeNull();
+    expect(log.pickerCancels).toEqual([]);
+    fireEvent.keyDown(window, { key: "Escape" });
+    await act(async () => undefined);
+    expect(log.pickerCancels).toEqual([FIFO]);
+  });
+
+  it("clears old marks before revealing a pasted file", async () => {
+    await openPicker({ multiple: true });
+    await moveToFirstFile();
+    fireEvent.keyDown(window, { key: " " });
+    editPath("/home/jc/todo.txt");
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "File or folder path" })).toBeNull(),
+    );
+    fireEvent.keyDown(window, { key: "Enter" });
+    await act(async () => undefined);
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/todo.txt"]);
+  });
+
+  it("does not edit paths in the browse window", async () => {
+    await openBrowser();
+    fireEvent.keyDown(window, { key: "l", ctrlKey: true });
+    expect(screen.queryByRole("textbox", { name: "File or folder path" })).toBeNull();
+  });
+
+  it("keeps directory-picker cursor selection after navigating to a pasted folder", async () => {
+    await openPicker({ directory: true });
+    editPath("/home/jc/projects");
+    await waitFor(() => expect(namesIn("column-current")).toContain("alpha"));
+    expect(log.pickerConfirms).toEqual([]);
+    fireEvent.click(screen.getByTestId("picker-accept"));
+    await act(async () => undefined);
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/projects/alpha"]);
+  });
+
+  it("does not take Ctrl+L from a modal", async () => {
+    await openPicker();
+    fireEvent.keyDown(window, { key: "?" });
+    fireEvent.keyDown(window, { key: "l", ctrlKey: true });
+    expect(screen.queryByRole("textbox", { name: "File or folder path" })).toBeNull();
+  });
+
+  it("reveals hidden files by enabling hidden entries first", async () => {
+    installFilePreview("/home/jc/dotted/.secret", "text/plain", "secret");
+    await openPicker();
+    editPath("/home/jc/dotted/.secret");
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "File or folder path" })).toBeNull(),
+    );
+    expect(log.listAsks.some((list) => list.path === "/home/jc/dotted" && list.showHidden)).toBe(
+      true,
+    );
+    fireEvent.keyDown(window, { key: "Enter" });
+    await act(async () => undefined);
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/dotted/.secret"]);
+    expect(log.listingWrites).toEqual([]);
+  });
+
+  it("keeps the path editor out of save dialogs", async () => {
+    await openPicker({ saveMode: true, suggestedName: "new.txt" });
+    expect(screen.queryByRole("button", { name: "Enter file or folder path (Ctrl+L)" })).toBeNull();
+    fireEvent.keyDown(window, { key: "l", ctrlKey: true });
+    expect(screen.queryByRole("textbox", { name: "File or folder path" })).toBeNull();
+    fireEvent.click(screen.getByTestId("picker-accept"));
+    await act(async () => undefined);
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/new.txt"]);
+  });
+
+  it.each(["e", "o"])("keeps Ctrl+%s from opening a second view in a picker", async (key) => {
+    render(
+      <App startPath="/home/jc" homePath="/home/jc" picker={requestFor()} chrome="atmosphere" />,
+    );
+    await waitFor(() => expect(namesIn("column-current").length).toBeGreaterThan(0));
+    fireEvent.keyDown(window, { key, ctrlKey: true });
+    await act(async () => undefined);
+    expect(namesIn("column-current")).toContain("notes.txt");
+    fireEvent.keyDown(window, { key: "l", ctrlKey: true });
+    expect(screen.getByRole("textbox", { name: "File or folder path" })).toBeTruthy();
+  });
+
+  it("keeps repeated Enter and Accept from confirming the old file during a read", async () => {
+    await openPicker();
+    await moveToFirstFile();
+    const release = log.holdNextList("/home/jc/projects", ["beta.md"]);
+    const field = editPath("/home/jc/projects/beta.md");
+    await act(async () => undefined);
+    fireEvent.keyDown(field, { key: "Enter" });
+    fireEvent.click(screen.getByTestId("picker-accept"));
+    expect(log.pickerConfirms).toEqual([]);
+    expect((screen.getByTestId("picker-accept") as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => release());
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "File or folder path" })).toBeNull(),
+    );
+    fireEvent.keyDown(window, { key: "Enter" });
+    await act(async () => undefined);
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/projects/beta.md"]);
+  });
+
+  it("cancels a pending path read with Escape", async () => {
+    await openPicker();
+    const release = log.holdNextList("/home/jc/projects", ["beta.md"]);
+    const field = editPath("/home/jc/projects/beta.md");
+    await act(async () => undefined);
+    fireEvent.keyDown(field, { key: "Escape" });
+    await act(async () => release());
+    expect(screen.getByTestId("crumb-current").textContent).toBe("jc");
+    expect(log.pickerConfirms).toEqual([]);
+    expect(log.pickerCancels).toEqual([]);
+  });
+
+  it("returns to the source folder when Escape cancels an unfinished reveal", async () => {
+    await openPicker();
+    const validate = log.holdNextList("/home/jc/projects", ["beta.md"]);
+    const field = editPath("/home/jc/projects/beta.md");
+    await act(async () => undefined);
+    const reveal = log.holdNextList("/home/jc/projects", ["beta.md"]);
+    await act(async () => validate());
+    expect(field.getAttribute("aria-busy")).toBe("true");
+    fireEvent.keyDown(field, { key: "Escape" });
+    await act(async () => reveal());
+    await waitFor(() => expect(namesIn("column-current")).toContain("notes.txt"));
+    expect(screen.getByTestId("crumb-current").textContent).toBe("jc");
+    expect(log.pickerConfirms).toEqual([]);
+    expect(log.pickerCancels).toEqual([]);
+  });
+
+  it("waits for a fresh reveal even after a navigation error", async () => {
+    await openPicker();
+    for (let index = 0; index < 4; index++) fireEvent.keyDown(window, { key: "j" });
+    fireEvent.keyDown(window, { key: "l" });
+    await waitFor(() => expect(screen.getByTestId("crumb-current").textContent).toBe("jc"));
+    await act(async () => undefined);
+    const validate = log.holdNextList("/home/jc/projects", ["beta.md"]);
+    const field = editPath("/home/jc/projects/beta.md");
+    await act(async () => undefined);
+    const reveal = log.holdNextList("/home/jc/projects", ["beta.md"]);
+    await act(async () => validate());
+    expect(screen.getByRole("textbox", { name: "File or folder path" })).toBe(field);
+    expect(field.getAttribute("aria-busy")).toBe("true");
+    fireEvent.keyDown(field, { key: "Enter" });
+    fireEvent.click(screen.getByTestId("picker-accept"));
+    expect(log.pickerConfirms).toEqual([]);
+    await act(async () => reveal());
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "File or folder path" })).toBeNull(),
+    );
+    fireEvent.keyDown(window, { key: "Enter" });
+    await act(async () => undefined);
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/projects/beta.md"]);
+  });
+
+  it("provides the same path field in the standalone header", async () => {
+    render(
+      <App startPath="/home/jc" homePath="/home/jc" picker={requestFor()} chrome="atmosphere" />,
+    );
+    await waitFor(() => expect(namesIn("column-current").length).toBeGreaterThan(0));
+    editPath("/home/jc/notes.txt");
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "File or folder path" })).toBeNull(),
+    );
+    fireEvent.keyDown(window, { key: "Enter" });
+    await act(async () => undefined);
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/notes.txt"]);
   });
 });

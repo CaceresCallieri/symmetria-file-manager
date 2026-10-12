@@ -2,15 +2,15 @@
 /**
  * Convert the KDE syntax theme into a `highlight.js` stylesheet.
  *
- * The theme is the operator's editor colours — the Qt build reads the same file
- * so that previews and the editor share one palette, and the two must not drift.
+ * The theme is the operator's editor colours. Previews and the editor share
+ * one palette, and the two must not drift.
  * Converting rather than re-authoring is what keeps that true: the KDE file
  * stays the single source, and this regenerates the CSS from it.
  *
  * Usage:
  *   node tools/theme/kde-theme-to-hljs.mjs \
- *     plugin/src/Symmetria/FileManager/Models/themes/wine.theme \
- *     app/src/renderer/syntax-wine.css
+ *     assets/themes/wine.theme \
+ *     packages/fm-ui/src/syntax-wine.css
  *
  * ── The four traps in this format ───────────────────────────────────────────
  * 1. KDE writes `strike-through`; CSS wants `line-through`.
@@ -134,8 +134,7 @@ const blocks = [
  * revision ${theme.metadata?.revision ?? "?"}).
  * Regenerate: node tools/theme/kde-theme-to-hljs.mjs <theme> <output>
  *
- * The same file colours the Qt build's previews and mirrors the operator's
- * editor colourscheme. Edit the theme, not this.
+ * The theme mirrors the operator's editor colourscheme. Edit the theme, not this.
  */`,
   `.hljs {\n  color: ${toCssColour(styles.Normal?.["text-color"]) ?? "#dddddd"};\n  background: ${toCssColour(editor.BackgroundColor) ?? "transparent"};\n}`,
 ];

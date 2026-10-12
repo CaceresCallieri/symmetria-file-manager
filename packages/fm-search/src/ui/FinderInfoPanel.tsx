@@ -58,7 +58,7 @@ export interface FinderInfoPanelProps {
  * The type, from the name.
  *
  * The engine's row carries no MIME type, and asking for one per highlighted row
- * would be a round trip to answer a question the extension already answers. Qt
+ * would be a round trip to answer a question the extension already answers. the earlier implementation
  * shows the MIME comment here; this shows the extension, which is what a reader
  * is checking for anyway — "is this the .ts or the .d.ts".
  */
@@ -87,7 +87,7 @@ export function FinderInfoPanel({ row, renderPreview, now }: FinderInfoPanelProp
       <p className="finder-info__name" data-testid="finder-info-name">
         {row.name}
       </p>
-      {/* A compact two-up grid, as in the Qt original: four facts in two tight
+      {/* A compact two-up grid, as in the earlier implementation: four facts in two tight
           rows, so the preview keeps the room. */}
       <div className="finder-info__facts" data-testid="finder-info-facts">
         <Fact label="Size" value={row.isDir ? "dir" : humanSize(row.size)} />

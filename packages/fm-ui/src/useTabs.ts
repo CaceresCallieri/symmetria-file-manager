@@ -44,7 +44,7 @@ import {
   updateActivePane,
   updatePaneById,
 } from "./state/tabs.ts";
-import { useListingOptions } from "./useListingOptions.ts";
+import { useWindowListingOptions } from "./useListingOptions.ts";
 
 interface TabErrors {
   /** The message for one tab, or none. `undefined` for no active tab. */
@@ -152,9 +152,12 @@ export interface Tabs {
   readonly renderDocuments: boolean;
   readonly error: string | null;
   readonly loading: boolean;
+  /** The reveal pending when this pane snapshot rendered. */
+  readonly revealingPath: string | null;
 
   setSort(sort: SortMode, reverse: boolean): void;
   toggleHidden(): void;
+  showHiddenTemporarily(): void;
   toggleRenderDocuments(): void;
 
   historyBack(): void;
@@ -304,7 +307,7 @@ function useDirectoryLoader(
   //
   // Navigating faster than the disk answers is normal with a held key, and
   // without this a slow read of a directory already left behind would land on
-  // top of a fast read of the directory the user is now in. The Qt version
+  // top of a fast read of the directory the user is now in. The earlier implementation
   // solved the same race with a generation counter, for the same reason.
   const generation = useRef(new Map<string, number>());
   const pendingReveal = useRef(new Map<string, PendingReveal>());
@@ -622,8 +625,8 @@ export function useTabs(initialPath: string, initialTabs?: TabsState): Tabs {
     release: releaseNavigation,
   } = useNavigationGenerations(activeId);
   const { errorFor, reportError } = useTabErrors();
-  const stored = useListingOptions();
-  const options = stored.options;
+  const listing = useWindowListingOptions();
+  const { options } = listing;
 
   // Read by `loadTab`, which must not depend on the options.
   //
@@ -742,6 +745,7 @@ export function useTabs(initialPath: string, initialTabs?: TabsState): Tabs {
   return {
     snapshot: state,
     navigationGeneration,
+    revealingPath: pendingPath(activeId),
     pendingRevealPath: pendingPath.bind(null, activeId),
     pane,
     parentEntries,
@@ -756,7 +760,7 @@ export function useTabs(initialPath: string, initialTabs?: TabsState): Tabs {
     sort: options.sort,
     reverse: options.reverse,
     showHidden: options.showHidden,
-    listingReady: stored.ready,
+    listingReady: listing.ready,
     renderDocuments: options.renderDocuments,
     error: errorFor(activeId),
     loading,
@@ -776,10 +780,10 @@ export function useTabs(initialPath: string, initialTabs?: TabsState): Tabs {
     // may call an updater more than once and at a time of its choosing, so a
     // write started from inside one is a side effect with no guarantee about
     // how often it runs — which is exactly what it must not be.
-    setSort: (sort, reverse) => stored.set({ ...options, sort, reverse }),
-    toggleHidden: () => stored.set({ ...options, showHidden: !options.showHidden }),
-    toggleRenderDocuments: () =>
-      stored.set({ ...options, renderDocuments: !options.renderDocuments }),
+    setSort: listing.setSort,
+    toggleHidden: listing.toggleHidden,
+    showHiddenTemporarily: listing.showHiddenTemporarily,
+    toggleRenderDocuments: listing.toggleRenderDocuments,
 
     moveBy: (delta) => changeActive((p) => moveCursor(p, delta)),
     moveTo: (index) => changeActive((p) => moveCursor(p, index - p.cursorIndex)),

@@ -3,7 +3,7 @@ import { basename } from "@symmetria/fm-core/overview/model";
 import type { measureFlashMatches } from "./flashTextGeometry.ts";
 import { measureFlashTypography } from "./flashTypography.ts";
 
-export interface FlashAnchor extends FlashTarget {
+interface FlashAnchor extends FlashTarget {
   readonly left: number;
   readonly right: number;
   readonly top: number;

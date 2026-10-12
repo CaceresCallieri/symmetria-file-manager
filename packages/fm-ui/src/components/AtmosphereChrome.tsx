@@ -20,14 +20,14 @@ import {
   Plus,
   Search,
 } from "lucide-react";
-import { type MouseEvent, type ReactNode, useEffect, useState } from "react";
+import { type MouseEvent, type ReactNode, type SyntheticEvent, useEffect, useState } from "react";
 import { useDiskUsage } from "../diskUsage.ts";
 import type { PressKey } from "../hooks/useKeyDispatch.ts";
 import { useViewSwitch } from "../hooks/useViewSwitch.ts";
 import { useFileManagerIo } from "../IoContext.tsx";
 
 import type { TabView } from "../useTabs.ts";
-import { PathBar } from "./PathBar.tsx";
+import { PathBar, type PathBarProps } from "./PathBar.tsx";
 import { TabBar } from "./TabBar.tsx";
 
 /*
@@ -100,6 +100,7 @@ const HEADER_KEYS = {
 } as const;
 
 export interface AtmosphereHeaderProps {
+  readonly pathEntry?: PathBarProps["pathEntry"];
   readonly views: readonly TabView[];
   readonly activeTab: number;
   onActivateTab(index: number): void;
@@ -138,7 +139,7 @@ export function AtmosphereHeader(props: AtmosphereHeaderProps) {
         </IconButton>
       </div>
       <div className="atmo-crumbs">
-        <PathBar path={props.path} onNavigate={props.onNavigate} />
+        <PathBar pathEntry={props.pathEntry} path={props.path} onNavigate={props.onNavigate} />
       </div>
       <button
         type="button"
@@ -209,43 +210,55 @@ export function AtmosphereRail({ home, path, bookmarks, onNavigate, footer }: At
   const places = usePlaces();
   return (
     <nav className="atmo-rail" aria-label="Places">
-      <div className="atmo-rail-section">
-        <RailPlace label="Home" target={home} path={path} Icon={House} onNavigate={onNavigate} />
-        {places.map((place) => (
-          <RailPlace
-            key={place.kind}
-            // The directory's own name, so a translated or renamed one reads
-            // as the user named it ("Descargas", not "Downloads").
-            label={place.path.slice(place.path.lastIndexOf("/") + 1)}
-            target={place.path}
-            path={path}
-            Icon={PLACE_ICONS[place.kind]}
-            onNavigate={onNavigate}
-          />
-        ))}
-      </div>
-      {bookmarks.size > 0 ? (
+      <div className="atmo-rail-scroll">
         <div className="atmo-rail-section">
-          {[...bookmarks].map(([letter, bookmark]) => (
-            <button
-              key={letter}
-              type="button"
-              className="atmo-rail-item"
-              aria-current={path === bookmark.path ? "page" : undefined}
-              onMouseDown={keepFocus}
-              onClick={() => onNavigate(bookmark.path)}
-            >
-              <span className="atmo-monogram">{letter.toUpperCase()}</span>
-              <span className="atmo-rail-tip">
-                {bookmark.label} <kbd>g{letter}</kbd>
-              </span>
-            </button>
+          <RailPlace label="Home" target={home} path={path} Icon={House} onNavigate={onNavigate} />
+          {places.map((place) => (
+            <RailPlace
+              key={place.kind}
+              // The directory's own name, so a translated or renamed one reads
+              // as the user named it ("Descargas", not "Downloads").
+              label={place.path.slice(place.path.lastIndexOf("/") + 1)}
+              target={place.path}
+              path={path}
+              Icon={PLACE_ICONS[place.kind]}
+              onNavigate={onNavigate}
+            />
           ))}
         </div>
-      ) : null}
+        {bookmarks.size > 0 ? (
+          <div className="atmo-rail-section">
+            {[...bookmarks].map(([letter, bookmark]) => (
+              <button
+                key={letter}
+                type="button"
+                className="atmo-rail-item"
+                aria-current={path === bookmark.path ? "page" : undefined}
+                onMouseDown={keepFocus}
+                onMouseEnter={positionRailTooltip}
+                onFocus={positionRailTooltip}
+                onClick={() => onNavigate(bookmark.path)}
+              >
+                <span className="atmo-monogram">{letter.toUpperCase()}</span>
+                <span className="atmo-rail-tip">
+                  {bookmark.label} <kbd>g{letter}</kbd>
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
       {footer ?? <DiskMeter path={path} />}
     </nav>
   );
+}
+
+/** Fixed tooltips escape the scroll region while the machine dock stays visible. */
+function positionRailTooltip(event: SyntheticEvent<HTMLButtonElement>): void {
+  const button = event.currentTarget;
+  const bounds = button.getBoundingClientRect();
+  button.style.setProperty("--rail-tip-x", `${bounds.right + 10}px`);
+  button.style.setProperty("--rail-tip-y", `${bounds.top + bounds.height / 2}px`);
 }
 
 function RailPlace({
@@ -267,6 +280,8 @@ function RailPlace({
       className="atmo-rail-item"
       aria-current={path === target ? "page" : undefined}
       onMouseDown={keepFocus}
+      onMouseEnter={positionRailTooltip}
+      onFocus={positionRailTooltip}
       onClick={() => onNavigate(target)}
     >
       <Icon size={18} aria-hidden="true" />

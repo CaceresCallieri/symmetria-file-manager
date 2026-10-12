@@ -90,7 +90,7 @@ on architecture.**
   nothing to clear; that class of defect cannot be written.
 - **Report 10 §3.4 recommends warm and this reverses it deliberately.** That
   advice assumed a *pool* of warm windows, so the reset machinery was being paid
-  for anyway. Decision D3 collapsed the pool, leaving a warm picker as the only
+  for anyway. The single-window decision collapsed the pool, leaving a warm picker as the only
   warm window in the application, carrying all of that complexity alone.
 
 **The speed evidence points the other way, and each correction has strengthened

@@ -69,7 +69,7 @@ describe("opening the search field", () => {
 
 describe("typing a query", () => {
   it("marks every match where it sits, leaving the rest of the listing visible", async () => {
-    // The decision recorded in the intent: this searches the Qt way. The whole
+    // The decision recorded in the intent: this searches the the earlier implementation way. The whole
     // listing stays on screen, because losing the neighbours is losing most of
     // what a column is for.
     await opened();
@@ -138,7 +138,7 @@ describe("leaving the search field", () => {
   });
 
   it("cancels with Escape, putting the cursor back where it started", async () => {
-    // The Qt build saves the index when the field opens and restores it on
+    // The earlier implementation saves the index when the field opens and restores it on
     // cancel. Leaving the cursor on a match after an abandoned search is how
     // the wrong file gets acted on next.
     await opened();
@@ -197,7 +197,7 @@ describe("cycling with n and N", () => {
 
 describe("navigating away", () => {
   it("clears the search, because the indices belonged to the old listing", async () => {
-    // An index is meaningless in a different directory. The Qt `WindowState`
+    // An index is meaningless in a different directory. The the earlier implementation `WindowState`
     // clears its transient search state on navigation for the same reason.
     await opened();
     const field = await searching();

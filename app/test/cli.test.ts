@@ -20,7 +20,7 @@ const CLI = fileURLToPath(new URL("../bin/symmetria-fm-electron-cli.mjs", import
  * quarter of a second at best — to deliver one line to a process that is already
  * running. Every system file dialog in the session would eventually pay it.
  *
- * The exit code is the contract, not a detail. The Qt build's portal backend
+ * The exit code is the contract, not a detail. The earlier implementation's portal backend
  * branches on it, and whatever replaces that backend will do the same.
  */
 let dir: string;

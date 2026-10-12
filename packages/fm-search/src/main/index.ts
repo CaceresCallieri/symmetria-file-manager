@@ -7,7 +7,7 @@
  *
  * **One index per process, and that is measured rather than chosen.** The
  * store refuses a second open inside one program, so N indices in N processes
- * works and N indices in one process does not. The Qt build works around this
+ * works and N indices in one process does not. The earlier implementation works around this
  * with a single process-wide engine whose base path is swapped, which is a
  * last-acquire-wins race across windows; do not reproduce that here. Nothing in
  * this module enforces the rule — it cannot, from inside one process — so the
@@ -61,7 +61,7 @@ export interface SearchIndex {
    * the finder is OPEN is not reflected until it is reopened. Refreshing per
    * search would put a filesystem walk on every keystroke, which is a far worse
    * trade than a fact that is one reopen behind. The research records the same
-   * shape in the Qt build for git status — "open the finder after editing a
+   * shape in the earlier implementation for git status — "open the finder after editing a
    * file and the info pane still says clean" — there because `opts.watch` is
    * false and no refresh is ever called at all.
    *

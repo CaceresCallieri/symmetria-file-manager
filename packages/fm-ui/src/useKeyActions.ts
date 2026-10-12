@@ -66,7 +66,7 @@ function isDirectoryUnderCursor(tabs: Tabs): boolean {
  * **A file in a dialog is CONFIRMED, and never handed to the desktop.** That
  * fall-through was a real defect: driven for real, Enter in a file dialog
  * launched a terminal running an editor on the highlighted file, and only the
- * virtual display kept that window off the operator's session. The Qt build
+ * virtual display kept that window off the operator's session. The earlier implementation
  * routes Enter through the same `confirmPickerSelection` its Accept button
  * uses, for exactly this reason.
  *
@@ -89,7 +89,7 @@ function activateUnderCursor(tabs: Tabs, ops: FileOps, picker: Picker): void {
 /**
  * Roughly half a screen of rows.
  *
- * The Qt original asked the view for its own metric. Nothing reports one yet,
+ * The earlier implementation asked the view for its own metric. Nothing reports one yet,
  * so this derives from the window: at a 24-pixel row, half the viewport is a
  * usable approximation and is never zero.
  */
@@ -189,6 +189,7 @@ export function useKeyActions(
       createEntry: () => ops.requestCreate(),
       // The `op.pickerSaveEdit` binding, gated on save mode by the registry.
       editSaveName: () => picker.focusSaveName(),
+      editPickerPath: picker.focusPath,
 
       yank: () => ops.yank(),
       cut: () => ops.cut(),

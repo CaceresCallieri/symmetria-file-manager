@@ -2,7 +2,7 @@ import type { TransferMode } from "@symmetria/fm-core/contract";
 import type { CursorEntry } from "@symmetria/fm-core/keys/types";
 import { isAncestorPath } from "@symmetria/fm-core/overview/model";
 
-export interface OperationChange {
+interface OperationChange {
   readonly removed?: readonly string[];
   readonly reveal?: string;
 }

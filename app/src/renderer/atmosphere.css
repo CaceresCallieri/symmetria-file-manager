@@ -144,6 +144,14 @@ body {
   background: none;
 }
 
+kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 7%);
+  box-shadow: inset 0 0 0 1px var(--atmo-edge);
+}
+
 /* ── Header ───────────────────────────────────────────────────────────────── */
 .atmo-header {
   container: atmo-header / inline-size;
@@ -245,6 +253,10 @@ body {
   min-width: 0;
   overflow: hidden;
 }
+.atmo-crumbs .path-entry {
+  --path-entry-surface: var(--atmo-well);
+  padding: 2px;
+}
 .atmo-crumbs .path-bar {
   gap: 0;
   padding: 0;
@@ -278,6 +290,9 @@ body {
 .atmo-crumbs .crumb--current {
   flex-shrink: 0;
   max-width: 100%;
+}
+.atmo-crumbs .path-bar:has(.path-bar__edit) .crumb--current {
+  flex-shrink: 1;
 }
 /* Narrow: only the parent and the current folder, behind an ellipsis. A
    leading segment squeezed to its padding reads as a stray letter. */
@@ -357,7 +372,19 @@ body {
   gap: 14px;
   padding-top: 2px;
 }
+.atmo-rail-scroll {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
 .atmo-rail-section {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -407,9 +434,9 @@ body {
   color: #111;
 }
 .atmo-rail-tip {
-  position: absolute;
-  left: 52px;
-  top: 50%;
+  position: fixed;
+  left: var(--rail-tip-x);
+  top: var(--rail-tip-y);
   z-index: 40;
   padding: 6px 10px;
   border-radius: 9px;
@@ -812,14 +839,6 @@ body {
   box-shadow:
     inset 0 0 0 1px var(--atmo-blue),
     0 0 0 4px var(--atmo-blue-faint);
-}
-
-kbd {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  border-radius: 6px;
-  background: rgb(255 255 255 / 7%);
-  box-shadow: inset 0 0 0 1px var(--atmo-edge);
 }
 
 /* ── Status bar: mode pill ────────────────────────────────────────────────── */

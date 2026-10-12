@@ -5,7 +5,7 @@
  * Acceptance criterion 6. The engine's file-search result carries no
  * per-character positions — only its content search does — so the row
  * renderer's highlighting has nothing to draw from unless this recomputes it.
- * The Qt build does the same, with a greedy subsequence match.
+ * The earlier implementation does the same, with a greedy subsequence match.
  */
 import { describe, expect, it } from "vitest";
 
@@ -29,7 +29,7 @@ describe("matchIndices", () => {
     // 4,5,6,7. The engine has already decided which rows match and in what
     // order; this only places the emphasis, so the cost is a little visual
     // polish. An optimal span would need a dynamic program per row per
-    // keystroke. The Qt build has the same behaviour.
+    // keystroke. The earlier implementation has the same behaviour.
     expect(matchIndices("src/components/", "comp")).toEqual([2, 5, 6, 7]);
   });
 

@@ -26,6 +26,9 @@ import { contextWith, permissiveState, press, type Recorder } from "./support/ke
 function stateFor(binding: Binding): Partial<KeyState> {
   // Ctrl+R is shared with `miller.renderToggle`; save mode is what makes the
   // picker row win, and it sits earlier in CORE.
+  if (binding.id === "picker.editPath") {
+    return { picker: { ...permissiveState().picker, active: true } };
+  }
   if (binding.id === "op.pickerSaveEdit") {
     return { picker: { ...permissiveState().picker, saveMode: true } };
   }

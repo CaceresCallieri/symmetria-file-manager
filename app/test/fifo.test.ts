@@ -59,7 +59,7 @@ describe("what the reader receives", () => {
     const outcome = await writeToFifo(fifo, selectionPayload(["/home/jc/one.txt", "/tmp/two.pdf"]));
 
     expect(outcome.ok).toBe(true);
-    // Parsed the way `portal/symmetria_portal.py` parses it: strip, split on
+    // Parsed the way `portal/symmetria_electron_portal.py` parses it: strip, split on
     // newlines, drop the empties. A payload that needs different parsing is a
     // payload the existing backend cannot read.
     const lines = (await reading)
@@ -79,8 +79,8 @@ describe("what the reader receives", () => {
   });
 
   it("gets exactly the cancellation sentinel when the user cancels", async () => {
-    // The literal is a protocol constant shared with the Qt build and with the
-    // portal — `host/standalone/main.qml` and `portal/symmetria_portal.py` both
+    // The literal is a protocol constant shared with the earlier implementation and with the
+    // portal — the picker host and `portal/symmetria_electron_portal.py` both
     // spell it. A backend that read a different word would treat a cancel as a
     // chosen file named `__PICKER_CANCELLED__`.
     const fifo = await makeFifo("c");
@@ -151,7 +151,7 @@ describe("what it refuses to write to", () => {
     // `createPicker`. Without this check, one could have the file manager write
     // the user's chosen filenames into a file of its choosing. The portal
     // defends its READ side the same way, with an `fstat` after the open; this
-    // is the mirror of it, and the Qt build does not have it.
+    // is the mirror of it, and the earlier implementation does not have it.
     const ordinary = join(dir, "not-a-fifo");
     await writeFile(ordinary, "original contents");
 
@@ -185,7 +185,7 @@ describe("what it refuses to write to", () => {
 
 describe("two answers at once", () => {
   it("delivers both, neither losing the other's path", async () => {
-    // The Qt build needed a queue here: it had ONE writer process whose target
+    // The earlier implementation needed a queue here: it had ONE writer process whose target
     // path was a mutable property, so two rejections in flight clobbered each
     // other. Each write below owns its own descriptor, so there is nothing to
     // clobber — this asserts that property rather than assuming it.

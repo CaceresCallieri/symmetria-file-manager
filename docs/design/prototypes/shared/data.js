@@ -210,7 +210,7 @@ A keyboard-first file manager for one person who lives in the terminal. It is a 
 - One set of keybindings, everywhere
 `,
   },
-  gitignore: { lang: "plain", text: "node_modules/\ndist-electron/\nplugin/build/\n*.log\n.DS_Store\n" },
+  gitignore: { lang: "plain", text: "node_modules/\ndist-electron/\n*.log\n.DS_Store\n" },
 };
 
 // ── The tree ────────────────────────────────────────────────────────────────

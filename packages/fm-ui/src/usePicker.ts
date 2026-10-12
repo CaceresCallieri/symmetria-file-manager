@@ -10,6 +10,7 @@ import type { PickerWindowRequest } from "@symmetria/fm-core/windowUrl";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { useFileManagerIo } from "./IoContext.tsx";
+import { usePickerPath } from "./usePickerPath.ts";
 import type { Tabs } from "./useTabs.ts";
 
 /**
@@ -40,6 +41,8 @@ export interface PickerChrome {
 }
 
 export interface Picker {
+  readonly pathEntry: ReturnType<typeof usePickerPath> | undefined;
+  focusPath(): void;
   /** What the key registry reads. All false in the browse window. */
   readonly state: PickerState;
   /** Null in the browse window, which must be untouched by any of this. */
@@ -68,8 +71,9 @@ const INERT: PickerState = {
   directory: false,
 };
 
-export function usePicker(request: PickerWindowRequest | null, tabs: Tabs): Picker {
+export function usePicker(request: PickerWindowRequest | null, tabs: Tabs, home: string): Picker {
   const { pickerCancel, pickerConfirm } = useFileManagerIo();
+  const pathEntry = usePickerPath(tabs, home);
   // Seeded from the request and then owned here, because the user edits it.
   const [saveName, setSaveName] = useState(request?.options.suggestedName ?? "");
   const saveNameRef = useRef<HTMLInputElement | null>(null);
@@ -111,14 +115,14 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs): Pick
   const fifo = request?.fifo ?? null;
 
   const confirm = useCallback(() => {
-    if (fifo === null || context === null) return;
+    if (fifo === null || context === null || pathEntry.editing) return;
     const resolved = resolvePickerSelection(context);
     // A refusal is silent on purpose: the button is disabled in the same
     // situation, and both come from this one function so they cannot disagree.
     // Answering with nothing would read to the portal as a confirmed selection.
     if (resolved.kind !== "paths") return;
     void pickerConfirm({ fifo, paths: resolved.paths });
-  }, [fifo, context, pickerConfirm]);
+  }, [fifo, context, pathEntry.editing, pickerConfirm]);
 
   const cancel = useCallback(() => {
     if (fifo === null) return;
@@ -147,7 +151,7 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs): Pick
         ? null
         : {
             acceptLabel: pickerAcceptLabel(context, request.options.acceptLabel),
-            acceptEnabled: pickerAcceptEnabled(context),
+            acceptEnabled: !pathEntry.editing && pickerAcceptEnabled(context),
             saveMode: request.options.saveMode,
             saveName,
             setSaveName,
@@ -155,7 +159,7 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs): Pick
             confirm,
             cancel,
           },
-    [request, context, saveName, confirm, cancel],
+    [request, context, saveName, confirm, cancel, pathEntry.editing],
   );
 
   // Stable, because `useKeyActions` memoises its action table on them. A fresh
@@ -168,7 +172,15 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs): Pick
   // exactly what the comment above claimed it prevented. Review found the
   // contradiction.
   return useMemo(
-    () => ({ state, chrome, focusSaveName, cancelIfActive: cancel, confirmIfActive: confirm }),
-    [state, chrome, focusSaveName, cancel, confirm],
+    () => ({
+      state,
+      chrome,
+      pathEntry: request === null || request.options.saveMode ? undefined : pathEntry,
+      focusPath: pathEntry.focus,
+      focusSaveName,
+      cancelIfActive: cancel,
+      confirmIfActive: confirm,
+    }),
+    [state, chrome, request, pathEntry, focusSaveName, cancel, confirm],
   );
 }

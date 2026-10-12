@@ -94,10 +94,10 @@ function fileNameOf(path: string): string {
 /**
  * A sound file: what it is, and a way to hear it.
  *
- * Laid out like the Qt build's `AudioPreview.qml` — art, then title and artist,
+ * The preview shows art, then title and artist,
  * then the transport — and it differs from the video pane in one deliberate
  * way: **there is no `autoPlay`**. Sound starting by itself as the cursor moves
- * through a directory is an interruption, not a preview, which is why the Qt
+ * through a directory is an interruption, not a preview, which is why the the earlier implementation
  * original sets `autoPlay: false` too. `Ctrl+P` is the only thing that starts
  * it, and the state behind that lives in `App` because it has to be cleared
  * when the cursor moves and only `App` knows where the cursor is.

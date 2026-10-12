@@ -5,11 +5,11 @@
  * It replaces the characters that follow the match rather than sitting beside
  * them, so the key to press appears where the eye is already looking. The name
  * is briefly not the name; the session is short and the name comes back whole
- * the moment it ends. The Qt build draws it the same way, in
+ * the moment it ends. The earlier implementation draws it the same way, in
  * `FileListItem._highlightFlash`, and the operator chose this over a chip at
  * the row's edge when the two were put side by side.
  *
- * **One component, two callers.** The Qt build carries two divergent copies of
+ * **One component, two callers.** The earlier implementation carries two divergent copies of
  * this function and its own documentation lists that as a defect awaiting
  * consolidation. The previewed directory's rows are not `FileRow` — deliberately,
  * since they have neither a cursor nor a mark — so the shared piece is this

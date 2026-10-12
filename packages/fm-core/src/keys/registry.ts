@@ -7,7 +7,7 @@ import type { Binding, HelpGroup, KeyContext, ViewKind } from "./types.ts";
  *
  * Both the dispatcher and the help overlay read this one table, so a binding
  * added here automatically works AND appears in the cheat sheet. That is the
- * property the Qt original was built for and the reason it is ported as data
+ * property the earlier implementation was built for and the reason it is ported as data
  * rather than rewritten as a switch.
  *
  * ── What is deliberately NOT here ───────────────────────────────────────────
@@ -21,7 +21,7 @@ import type { Binding, HelpGroup, KeyContext, ViewKind } from "./types.ts";
  * compares as `"g"`, and its Shift requirement is checked separately by `mods`.
  *
  * ── One thing the web port gets for free ────────────────────────────────────
- * Qt needed a separate `Key_Backtab` for Shift+Tab. The browser reports
+ * the earlier implementation needed a separate `Key_Backtab` for Shift+Tab. The browser reports
  * `key: "Tab"` with `shift: true`, so previous-tab is an ordinary
  * `mods: "Ctrl+Shift"` row on the same key as next-tab.
  */
@@ -440,6 +440,17 @@ export const OVERVIEW_ONLY: readonly Binding[] = [
 ];
 export const MILLER_ONLY: readonly Binding[] = [
   {
+    id: "picker.editPath",
+    keys: ["l"],
+    mods: "Ctrl",
+    keycap: "Ctrl+L",
+    label: "Enter file or folder path",
+    icon: "edit",
+    group: "Navigation",
+    when: (ctx) => ctx.state.picker.active && !ctx.state.picker.saveMode,
+    run: (ctx) => ctx.actions.editPickerPath(),
+  },
+  {
     id: "miller.overview",
     keys: ["o"],
     mods: "Ctrl",
@@ -479,10 +490,6 @@ export const MILLER_ONLY: readonly Binding[] = [
     icon: "fullscreen",
     group: "Navigation",
     // This row replaces `miller.contextMenu`, row 3 of MILLER_ONLY in
-    // `docs/electron-transition/01-navigation-and-keyboard.md`, which still
-    // specifies the ported Qt behaviour for Ctrl+Enter — read that divergence
-    // here rather than as a dropped row.
-    //
     // Keep this condition outside run so Ctrl+Enter on a directory falls
     // through without consuming the key.
     when: (ctx) => ctx.state.cursorEntry !== null && !ctx.state.cursorEntry.isDirectory,
@@ -669,7 +676,7 @@ export const MILLER_ONLY: readonly Binding[] = [
     run: (ctx) => ctx.actions.tabNext(),
   },
   {
-    // Qt needed a separate `Key_Backtab` here. The browser reports Shift+Tab as
+    // the earlier implementation needed a separate `Key_Backtab` here. The browser reports Shift+Tab as
     // `key: "Tab"` with `shift: true`, so this is an ordinary modifier row.
     id: "miller.tabPrevCtrl",
     keys: ["tab"],

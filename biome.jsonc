@@ -20,15 +20,6 @@
       "!**/dist",
       "!**/dist-electron",
 
-      // ── The Qt tree. Not ours to lint. ──
-      // `qml/` holds the QML panel and its `.js` key handlers. Those already
-      // have an incumbent gate — `tools/quality/check-qml.sh`, delta-based with
-      // the baseline recorded in `.claude/project-standards.md`. Two tools in
-      // one slot is worse than either alone, so Biome stays out.
-      "!qml",
-      "!plugin/third_party",
-      "!plugin/build",
-
       // ── Vendored policy source. Provenance-tracked, not ours to format. ──
       // Copied verbatim from anti-slop upstream commit
       // 6d538555cb151d4121ed51a27db81890eacf8ae9. Drift is detected by diffing
