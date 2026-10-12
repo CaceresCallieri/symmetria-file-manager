@@ -291,3 +291,30 @@ describe("Enter inside a dialog", () => {
     expect(log.ops.filter((each) => each.startsWith("open "))).toHaveLength(1);
   });
 });
+
+describe("a focused dialog button keeps its own Enter", () => {
+  it("leaves Enter on Cancel to the button, so it never confirms the file under the cursor", async () => {
+    await openPicker();
+    await moveToFirstFile();
+    const cancel = screen.getByTestId("picker-cancel");
+    cancel.focus();
+
+    // `true`: nothing called preventDefault, so the browser's own activation
+    // (a click on Cancel) runs. Before, `nav.activate` took the key and
+    // confirmed `notes.txt`.
+    expect(fireEvent.keyDown(cancel, { key: "Enter" })).toBe(true);
+    await act(async () => undefined);
+    expect(log.pickerConfirms).toEqual([]);
+  });
+
+  it("leaves Space on Accept to the button, so the keymap does not also act", async () => {
+    await openPicker();
+    await moveToFirstFile();
+    const accept = screen.getByTestId("picker-accept");
+    accept.focus();
+
+    expect(fireEvent.keyDown(accept, { key: " " })).toBe(true);
+    await act(async () => undefined);
+    expect(log.pickerConfirms).toEqual([]);
+  });
+});

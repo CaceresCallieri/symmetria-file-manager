@@ -660,20 +660,29 @@ body {
    bar. They were browser-default buttons. Here they become the dialog pills:
    both buttons at the bar's right end, Cancel quiet, Accept the solid
    foreground pill the operation dialogs use, each showing its key. The keys
-   are drawn with `::after` so the buttons' text stays their label. */
+   are drawn with `::after` and an EMPTY alternative text (`/ ""`): generated
+   content joins a button's accessible name, and without it a screen reader
+   heard "Cancel Esc" and "Open ↵". */
 /* One line, always. In a narrow save dialog the name field and both buttons
    left the summary a sliver, and "176 entries" and "sort: modified ↓" each
    wrapped onto two or three lines. The summary's items shrink and elide
-   instead; the controls keep their size. */
+   instead; the controls keep their size. `flex-shrink` is restated because
+   `styles.css` gives `.pane-error` and `.pane-message` `flex: 0 0 auto`, and
+   a long error then pushed Cancel and Accept out of the bar. A plain message
+   is a block so its text can elide; a flex `<p>` cannot. */
 .app--atmosphere .status-bar {
   white-space: nowrap;
 }
 .app--atmosphere
   .status-bar
   > :not(.status-bar__mode, .status-bar__accept, .status-bar__cancel, .status-bar__save-name) {
+  flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.app--atmosphere .status-bar > .pane-message:not(:has(button)) {
+  display: block;
 }
 .app--atmosphere .status-bar__cancel {
   order: 1;
@@ -714,7 +723,7 @@ body {
   background: rgb(255 255 255 / 11%);
 }
 .app--atmosphere .status-bar__cancel::after {
-  content: "Esc";
+  content: "Esc" / "";
   background: rgb(255 255 255 / 8%);
   color: var(--atmo-faint);
 }
@@ -727,7 +736,7 @@ body {
   background: #fff;
 }
 .app--atmosphere .status-bar__accept::after {
-  content: "↵";
+  content: "↵" / "";
   background: rgb(0 0 0 / 10%);
   color: rgb(17 17 17 / 60%);
 }

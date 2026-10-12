@@ -171,10 +171,14 @@ function nativeControlActivation(event: KeyboardEvent, context: KeyContext, mode
   if (mode.modalOpen || mode.flashActive || mode.chordPrefix) return false;
   if (!isPlainActivation(event)) return false;
   if (!(event.target instanceof Element)) return false;
+  // The status bar's buttons — a file dialog's Accept and Cancel, a transfer's
+  // Cancel — keep native activation in every view. Without them in the list,
+  // Enter on a focused Cancel in Columns ran `nav.activate`, which in a dialog
+  // CONFIRMS the file under the cursor: the opposite of the button.
   const selector =
     context.view === "tree"
       ? "button, summary"
-      : ".overview-toolbar button, .overview-toolbar summary";
+      : ".overview-toolbar button, .overview-toolbar summary, .status-bar button";
   return event.target.closest(selector) !== null;
 }
 
