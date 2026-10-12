@@ -20,7 +20,7 @@ export interface ArchivePreviewProps {
 /** Row height in pixels. Fixed, so the virtualiser needs no measurement pass. */
 const ROW_HEIGHT = 20;
 
-/** How far one level of nesting indents. Matches the Qt build's 18 pixels. */
+/** How far one level of nesting indents. Matches the earlier implementation's 18 pixels. */
 const INDENT = 18;
 
 const reader = lazyWorker(
@@ -199,7 +199,7 @@ export function ArchivePreview({ path, format, compression, size }: ArchivePrevi
                 )}
                 <FileIcon name={entry.name} kind={entry.isDirectory ? "directory" : "file"} />
                 <span className="row__name">{entry.name}</span>
-                {/* A folder shows no size. The Qt build shows none either, and
+                {/* A folder shows no size. The earlier implementation shows none either, and
                     a zero would read as an empty folder rather than a folder. */}
                 {entry.isDirectory ? null : (
                   <span className="preview__archive-size" data-testid="preview-archive-size">

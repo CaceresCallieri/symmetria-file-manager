@@ -304,7 +304,7 @@ function useDirectoryLoader(
   //
   // Navigating faster than the disk answers is normal with a held key, and
   // without this a slow read of a directory already left behind would land on
-  // top of a fast read of the directory the user is now in. The Qt version
+  // top of a fast read of the directory the user is now in. The earlier implementation
   // solved the same race with a generation counter, for the same reason.
   const generation = useRef(new Map<string, number>());
   const pendingReveal = useRef(new Map<string, PendingReveal>());

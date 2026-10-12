@@ -38,8 +38,4 @@ StartupNotify=false
 #     Editing it to fix a window rule will do nothing at all. It is kept in step
 #     anyway so the three never disagree.
 #
-# Deliberately NOT `symmetria-fm`, which belongs to the Qt build. The two run
-# side by side until the rewrite reaches parity and the operator uses the Qt one
-# every day; one identifier for both would make either compositor rule match the
-# wrong window.
 StartupWMClass=symmetria-fm-electron

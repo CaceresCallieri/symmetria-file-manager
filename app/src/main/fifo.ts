@@ -59,7 +59,7 @@ type OpenOutcome =
  * picker prefix — so without them, one could have the file manager write the
  * user's chosen filenames into a file of its choosing. The portal defends its
  * READ side exactly this way, with an `fstat` after the open; this is the
- * mirror of it, and the Qt build does not have it.
+ * mirror of it, and the earlier implementation does not have it.
  *
  * The check is after the open rather than before it because a check before it
  * is a race: the path could be replaced in between. The descriptor is the only

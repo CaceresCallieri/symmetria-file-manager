@@ -110,10 +110,10 @@ describe("MillerColumns", () => {
 describe("MillerColumns at scale", () => {
   it("does not mount ten thousand rows", () => {
     // Virtualisation is necessary and NOT sufficient — the measured lesson from
-    // the Qt tree is that the dominant cost was the NUMBER of directories
+    // the earlier source tree is that the dominant cost was the NUMBER of directories
     // expanded, not the cost of each row. Miller columns are safe by
     // construction because they show three levels and never expand a subtree,
-    // and decision D5 removed auto-expansion entirely. This test guards the
+    // and the navigation policy removed auto-expansion entirely. This test guards the
     // row-mounting half of it.
     const many = Array.from({ length: 10_000 }, (_, i) => entry(`entry-${i}.txt`));
 

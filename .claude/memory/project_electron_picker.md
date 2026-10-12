@@ -1,6 +1,6 @@
 ---
 name: project-electron-picker
-description: "2026-09-01 — the Electron FM's portal file picker is COMPLETE: all 5 phases built, proven over real D-Bus, and deliberately not switched on"
+description: "2026-09-01 — the Electron FM's portal file picker is COMPLETE: all 5 phases built, proven over real D-Bus, and installed as the laptop FileChooser"
 metadata: 
   node_type: memory
   type: project
@@ -18,36 +18,9 @@ they exist on disk only.
 and give it a working file picker", merge commit `6eb9550` — 42 commits, 240
 files. Everything below is on `main` now.
 
-## Where it stopped
+## Current installation
 
-| Commit | Phase |
-|---|---|
-| `9ecd954` | route every bridge push to the window that asked |
-| `77d5246` | open a picker window on `createPicker` / `closePicker` |
-| `138d59a` | answer the blocked caller on its FIFO |
-| `11813fd` | selection logic + the request on the window URL |
-| `81cb682` | the chrome, and `PickerState.active` stops being a constant |
-| `51cc47d` | **fix:** confirm on Enter instead of opening the file elsewhere |
-| `c9596eb` | **fix:** the same hole on Shift+Enter, and marks filtered by kind |
-| `2059486` | the portal registration, switched off, and the whole-path measurement |
-| `7e663d6` | **CI:** `HeifDecoderTest` had failed on `main` since 14 Aug — Ubuntu splits libheif's codecs into plugin packages and `--no-install-recommends` installed none, so CI had a libheif that could parse an HEIC and not decode the HEVC inside it. Returns empty, exactly as a corrupt file does. Fixed with `libheif-plugin-libde265`; the decoder now logs libheif's own `err.message`, which it had been discarding. |
-
-**The picker WORKS end to end.** A witness drove a real dialog under a virtual
-display: `/etc/xattr.conf` came back on the pipe, a save dialog returned
-`/tmp/notes.txt` rather than the highlighted file, a folder dialog refused a file
-with Accept greyed out, Escape sent the sentinel, and `p` did not paste — the
-first time that suppression has ever been reachable.
-
-**All five phases are done.** The portal backend was installed, started on its
-own bus name and driven with a real D-Bus `OpenFile` — a real dialog appeared and
-`code=1` came back in 3.1 s — with Qt preferred throughout, so no system dialog
-was ever routed to it. Both backends sat on the bus at once.
-
-**The Qt build is still the active FileChooser and must stay so until the
-operator says otherwise.** `portals.conf` was verified byte-identical afterwards,
-`xdg-desktop-portal` was never restarted, and the Electron portal unit is
-installed but `disabled` and stopped. To switch: one line in `portals.conf`
-(`FileChooser=symmetria-electron`) plus a portal restart; back is `symmetria`.
+The Electron backend answers FileChooser on the laptop. Its installer creates its own virtualenv and does not change routing. Read `docs/electron-transition/24-picker.md` for the lifecycle constraints.
 
 **Fresh-versus-warm is CLOSED: fresh stays.** Everything the picker path adds
 before paint is p50 9.8 ms — 0.59 of a frame — so the gap between the two is the
@@ -61,9 +34,8 @@ expiry (only the `SYMMETRIA_FM_PICKER_LIFETIME_MS` override was exercised).
 
 ## Five things a future agent must not re-derive
 
-**The daemon does NOT rebuild on start — the unit builds on FIRST RUN ONLY.**
-After changing it, `systemctl --user restart symmetria-fm-electron.service` or
-the portal talks to yesterday's code. This cost a failed end-to-end test: the
+**Build before restarting the daemon.**
+The daemon does not rebuild on start. Follow the build and reload instructions in `AGENTS.md`. This cost a failed end-to-end test: the
 daemon had been up since login and answered `unknown command: createPicker`,
 and the symptom was a dialog that never appeared rather than an error anyone
 saw.
@@ -86,7 +58,7 @@ process may name any path under the picker prefix.
 **No key inside a dialog may reach `ops.open()`.** Enter did, and driven for
 real it launched a terminal running nvim on `/etc/xattr.conf`; only the virtual
 display kept that off the operator's desktop. Shift+Enter (`openCopyingPath`) had
-the identical hole and was found by review one commit later. The Qt build does
+the identical hole and was found by review one commit later. The previous implementation does
 not SUPPRESS Enter — it RE-ROUTES it through `confirmPickerSelection`, which is
 why its suppression list is short. Porting a list is easy; porting the reason the
 list is short is not. Check any new binding that spawns, writes or deletes.

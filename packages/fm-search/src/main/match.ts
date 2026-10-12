@@ -3,7 +3,7 @@
  *
  * The engine does not tell us. Its file-search result carries no per-character
  * positions — only its content search does — so the row renderer would have
- * nothing to highlight. The Qt build recomputes them the same way, with a
+ * nothing to highlight. The earlier implementation recomputes them the same way, with a
  * greedy subsequence match, and this is the port of that.
  *
  * **Greedy, and that is a deliberate approximation.** It takes the first

@@ -97,7 +97,7 @@ describe("the panel appears with the answer", () => {
   });
 
   it("widens the overlay only once it has an answer", async () => {
-    // The Qt original grows from 672 to 1080 pixels for the same reason: the
+    // The earlier implementation grows from 672 to 1080 pixels for the same reason: the
     // growth is what makes the surface feel like it is answering.
     await opened({ search: (query) => (query === "hit" ? [row("a.ts", "a.ts")] : []) });
     await type("miss");

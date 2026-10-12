@@ -15,8 +15,7 @@ export interface HtmlPreviewProps {
  * ── `allow-scripts` is absent, and that is the point ────────────────────────
  * A previewed page is a stranger's file reached by moving a cursor. Without
  * this token nothing in the framed document executes at all — which is the
- * same posture the Qt build reaches by turning JavaScript off in its engine.
- * See `HtmlPreview.qml` in the Qt tree for the reasoning being copied.
+ * same posture the earlier implementation reaches by turning JavaScript off in its engine.
  *
  * ── The two flags are safe apart and unsafe TOGETHER ────────────────────────
  * **Do not add `allow-scripts` here.** `allow-same-origin` alone is harmless:
@@ -33,7 +32,7 @@ export interface HtmlPreviewProps {
  *
  * Everything else is withheld by omission: no navigation, no popups, no
  * forms, no modals, no downloads. This stays a preview, which is the decision
- * the Qt build already made when it ignored every navigation but the first.
+ * the earlier implementation already made when it ignored every navigation but the first.
  */
 const FRAME_PERMISSIONS = "allow-same-origin";
 

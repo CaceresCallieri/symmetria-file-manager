@@ -13,8 +13,7 @@ import { claimSocket, daemonSocketPath, sendCommand } from "../src/main/socket.t
  * Acceptance criteria 3 and 4 of phase 1.
  *
  * **Every test here works inside a temporary directory.** The real
- * `$XDG_RUNTIME_DIR` holds the Qt daemon's live socket, which the operator uses
- * daily; a test that wrote there could take their working file manager down.
+ * `$XDG_RUNTIME_DIR` holds the operator's live socket. Tests use private paths.
  */
 let dir: string;
 
@@ -34,12 +33,10 @@ describe("daemonSocketPath", () => {
     expect(path.startsWith("/run/user/1000/")).toBe(true);
   });
 
-  it("is NOT the Qt build's socket", () => {
-    // The Qt daemon owns `symmetria-fm.sock` and the operator uses it every
-    // day. Binding the same path would take their working file manager down,
-    // and the two applications are meant to run side by side until parity.
-    const path = daemonSocketPath({ XDG_RUNTIME_DIR: "/run/user/1000" });
-    expect(path).not.toBe("/run/user/1000/symmetria-fm.sock");
+  it("uses the basename shared with the command-line tool", () => {
+    expect(daemonSocketPath({ XDG_RUNTIME_DIR: "/run/user/1000" })).toBe(
+      "/run/user/1000/symmetria-fm-electron.sock",
+    );
   });
 
   it("falls back somewhere writable when the runtime directory is unset", () => {
@@ -65,9 +62,8 @@ describe("claiming the socket", () => {
   });
 
   it("refuses to take a socket a live daemon is behind", async () => {
-    // The Qt build gets this wrong: `server.cpp` unlinks unconditionally
-    // before listening, so a second daemon started by accident silently steals
-    // the socket from a running one.
+    // Unlinking unconditionally before listening lets a second daemon
+    // silently steal the socket from a running one.
     const path = join(dir, "d.sock");
     const first = await claimSocket(path, accepted);
     expect(first.ok).toBe(true);
@@ -116,7 +112,7 @@ describe("what it refuses to touch", () => {
     // The other half of the same guarantee. `isSocketLive` used to read EVERY
     // connect error as "nothing is there", so an EACCES — a socket that exists
     // and is reachable, just not by us — would be unlinked and rebound over.
-    // That is the same defect this module criticises in the Qt build, one error
+    // That is the same defect this module criticises in the earlier implementation, one error
     // code narrower.
     const sealed = join(dir, "sealed");
     await mkdir(sealed, { mode: 0o700 });

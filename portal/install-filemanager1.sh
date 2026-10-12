@@ -8,10 +8,10 @@
 # /usr/share, so the bus activates this service once the name is free.
 #
 # The script and the virtualenv sit at the FIXED ~/.local/share paths the unit
-# names (%h/.local/share) and install-portal.sh creates. Only the D-Bus file
+# names (%h/.local/share) and install-portal-electron.sh creates. Only the D-Bus file
 # follows $XDG_DATA_HOME, because that is where the bus looks for it.
 #
-# It shares the portal's virtualenv (dbus-fast); run install-portal.sh once
+# It shares the portal's virtualenv (dbus-fast); run install-portal-electron.sh once
 # first if that does not exist.
 set -euo pipefail
 
@@ -22,7 +22,7 @@ units="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 venv="$share/symmetria/portal-venv"
 
 if ! "$venv/bin/python3" -c "import dbus_fast" 2>/dev/null; then
-  echo "Missing $venv with dbus-fast. Run portal/install-portal.sh once first." >&2
+  echo "Missing $venv with dbus-fast. Run portal/install-portal-electron.sh once first." >&2
   exit 1
 fi
 

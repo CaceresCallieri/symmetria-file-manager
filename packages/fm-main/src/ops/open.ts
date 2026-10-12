@@ -13,7 +13,7 @@ import { dataDirectories } from "../xdg.ts";
  * module exists at all: a desktop entry may declare `Terminal=true`, meaning
  * its command is a text-mode program that must be given a terminal to run in.
  * Electron cannot express that, so the entry is read and those are routed to a
- * terminal — the same probe the Qt build does.
+ * terminal — the same probe the earlier implementation does.
  *
  * ── WARNING: this is the one operation that is NOT confined by the test
  * environment ──────────────────────────────────────────────────────────────

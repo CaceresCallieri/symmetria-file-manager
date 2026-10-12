@@ -4,7 +4,7 @@ export type EntryKind = "file" | "directory" | "other";
 /**
  * One directory entry, as an immutable snapshot.
  *
- * Immutable on purpose. The Qt version held a `QFileInfo` stat'd once at
+ * Immutable on purpose. The earlier implementation held a `QFileInfo` stat'd once at
  * construction and mutated nothing, which meant a file that changed on disk
  * kept its stale size until the entry was rebuilt. Keeping the snapshot but
  * rebuilding it on change — remove plus add, never mutate — is what makes a

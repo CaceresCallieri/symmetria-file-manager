@@ -130,7 +130,7 @@ describe("the archive pane", () => {
     const rows = screen.getAllByTestId("preview-archive-row");
 
     expect(rows.map((element) => element.getAttribute("data-depth"))).toEqual(["0", "1", "0"]);
-    // A folder has no size beside it. The Qt build shows none either, and a
+    // A folder has no size beside it. The earlier implementation shows none either, and a
     // zero would read as an empty folder rather than as a folder.
     expect(rows[0]?.querySelector('[data-testid="preview-archive-size"]')).toBeNull();
     expect(rows[1]?.querySelector('[data-testid="preview-archive-size"]')?.textContent).toContain(

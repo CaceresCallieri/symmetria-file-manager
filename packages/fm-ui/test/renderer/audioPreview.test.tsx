@@ -167,7 +167,7 @@ describe("cover art", () => {
 describe("the transport", () => {
   it("plays and pauses as the playing flag changes, and not on its own", async () => {
     // The element is deliberately NOT `autoPlay`: sound starting by itself as
-    // the cursor moves is an interruption, which is why the Qt original sets
+    // the cursor moves is an interruption, which is why the earlier implementation sets
     // `autoPlay: false` too. Only `Ctrl+P` starts it.
     const play = vi
       .spyOn(HTMLMediaElement.prototype, "play")

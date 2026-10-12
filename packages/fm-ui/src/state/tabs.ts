@@ -11,7 +11,7 @@ import { createPane, goToPath, type PaneState } from "@symmetria/fm-core/pane";
  * The tab collection, as pure transitions.
  *
  * Tabs are the primary navigation model rather than a per-window detail
- * (decision D3): a tool that makes it easy to scatter twenty windows
+ * (the single-window decision): a tool that makes it easy to scatter twenty windows
  * encourages scattering twenty windows. There is one window, and anything that
  * would spawn a second is out of scope.
  *
@@ -20,7 +20,7 @@ import { createPane, goToPath, type PaneState } from "@symmetria/fm-core/pane";
  * selection. All of it already lives in `PaneState`, so a tab IS a pane plus an
  * identity, and nothing has to be kept in step by hand.
  *
- * Shared: the clipboard, the theme, and anything the main process owns. The Qt
+ * Shared: the clipboard, the theme, and anything the main process owns. The the earlier implementation
  * original drew the line in the same place, with the clipboard and picker mode
  * global and everything navigational per window.
  */

@@ -1,7 +1,7 @@
 /**
  * Flash labelling: which names match, and which key jumps to each.
  *
- * The port of `FlashLogic.js` from the Qt build — the one part of flash that
+ * The port of `FlashLogic.js` from the earlier implementation — the one part of flash that
  * never needed a window, and the reason the two builds can share a definition
  * of "correct" rather than two implementations that drift.
  *
@@ -20,7 +20,7 @@ export type FlashColumn = "current" | "preview" | "parent";
  * A row a session may label.
  *
  * A name, and enough to find the row again. **No path and no kind**, although
- * the Qt original threads both through the algorithm: it reads neither, and the
+ * the earlier implementation threads both through the algorithm: it reads neither, and the
  * host that supplied the candidate can resolve the column and the index back to
  * an entry itself. Keeping them out is what makes this module about characters.
  */
@@ -49,7 +49,7 @@ export interface FlashLabelling {
 /**
  * The label pool, home row first.
  *
- * Byte-identical to the Qt build's, and the order is the priority: the match
+ * Byte-identical to the earlier implementation's, and the order is the priority: the match
  * the user most likely wants gets the key their finger is already on.
  */
 export const LABEL_CHARS = "asdfghjklqwertyuiopzxcvbnm";
@@ -99,7 +99,7 @@ function continuationChars(query: string, matches: readonly FlashMatch[]): Set<s
 /**
  * Priority: the current column nearest the cursor, then preview, then parent.
  *
- * Returns a new array. The Qt original sorts in place, which is safe there and
+ * Returns a new array. The earlier implementation sorts in place, which is safe there and
  * is not here — the candidate list belongs to the caller and may well be a
  * memoised value it will hand over again.
  */
@@ -124,7 +124,7 @@ interface LabelSplit {
 /**
  * How to split the pool between single labels and two-character prefixes.
  *
- * ── The Qt version of this branch cannot run, and that is why it is here ────
+ * ── The earlier implementation of this branch cannot run, and that is why it is here ────
  * `_assignLabels` spends `min(matches, available)` characters on single labels
  * first and only then looks for a prefix — so the prefix search runs exactly
  * when there are more matches than characters, which is exactly when every
@@ -170,7 +170,7 @@ function planLabels(available: number, matches: number): LabelSplit {
 /**
  * Hand a label to each match, in the priority order they arrive in.
  *
- * **A pair never starts with a character that is also a single label.** The Qt
+ * **A pair never starts with a character that is also a single label.** The the earlier implementation
  * source calls this rule critical and it is: a single-character label resolves
  * on the keystroke, so a pair sharing its first character could never be
  * reached. Matches past the pool's reach keep `""` and simply have no jump —
@@ -204,7 +204,7 @@ function assignLabels(matches: readonly FlashMatch[], available: readonly string
  * nothing else; it is what makes the nearest row take the easiest key.
  *
  * The caller may hand over a query in any case — it is lowered here rather than
- * relied upon, since the Qt original documents "already lowercase" as a
+ * relied upon, since the earlier implementation documents "already lowercase" as a
  * precondition and one of its two callers is the one that lowers it.
  */
 export function computeFlash(

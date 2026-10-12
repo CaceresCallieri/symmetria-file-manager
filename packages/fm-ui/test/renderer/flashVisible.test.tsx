@@ -3,8 +3,8 @@
  *
  * Only what can be seen gets a label.
  *
- * The one place this port deliberately departs from the Qt build, and the
- * operator chose it: Qt labels every match in the listing, including rows
+ * The one place this port deliberately departs from the earlier implementation, and the
+ * operator chose it: the earlier implementation labels every match in the listing, including rows
  * scrolled far out of view — so labels exist that nobody can read, and they
  * have spent characters from a pool of twenty-six.
  *

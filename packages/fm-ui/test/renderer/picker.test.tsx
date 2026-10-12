@@ -243,7 +243,7 @@ describe("Enter inside a dialog", () => {
    * it launched a terminal running an editor on `/etc/xattr.conf` — on the
    * operator's own session that window would have appeared on their desktop.
    *
-   * The Qt build routes Enter through `confirmPickerSelection`, the same
+   * The earlier implementation routes Enter through `confirmPickerSelection`, the same
    * function its Accept button uses, for exactly this reason.
    */
   it("confirms rather than handing the file to another application", async () => {

@@ -107,51 +107,27 @@ quantised — it is a socket round trip, not a frame clock — so its 0.59 is a 
 document was wrong twice by reading that quantisation as signal; divide by
 16.667 before theorising about it.
 
-## The registration, and why it is switched off
+## The portal registration
 
-Only one backend may own `org.freedesktop.impl.portal.FileChooser`. The Qt
-build owns it and the operator uses those dialogs every day, so this phase
-ships the registration and activates nothing.
-
-**One script, two registrations.** `portal/symmetria_portal.py` is 392 lines and
-a second copy would drift — the looser of two copies being the one that matters,
-since that script creates the FIFO the daemon later opens for writing. The two
-backends differ in exactly two values, and both come from the environment:
-
-| Variable | Qt default | Electron |
-|---|---|---|
-| `SYMMETRIA_PORTAL_FM_CLI` | `symmetria-fm-cli` | `symmetria-fm-electron-cli` |
-| `SYMMETRIA_PORTAL_BUS_NAME` | `…desktop.symmetria` | `…desktop.symmetria-electron` |
-
-The defaults are the Qt build's, so its registration behaves exactly as it did
-before the script was parameterised.
+`portal/symmetria_electron_portal.py` implements FileChooser. It defaults to `symmetria-fm-electron-cli` and `org.freedesktop.impl.portal.desktop.symmetria-electron`. The systemd unit supplies the installed CLI's absolute path.
 
 ```bash
-./portal/install-portal-electron.sh    # places files; activates nothing
+./portal/install-portal-electron.sh
 ```
 
-To switch over, add to `~/.config/xdg-desktop-portal/portals.conf`:
+The installer creates its own virtualenv with `dbus-fast`. It does not change routing or start services. For a new installation, select the backend in `~/.config/xdg-desktop-portal/portals.conf`:
 
 ```ini
 [preferred]
 org.freedesktop.impl.portal.FileChooser=symmetria-electron
 ```
 
-then `systemctl --user restart xdg-desktop-portal`. To switch back, the Qt
-build's value is `symmetria`.
-
-⚠ **Check `systemctl --user status xdg-desktop-portal` afterwards.** It
-activates the GTK Settings backend synchronously at startup, and if GTK is not
-already running that call burns a 75-second D-Bus timeout and systemd may kill
-the unit — at which point NO file dialog works anywhere, including the Qt one.
-That failure looks like this change broke something and is unrelated to it. See
-Critical Pitfalls in `CLAUDE.md`.
+Restart `xdg-desktop-portal-symmetria-electron.service` after replacing its script. Restart `xdg-desktop-portal` after changing routing. The portal router also needs its GTK Settings backend ready; check the router's service status if activation stalls.
 
 ## Proven against the real bus
 
 The backend was installed, started on its own name, and driven with a real
-D-Bus `OpenFile` — with the Qt backend still preferred throughout, so no system
-dialog was ever routed to it:
+D-Bus `OpenFile`:
 
 ```
 CALL:    OpenFile on the Electron backend
@@ -162,10 +138,7 @@ backend: Picker cancelled
 REPLY:   code=1 results={} after 3.1s
 ```
 
-Both backends sat on the bus at once, on separate names, each exposing
-`OpenFile`, `SaveFile` and `SaveFiles`. That is the whole chain: D-Bus →
-parameterised script → the ELECTRON command-line tool → the daemon → a real
-window → the FIFO → a D-Bus reply.
+The backend exposes `OpenFile`, `SaveFile` and `SaveFiles`. The chain is D-Bus → portal script → command-line tool → daemon → picker window → FIFO → D-Bus reply.
 
 ⚠ **The first attempt failed, and the reason is worth keeping.** The daemon had
 been running since login, from before the picker existed, and answered

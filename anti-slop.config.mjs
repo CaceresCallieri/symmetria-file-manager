@@ -23,14 +23,6 @@ export default defineConfig({
     ".roo/**",
     ".windsurf/**",
     "tools/oxlint/anti-slop/**",
-    // The Qt tree. Its `.js` files are QML-flavoured JavaScript — `.pragma
-    // library`, QML type annotations — which oxlint cannot parse, so it reports
-    // `Unexpected token` on three of them. They also already have an incumbent
-    // gate: `tools/quality/check-qml.sh`, delta-based against the baseline in
-    // `.claude/project-standards.md`. Two tools in one slot is worse than
-    // either alone. Remove this line when the Qt tree is deleted at parity.
-    "qml/**",
-    "plugin/third_party/**",
   ],
   jsPlugins: [{ name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" }],
   rules: {

@@ -158,7 +158,7 @@ describe("what the frame is permitted to do", () => {
     ["pointer lock", "allow-pointer-lock"],
     ["presentation", "allow-presentation"],
   ])("grants nothing that allows %s", async (_why, token) => {
-    // This stays a preview. The Qt build reached the same posture by ignoring
+    // This stays a preview. The earlier implementation reached the same posture by ignoring
     // every navigation that was not the initial load.
     render(<HtmlPreview path="/home/jc/page.html" />);
 

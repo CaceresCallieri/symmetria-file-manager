@@ -11,7 +11,7 @@
  * A seed re-merged on every start cannot be deleted from: `gx p` would remove
  * Pictures and the next launch would put it back, with no way for the user to
  * say no. So a missing file means the seed AND a write; a file that exists is
- * the whole answer. Qt settles it the same way — its defaults are documented as
+ * the whole answer. the earlier implementation settles it the same way — its defaults are documented as
  * "seeded on first run, deletable by the user".
  *
  * The one exception is a file that cannot be read at all. That is the user's
@@ -45,7 +45,7 @@ export function isReservedLetter(letter: string): boolean {
 /**
  * What a fresh machine gets, as letter to home-relative suffix.
  *
- * Eight rather than the Qt build's two. The operator asked for Downloads,
+ * Eight rather than the earlier implementation's two. The operator asked for Downloads,
  * Pictures and Videos by name and uses those jumps constantly, and a seed that
  * cannot answer `gp` on a new machine fails the request it exists for.
  *

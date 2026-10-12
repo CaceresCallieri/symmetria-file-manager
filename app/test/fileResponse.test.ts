@@ -130,7 +130,7 @@ describe("a refusal", () => {
 /**
  * The content policy a served DOCUMENT carries.
  *
- * The Qt build reaches "it cannot phone home" by turning off remote URL access
+ * The earlier implementation reaches "it cannot phone home" by turning off remote URL access
  * in its browser engine. There is no engine to configure here: the frame is an
  * ordinary one, so the lock has to travel with the response. A page served
  * without this header could fetch a tracker, a remote font or a remote script
