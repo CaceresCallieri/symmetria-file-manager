@@ -3,11 +3,12 @@ import { FileTree } from "../tree/FileTree.tsx";
 import type { useTreeMode } from "../tree/useTreeMode.ts";
 import type { Tabs } from "../useTabs.ts";
 import { MillerColumns, type MillerColumnsProps } from "./MillerColumns.tsx";
-import { PathBar } from "./PathBar.tsx";
+import { PathBar, type PathBarProps } from "./PathBar.tsx";
 import { PreviewPane } from "./preview/PreviewPane.tsx";
 
 export function BrowsingView({
   chrome,
+  pathEntry,
   tabs,
   tree,
   model,
@@ -22,6 +23,7 @@ export function BrowsingView({
 }: {
   /** Atmosphere: see `AppProps.chrome`. */
   chrome?: "atmosphere" | undefined;
+  pathEntry: PathBarProps["pathEntry"];
   tabs: Tabs;
   tree: ReturnType<typeof useTreeMode>;
   model: OverviewModel;
@@ -59,11 +61,12 @@ export function BrowsingView({
   }
   return (
     <>
-      {chrome === "atmosphere" ? null : (
-        <div className="view-control">
-          <PathBar path={tabs.pane.path} onNavigate={tabs.navigate} />
-        </div>
-      )}
+      <ViewControl
+        chrome={chrome}
+        path={tabs.pane.path}
+        onNavigate={tabs.navigate}
+        pathEntry={pathEntry}
+      />
       <MillerColumns
         path={tabs.pane.path}
         parentEntries={tabs.parentEntries}
@@ -81,5 +84,17 @@ export function BrowsingView({
         onVisibleRange={onVisibleRange}
       />
     </>
+  );
+}
+
+function ViewControl({
+  chrome,
+  ...props
+}: PathBarProps & { readonly chrome?: "atmosphere" | undefined }) {
+  if (chrome === "atmosphere") return null;
+  return (
+    <div className="view-control">
+      <PathBar {...props} />
+    </div>
   );
 }

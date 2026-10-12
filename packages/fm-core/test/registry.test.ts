@@ -164,7 +164,8 @@ describe("view scoping", () => {
     expect(CORE).toHaveLength(28);
     // The overview adds one row. preview.expand replaces the ported
     // miller.contextMenu row, so that replacement leaves the count unchanged.
-    expect(MILLER_ONLY).toHaveLength(21);
+    // The picker adds Ctrl+L for local path entry.
+    expect(MILLER_ONLY).toHaveLength(22);
     // Tree adds a mode close binding on Escape.
     expect(TREE_ONLY).toHaveLength(10);
   });

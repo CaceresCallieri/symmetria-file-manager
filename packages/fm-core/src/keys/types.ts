@@ -119,6 +119,7 @@ export interface KeyActions {
   activate(): void;
   goUp(): void;
   enterDirectory(): void;
+  editPickerPath(): void;
   goHome(): void;
   jumpDirectoryFileBoundary(): void;
   /** Swallow a stray Escape so it does not reach the host's close handling. */

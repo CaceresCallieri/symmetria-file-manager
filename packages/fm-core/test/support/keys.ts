@@ -30,6 +30,7 @@ function recorder(): Recorder {
     activate: log("activate"),
     goUp: log("goUp"),
     enterDirectory: log("enterDirectory"),
+    editPickerPath: log("editPickerPath"),
     goHome: log("goHome"),
     jumpDirectoryFileBoundary: log("jumpDirectoryFileBoundary"),
     dismiss: log("dismiss"),

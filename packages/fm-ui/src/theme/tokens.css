@@ -48,6 +48,7 @@
 
   /* Input and action rules need more contrast than the 5–6% glass edges. */
   --dialog-border: color-mix(in srgb, var(--foreground) 15%, transparent);
+  --path-selection: color-mix(in srgb, var(--foreground) 22%, transparent);
   /* The Quiet confirm action uses a neutral fill, independent of blue primary. */
   --dialog-confirm: color-mix(in srgb, var(--foreground) 88%, var(--background));
 
