@@ -3,7 +3,7 @@ import type { OverviewReply } from "@symmetria/fm-core/overview/contract";
 import type { OverviewFolder } from "@symmetria/fm-core/overview/model";
 import { isAncestorPath } from "@symmetria/fm-core/overview/model";
 import { joinPath } from "@symmetria/fm-core/pane";
-import { cancelOverview, readOverview } from "../bridge.ts";
+import { defaultFileManagerIo, type FileManagerIo } from "../bridge.ts";
 import { OVERVIEW_LIMITS } from "./limits.ts";
 import { OverviewSubscriptions } from "./subscriptions.ts";
 export const EXCLUSIONS = [
@@ -60,6 +60,7 @@ export class OverviewSession {
     private readonly changed: (snapshot: OverviewSnapshot) => void,
     seed?: OverviewSnapshot,
     private readonly automaticDepth: number = OVERVIEW_LIMITS.automaticDepth,
+    private readonly io: FileManagerIo = defaultFileManagerIo,
   ) {
     for (const [path, folder] of seed?.folders ?? []) this.folders.set(path, folder);
     this.queue.push({ path: root, depth: 0, refresh: false });
@@ -75,6 +76,7 @@ export class OverviewSession {
         else this.coverage.set(path, error);
         this.publish();
       },
+      io,
     );
   }
   start(): void {
@@ -82,7 +84,7 @@ export class OverviewSession {
   }
   stop(): void {
     this.stopped = true;
-    for (const id of this.pending.keys()) cancelOverview(id);
+    for (const id of this.pending.keys()) this.io.cancelOverview(id);
     this.watches.stop();
     this.pending.clear();
     this.queue = [];
@@ -196,7 +198,7 @@ export class OverviewSession {
     for (const [id, job] of this.pending)
       if (isAncestorPath(path, job.path)) {
         this.cancelled.add(id);
-        cancelOverview(id);
+        this.io.cancelOverview(id);
       }
   }
   private reconcileChildren(folder: OverviewFolder, recursive: boolean): void {
@@ -224,7 +226,7 @@ export class OverviewSession {
     const started = !this.cancelled.has(id);
     const reply = !started
       ? failure<OverviewReply>("cancelled", "Branch removed")
-      : await readOverview(job.path, id, reservation.limit);
+      : await this.io.readOverview(job.path, id, reservation.limit);
     if (this.stopped) return;
     this.pending.delete(id);
     this.account(job, reservation, started ? reply : null);

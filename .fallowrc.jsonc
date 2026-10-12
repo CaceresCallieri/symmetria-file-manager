@@ -74,6 +74,13 @@
   // built page loads the renderer. Without these, fallow reports all three as
   // unused files — which is true of the module graph and false of the program.
   "entry": [
+    // The read-only remote prototype is invoked directly and serves its own page.
+    "app/prototypes/remote-viewer/build.mjs",
+    "app/prototypes/remote-viewer/server.ts",
+    "app/prototypes/remote-viewer/main.tsx",
+    "app/prototypes/remote-viewer/probe.test.mjs",
+    // Built as a separate Node executable by app/scripts/build.mjs.
+    "app/src/main/remote/entry.ts",
     "app/src/main/index.ts",
     "app/src/preload/index.ts",
     "app/src/renderer/main.tsx",

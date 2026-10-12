@@ -28,7 +28,20 @@ import type { Binding, HelpGroup, KeyContext, ViewKind } from "./types.ts";
 
 // ── CORE: identical in both views ───────────────────────────────────────────
 
+const MACHINE_BINDING: Binding = {
+  id: "machine.choose",
+  keys: ["m"],
+  mods: "",
+  keycap: "m",
+  label: "Machines…",
+  icon: "computer",
+  group: "Tools",
+  when: (ctx) => ctx.actions.openMachines !== undefined && !ctx.state.picker.active,
+  run: (ctx) => ctx.actions.openMachines?.(),
+};
+
 export const CORE: readonly Binding[] = [
+  MACHINE_BINDING,
   // Navigation
   {
     id: "nav.down",
@@ -376,6 +389,7 @@ function overviewBinding(
   };
 }
 export const OVERVIEW_ONLY: readonly Binding[] = [
+  MACHINE_BINDING,
   ...OVERVIEW_DIRECTIONS.flatMap(({ direction, key, arrow, halfAlias }) => [
     overviewBinding(direction, [key, arrow], "", `Select ${direction}`),
     overviewBinding(
@@ -790,6 +804,7 @@ function isRenderable(ctx: KeyContext): boolean {
 }
 
 const TREE_SHARED = new Set([
+  "machine.choose",
   "op.create",
   "op.delete",
   "op.rename",

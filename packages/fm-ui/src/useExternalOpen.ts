@@ -2,7 +2,7 @@ import type { ExternalOpen } from "@symmetria/fm-core/bridge";
 import { basename } from "@symmetria/fm-core/pane";
 import { useEffect, useRef, useState } from "react";
 
-import { onOpenPath } from "./bridge.ts";
+import { useFileManagerIo } from "./IoContext.tsx";
 
 /** What the hook drives on the tab collection. */
 export interface ExternalOpenTarget {
@@ -13,6 +13,7 @@ export interface ExternalOpenTarget {
   /** The active tab's directory. */
   readonly activePath: string;
   readonly showHidden: boolean;
+  readonly ready?: boolean;
   toggleHidden(): void;
 }
 
@@ -51,7 +52,11 @@ export interface ExternalOpenTarget {
  * measured rather than aesthetic: inline, they took the component past this
  * project's hook-density bound. One call site costs one.
  */
-export function useExternalOpen(target: ExternalOpenTarget): void {
+export function useExternalOpen(
+  target: ExternalOpenTarget,
+  initialRequest?: ExternalOpen | null,
+): void {
+  const { onOpenPath } = useFileManagerIo();
   const latest = useRef(target);
   const [pending, setPending] = useState<ExternalOpen | null>(null);
 
@@ -65,12 +70,20 @@ export function useExternalOpen(target: ExternalOpenTarget): void {
         latest.current.openAt(request.path);
         setPending(request.reveal === null ? null : request);
       }),
-    [],
+    [onOpenPath],
   );
 
-  const { activePath, showHidden } = target;
   useEffect(() => {
-    if (pending === null || pending.reveal === null) return;
+    if (!initialRequest) return;
+    latest.current.openAt(initialRequest.path);
+    setPending(initialRequest.reveal === null ? null : initialRequest);
+  }, [initialRequest]);
+
+  const { activePath, showHidden, ready = true } = target;
+  useEffect(() => {
+    // A reveal at mount must wait for preferences. Otherwise the initial read
+    // can turn hidden files off after the reveal turns them on.
+    if (!ready || pending === null || pending.reveal === null) return;
     if (activePath !== pending.path) {
       setPending(null);
       return;
@@ -81,5 +94,5 @@ export function useExternalOpen(target: ExternalOpenTarget): void {
     }
     setPending(null);
     latest.current.reveal(pending.reveal);
-  }, [pending, activePath, showHidden]);
+  }, [pending, activePath, showHidden, ready]);
 }

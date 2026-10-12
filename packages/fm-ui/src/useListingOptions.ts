@@ -2,7 +2,7 @@ import { isFailure } from "@symmetria/fm-core/contract";
 import { DEFAULT_LISTING_OPTIONS, type ListingOptions } from "@symmetria/fm-core/listingOptions";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { readListingOptions, writeListingOptions } from "./bridge.ts";
+import { useFileManagerIo } from "./IoContext.tsx";
 
 /**
  * The listing order, loaded once and saved on every change.
@@ -20,11 +20,13 @@ import { readListingOptions, writeListingOptions } from "./bridge.ts";
  */
 export interface StoredOrder {
   readonly options: ListingOptions;
+  readonly ready: boolean;
   /** Replace the order and write it back. */
   set(options: ListingOptions): void;
 }
 
 export function useListingOptions(): StoredOrder {
+  const { readListingOptions, writeListingOptions } = useFileManagerIo();
   const [options, setOptions] = useState<ListingOptions>(DEFAULT_LISTING_OPTIONS);
 
   /**
@@ -35,6 +37,7 @@ export function useListingOptions(): StoredOrder {
    * and the file dialog opens a second one.
    */
   const loaded = useRef(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -54,6 +57,7 @@ export function useListingOptions(): StoredOrder {
       // that integration and went with it. Do not weaken this on the strength
       // of the mutation passing; do not credit it with a fix either.
       loaded.current = true;
+      if (current) setReady(true);
     };
 
     void readListingOptions().then((reply) => {
@@ -71,7 +75,7 @@ export function useListingOptions(): StoredOrder {
     return () => {
       current = false;
     };
-  }, []);
+  }, [readListingOptions]);
 
   /**
    * Writes land in the order they were made.
@@ -85,20 +89,23 @@ export function useListingOptions(): StoredOrder {
    */
   const writeChain = useRef<Promise<unknown>>(Promise.resolve());
 
-  const set = useCallback((next: ListingOptions) => {
-    setOptions(next);
-    if (!loaded.current) return;
+  const set = useCallback(
+    (next: ListingOptions) => {
+      setOptions(next);
+      if (!loaded.current) return;
 
-    // The whole object rather than a delta: it is three fields, and a
-    // partial-update path would be a second shape for one fact.
-    //
-    // `catch` on the chain and not on the write: one rejection must not break
-    // the link and strand every write after it.
-    writeChain.current = writeChain.current.then(
-      () => writeListingOptions(next),
-      () => writeListingOptions(next),
-    );
-  }, []);
+      // The whole object rather than a delta: it is three fields, and a
+      // partial-update path would be a second shape for one fact.
+      //
+      // `catch` on the chain and not on the write: one rejection must not break
+      // the link and strand every write after it.
+      writeChain.current = writeChain.current.then(
+        () => writeListingOptions(next),
+        () => writeListingOptions(next),
+      );
+    },
+    [writeListingOptions],
+  );
 
-  return { options, set };
+  return { options, set, ready };
 }

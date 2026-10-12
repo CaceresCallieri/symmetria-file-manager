@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useFileManagerIo } from "../IoContext.tsx";
 import { OverviewCache } from "../overview/cache.ts";
 import { OVERVIEW_LIMITS } from "../overview/limits.ts";
 import { EXCLUSIONS, OverviewSession, type OverviewSnapshot } from "../overview/session.ts";
@@ -9,6 +10,7 @@ export function useDirectorySnapshot(
   showHidden: boolean,
   automaticDepth: number = OVERVIEW_LIMITS.automaticDepth,
 ) {
+  const io = useFileManagerIo();
   const cache = useRef(new OverviewCache());
   const key = JSON.stringify([root, showHidden, EXCLUSIONS, automaticDepth]);
   const [result, setResult] = useState({ key: "", snapshot: EMPTY, refreshing: false });
@@ -36,13 +38,14 @@ export function useDirectorySnapshot(
       },
       seed,
       automaticDepth,
+      io,
     );
     active.current = {
       stop: () => session.stop(),
       include: (path: string) => session.include(path),
     };
     session.start();
-  }, [root, showHidden, key, paused, automaticDepth]);
+  }, [root, showHidden, key, paused, automaticDepth, io]);
   useEffect(() => {
     start();
     return () => {

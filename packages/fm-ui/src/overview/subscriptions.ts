@@ -1,4 +1,4 @@
-import { watchDirectory } from "../bridge.ts";
+import { defaultFileManagerIo, type FileManagerIo } from "../bridge.ts";
 import { OVERVIEW_LIMITS } from "./limits.ts";
 import { overviewWatchBudget } from "./watchBudget.ts";
 
@@ -17,6 +17,7 @@ export class OverviewSubscriptions {
     private readonly id: string,
     private readonly changed: (path: string) => void,
     private readonly coverage: (path: string, error: string | null) => void,
+    private readonly io: FileManagerIo = defaultFileManagerIo,
   ) {}
   ensure(path: string): Promise<void> {
     const existing = this.slots.get(path);
@@ -47,18 +48,22 @@ export class OverviewSubscriptions {
       return;
     }
     let failed = false;
-    const stop = await watchDirectory(path, `${this.id}:${this.serial++}:${path}`, (event) => {
-      if (!this.current(path, slot)) return;
-      if (event.error !== undefined) {
-        failed = true;
-        this.failed(path, slot, event.error);
-        return;
-      }
-      slot.timer ??= setTimeout(() => {
-        slot.timer = null;
-        this.changed(path);
-      }, 100);
-    });
+    const stop = await this.io.watchDirectory(
+      path,
+      `${this.id}:${this.serial++}:${path}`,
+      (event) => {
+        if (!this.current(path, slot)) return;
+        if (event.error !== undefined) {
+          failed = true;
+          this.failed(path, slot, event.error);
+          return;
+        }
+        slot.timer ??= setTimeout(() => {
+          slot.timer = null;
+          this.changed(path);
+        }, 100);
+      },
+    );
     let retired: Promise<void> | undefined;
     const retire = () => (retired ??= stop().finally(release));
     if (!this.current(path, slot)) await retire();

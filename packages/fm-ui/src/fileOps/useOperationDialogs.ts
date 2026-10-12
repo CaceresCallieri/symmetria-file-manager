@@ -1,7 +1,7 @@
 import { isFailure, type Result } from "@symmetria/fm-core/contract";
 import { joinPath } from "@symmetria/fm-core/pane";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { createPath, renamePath, trashPaths } from "../bridge.ts";
+import { useFileManagerIo } from "../IoContext.tsx";
 import type { CreateTarget, OpsModal } from "./modal.ts";
 import { mutationPaths, type OperationTarget } from "./targets.ts";
 
@@ -17,6 +17,7 @@ function sourceIsCurrent(modal: OpsModal) {
 
 /** All modal writes update ownership synchronously, before a fast bridge reply. */
 export function useOperationDialogs(setMessage: (message: string) => void) {
+  const { createPath, renamePath, trashPaths } = useFileManagerIo();
   const [modal, setModal] = useState<OpsModal>({ kind: "none" });
   const active = useRef<OpsModal>(modal);
   const mounted = useRef(false);

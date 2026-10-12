@@ -10,11 +10,9 @@ import {
   type ListBatch,
   type ListReply,
 } from "@symmetria/fm-core/contract";
-
 import type { FsEntry } from "@symmetria/fm-core/entry";
 import { DEFAULT_LISTING_OPTIONS } from "@symmetria/fm-core/listingOptions";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-
 import { CHANNELS, REQUEST_CHANNELS } from "../src/ipc/channels.ts";
 import { electronIpcSurface, type InvokeEvent } from "../src/ipc/electronSurface.ts";
 import {
@@ -24,6 +22,8 @@ import {
   MAX_DIRECTORY_PREVIEW_ENTRIES,
   type SenderHandle,
 } from "../src/ipc/register.ts";
+import { operations } from "../src/ops/index.ts";
+import { desktopTestServices } from "./desktopTestServices.ts";
 
 /**
  * The host's job, faked.
@@ -145,7 +145,7 @@ afterAll(async () => {
 
 it("tree-create P2-1: returns the real existing-folder failure through the create IPC handler", async () => {
   const ipc = fakeIpc();
-  const registry = createRegistry(ipc, { previewUrlFor });
+  const registry = createRegistry(ipc, { previewUrlFor, operations, ...desktopTestServices });
   const original = await readFile(join(root, "alpha.txt"), "utf8");
   try {
     const reply = await ipc.invoke(CHANNELS.create, { path: root, kind: "directory" });
@@ -165,7 +165,7 @@ it("tree-create P2-1: returns the real existing-folder failure through the creat
 describe("the bridge returns what the main process produced", () => {
   it("lists a directory", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.list, { path: root });
 
@@ -176,7 +176,7 @@ describe("the bridge returns what the main process produced", () => {
 
   it("reports a failure as a value, never as a thrown error", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.list, { path: "/does/not/exist" });
 
@@ -203,7 +203,7 @@ function listing(value: unknown): string[] {
 describe("the listing comes back in the order that was asked for", () => {
   it("puts the smallest file first when asked for the size order", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.list, { path: ordered, sort: "size" });
 
@@ -214,7 +214,7 @@ describe("the listing comes back in the order that was asked for", () => {
 
   it("puts the largest first when the order is reversed", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.list, {
       path: ordered,
@@ -232,7 +232,7 @@ describe("the listing comes back in the order that was asked for", () => {
 
   it("keeps directories above files in every order, reversed or not", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     for (const sort of ["alphabetical", "modified", "size", "extension", "natural"]) {
       for (const reverse of [false, true]) {
@@ -250,7 +250,7 @@ describe("the listing comes back in the order that was asked for", () => {
 
   it("treats a missing reverse field as not reversed", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const withOut = await ipc.invoke(CHANNELS.list, { path: ordered, sort: "size" });
     const withFalse = await ipc.invoke(CHANNELS.list, {
@@ -269,7 +269,7 @@ describe("the boundary rejects before the handler runs", () => {
   it("never enters the handler on a malformed payload", async () => {
     const scan = vi.fn();
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor, scanDirectory: scan });
+    createRegistry(ipc, { readOnly: true, previewUrlFor, scanDirectory: scan });
 
     const reply = await ipc.invoke(CHANNELS.list, { path: 7 });
 
@@ -284,7 +284,7 @@ describe("the boundary rejects before the handler runs", () => {
   it("rejects a relative path without touching the filesystem", async () => {
     const scan = vi.fn();
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor, scanDirectory: scan });
+    createRegistry(ipc, { readOnly: true, previewUrlFor, scanDirectory: scan });
 
     await ipc.invoke(CHANNELS.list, { path: "../../etc" });
 
@@ -302,7 +302,7 @@ describe("the channel surface is closed", () => {
       removeHandler() {},
     };
 
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     // Request channels only. A push channel is sent to and never handled, and
     // conflating the two made this assertion fail for a correct registry.
@@ -336,9 +336,9 @@ describe("the channel surface is closed", () => {
 
   it("refuses to register the same channel twice", () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
-    expect(() => createRegistry(ipc, { previewUrlFor })).toThrow();
+    expect(() => createRegistry(ipc, { readOnly: true, previewUrlFor })).toThrow();
   });
 });
 
@@ -361,7 +361,7 @@ describe("a large listing arrives in batches", () => {
     // same, about 400 MB/s, so the entire cost of a large reply is copying. One
     // giant message blocks; batches let the first rows paint.
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.list, { path: big, stream: true });
 
@@ -380,7 +380,7 @@ describe("a large listing arrives in batches", () => {
 describe("cancellation reaches the work", () => {
   it("stops a scan that is still running", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const started = performance.now();
     const pending = ipc.invoke(CHANNELS.list, { path: "/usr/lib", stream: true });
@@ -429,6 +429,7 @@ describe("the Electron adapter", () => {
     const transport = electronIpcSurface(fakeIpcMain);
     const pushed: string[] = [];
     createRegistry(transport.surface, {
+      readOnly: true,
       previewUrlFor,
       watchDirectory: (_path, onChange) => {
         onChange([]);
@@ -499,6 +500,7 @@ describe("watching", () => {
     // failure that is a value but lies about itself is no better than a throw.
     const ipc = fakeIpc();
     createRegistry(ipc, {
+      readOnly: true,
       previewUrlFor,
       watchDirectory: () => Promise.reject(new Error("no such directory")),
     });
@@ -512,7 +514,7 @@ describe("watching", () => {
 
   it("reports a read failure as read_failed", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.readText, { path: "/does/not/exist" });
 
@@ -530,6 +532,7 @@ describe("watching", () => {
     let opened = 0;
     const ipc = fakeIpc();
     createRegistry(ipc, {
+      readOnly: true,
       previewUrlFor,
       watchDirectory: async (path) => {
         const mine = `${path}#${opened++}`;
@@ -554,6 +557,7 @@ describe("watching", () => {
     let stopped = false;
     const ipc = fakeIpc();
     createRegistry(ipc, {
+      readOnly: true,
       previewUrlFor,
       watchDirectory: async () => async () => {
         stopped = true;
@@ -576,6 +580,7 @@ describe("dispose", () => {
     let stopped = 0;
     const ipc = fakeIpc();
     const registry = createRegistry(ipc, {
+      readOnly: true,
       previewUrlFor,
       watchDirectory: async () => async () => {
         stopped++;
@@ -598,7 +603,7 @@ describe("a caller-named stream can be cancelled while it runs", () => {
     // specific running scan was structurally impossible and `"all"` was the
     // only lever that ever worked.
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const pending = ipc.invoke(CHANNELS.list, {
       path: "/usr/lib",
@@ -615,7 +620,7 @@ describe("a caller-named stream can be cancelled while it runs", () => {
 describe("describing a directory", () => {
   it("carries the entries, not only how many there are", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.describe, { path: root });
 
@@ -628,7 +633,7 @@ describe("describing a directory", () => {
 
   it("reports each entry's kind, so the listing can draw the right icon", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.describe, { path: kinds });
 
@@ -648,7 +653,7 @@ describe("describing a directory", () => {
     // correctly two columns to the left, which is where a listing that
     // disagrees with the scan becomes visible.
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.describe, { path: kinds });
 
@@ -669,7 +674,7 @@ describe("describing a directory", () => {
     // thousand strings across the bridge every time the cursor settled on it,
     // 150 ms apart. The cap bounds the payload; the count stays honest.
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.describe, { path: capped });
 
@@ -682,7 +687,7 @@ describe("describing a directory", () => {
 
   it("sends an empty listing for a file", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.describe, { path: join(root, "alpha.txt") });
 
@@ -724,7 +729,7 @@ describe("the bookmark channels", () => {
 
   it("answers the read with a seeded store on a first run", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.bookmarksRead, {});
 
@@ -738,7 +743,7 @@ describe("the bookmark channels", () => {
     // `g` is jump-to-top, so a bookmark on it could never fire. Persisting it
     // would look like a save that worked and be gone after a restart.
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     await ipc.invoke(CHANNELS.bookmarksWrite, {
       bookmarks: [
@@ -753,7 +758,7 @@ describe("the bookmark channels", () => {
 
   it("refuses a relative path", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     await ipc.invoke(CHANNELS.bookmarksWrite, {
       bookmarks: [{ letter: "w", bookmark: { path: "relative/here", label: "here" } }],
@@ -765,7 +770,7 @@ describe("the bookmark channels", () => {
 
   it("never enters the handler on a malformed payload", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.bookmarksWrite, { bookmarks: "not a list" });
 
@@ -776,7 +781,7 @@ describe("the bookmark channels", () => {
 
   it("reads back what it wrote", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     await ipc.invoke(CHANNELS.bookmarksWrite, {
       bookmarks: [{ letter: "w", bookmark: { path: "/tmp/work", label: "work" } }],
@@ -823,7 +828,7 @@ describe("the directory preview URL comes from the host", () => {
     const file = join(root, "doc.md");
     await writeFile(file, "# hello");
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = (await ipc.invoke(CHANNELS.previewDirectoryUrl, { path: file })) as {
       ok: boolean;
@@ -843,7 +848,7 @@ describe("the directory preview URL comes from the host", () => {
     await writeFile(first, "one");
     await writeFile(second, "two");
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const a = (await ipc.invoke(CHANNELS.previewDirectoryUrl, { path: first })) as {
       value: { url: string };
@@ -859,7 +864,7 @@ describe("the directory preview URL comes from the host", () => {
     const file = join(root, "secret-document.md");
     await writeFile(file, "content");
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = (await ipc.invoke(CHANNELS.previewDirectoryUrl, { path: file })) as {
       value: { url: string };
@@ -871,7 +876,7 @@ describe("the directory preview URL comes from the host", () => {
 
   it("refuses a path that is not there", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = (await ipc.invoke(CHANNELS.previewDirectoryUrl, {
       path: join(root, "no-such-document.md"),
@@ -887,7 +892,7 @@ describe("the preview URL comes from the host", () => {
     const file = join(root, "previewable.txt");
     await writeFile(file, "content");
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = (await ipc.invoke(CHANNELS.previewUrl, { path: file })) as {
       ok: boolean;
@@ -906,7 +911,7 @@ describe("the preview URL comes from the host", () => {
     const file = join(root, "secret-name.txt");
     await writeFile(file, "content");
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = (await ipc.invoke(CHANNELS.previewUrl, { path: file })) as {
       ok: boolean;
@@ -942,7 +947,7 @@ describe("the listing order crosses the boundary", () => {
 
   it("answers the default before anything has been written", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.listingRead, {});
 
@@ -953,7 +958,7 @@ describe("the listing order crosses the boundary", () => {
 
   it("round-trips a whole options object", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
     // WHOLE, as the name says: the decoder fills any field the payload omits,
     // so a partial object cannot round-trip to itself and never could.
     const options = {
@@ -974,7 +979,7 @@ describe("the listing order crosses the boundary", () => {
 
   it("refuses a malformed payload before it reaches the disk", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.listingWrite, { options: "size" });
 
@@ -994,7 +999,7 @@ describe("the listing order crosses the boundary", () => {
     // fixing. Verification confirmed this by hand — that does not survive the
     // next refactor and this does.
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
     const path = process.env["SYMMETRIA_FM_LISTING"] as string;
     await writeFile(path, "{ half a file", "utf8");
 
@@ -1011,7 +1016,7 @@ describe("the listing order crosses the boundary", () => {
     // caller must not be able to persist a value the next load would silently
     // discard, which is a setting that appears to save and is gone next time.
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const written = await ipc.invoke(CHANNELS.listingWrite, {
       options: { sort: "cromulent", reverse: true, showHidden: false },
@@ -1030,7 +1035,7 @@ describe("the listing order crosses the boundary", () => {
 describe("the disk usage channel", () => {
   it("measures the filesystem holding a directory", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.diskUsage, { path: root });
 
@@ -1043,7 +1048,7 @@ describe("the disk usage channel", () => {
 
   it("answers a path that does not exist with a failure value", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.diskUsage, { path: join(root, "missing") });
 
@@ -1054,7 +1059,7 @@ describe("the disk usage channel", () => {
 
   it("refuses a relative path before touching the filesystem", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.diskUsage, { path: "relative" });
 
@@ -1067,7 +1072,7 @@ describe("the disk usage channel", () => {
 describe("the places channel", () => {
   it("answers a list the renderer's decoder accepts", async () => {
     const ipc = fakeIpc();
-    createRegistry(ipc, { previewUrlFor });
+    createRegistry(ipc, { readOnly: true, previewUrlFor });
 
     const reply = await ipc.invoke(CHANNELS.places, {});
 

@@ -8,8 +8,8 @@ import {
   routePreview,
 } from "@symmetria/fm-core/preview/route";
 import { useEffect, useMemo, useState } from "react";
-import { describeEntry } from "./bridge.ts";
 import type { PreviewPaneProps } from "./components/preview/PreviewPane.tsx";
+import { useFileManagerIo } from "./IoContext.tsx";
 import { useAudioPlayback } from "./useAudioPlayback.ts";
 
 /**
@@ -132,6 +132,7 @@ const NOTHING: Preview = {
  * written twice.
  */
 function usePreview(path: string | null): Preview {
+  const { describeEntry } = useFileManagerIo();
   const [preview, setPreview] = useState<Preview>(NOTHING);
 
   useEffect(() => {
@@ -176,7 +177,7 @@ function usePreview(path: string | null): Preview {
       current = false;
       clearTimeout(timer);
     };
-  }, [path]);
+  }, [path, describeEntry]);
 
   return preview;
 }

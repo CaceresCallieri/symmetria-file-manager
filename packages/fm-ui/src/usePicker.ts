@@ -9,7 +9,7 @@ import {
 import type { PickerWindowRequest } from "@symmetria/fm-core/windowUrl";
 import { useCallback, useMemo, useRef, useState } from "react";
 
-import { pickerCancel, pickerConfirm } from "./bridge.ts";
+import { useFileManagerIo } from "./IoContext.tsx";
 import type { Tabs } from "./useTabs.ts";
 
 /**
@@ -69,6 +69,7 @@ const INERT: PickerState = {
 };
 
 export function usePicker(request: PickerWindowRequest | null, tabs: Tabs): Picker {
+  const { pickerCancel, pickerConfirm } = useFileManagerIo();
   // Seeded from the request and then owned here, because the user edits it.
   const [saveName, setSaveName] = useState(request?.options.suggestedName ?? "");
   const saveNameRef = useRef<HTMLInputElement | null>(null);
@@ -117,12 +118,12 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs): Pick
     // Answering with nothing would read to the portal as a confirmed selection.
     if (resolved.kind !== "paths") return;
     void pickerConfirm({ fifo, paths: resolved.paths });
-  }, [fifo, context]);
+  }, [fifo, context, pickerConfirm]);
 
   const cancel = useCallback(() => {
     if (fifo === null) return;
     void pickerCancel({ fifo });
-  }, [fifo]);
+  }, [fifo, pickerCancel]);
 
   const state = useMemo<PickerState>(
     () =>

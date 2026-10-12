@@ -1,7 +1,7 @@
 import { isFailure } from "@symmetria/fm-core/contract";
 import { isAncestorPath } from "@symmetria/fm-core/overview/model";
 import { useRef, useState } from "react";
-import { cancelTransfer, onTransferProgress, transferEntries } from "../bridge.ts";
+import { useFileManagerIo } from "../IoContext.tsx";
 import { type Clipboard, mutationPaths, type OperationTarget } from "./targets.ts";
 import type { useOperationDialogs } from "./useOperationDialogs.ts";
 
@@ -23,6 +23,7 @@ export function useTransfers(
   dialogs: ReturnType<typeof useOperationDialogs>,
   setMessage: (message: string) => void,
 ) {
+  const { cancelTransfer, onTransferProgress, transferEntries } = useFileManagerIo();
   const [clipboard, setClipboard] = useState<Clipboard | null>(null);
   const [progress, setProgress] = useState<TransferProgressState | null>(null);
   const currentTransfer = useRef<string | null>(null);

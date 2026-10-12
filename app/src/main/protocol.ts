@@ -10,10 +10,9 @@ import {
   TOKEN_PREFIX,
 } from "@symmetria/fm-main/previewTokens";
 import { net, protocol } from "electron";
-
-import { APP_SCHEME } from "./appScheme.ts";
-
+import { APP_HOST, APP_ORIGIN, APP_SCHEME } from "./appScheme.ts";
 import { fileResponse } from "./fileResponse.ts";
+import { REMOTE_PREVIEW_PREFIX, serveRemotePreview } from "./remote/previews.ts";
 
 /**
  * The scheme the renderer is served from.
@@ -35,7 +34,6 @@ import { fileResponse } from "./fileResponse.ts";
 // can be read by `frameNavigation.ts`, which must stay testable.
 
 /** The authority segment. `symmetria-fm://app/index.html`. */
-const APP_HOST = "app";
 
 /**
  * Must run before the app is ready, and before any window exists.
@@ -177,22 +175,31 @@ export function handleAppScheme(): void {
     const url = new URL(request.url);
     if (url.hostname !== APP_HOST) return notFound();
 
-    if (url.pathname.startsWith(TOKEN_PREFIX)) {
-      const remainder = url.pathname.slice(TOKEN_PREFIX.length);
-      const separator = remainder.indexOf("/");
-      if (separator < 0) return servePreview(request, url.pathname);
-
-      return serveNeighbour(request, remainder.slice(0, separator), remainder.slice(separator + 1));
-    }
-
-    return serveAsset(root, url.pathname);
+    return serveAuthorizedRequest(root, request, url.pathname);
   });
 }
 
+async function serveAuthorizedRequest(
+  root: string,
+  request: Request,
+  pathname: string,
+): Promise<Response> {
+  if (pathname.startsWith(REMOTE_PREVIEW_PREFIX)) return serveRemotePreview(request, pathname);
+  if (pathname.startsWith(TOKEN_PREFIX)) {
+    const remainder = pathname.slice(TOKEN_PREFIX.length);
+    const separator = remainder.indexOf("/");
+    if (separator < 0) return servePreview(request, pathname);
+
+    return serveNeighbour(request, remainder.slice(0, separator), remainder.slice(separator + 1));
+  }
+
+  return serveAsset(root, pathname);
+}
+
 /** The URL the window loads. */
-export const APP_ENTRY_URL = `${APP_SCHEME}://${APP_HOST}/index.html`;
+export const APP_ENTRY_URL = `${APP_ORIGIN}/index.html`;
 
 /** Where a token-addressed preview is served from. */
 export function previewUrlFor(token: string): string {
-  return `${APP_SCHEME}://${APP_HOST}${TOKEN_PREFIX}${token}`;
+  return `${APP_ORIGIN}${TOKEN_PREFIX}${token}`;
 }

@@ -17,6 +17,7 @@ function harness(ignoreAbort = false) {
       },
     },
     {
+      readOnly: true,
       previewUrlFor: (token) => token,
       readOverviewDirectory: (_path, _limit, signal) =>
         new Promise((resolve, reject) => {

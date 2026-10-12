@@ -1,10 +1,5 @@
 import type { Bookmark } from "@symmetria/fm-core/bookmarks";
-import {
-  type DiskUsageReply,
-  isFailure,
-  type Place,
-  type PlaceKind,
-} from "@symmetria/fm-core/contract";
+import { isFailure, type Place, type PlaceKind } from "@symmetria/fm-core/contract";
 import { humanSize } from "@symmetria/fm-core/format";
 import type { KeyEvent, ViewKind } from "@symmetria/fm-core/keys/types";
 import {
@@ -26,10 +21,10 @@ import {
   Search,
 } from "lucide-react";
 import { type MouseEvent, type ReactNode, useEffect, useState } from "react";
-
-import { diskUsage, userPlaces } from "../bridge.ts";
+import { useDiskUsage } from "../diskUsage.ts";
 import type { PressKey } from "../hooks/useKeyDispatch.ts";
 import { useViewSwitch } from "../hooks/useViewSwitch.ts";
+import { useFileManagerIo } from "../IoContext.tsx";
 
 import type { TabView } from "../useTabs.ts";
 import { PathBar } from "./PathBar.tsx";
@@ -188,6 +183,7 @@ const PLACE_ICONS = {
  * guessing English names a user may have renamed or never had.
  */
 function usePlaces(): readonly Place[] {
+  const { userPlaces } = useFileManagerIo();
   const [places, setPlaces] = useState<readonly Place[]>([]);
   useEffect(() => {
     let current = true;
@@ -197,18 +193,19 @@ function usePlaces(): readonly Place[] {
     return () => {
       current = false;
     };
-  }, []);
+  }, [userPlaces]);
   return places;
 }
 
 export interface AtmosphereRailProps {
+  readonly footer?: ReactNode;
   readonly home: string;
   readonly path: string;
   readonly bookmarks: ReadonlyMap<string, Bookmark>;
   onNavigate(path: string): void;
 }
 
-export function AtmosphereRail({ home, path, bookmarks, onNavigate }: AtmosphereRailProps) {
+export function AtmosphereRail({ home, path, bookmarks, onNavigate, footer }: AtmosphereRailProps) {
   const places = usePlaces();
   return (
     <nav className="atmo-rail" aria-label="Places">
@@ -246,7 +243,7 @@ export function AtmosphereRail({ home, path, bookmarks, onNavigate }: Atmosphere
           ))}
         </div>
       ) : null}
-      <DiskMeter path={path} />
+      {footer ?? <DiskMeter path={path} />}
     </nav>
   );
 }
@@ -278,33 +275,6 @@ function RailPlace({
   );
 }
 
-/** How often the meter re-reads while the directory stays the same. */
-const DISK_REFRESH_MS = 30_000;
-
-/**
- * The filesystem holding `path`, re-read when the directory changes and every
- * `DISK_REFRESH_MS` while it does not, so a copy into the same folder still
- * moves the bar. Null until the first answer, and for a host that cannot
- * measure.
- */
-function useDiskUsage(path: string): DiskUsageReply | null {
-  const [usage, setUsage] = useState<DiskUsageReply | null>(null);
-  useEffect(() => {
-    let current = true;
-    const read = () =>
-      void diskUsage(path).then((reply) => {
-        if (current) setUsage(isFailure(reply) ? null : reply.value);
-      });
-    read();
-    const timer = window.setInterval(read, DISK_REFRESH_MS);
-    return () => {
-      current = false;
-      window.clearInterval(timer);
-    };
-  }, [path]);
-  return usage;
-}
-
 /** Used share at or above which the bar turns amber, then red. */
 const DISK_WARN = 0.9;
 const DISK_FULL = 0.97;
@@ -320,7 +290,7 @@ function diskLevel(used: number): "ok" | "warn" | "full" {
 }
 
 function DiskMeter({ path }: { readonly path: string }) {
-  const usage = useDiskUsage(path);
+  const usage = useDiskUsage(useFileManagerIo(), path);
   if (usage === null) return null;
 
   const used = (usage.total - usage.free) / usage.total;

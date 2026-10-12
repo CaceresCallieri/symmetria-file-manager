@@ -2,7 +2,7 @@ import type { Bookmark } from "@symmetria/fm-core/bookmarks";
 import { isFailure } from "@symmetria/fm-core/contract";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { readBookmarks, writeBookmarks } from "./bridge.ts";
+import { useFileManagerIo } from "./IoContext.tsx";
 
 /**
  * The bookmark store, as the window sees it.
@@ -25,6 +25,7 @@ export interface Bookmarks {
 }
 
 export function useBookmarks(): Bookmarks {
+  const { readBookmarks, writeBookmarks } = useFileManagerIo();
   const [byLetter, setByLetter] = useState<ReadonlyMap<string, Bookmark>>(new Map());
 
   useEffect(() => {
@@ -37,7 +38,7 @@ export function useBookmarks(): Bookmarks {
     return () => {
       current = false;
     };
-  }, []);
+  }, [readBookmarks]);
 
   /**
    * The tail of the write chain.
@@ -64,15 +65,18 @@ export function useBookmarks(): Bookmarks {
    * works for the session, and it is silent for the same reason the seed write
    * is — the user asked to bind a letter, not to be told about a filesystem.
    */
-  const persist = useCallback((next: Map<string, Bookmark>) => {
-    setByLetter(next);
-    // `catch` on the chain, not on the write: one rejection must not break the
-    // link and strand every write after it.
-    writeChain.current = writeChain.current.then(
-      () => writeBookmarks(next),
-      () => writeBookmarks(next),
-    );
-  }, []);
+  const persist = useCallback(
+    (next: Map<string, Bookmark>) => {
+      setByLetter(next);
+      // `catch` on the chain, not on the write: one rejection must not break the
+      // link and strand every write after it.
+      writeChain.current = writeChain.current.then(
+        () => writeBookmarks(next),
+        () => writeBookmarks(next),
+      );
+    },
+    [writeBookmarks],
+  );
 
   return {
     byLetter,

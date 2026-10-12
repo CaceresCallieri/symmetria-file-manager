@@ -40,6 +40,7 @@ import { resolveListingOptions } from "@symmetria/fm-core/listingOptions";
 import { resolveMimeType } from "@symmetria/fm-core/mime";
 import { decodeOverviewRequest } from "@symmetria/fm-core/overview/contract";
 import { sortEntries } from "@symmetria/fm-core/sort";
+import type { IndexPool } from "@symmetria/fm-search/main/pool";
 import { defaultBookmarksPath, readOrSeedBookmarks, saveBookmarks } from "../bookmarks.ts";
 import { mimeTables } from "../fs/mimeTables.ts";
 import { readOverviewDirectory } from "../fs/overview.ts";
@@ -50,11 +51,10 @@ import {
   loadListingOptions,
   saveListingOptions,
 } from "../listingOptions.ts";
-import { copyImage, copyText } from "../ops/clipboard.ts";
-import { operations } from "../ops/index.ts";
+import type * as HostClipboard from "../ops/clipboard.ts";
+import type { Operations } from "../ops/index.ts";
 import { frecentDirectories } from "../ops/zoxide.ts";
 import { authorisePreview, authorisePreviewDirectory } from "../previewTokens.ts";
-import { searchPool } from "../search.ts";
 import { userPlaces } from "../xdg.ts";
 import { CHANNELS, REQUEST_CHANNELS } from "./channels.ts";
 
@@ -194,20 +194,35 @@ export interface Registry {
  */
 export type PreviewUrlFor = (token: string) => string;
 
-/**
- * What the host supplies.
- *
- * `previewUrlFor` is REQUIRED because there is no honest default: a fallback
- * would have to name some host's scheme, and a registry that quietly serves the
- * wrong origin is worse than one that will not compile without being told.
- * The other two are optional, injected so a test can prove a handler was never
- * entered.
- */
-export interface Dependencies {
+/** Host-specific URL grants and optional read implementations. */
+interface ReadDependencies {
   previewUrlFor: PreviewUrlFor;
   scanDirectory?: typeof scanDirectory;
   readOverviewDirectory?: typeof readOverviewDirectory;
   watchDirectory?: typeof watchDirectory;
+}
+/** A full host must supply every desktop capability at compile time. */
+export interface FullDependencies extends ReadDependencies {
+  readonly readOnly?: false;
+  readonly operations: Operations;
+  readonly clipboard: Pick<typeof HostClipboard, "copyText" | "copyImage">;
+  readonly searchPool: () => IndexPool;
+}
+/** Explicit opt-in for a host without mutation, clipboard, or finder services.
+ * Configuration stores remain separate from file operations. The remote host
+ * additionally limits requests at its authenticated boundary.
+ */
+interface ReadOnlyDependencies extends ReadDependencies {
+  readonly readOnly: true;
+  readonly operations?: never;
+  readonly clipboard?: never;
+  readonly searchPool?: never;
+}
+export type Dependencies = FullDependencies | ReadOnlyDependencies;
+
+function requireHost<T>(service: T | undefined): T {
+  if (service === undefined) throw new Error("This host does not provide this operation");
+  return service;
 }
 
 /**
@@ -593,7 +608,7 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
   ipc.handle(
     CHANNELS.transfer,
     guard(decodeTransferRequest, "write_failed", async (request, from) => {
-      const outcome = await operations.transfer(request, (done, total) => {
+      const outcome = await requireHost(deps.operations).transfer(request, (done, total) => {
         from.send(CHANNELS.transferProgress, {
           transferId: request.transferId,
           done,
@@ -607,7 +622,7 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
   ipc.handle(
     CHANNELS.cancelTransfer,
     guard(decodeCancelTransferRequest, "write_failed", (request) => {
-      operations.cancelTransfer(request.transferId);
+      requireHost(deps.operations).cancelTransfer(request.transferId);
       return Promise.resolve(success(null));
     }),
   );
@@ -615,7 +630,7 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
   ipc.handle(
     CHANNELS.create,
     guard(decodeCreateRequest, "write_failed", async (request) => {
-      await operations.create(request.path, request.kind);
+      await requireHost(deps.operations).create(request.path, request.kind);
       return success(null);
     }),
   );
@@ -623,14 +638,16 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
   ipc.handle(
     CHANNELS.rename,
     guard(decodeRenameRequest, "write_failed", async (request) => {
-      return success({ path: await operations.rename(request.path, request.name) });
+      return success({
+        path: await requireHost(deps.operations).rename(request.path, request.name),
+      });
     }),
   );
 
   ipc.handle(
     CHANNELS.trash,
     guard(decodeTrashRequest, "write_failed", async (request) => {
-      await operations.trash(request.paths);
+      await requireHost(deps.operations).trash(request.paths);
       return success(null);
     }),
   );
@@ -645,7 +662,7 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
       // success and letting the first query discover it turns "this directory
       // could not be indexed" into a finder that shows nothing and says
       // nothing.
-      await searchPool().start(request.directory);
+      await requireHost(deps.searchPool)().start(request.directory);
       return success(null);
     }),
   );
@@ -653,7 +670,7 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
   ipc.handle(
     CHANNELS.searchQuery,
     guard(decodeSearchQueryRequest, "read_failed", async (request) => {
-      const reply = await searchPool().search(request.directory, request.query);
+      const reply = await requireHost(deps.searchPool)().search(request.directory, request.query);
       return success(reply);
     }),
   );
@@ -665,7 +682,7 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
       // outcome a user could act on, and making the overlay wait for it would
       // put a statistic on the path between pressing Enter and the file
       // opening. Silent when the index is already gone.
-      searchPool().record(request.directory, request.query, request.chosenPath);
+      requireHost(deps.searchPool)().record(request.directory, request.query, request.chosenPath);
       return success(null);
     }),
   );
@@ -673,7 +690,7 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
   ipc.handle(
     CHANNELS.searchRelease,
     guard(decodeSearchDirectoryRequest, "read_failed", async (request) => {
-      searchPool().release(request.directory);
+      requireHost(deps.searchPool)().release(request.directory);
       return success(null);
     }),
   );
@@ -707,14 +724,14 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
     CHANNELS.clipboard,
     guard(decodeClipboardRequest, "write_failed", async (request) => {
       if (request.kind === "text") {
-        copyText(request.text);
+        requireHost(deps.clipboard).copyText(request.text);
         return success(null);
       }
 
       // Reported as a value rather than thrown. A file that is not an image —
       // or one that vanished between the keystroke and the read — is an
       // ordinary thing for a user to point at, not an exceptional one.
-      const problem = copyImage(request.path);
+      const problem = requireHost(deps.clipboard).copyImage(request.path);
       return problem === null ? success(null) : failure("write_failed", problem);
     }),
   );
@@ -722,7 +739,7 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
   ipc.handle(
     CHANNELS.open,
     guard(decodeOpenRequest, "read_failed", async (request) => {
-      await operations.open(request.path);
+      await requireHost(deps.operations).open(request.path);
       return success(null);
     }),
   );

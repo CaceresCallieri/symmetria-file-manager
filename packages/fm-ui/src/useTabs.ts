@@ -25,8 +25,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { hideWindow, listDirectory, watchDirectory } from "./bridge.ts";
 import { useNavigationGenerations } from "./hooks/useNavigationGenerations.ts";
+import { useFileManagerIo } from "./IoContext.tsx";
 import {
   activateTab,
   activePane,
@@ -137,6 +137,7 @@ export interface TabView {
 }
 
 export interface Tabs {
+  readonly snapshot: TabsState;
   readonly pane: PaneState;
   readonly parentEntries: readonly FsEntry[];
   readonly parentCursorName: string;
@@ -146,6 +147,7 @@ export interface Tabs {
   readonly sort: SortMode;
   readonly reverse: boolean;
   readonly showHidden: boolean;
+  readonly listingReady: boolean;
   /** Whether a file with a rendered form shows it, or shows its source. */
   readonly renderDocuments: boolean;
   readonly error: string | null;
@@ -297,6 +299,7 @@ function useDirectoryLoader(
   setState: Dispatch<SetStateAction<TabsState>>,
   reportError: ReportError,
 ): DirectoryLoader {
+  const { listDirectory } = useFileManagerIo();
   // Which read is the current one, per tab.
   //
   // Navigating faster than the disk answers is normal with a held key, and
@@ -442,7 +445,7 @@ function useDirectoryLoader(
         );
       });
     },
-    [failedRead, optionsRef, clearSuccessfulReadError, setState],
+    [failedRead, optionsRef, clearSuccessfulReadError, setState, listDirectory],
   );
 
   // Four maps keyed by tab id, and none of them was pruned — so every tab a
@@ -495,6 +498,7 @@ function useDirectoryLoader(
  * what it depends on and what it uses are the same thing.
  */
 function useWatchReconciler(topology: string, loadTab: (id: string, path: string) => void): void {
+  const { watchDirectory } = useFileManagerIo();
   const live = useRef(new Map<string, WatchSlot>());
 
   useEffect(() => {
@@ -521,7 +525,7 @@ function useWatchReconciler(topology: string, loadTab: (id: string, path: string
         else unsubscribe();
       });
     }
-  }, [topology, loadTab]);
+  }, [topology, loadTab, watchDirectory]);
 
   // Release every watch when the window goes. Separate from the reconciler so
   // it does not run on each change of the tab list.
@@ -565,6 +569,7 @@ interface ParentColumn {
  * one, so reading it for all of them would be work nobody sees.
  */
 function useParentColumn(activePath: string, options: ListingOptions): ParentColumn {
+  const { listDirectory } = useFileManagerIo();
   const [parentEntries, setParentEntries] = useState<readonly FsEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -602,13 +607,14 @@ function useParentColumn(activePath: string, options: ListingOptions): ParentCol
     // A listing like any other, so it re-reads when the ORDER does — without
     // that the two columns would disagree, which is more confusing than either
     // order on its own.
-  }, [activePath, forListing]);
+  }, [activePath, forListing, listDirectory]);
 
   return { parentEntries, loading };
 }
 
-export function useTabs(initialPath: string): Tabs {
-  const [state, setState] = useState<TabsState>(() => createTabs(initialPath));
+export function useTabs(initialPath: string, initialTabs?: TabsState): Tabs {
+  const { hideWindow } = useFileManagerIo();
+  const [state, setState] = useState<TabsState>(() => initialTabs ?? createTabs(initialPath));
   const activeId = state.tabs[state.activeIndex]?.id;
   const {
     current: navigationGeneration,
@@ -730,10 +736,11 @@ export function useTabs(initialPath: string): Tabs {
         return previous;
       });
     },
-    [release, reportError, releaseNavigation],
+    [release, reportError, releaseNavigation, hideWindow],
   );
 
   return {
+    snapshot: state,
     navigationGeneration,
     pendingRevealPath: pendingPath.bind(null, activeId),
     pane,
@@ -749,6 +756,7 @@ export function useTabs(initialPath: string): Tabs {
     sort: options.sort,
     reverse: options.reverse,
     showHidden: options.showHidden,
+    listingReady: stored.ready,
     renderDocuments: options.renderDocuments,
     error: errorFor(activeId),
     loading,

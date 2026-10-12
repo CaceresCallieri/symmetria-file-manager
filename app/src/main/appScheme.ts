@@ -15,3 +15,6 @@ export const APP_SCHEME = "symmetria-fm";
 
 /** The same, as a URL's `protocol` reads it. */
 export const APP_SCHEME_PROTOCOL = `${APP_SCHEME}:`;
+
+export const APP_HOST = "app";
+export const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`;

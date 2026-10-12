@@ -2,7 +2,7 @@ import type { Result } from "@symmetria/fm-core/contract";
 import { isFailure } from "@symmetria/fm-core/contract";
 import { useEffect, useState } from "react";
 
-import { previewDirectoryUrl, previewUrl } from "../../bridge.ts";
+import { useFileManagerIo } from "../../IoContext.tsx";
 
 /**
  * A URL the browser may load a previewed file from.
@@ -21,6 +21,7 @@ import { previewDirectoryUrl, previewUrl } from "../../bridge.ts";
  * circular import as soon as the second one grows.
  */
 export function usePreviewUrl(path: string): string | null {
+  const { previewUrl } = useFileManagerIo();
   return useResolvedUrl(path, previewUrl);
 }
 
@@ -37,6 +38,7 @@ export function usePreviewUrl(path: string): string | null {
  * either one.
  */
 export function usePreviewDirectoryUrl(path: string): string | null {
+  const { previewDirectoryUrl } = useFileManagerIo();
   return useResolvedUrl(path, previewDirectoryUrl);
 }
 

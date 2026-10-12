@@ -79,3 +79,15 @@ await esbuild({
   sourcemap: true,
   logLevel: "info",
 });
+
+// The read-only service runs in plain Node on a headless machine.
+await esbuild({
+  entryPoints: [`${appDir}/src/main/remote/entry.ts`],
+  outfile: `${out}/remote/service.mjs`,
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  target: "node24",
+  sourcemap: true,
+  logLevel: "info",
+});

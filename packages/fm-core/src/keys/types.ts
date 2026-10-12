@@ -80,6 +80,7 @@ export interface PickerState {
 
 /** Everything a `when()` may read. Never mutated by the registry. */
 export interface KeyState {
+  readonly readOnly?: boolean;
   readonly selectedCount: number;
   readonly searchActive: boolean;
   readonly matchCount: number;
@@ -109,6 +110,7 @@ export type CopyTarget = "path" | "filename" | "nameWithoutExtension" | "directo
  * the operation does — that split is what keeps the table readable.
  */
 export interface KeyActions {
+  openMachines?: (() => void) | undefined;
   // Navigation
   moveDown(): void;
   moveUp(): void;

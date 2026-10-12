@@ -1,6 +1,7 @@
 import type { Bookmark } from "@symmetria/fm-core/bookmarks";
+import type { Bridge, ExternalOpen } from "@symmetria/fm-core/bridge";
 import type { CascadeMode } from "@symmetria/fm-core/keys/cascade";
-import type { KeyContext } from "@symmetria/fm-core/keys/types";
+import type { KeyContext, ViewKind } from "@symmetria/fm-core/keys/types";
 import {
   cursorEntry,
   entryAt,
@@ -16,6 +17,7 @@ import {
 } from "@symmetria/fm-core/windowUrl";
 import { FinderOverlay } from "@symmetria/fm-search/ui";
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
+import { createFileManagerIo, defaultFileManagerIo } from "./bridge.ts";
 import { AtmosphereHeader, AtmosphereRail } from "./components/AtmosphereChrome.tsx";
 import { BrowsingView } from "./components/BrowsingView.tsx";
 import { ClipboardIndicators } from "./components/ClipboardIndicator.tsx";
@@ -32,8 +34,10 @@ import type { TransientLineProps } from "./components/transientLine.tsx";
 import { WhichKeyOverlay } from "./components/WhichKeyOverlay.tsx";
 import { ZoxidePopup } from "./components/ZoxidePopup.tsx";
 import { type PressKey, useKeyDispatch } from "./hooks/useKeyDispatch.ts";
+import { FileManagerIoContext } from "./IoContext.tsx";
 import { OverviewLayer } from "./overview/Overview.tsx";
 import { useOverviewMode } from "./overview/useOverviewMode.ts";
+import type { TabsState } from "./state/tabs.ts";
 import { treeDirectoryError, treeSummary } from "./tree/TreeSummary.tsx";
 import { treeKeyContext, useTreeMode } from "./tree/useTreeMode.ts";
 import { useBookmarks } from "./useBookmarks.ts";
@@ -186,6 +190,15 @@ function flashHostFor(tabs: Tabs, preview: Preview, cursorPath: string | null): 
 }
 
 export interface AppProps {
+  readonly initialTabs?: TabsState;
+  readonly initialExternalOpen?: ExternalOpen | null;
+  readonly onTabsChange?: (tabs: TabsState) => void;
+  readonly initialView?: ViewKind;
+  readonly onViewChange?: (view: ViewKind) => void;
+  readonly readOnly?: boolean;
+  readonly onChooseMachine?: () => void;
+  readonly chromeExtras?: { readonly railFooter: ReactNode };
+  readonly bridge?: Bridge;
   readonly onOpenFile?: (path: string) => void;
   /** Overridden by tests, which must not depend on the real location. */
   readonly startPath?: string;
@@ -355,7 +368,20 @@ function Overlays({
 }
 
 export function App(props: AppProps = {}) {
-  const tabs = useTabs(initialPath(props.startPath));
+  const io = useMemo(
+    () => (props.bridge === undefined ? defaultFileManagerIo : createFileManagerIo(props.bridge)),
+    [props.bridge],
+  );
+  return (
+    <FileManagerIoContext value={io}>
+      <FileManagerPanel {...props} />
+    </FileManagerIoContext>
+  );
+}
+
+function FileManagerPanel(props: AppProps) {
+  const tabs = useTabs(initialPath(props.startPath), props.initialTabs);
+
   const home = homePath(props.homePath);
   const { tree, overview } = useProjectViews(tabs);
   // Memoised because `pickerFromSearch` PARSES the URL: a fresh object each
@@ -371,23 +397,6 @@ export function App(props: AppProps = {}) {
     moveTo: tabs.moveTo,
   });
   const bookmarks = useBookmarks();
-
-  // Wired here rather than inside `useTabs`, and the placement is the point:
-  // `useTabs` owns the tab collection, while composing an external event source
-  // onto it is this component's job.
-  useExternalOpen({
-    openAt: (path) => {
-      search.cancel();
-      modes.reset();
-      millerFlash.clear();
-      overview.close();
-      tree.external(path);
-    },
-    reveal: tabs.reveal,
-    activePath: tabs.pane.path,
-    showHidden: tabs.showHidden,
-    toggleHidden: tabs.toggleHidden,
-  });
 
   // The preview is resolved BEFORE the key actions, not after, because one of
   // those actions needs its answer: the copy chord's image row asks whether the
@@ -415,7 +424,7 @@ export function App(props: AppProps = {}) {
     millerFlash.start,
   );
 
-  const context = browsingContext(
+  const baseContext = browsingContext(
     picker.state.active,
     search,
     modes,
@@ -425,11 +434,24 @@ export function App(props: AppProps = {}) {
     actions,
     ops,
   );
-  useBrowsingTransitions(tree.id, modes.reset, search.cancel, tree.cancel, millerFlash.clear);
-  useBrowsingTransitions(context.view, millerFlash.clear);
+  const context = machineContext(baseContext, props, actions.expandPreview);
+  useBrowsingModeTransitions(tree, context.view, modes.reset, search.cancel, millerFlash.clear);
 
   const flash = browsingFlash(context, tree, overview, millerFlash);
-  const previewPanes = previewPanesFor(modes.readerOpen, cursorPath, previewing.pane);
+  useExternalMachineNavigation(
+    tabs,
+    search,
+    modes,
+    millerFlash,
+    tree,
+    overview,
+    props.initialExternalOpen,
+  );
+  const previewPanes = previewPanesFor(
+    modes.readerOpen,
+    previewPathFor(atmosphere, tree, cursorPath),
+    previewing.pane,
+  );
   const mode = useMemo<CascadeMode>(
     () => cascadeModeFor(modes, ops.modal.kind, search.active, flash.active),
     [modes, ops.modal.kind, search.active, flash.active],
@@ -441,8 +463,11 @@ export function App(props: AppProps = {}) {
     onFlashKey: flash.onKey,
   });
 
-  const { onOpenFile = ops.openAbsolute, rowHeight = DEFAULT_ROW_HEIGHT } = props;
+  const { rowHeight = DEFAULT_ROW_HEIGHT } = props;
+  const onOpenFile = fileOpenFor(props, ops, context);
+  useMachineStateReporting(props, tabs.snapshot, context.view, press, tree.close);
   const chrome = atmosphereChromeFor(atmosphere, {
+    extras: props.chromeExtras,
     tabs,
     context,
     press,
@@ -489,7 +514,7 @@ export function App(props: AppProps = {}) {
               flashLabels={millerFlash.labels}
               flashActive={millerFlash.active}
               onVisibleRange={millerFlash.reportVisibleRange}
-              onActivate={(index) => activateAt(tabs, ops, index)}
+              onActivate={pointerActivationFor(tabs, ops, context)}
               onLeaveTo={leaveTo}
             />
             <WhichKeyOverlay
@@ -605,6 +630,7 @@ function navigateFromChrome(
 }
 
 interface AtmosphereChromeSources {
+  readonly extras: AppProps["chromeExtras"];
   readonly tabs: Tabs;
   readonly context: KeyContext;
   readonly press: PressKey;
@@ -621,7 +647,7 @@ interface AtmosphereChromeSources {
  * counts hooks: that is why the view switch's hook lives in the header.
  */
 function atmosphereChromeFor(enabled: boolean, sources: AtmosphereChromeSources) {
-  const { tabs, context, press, tree, overview, home, bookmarks } = sources;
+  const { tabs, context, press, tree, overview, home, bookmarks, extras } = sources;
   const navigate = (path: string) => navigateFromChrome(path, tabs, tree, overview);
   if (!enabled) {
     return {
@@ -647,6 +673,7 @@ function atmosphereChromeFor(enabled: boolean, sources: AtmosphereChromeSources)
     ),
     rail: (
       <AtmosphereRail
+        footer={extras?.railFooter}
         home={home}
         path={tabs.pane.path}
         bookmarks={bookmarks}
@@ -772,4 +799,118 @@ function browsingFlash(
   if (context.view === "overview")
     return { active: overview.flashActive, onKey: overview.onFlashKey, chrome: null };
   return miller;
+}
+
+function useInitialMachineView(view: ViewKind | undefined, press: PressKey, closeTree: () => void) {
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current) return;
+    restored.current = true;
+    if (view === "tree") press({ key: "e", ctrl: true, shift: false, alt: false, meta: false });
+    if (view === "overview") {
+      closeTree();
+      press({ key: "o", ctrl: true, shift: false, alt: false, meta: false });
+    }
+  }, [view, press, closeTree]);
+}
+
+function machineActions(
+  context: KeyContext,
+  props: AppProps,
+  expandPreview: () => void,
+): KeyContext["actions"] {
+  const activate = () => {
+    if (props.readOnly && context.state.cursorEntry?.isDirectory === false) expandPreview();
+    else context.actions.activate();
+  };
+  return {
+    ...context.actions,
+    activate,
+    enterDirectory: activate,
+    openMachines: props.onChooseMachine,
+  };
+}
+
+function machineContext(
+  context: KeyContext,
+  props: AppProps,
+  expandPreview: () => void,
+): KeyContext {
+  return {
+    ...context,
+    state: { ...context.state, readOnly: props.readOnly ?? false },
+    actions: machineActions(context, props, expandPreview),
+  };
+}
+function useMachineStateReporting(
+  props: AppProps,
+  tabs: TabsState,
+  view: ViewKind,
+  press: PressKey,
+  closeTree: () => void,
+): void {
+  useInitialMachineView(props.initialView, press, closeTree);
+  useEffect(() => {
+    props.onTabsChange?.(tabs);
+  }, [props.onTabsChange, tabs]);
+  useEffect(() => {
+    props.onViewChange?.(view);
+  }, [props.onViewChange, view]);
+}
+
+function fileOpenFor(props: AppProps, ops: FileOps, context: KeyContext): (path: string) => void {
+  if (props.readOnly) return () => context.actions.expandPreview();
+  return props.onOpenFile ?? ops.openAbsolute;
+}
+function pointerActivationFor(
+  tabs: Tabs,
+  ops: FileOps,
+  context: KeyContext,
+): (index: number) => void {
+  return (index) => {
+    const entry = entryAt(tabs.pane, index);
+    if (context.state.readOnly && entry?.kind === "file") {
+      tabs.moveTo(index);
+      context.actions.expandPreview();
+    } else activateAt(tabs, ops, index);
+  };
+}
+
+function useExternalMachineNavigation(
+  tabs: Tabs,
+  search: Search,
+  modes: KeyWiring["modes"],
+  millerFlash: ReturnType<typeof useFlash>,
+  tree: ReturnType<typeof useTreeMode>,
+  overview: ReturnType<typeof useOverviewMode>,
+  initialRequest?: ExternalOpen | null,
+): void {
+  useExternalOpen(
+    {
+      openAt: (path) => {
+        search.cancel();
+        modes.reset();
+        millerFlash.clear();
+        overview.close();
+        tree.external(path);
+      },
+      reveal: tabs.reveal,
+      activePath: tabs.pane.path,
+      showHidden: tabs.showHidden,
+      ready: tabs.listingReady,
+      toggleHidden: tabs.toggleHidden,
+    },
+    initialRequest,
+  );
+}
+
+function useBrowsingModeTransitions(
+  tree: ReturnType<typeof useTreeMode>,
+  view: ViewKind,
+  reset: () => void,
+  cancelSearch: () => void,
+  clearFlash: () => void,
+): void {
+  useBrowsingTransitions(tree.id, reset, cancelSearch, tree.cancel, clearFlash);
+  useBrowsingTransitions(view, clearFlash);
 }

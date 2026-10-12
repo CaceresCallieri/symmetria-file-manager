@@ -153,7 +153,12 @@ describe("view scoping", () => {
         "sel.toggle",
       ].sort(),
     );
-    expect(tree.some((binding) => ["History", "Tools"].includes(binding.group))).toBe(false);
+    expect(
+      tree.some(
+        (binding) =>
+          binding.id !== "machine.choose" && ["History", "Tools"].includes(binding.group),
+      ),
+    ).toBe(false);
     expect(tree.some((binding) => binding.id === "tree.toggleGitignore")).toBe(false);
   });
 
@@ -161,7 +166,8 @@ describe("view scoping", () => {
     // The Qt registry held 54 rows: 28 shared, 20 Miller-only, 6 tree-only. A
     // count that drifts means a row was dropped in the port rather than
     // deliberately removed.
-    expect(CORE).toHaveLength(28);
+    // The native machine chooser adds one shared row.
+    expect(CORE).toHaveLength(29);
     // The overview adds one row. preview.expand replaces the ported
     // miller.contextMenu row, so that replacement leaves the count unchanged.
     expect(MILLER_ONLY).toHaveLength(21);

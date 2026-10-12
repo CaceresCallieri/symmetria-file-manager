@@ -1,7 +1,7 @@
 import { isFailure } from "@symmetria/fm-core/contract";
 import { useEffect, useState } from "react";
 
-import { readFileText } from "../../bridge.ts";
+import { useFileManagerIo } from "../../IoContext.tsx";
 import { ScrollablePreview } from "./ScrollablePreview.tsx";
 import type { PreviewVariant } from "./variant.ts";
 
@@ -26,6 +26,7 @@ interface Loaded {
 
 /** Read the head of a file as text, re-reading whenever the path changes. */
 export function useFileText(path: string): Loaded | null {
+  const { readFileText } = useFileManagerIo();
   const [loaded, setLoaded] = useState<Loaded | null>(null);
 
   useEffect(() => {
@@ -44,7 +45,7 @@ export function useFileText(path: string): Loaded | null {
     return () => {
       current = false;
     };
-  }, [path]);
+  }, [path, readFileText]);
 
   return loaded;
 }

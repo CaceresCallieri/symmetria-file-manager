@@ -88,6 +88,10 @@ describe("the application boots", () => {
     expect(report.shownOnReadyToShow).toBe(true);
   });
 
+  it("lists through an independent machine connection in the real preload", () => {
+    expect(report.machineProbe).toMatchObject({ reply: { ok: true } });
+  });
+
   it("denies the renderer any access to the filesystem", () => {
     // The renderer is sandboxed, so `require("node:fs")` must not resolve.
     // This is the criterion the whole architecture rests on: if it ever passes,
@@ -139,7 +143,7 @@ describe("the application boots", () => {
     // run, and this assertion then reads a stale build and passes against code
     // that is no longer there. It did exactly that for three phases.
     expect(report.bridgeKeys).toBe(
-      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,clipboard,create,describe,diskUsage,frecent,hideWindow,list,listingRead,listingWrite,onChanged,onListBatch,onOpenPath,onTransferProgress,open,overview,pickerCancel,pickerConfirm,places,previewDirectoryUrl,previewUrl,readText,rename,searchQuery,searchRecord,searchRelease,searchStart,transfer,trash,unwatch,version,watch",
+      "bookmarksRead,bookmarksWrite,cancel,cancelTransfer,clipboard,create,describe,diskUsage,forMachine,frecent,hideWindow,list,listingRead,listingWrite,machinesRead,onChanged,onListBatch,onOpenPath,onTransferProgress,open,overview,pickerCancel,pickerConfirm,places,previewDirectoryUrl,previewUrl,readText,rename,searchQuery,searchRecord,searchRelease,searchStart,transfer,trash,unwatch,version,watch",
     );
   });
 

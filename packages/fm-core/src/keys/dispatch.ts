@@ -28,6 +28,7 @@ export function matchBinding(event: KeyEvent, ctx: KeyContext): Binding | null {
   for (const binding of bindingsFor(ctx.view)) {
     if (!matchKey(binding, event)) continue;
     if (binding.when && !binding.when(ctx)) continue;
+    if (isSuppressedReadOnly(binding, ctx)) continue;
     return binding;
   }
   return null;
@@ -81,6 +82,7 @@ function isSuppressedNow(key: string, event: KeyEvent, picker: PickerState): boo
  * a binding that still works.
  */
 export function isSuppressedInPicker(binding: Binding, ctx: KeyContext): boolean {
+  if (isSuppressedReadOnly(binding, ctx)) return true;
   const { picker } = ctx.state;
   if (!picker.active || picker.fileOps) return false;
 
@@ -111,4 +113,12 @@ export function dispatch(event: KeyEvent, ctx: KeyContext): boolean {
 
   binding.run(ctx);
   return true;
+}
+
+function isSuppressedReadOnly(binding: Binding, ctx: KeyContext): boolean {
+  if (!ctx.state.readOnly) return false;
+  return (
+    ["File", "Clipboard"].includes(binding.group) ||
+    ["finder.fuzzy", "miller.zoxide", "chord.copy", "miller.shiftEnter"].includes(binding.id)
+  );
 }

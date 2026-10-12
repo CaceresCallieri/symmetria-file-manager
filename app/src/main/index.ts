@@ -11,7 +11,9 @@ import { PUSH_CHANNELS, REQUEST_CHANNELS } from "@symmetria/fm-main/ipc/channels
 import type { ElectronTransport } from "@symmetria/fm-main/ipc/electronSurface";
 import { electronIpcSurface } from "@symmetria/fm-main/ipc/electronSurface";
 import { createRegistry, type Registry } from "@symmetria/fm-main/ipc/register";
-import { closeAllSearchIndices } from "@symmetria/fm-main/search";
+import { operations } from "@symmetria/fm-main/ops";
+import * as hostClipboard from "@symmetria/fm-main/ops/clipboard";
+import { closeAllSearchIndices, searchPool } from "@symmetria/fm-main/search";
 import { app, BrowserWindow, ipcMain, session } from "electron";
 import { externalOpenFor, isDirectoryOnDisk } from "./externalOpen.ts";
 import { writeToFifo } from "./fifo.ts";
@@ -27,6 +29,8 @@ import {
 } from "./picker.ts";
 import { type PickerPlacer, pickerPlacer } from "./pickerPlacement.ts";
 import { APP_ENTRY_URL, handleAppScheme, previewUrlFor, registerAppScheme } from "./protocol.ts";
+import { loadOptionalRemoteConfig } from "./remote/config.ts";
+import { MachineHost } from "./remote/host.ts";
 import { type CommandHandler, claimSocket, daemonSocketPath, sendCommand } from "./socket.ts";
 import { buildWindowOptions, WINDOW_MINIMUM_SIZE } from "./window.ts";
 import { type WindowFocuser, windowFocuser } from "./windowFocus.ts";
@@ -499,6 +503,32 @@ async function reportAndQuit(window: BrowserWindow, socketPath: string): Promise
       } catch { return false; }
     })(),
     bridgeKeys: Object.keys(window[${JSON.stringify(BRIDGE_KEY)}]).sort().join(","),
+    machineProbe: await (async () => {
+      const bridge = window[${JSON.stringify(BRIDGE_KEY)}];
+      const connection = bridge.forMachine("local");
+      const reply = await connection.list({path: "/usr", showHidden: false});
+      connection.dispose();
+      const catalog = await bridge.machinesRead();
+      const home = catalog.ok && catalog.value.find(machine => machine.id === "home");
+      if (!home) return {reply};
+      const remote = bridge.forMachine("home");
+      const homeList = await remote.list({path: home.startPath, showHidden: false});
+      const denied = await remote.create({path: home.startPath + "/forbidden.txt", kind: "file"});
+      const preview = await remote.previewUrl({path: home.startPath + "/remote.txt"});
+      const text = preview.ok ? await fetch(preview.value.url).then(response => response.text()) : null;
+      remote.dispose();
+      const homeButton = document.querySelector('[aria-label="Browse Vigilia Home"]');
+      homeButton?.click();
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (document.querySelector('[data-testid="column-current"]')?.textContent.includes("remote.txt")) break;
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      const label = document.querySelector('.machine-dock-button[aria-pressed="true"] .machine-tooltip')?.textContent;
+      const rows = document.querySelector('[data-testid="column-current"]')?.textContent;
+      document.querySelector('[aria-label="Browse Local"]')?.click();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return {reply, homeList, denied, text, label, rows};
+    })(),
     // How a row lays out when its name is too wide for its column.
     //
     // Measured here because it cannot be measured anywhere else. The renderer
@@ -828,6 +858,12 @@ app.whenReady().then(async () => {
   // `createWindow` may never fire on a sandboxed renderer. See
   // `frameNavigation.ts`.
   refuseDocumentRequestsOffScheme(session.defaultSession);
+  // Remote configuration must finish before the renderer can open a context.
+  const remoteConfig = await loadOptionalRemoteConfig(
+    app.getPath("userData"),
+    process.env.SYMMETRIA_FM_REMOTE_CONFIG,
+    (message) => console.error(`Home configuration: ${message}`),
+  );
   const { window, painted } = createWindow();
 
   // The renderer has no filesystem of its own, so this registry is the only
@@ -840,12 +876,16 @@ app.whenReady().then(async () => {
   // is the second window, and it would have watched its rows arrive on another
   // workspace.
   const transport = electronIpcSurface(ipcMain);
+  const machineHost = new MachineHost(
+    remoteConfig,
+    (sender) => sender === transport.handleFor(window.webContents),
+  );
   const registry = createRegistry(
-    transport.surface,
+    machineHost.wrap(transport.surface),
     // The host owns its own origin, so it is the host that turns a preview
     // token into a URL. The registry used to import this and that import was
     // the last line tying the privileged half to one particular application.
-    { previewUrlFor },
+    { previewUrlFor, operations, clipboard: hostClipboard, searchPool },
   );
 
   // `dispose` was written and never called, which meant every filesystem watch
@@ -856,7 +896,15 @@ app.whenReady().then(async () => {
   // Hung off `will-quit` alone. It used to also hang off the window's `closed`
   // event, which now never fires — the window is hidden rather than destroyed —
   // so leaving it there would have looked like cleanup that no longer ran.
+  machineHost.bindRegistry(registry);
+  window.webContents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame) machineHost.closeOwner(transport.handleFor(window.webContents));
+  });
+  window.webContents.once("destroyed", () =>
+    machineHost.closeOwner(transport.handleFor(window.webContents)),
+  );
   app.on("will-quit", () => {
+    machineHost.dispose();
     registry.dispose();
     // Every search worker dies with the application. A utility process that
     // outlives its owner is the failure that takes the resident daemon with

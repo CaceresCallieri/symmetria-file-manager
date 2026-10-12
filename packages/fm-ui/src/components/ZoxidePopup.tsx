@@ -3,7 +3,7 @@ import { type FrecentDirectory, filterFrecent } from "@symmetria/fm-core/zoxide"
 import { useOverlayList } from "@symmetria/fm-search/ui";
 import { useEffect, useMemo, useState } from "react";
 
-import { frecentDirectories } from "../bridge.ts";
+import { useFileManagerIo } from "../IoContext.tsx";
 
 /** A stable id per row, so the field can name the one that is current. */
 function rowId(index: number): string {
@@ -27,6 +27,7 @@ export interface ZoxidePopupProps {
  * reach in.
  */
 export function ZoxidePopup({ onChoose, onClose }: ZoxidePopupProps) {
+  const { frecentDirectories } = useFileManagerIo();
   const [entries, setEntries] = useState<readonly FrecentDirectory[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -44,7 +45,7 @@ export function ZoxidePopup({ onChoose, onClose }: ZoxidePopupProps) {
     return () => {
       current = false;
     };
-  }, []);
+  }, [frecentDirectories]);
 
   const shown = useMemo(() => filterFrecent(entries, query), [entries, query]);
 

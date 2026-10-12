@@ -5,7 +5,6 @@ import type { IpcReply } from "@symmetria/fm-core/contract";
 import type { FsEntry } from "@symmetria/fm-core/entry";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ChangedEntry } from "../src/fs/watch.ts";
-
 import { CHANNELS } from "../src/ipc/channels.ts";
 import {
   createRegistry,
@@ -14,6 +13,8 @@ import {
   type Registry,
   type SenderHandle,
 } from "../src/ipc/register.ts";
+import { operations } from "../src/ops/index.ts";
+import { desktopTestServices } from "./desktopTestServices.ts";
 
 /**
  * Which window a push reached.
@@ -134,6 +135,7 @@ describe("a push reaches the window that asked for it", () => {
   it("delivers a streamed listing's batches only to the requesting window", async () => {
     const h = harness();
     createRegistry(h.surface, {
+      readOnly: true,
       previewUrlFor,
       scanDirectory: () => Promise.resolve([entry("one.txt"), entry("two.txt")]),
     });
@@ -152,6 +154,7 @@ describe("a push reaches the window that asked for it", () => {
     // it narrows to `never` at the call and will not compile.
     const listeners: ((changed: ChangedEntry[]) => void)[] = [];
     createRegistry(h.surface, {
+      readOnly: true,
       previewUrlFor,
       watchDirectory: (_path, onChange) => {
         listeners.push(onChange);
@@ -174,6 +177,7 @@ describe("a push reaches the window that asked for it", () => {
     const stopped: string[] = [];
     let opened = 0;
     createRegistry(h.surface, {
+      readOnly: true,
       previewUrlFor,
       watchDirectory: () => {
         const mine = `w${opened++}`;
@@ -196,10 +200,10 @@ describe("a push reaches the window that asked for it", () => {
     // `from` without ever touching the per-window resource map, so it is a
     // structurally different path from the listing and the watch.
     //
-    // A real copy on real files, because `operations` is a module-level import
-    // rather than an injected dependency — there is nothing to stub.
+    // Inject real operations so this probe observes transfer pushes from a
+    // real copy, independently of the listing and watch resource tables.
     const h = harness();
-    createRegistry(h.surface, { previewUrlFor });
+    createRegistry(h.surface, { previewUrlFor, operations, ...desktopTestServices });
 
     const source = join(scratch, "to-copy.txt");
     const destination = join(scratch, "into");
@@ -231,6 +235,7 @@ describe("cancelling everything cancels only one window's everything", () => {
     // without a window count would have passed on the bug.
     const h = harness();
     const registry: Registry = createRegistry(h.surface, {
+      readOnly: true,
       previewUrlFor,
       watchDirectory: () => Promise.resolve(async () => undefined),
     });
@@ -248,7 +253,7 @@ describe("cancelling everything cancels only one window's everything", () => {
 
   it("leaves the other window's stream running", async () => {
     const h = harness();
-    createRegistry(h.surface, { previewUrlFor, scanDirectory: hangingScan() });
+    createRegistry(h.surface, { readOnly: true, previewUrlFor, scanDirectory: hangingScan() });
 
     const a = h.invoke(CHANNELS.list, { path: "/tmp", stream: true, streamId: "a1" }, h.windowA);
     const b = h.invoke(CHANNELS.list, { path: "/tmp", stream: true, streamId: "b1" }, h.windowB);
@@ -275,6 +280,7 @@ describe("closing one window releases only its own resources", () => {
     const h = harness();
     const stopped: string[] = [];
     const registry: Registry = createRegistry(h.surface, {
+      readOnly: true,
       previewUrlFor,
       watchDirectory: (path) =>
         Promise.resolve(async () => {
@@ -294,6 +300,7 @@ describe("closing one window releases only its own resources", () => {
   it("aborts that window's streams and leaves the other window's running", async () => {
     const h = harness();
     const registry: Registry = createRegistry(h.surface, {
+      readOnly: true,
       previewUrlFor,
       scanDirectory: hangingScan(),
     });
@@ -322,6 +329,7 @@ describe("closing one window releases only its own resources", () => {
     const h = harness();
     const stopped: string[] = [];
     const registry: Registry = createRegistry(h.surface, {
+      readOnly: true,
       previewUrlFor,
       watchDirectory: (path) =>
         Promise.resolve(async () => {

@@ -1,4 +1,5 @@
 import type { Result } from "@symmetria/fm-core/contract";
+import type { MachineId } from "./machines.ts";
 
 /**
  * The single global the sandboxed renderer is allowed to see.
@@ -13,6 +14,12 @@ export const BRIDGE_KEY = "symmetriaFm";
 export type Unsubscribe = () => void;
 
 export interface Bridge {
+  /** A standalone host can provide independent connections for its machines. */
+  machinesRead?(): Promise<Result<unknown>>;
+  forMachine?(id: MachineId): Bridge;
+  onConnectionLost?(listener: (message: string) => void): Unsubscribe;
+  /** Release a connection created by forMachine. */
+  dispose?(): void;
   /** Identifies which build produced this bridge. */
   readonly version: string;
   /** List a directory. Failures arrive as values, never as thrown errors. */

@@ -3,12 +3,12 @@ import { isFailure, type Result, type TransferMode } from "@symmetria/fm-core/co
 import type { CopyTarget } from "@symmetria/fm-core/keys/types";
 import { entryAt, joinPath } from "@symmetria/fm-core/pane";
 import { useCallback, useState } from "react";
-import { openPath, copyToClipboard as sendToClipboard } from "./bridge.ts";
 import type { CreateTarget, OpsModal } from "./fileOps/modal.ts";
 import type { Clipboard, OperationTarget } from "./fileOps/targets.ts";
 import { refuseProtectedRoot, useOperationDialogs } from "./fileOps/useOperationDialogs.ts";
 import { usePaneTarget } from "./fileOps/usePaneTarget.ts";
 import { useTransfers } from "./fileOps/useTransfers.ts";
+import { useFileManagerIo } from "./IoContext.tsx";
 import type { Tabs } from "./useTabs.ts";
 
 export type { CreateTarget, OpsModal } from "./fileOps/modal.ts";
@@ -47,6 +47,7 @@ export interface FileOps {
  * a partial undo implementation would misrepresent what can be recovered.
  */
 export function useFileOps(tabs: Tabs, viewKey = "miller"): FileOps {
+  const { openPath, copyToClipboard: sendToClipboard } = useFileManagerIo();
   const [message, setMessage] = useState<string | null>(null);
   const target = usePaneTarget(tabs, viewKey);
   const dialogs = useOperationDialogs(setMessage);

@@ -80,7 +80,7 @@ export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.isComposing || event.defaultPrevented) return;
+      if (ignoredKeyEvent(event)) return;
       const { mode: currentMode, context: ctx, onFlashKey: flash } = latest.current;
 
       // Focus wins over everything, and it is decided by the DOM rather than by
@@ -178,7 +178,7 @@ function nativeControlActivation(event: KeyboardEvent, context: KeyContext, mode
   const selector =
     context.view === "tree"
       ? "button, summary"
-      : ".overview-toolbar button, .overview-toolbar summary, .status-bar button";
+      : ".overview-toolbar button, .overview-toolbar summary, .status-bar button, .machine-dock button";
   return event.target.closest(selector) !== null;
 }
 
@@ -199,5 +199,11 @@ function repeatedFlash(
     event.repeat &&
     !mode.flashActive &&
     ["overview.flash", "flash.enter"].includes(matchBinding(key, context)?.id ?? "")
+  );
+}
+
+function ignoredKeyEvent(event: KeyboardEvent): boolean {
+  return [event.isComposing, event.defaultPrevented, event.repeat && event.key === "m"].some(
+    Boolean,
   );
 }

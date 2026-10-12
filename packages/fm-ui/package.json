@@ -11,10 +11,13 @@
   "exports": {
     "./App": "./src/App.tsx",
     "./bridge": "./src/bridge.ts",
+    "./diskUsage": "./src/diskUsage.ts",
     "./styles.css": "./src/styles.css",
     "./syntax-wine.css": "./src/syntax-wine.css",
     "./highlight.worker": "./src/highlight.worker.ts",
-    "./theme/tokens.css": "./src/theme/tokens.css"
+    "./theme/tokens.css": "./src/theme/tokens.css",
+    "./machines": "./src/machines/Machines.tsx",
+    "./state/tabs": "./src/state/tabs.ts"
   },
   "dependencies": {
     "@symmetria/fm-core": "workspace:*",

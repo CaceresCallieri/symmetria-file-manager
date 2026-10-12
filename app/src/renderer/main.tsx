@@ -1,6 +1,6 @@
-import { App } from "@symmetria/fm-ui/App";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { MachinePanel } from "./MachinePanel.tsx";
 import "@symmetria/fm-ui/theme/tokens.css";
 import "@symmetria/fm-ui/styles.css";
 import "@symmetria/fm-ui/syntax-wine.css";
@@ -23,6 +23,6 @@ if (!host) throw new Error("index.html is missing its #root element");
 
 createRoot(host).render(
   <StrictMode>
-    <App chrome="atmosphere" rowHeight={ATMOSPHERE_ROW_HEIGHT} />
+    <MachinePanel rowHeight={ATMOSPHERE_ROW_HEIGHT} />
   </StrictMode>,
 );
