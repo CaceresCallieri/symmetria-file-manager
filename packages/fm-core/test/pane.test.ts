@@ -384,7 +384,7 @@ describe("remembering a cursor for somewhere else", () => {
   });
 
   it("leaves the cursor remembered for the pane's own directory alone", () => {
-    // A flash jump records the DESTINATION's cursor and then moves. The Qt
+    // A flash jump records the DESTINATION's cursor and then moves. The the earlier implementation
     // build had to warn that the two writes must happen in a particular order,
     // because both went into one cache under different keys; recording for a
     // named path rather than for "here" removes the hazard rather than

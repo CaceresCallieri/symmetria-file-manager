@@ -39,7 +39,7 @@ export interface FileRowProps {
 /**
  * One row.
  *
- * **A plain element with no transition and no gradient.** The Qt version
+ * **A plain element with no transition and no gradient.** The earlier implementation
  * measured visible stutter during fast `j`/`k` when a per-delegate rectangle
  * carried a `Behavior` animation, and the zebra striping was removed
  * deliberately: over a near-black base the alternation read as banding rather
@@ -117,7 +117,7 @@ export function FileRow({
   onActivate,
 }: FileRowProps) {
   const clickable = onSelect !== undefined;
-  // A session is running and this row offers nothing to jump to. Qt fades such
+  // A session is running and this row offers nothing to jump to. the earlier implementation fades such
   // a row to a quarter; the same figure is used here.
   const dimmed = flashActive && flash === null;
 

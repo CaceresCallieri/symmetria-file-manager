@@ -11,7 +11,7 @@ import type { BookmarkSubMode, KeyContext, KeyEvent, SortKey } from "./types.ts"
  * eaten by the suppression pre-pass before the resolver ever saw it.
  *
  * **There is no chord timeout, and there never was.** The project documentation
- * states a 500 ms timer twice; the Qt implementation has none. A prefix persists
+ * states a 500 ms timer twice; the earlier implementation has none. A prefix persists
  * until the next key, an Escape, a focus loss, or a tab switch. Resist adding a
  * timer to match the documentation — correct the documentation instead.
  */

@@ -76,7 +76,7 @@ body {
 }
 
 /*
- * A plain fill. No gradient and no transition: the Qt version measured visible
+ * A plain fill. No gradient and no transition: the earlier implementation measured visible
  * stutter during fast cursor movement when a per-row rectangle carried an
  * animation, and the zebra striping was removed because over a near-black base
  * the alternation read as banding. The cursor highlight is the only row fill.
@@ -106,7 +106,7 @@ body {
 }
 
 /* The mark colour is hardcoded rather than taken from the palette, for the same
-   reason the Qt build hardcodes its indicators: a wallpaper-derived scheme can
+   reason the earlier implementation hardcodes its indicators: a wallpaper-derived scheme can
    land anywhere, and an indicator that stops being legible is worse than one
    that does not match. */
 /*
@@ -151,7 +151,7 @@ body {
   flex: 0 0 8px;
 }
 
-/* Match Qt's IndicatorStrip: full height, 5px wide, rounded on the left. */
+/* Match the earlier implementation's IndicatorStrip: full height, 5px wide, rounded on the left. */
 .row__clipboard {
   position: absolute;
   inset: 0 auto 0 0;
@@ -177,10 +177,8 @@ body {
  * string — the box never gets smaller than its text, so there is no overflow
  * to clip and no ellipsis to draw.
  *
- * A search match is elided like any other row. Qt draws a match unelided
- * (`FileListItem.qml:201`) so the whole name can be read; carrying that over
- * would put the matching row back outside its column, which is the defect this
- * rule exists to fix. The deviation is deliberate — see the plan's decisions.
+ * Elide search matches too. Drawing a complete long match would put its row
+ * outside the column and remove the overflow bound this rule establishes.
  */
 .row__name {
   min-width: 0;
@@ -1043,7 +1041,7 @@ kbd {
  * cursor fill in specificity order for the same reason: where the cursor sits
  * on a match, "where you are" is the more urgent fact.
  *
- * No transition, for the reason every row fill in this file has none — the Qt
+ * No transition, for the reason every row fill in this file has none — the the earlier implementation
  * build measured visible stutter during fast cursor movement when a per-row
  * rectangle carried an animation.
  */
@@ -1060,7 +1058,7 @@ kbd {
  *
  * Fading rather than hiding: the rows are still the map of the directory, and
  * removing them would move every label under the reader's eyes. A quarter is
- * the Qt build's figure and it reads the same over this near-black base.
+ * the earlier implementation's figure and it reads the same over this near-black base.
  *
  * No transition, like every other row state in this file — a per-row animation
  * measured as visible stutter during fast cursor movement.

@@ -8,7 +8,7 @@ import type { OpsModal } from "../../useFileOps.ts";
  * Every dialog the file operations open, behind one gate.
  *
  * A single active-modal value decides which one is up, so two cannot be open at
- * once — the pattern the Qt build used and the reason it never had to reason
+ * once — the pattern the earlier implementation used and the reason it never had to reason
  * about a rename dialog over a delete confirmation.
  *
  * Each dialog handles its own Escape and its own Enter. The cascade reports

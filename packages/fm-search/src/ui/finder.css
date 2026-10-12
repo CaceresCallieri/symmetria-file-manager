@@ -181,7 +181,7 @@
 
 /* `min-width: 0` is load-bearing, not tidiness. A flex item's default minimum
    is its content, so without it a single very long path would push the list
-   past its share and starve it — which is the exact failure Qt worked around by
+   past its share and starve it — which is the exact failure the earlier implementation worked around by
    pinning its panel to 360px with a hard maximum. */
 .finder__list {
   /* The gap is subtracted BEFORE the share is taken, so the share divides the
@@ -236,7 +236,7 @@
 
 /* `mark` carries a browser default background that would paint a block of
    highlighter yellow across the row. The match is shown by WEIGHT and colour
-   instead, which is what the Qt finder does and what survives a dark palette. */
+   instead, which is what the earlier finder does and what survives a dark palette. */
 .finder__match {
   background: none;
   color: var(--foreground);
@@ -267,7 +267,7 @@
 }
 
 /* Two up, so four facts occupy two tight rows and leave the preview the room.
-   The Qt information panel uses the same arrangement for the same reason. */
+   The earlier information panel uses the same arrangement for the same reason. */
 .finder-info__facts {
   display: grid;
   grid-template-columns: 1fr 1fr;

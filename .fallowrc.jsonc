@@ -18,21 +18,6 @@
   // resolution and the module graph. Reserved for trees fallow cannot parse or
   // must not reason about.
   "ignorePatterns": [
-    // ── The Qt tree ──
-    // Observed: `fallow dead-code` reported 32 unreachable files, all of them
-    // QML-side JavaScript (`handlers/KeyRegistry.js`, `TreeModel.js`, …). They
-    // are not dead: QML loads them with `import "handlers/…" as …`, an edge no
-    // JavaScript analyser can follow. Observed too: `fallow dupes` found 127
-    // duplicated lines between `FlashHandler.js` and `TreeFlashHandler.js` —
-    // real, but in code this cycle must leave untouched, and already covered by
-    // the incumbent gate `tools/quality/check-qml.sh`.
-    // Remove this entry when the Qt tree is deleted at parity.
-    "qml/**",
-
-    // Vendored dependencies and build output. Not our source.
-    "plugin/third_party/**",
-    "plugin/build/**",
-
     // Research prose and a generated page. No source to analyse.
     "docs/**",
 

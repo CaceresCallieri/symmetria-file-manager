@@ -49,7 +49,7 @@ const FRAMED_DOCUMENT_TYPES: readonly string[] = ["text/html", "application/xhtm
  * What a framed document may reach.
  *
  * ── This is the lock that replaces a browser engine setting ─────────────────
- * The Qt build gets "it cannot phone home" from
+ * The earlier implementation gets "it cannot phone home" from
  * `localContentCanAccessRemoteUrls: false` on its WebEngine view. There is no
  * engine to configure here — the frame is an ordinary one — so the lock has to
  * travel with the response, and this header is it. Without it a previewed page
@@ -90,7 +90,7 @@ const FRAMED_DOCUMENT_TYPES: readonly string[] = ["text/html", "application/xhtm
  *
  * Both are set to `'none'` rather than `'self'`: this is a preview and not a
  * browser, so a form must never submit anywhere, which is the same decision
- * the Qt build made when it ignored every navigation that was not the initial
+ * the earlier implementation made when it ignored every navigation that was not the initial
  * load. The frame's own permission list withholds forms as well — this is the
  * second lock, and neither one is stated where a reader of the other would
  * see it.

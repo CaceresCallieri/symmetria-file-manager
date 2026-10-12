@@ -20,7 +20,7 @@ import { readJsonObject, writeJsonObject } from "./jsonStore.ts";
  * ── Its own file, not a key in the bookmark store ───────────────────────────
  * The two are written by different actions at different rates, and a sort
  * change must not put the bookmark file at risk. Unlike the bookmarks, this is
- * NOT shared with the Qt build — that one keeps its order elsewhere — so there
+ * NOT shared with the earlier implementation — that one keeps its order elsewhere — so there
  * is no cross-build contract to honour here.
  */
 

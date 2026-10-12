@@ -12,7 +12,7 @@ export interface VideoPreviewProps {
 /**
  * A video, initially muted. The column loops; the reader offers native controls.
  *
- * Parity with the Qt build's `VideoPreview.qml`, which autoplays and loops
+ * The preview autoplays and loops
  * forever and attaches no audio output at all. The column preserves that
  * behavior; the reader lets the user control playback:
  *

@@ -354,7 +354,7 @@
   white-space: nowrap;
 }
 
-/* Keep the matched query bright and fade the structure with Qt flash timing. */
+/* Keep the matched query bright and fade the structure with Flash timing. */
 .overview-graph-frame .overview-row,
 .overview-graph-frame .folder-group-name,
 .overview-graph-frame .folder-ancestors,

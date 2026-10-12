@@ -173,12 +173,11 @@ function paint(canvas: HTMLCanvasElement, bars: Float32Array, playedFraction: nu
  * A sound file drawn as its own shape.
  *
  * ── It repaints on `timeupdate`, deliberately, and NOT on a timer ───────────
- * The Qt build this replaces repaints every 50 ms because QML gives it no
- * playback event to hang off. The browser fires `timeupdate` about four times a
+ * The browser fires `timeupdate` about four times a
  * second while playing and NOT AT ALL while paused, which is both cheaper and
  * correct at the ends — a timer keeps waking a paused pane forever. This
  * component takes `position` as a prop for exactly that reason: the audio
- * element's own event drives it. **Do not "restore parity" by adding a timer.**
+ * element's own event drives it. **Do not replace the event with a timer.**
  */
 export function Waveform({ url, position, duration }: WaveformProps) {
   const bars = useWaveform(url, duration);

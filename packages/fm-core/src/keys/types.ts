@@ -33,7 +33,7 @@ export interface KeyEvent {
  * layout-dependent: on the Latin-American layout `/` is Shift+7 and `=` is
  * Shift+0, so those events arrive with `shift: true`. A binding declaring `""`
  * rejects them and the key silently does nothing — exactly the regression that
- * broke slash-search in the Qt build after its own registry migration. Letters
+ * broke slash-search in the earlier implementation after its own registry migration. Letters
  * and real chords keep precise modifiers, because there the modifier is the
  * user's intent rather than a side effect of the layout.
  */
@@ -99,7 +99,7 @@ export type CopyTarget = "path" | "filename" | "nameWithoutExtension" | "directo
 /**
  * Everything a binding can do, as an interface the host implements.
  *
- * The Qt original injected its singletons through `ctx.services` for one
+ * The earlier implementation injected its singletons through `ctx.services` for one
  * reason: it made dispatch testable without loading the UI. The same reason
  * applies here and the same shape is kept. A test passes a recording stub and
  * asserts which method a key reached; nothing in this package knows what a

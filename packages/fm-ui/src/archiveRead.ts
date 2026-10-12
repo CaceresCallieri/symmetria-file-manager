@@ -28,7 +28,7 @@ import type { ArchiveCompression, ArchiveFormat } from "@symmetria/fm-core/previ
  * reason `fm-core` has two readers, and it reaches all the way out to here.
  */
 
-export interface ArchiveContents {
+interface ArchiveContents {
   readonly kind: "listing";
   readonly listing: ArchiveListing;
   /**

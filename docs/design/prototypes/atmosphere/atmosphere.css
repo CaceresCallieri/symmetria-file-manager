@@ -10,8 +10,7 @@
  *     the window arrives as greyscale. A sunset wallpaper and a grey one give
  *     the same neutral window — only brightness passes through. Press `W` in
  *     the prototype to check this against four wallpapers.
- *   - The neutral ladder is achromatic (r = g = b), the same rule the Qt
- *     palette follows.
+ *   - The neutral ladder is achromatic (r = g = b).
  *   - Colour is reserved for meaning. Blue (Mesura Code's accent) means
  *     selection and focus. Green, red and amber are utilities: yanked, cut or
  *     destructive, git-modified. Nothing else is coloured.

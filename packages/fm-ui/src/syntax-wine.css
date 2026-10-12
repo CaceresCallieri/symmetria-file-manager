@@ -1,12 +1,11 @@
 /*
  * GENERATED — do not edit.
  *
- * Source: plugin/src/Symmetria/FileManager/Models/themes/wine.theme (KDE syntax theme "Wine",
+ * Source: assets/themes/wine.theme (KDE syntax theme "Wine",
  * revision 1).
  * Regenerate: node tools/theme/kde-theme-to-hljs.mjs <theme> <output>
  *
- * The same file colours the Qt build's previews and mirrors the operator's
- * editor colourscheme. Edit the theme, not this.
+ * The theme mirrors the operator's editor colourscheme. Edit the theme, not this.
  */
 
 .hljs {

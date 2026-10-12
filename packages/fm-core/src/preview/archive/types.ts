@@ -38,7 +38,7 @@ export interface ByteSource {
  * beside it. Turning that into a tree is `listing.ts`'s job, and keeping it out
  * of here is what lets the zip and tar readers share one shape.
  *
- * There is deliberately **no modification time**. Neither the Qt build's
+ * There is deliberately **no modification time**. Neither the earlier implementation's
  * archive rows nor this one's show a date per member, so a field nothing reads
  * would be dead weight the dead-code gate is right to object to.
  */
@@ -52,9 +52,7 @@ export interface ArchiveEntry {
 /**
  * The most rows an archive preview will show.
  *
- * 5000, matching `MaxEntries` in the Qt build's
- * `plugin/src/Symmetria/FileManager/Models/archivepreviewmodel.hpp`, so the two
- * builds truncate the same archive at the same place while both are installed.
+ * The cap bounds traversal work and rendered rows.
  *
  * **The two readers treat it differently, and that asymmetry is deliberate.**
  * The tar walker stops AT this number, because walking is unbounded work and

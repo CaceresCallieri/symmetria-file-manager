@@ -92,7 +92,7 @@ describe("the palette", () => {
 
   it("has no colour literal in any stylesheet but the token file", async () => {
     // The generated syntax theme is the other exemption: it IS a palette, and
-    // it is regenerated from the KDE theme the Qt build reads.
+    // it is regenerated from the KDE theme the earlier implementation reads.
     const sheets = [...(await sourceFiles(RENDERER, /\.css$/)), FINDER_CSS].filter(
       (file) => !file.endsWith("syntax-wine.css"),
     );
@@ -530,7 +530,7 @@ describe("the file finder's split", () => {
   it("lets the list shrink below its content, so a long path elides", async () => {
     // A flex item's default minimum is its content, so without `min-width: 0` a
     // single very long path would push the list past its share and starve it —
-    // the exact failure Qt worked around by pinning its information panel to
+    // the exact failure the earlier implementation worked around by pinning its information panel to
     // 360px with a hard maximum. The ratio is only safe with this line.
     const styles = await readFile(FINDER_CSS, "utf8");
     const rule = styles.slice(styles.indexOf(".finder__list {"));

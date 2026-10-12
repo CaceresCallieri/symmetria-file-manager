@@ -46,19 +46,16 @@ export interface OpenCommand {
  * daemon is about to OPEN IT FOR WRITING and put the user's chosen filenames
  * into it. Without the constraint, a caller could name any writable path.
  *
- * The same literal is `kValidFifoPrefix` in `host/standalone/server.cpp` and
- * `FIFO_PREFIX` in `portal/symmetria_portal.py`, which is what creates the
- * FIFO. All three must agree.
+ * The portal creates the FIFO with `FIFO_PREFIX` in
+ * `portal/symmetria_electron_portal.py`. The prefix must agree on both sides.
  */
 export const PICKER_FIFO_PREFIX = "/tmp/symmetria-picker-";
 
 /**
  * What a cancellation looks like on the wire.
  *
- * A protocol constant shared with the Qt build and the portal backend:
- * `_cancelledSentinel` in `host/standalone/main.qml` and `CANCELLED_SENTINEL` in
- * `portal/symmetria_portal.py`. A backend reading a different word would treat a
- * cancel as a chosen file literally named `__PICKER_CANCELLED__`.
+ * The portal's `CANCELLED_SENTINEL` must match this value. A different word
+ * would treat a cancellation as a chosen file named `__PICKER_CANCELLED__`.
  *
  * It lives here rather than beside the writer because it is part of the protocol
  * rather than part of the writing — and this package compiles against no
@@ -69,7 +66,7 @@ export const CANCELLED_SENTINEL = "__PICKER_CANCELLED__";
 /**
  * The chosen paths, as the portal parses them.
  *
- * Newline-separated with no trailing newline, matching what the Qt daemon
+ * Newline-separated with no trailing newline, matching what the earlier daemon
  * writes. The reader strips and drops empty lines either way, but matching it
  * exactly means one backend can serve both applications unchanged.
  */
@@ -77,7 +74,7 @@ export function selectionPayload(paths: readonly string[]): string {
   return paths.join("\n");
 }
 
-/** What kind of dialog the portal asked for. Defaults are the Qt build's. */
+/** What kind of dialog the portal asked for. Defaults are the earlier implementation's. */
 export interface PickerOptions {
   readonly title: string;
   readonly acceptLabel: string;
@@ -169,7 +166,7 @@ function decodeCurrentFolder(raw: Record<string, unknown>): Result<string> {
 }
 
 function decodePickerOptions(raw: Record<string, unknown>): Result<PickerOptions> {
-  // The defaults are `FileManagerService.qml`'s `startPickerMode`, so a portal
+  // The defaults define the picker contract, so a portal
   // request that omits an option produces the same dialog from either build.
   const title = optionalString(raw, "title", "Select a File");
   if (isFailure(title)) return title;
@@ -190,7 +187,7 @@ function decodePickerOptions(raw: Record<string, unknown>): Result<PickerOptions
 
   // `parentWindow` is deliberately absent, and its absence is a decision rather
   // than an omission: the portal sends a foreign-toplevel handle for
-  // cross-application parenting, and Electron cannot import one. The Qt build
+  // cross-application parenting, and Electron cannot import one. The earlier implementation
   // logs it and ignores it too. Accepting the field and dropping it keeps the
   // wire format identical between the two backends.
   return success({
@@ -246,7 +243,7 @@ export const decodeDaemonCommand: Decoder<DaemonCommand> = (raw) => {
  *
  * Newline-delimited because the caller reads until one: a reply split across
  * two reads has to be reassembled somehow, and a delimiter is the cheapest
- * agreement that makes that possible. The shape mirrors the Qt daemon's so the
+ * agreement that makes that possible. The shape mirrors the earlier daemon's so the
  * two are legible side by side while both exist.
  */
 export function replyLine(result: Result<unknown>): string {

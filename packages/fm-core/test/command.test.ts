@@ -75,13 +75,8 @@ describe("decodeDaemonCommand", () => {
 /**
  * The FIFO path a picker answers on.
  *
- * The Qt daemon validates this server-side before it trusts it —
- * `host/standalone/server.cpp` refuses a create or a close whose path is
- * outside `/tmp/symmetria-picker-`. The same rule applies here and for the same
- * reason: the path arrives from a socket any process running as this user can
- * write to, and the daemon is about to OPEN it for writing. Without the prefix,
- * a caller could name any writable path and have the file manager write the
- * user's chosen filenames into it.
+ * The prefix restricts paths supplied by any process that can reach the
+ * daemon socket. The daemon must not write a selection into an arbitrary file.
  */
 const VALID_FIFO = "/tmp/symmetria-picker-9f3a2b.fifo";
 
@@ -117,9 +112,8 @@ describe("createPicker", () => {
     }
   });
 
-  it("takes the Qt defaults for every option the caller leaves out", () => {
-    // The defaults are `FileManagerService.qml`'s, so a portal request that
-    // omits an option gets the same dialog from either build.
+  it("takes the picker defaults for every option the caller leaves out", () => {
+    // A portal request that omits an option must receive the picker defaults.
     const out = decodeDaemonCommand({ cmd: "createPicker", fifo: VALID_FIFO });
 
     expect(isFailure(out)).toBe(false);
@@ -147,7 +141,7 @@ describe("createPicker", () => {
       suggestedName: "report.pdf",
       currentFolder: "/home/jc/Downloads",
       // Accepted and ignored: Electron cannot import a foreign Wayland
-      // toplevel, so cross-application parenting is not available. The Qt build
+      // toplevel, so cross-application parenting is not available. The earlier implementation
       // logs it and ignores it too.
       parentWindow: "wayland:abc123",
     });

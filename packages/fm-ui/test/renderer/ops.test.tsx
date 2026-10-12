@@ -43,7 +43,7 @@ describe("what an operation acts on", () => {
   });
 
   it("prefers the marked entries over the cursor", async () => {
-    // The precedence that makes marking worth doing, and the rule the Qt build
+    // The precedence that makes marking worth doing, and the rule the earlier implementation
     // used for every clipboard and delete operation.
     await opened();
     await onNotes();
@@ -129,7 +129,7 @@ describe("the clipboard", () => {
 
 describe("conflicts", () => {
   it("prompts rather than overwriting, and names what is in the way", async () => {
-    // A paste that silently overwrote was the sharpest edge the Qt build had.
+    // A paste that silently overwrote was the sharpest edge the earlier implementation had.
     await opened();
     await onNotes();
     log.conflictNext(["notes.txt"]);

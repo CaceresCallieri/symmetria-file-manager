@@ -326,7 +326,7 @@ export function createPickerHost(
         // reaches nobody — without this write it waits out the portal's five
         // minutes for a dialog that was never going to open.
         //
-        // It goes to the NEW request's pipe and touches nothing else. The Qt
+        // It goes to the NEW request's pipe and touches nothing else. The the earlier implementation
         // build needed a whole separate writer to get this right, because its
         // cancel writer closed the active window when it finished, which is
         // exactly what a busy rejection must not do: a user is looking at that
@@ -391,7 +391,7 @@ export function createPickerHost(
       // a newline. Such a path would reach the portal as two bogus paths — a
       // silent corruption of the one thing this whole phase exists to deliver
       // — so it is refused loudly instead. The format itself cannot change:
-      // the same portal backend serves the Qt build, which writes it too.
+      // the same portal backend serves the earlier implementation, which writes it too.
       const untransmittable = paths.find((path) => path.includes("\n"));
       if (untransmittable !== undefined) {
         return Promise.resolve(

@@ -156,7 +156,7 @@ describe("what the store answers with", () => {
    * seed re-merged on every start would put Pictures back on the next launch
    * with no way for the user to say no.
    *
-   * Qt settles it the same way — its defaults are "seeded on first run,
+   * the earlier implementation settles it the same way — its defaults are "seeded on first run,
    * deletable by the user". So: no file means the seed, and it is written; a
    * file means the file. `resolveBookmarks` is that rule, and it reports
    * whether the caller owes the disk a write.

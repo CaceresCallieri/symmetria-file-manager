@@ -10,7 +10,7 @@
  * **Every preview type therefore arrives at once**, and nothing is re-routed
  * here: images, documents, video, audio, code with highlighting, archives,
  * spreadsheets, markdown and directory listings all come from the same router
- * the pane uses. The Qt tree states the same rule for the same reason — one
+ * the pane uses. The earlier source tree states the same rule for the same reason — one
  * router, two consumers — and a type added there appears in both.
  *
  * **The debounce lives inside `usePreview`**, at the 150 ms this would

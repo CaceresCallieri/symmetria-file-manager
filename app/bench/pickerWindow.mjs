@@ -11,7 +11,7 @@ import { app, BrowserWindow } from "electron";
  *   window be kept warm and reused?
  *
  * Report 10 §3.4 recommends the warm one. That advice was written when the
- * design still had a POOL of warm windows; decision D3 collapsed the pool, so a
+ * design still had a POOL of warm windows; the single-window decision collapsed the pool, so a
  * warm picker would now be the only warm window in the whole application and
  * would carry all of the between-uses reset correctness on its own. A fresh
  * window has no state to reset, by construction. The operator's position:

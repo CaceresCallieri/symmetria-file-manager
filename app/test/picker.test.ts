@@ -273,7 +273,7 @@ describe("closing a picker", () => {
     // The portal sends this when the CALLING application withdraws or dies, and
     // by then the picker it meant may already have been answered and replaced.
     // Honouring it blindly would close a dialog a different application is
-    // waiting on. The Qt daemon compares the fifo for exactly this reason.
+    // waiting on. The earlier daemon compares the fifo for exactly this reason.
     const f = factory();
     const host = createPickerHost(f.open, silentWriter);
     host.create(request(FIFO_A));
@@ -394,7 +394,7 @@ describe("every way out of a picker answers its caller", () => {
   });
 
   it("leaves the open dialog untouched when it turns a request away", async () => {
-    // The Qt build needed a SEPARATE writer for this, because its cancel writer
+    // The earlier implementation needed a SEPARATE writer for this, because its cancel writer
     // closed the active window when it finished — which is exactly what a busy
     // rejection must not do. A user is looking at that window.
     const f = factory();
@@ -618,7 +618,7 @@ describe("a request that names the open picker's own pipe", () => {
 describe("a path the wire format cannot carry", () => {
   it("is refused rather than silently split in two", async () => {
     // A Linux filename may contain a newline, and the payload is
-    // newline-delimited — the same format the Qt build writes and the same one
+    // newline-delimited — the same format the earlier implementation writes and the same one
     // the portal parses, so it cannot change. Such a path would arrive as two
     // bogus paths: a silent corruption of the one thing this phase delivers.
     const f = factory();

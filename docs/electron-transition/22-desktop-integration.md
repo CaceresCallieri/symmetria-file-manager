@@ -22,9 +22,6 @@ compositor rule matches. `StartupWMClass` drives nothing — editing it to fix a
 window rule will do nothing at all — and is kept in step only so the three never
 disagree. `app/test/desktopEntry.test.ts` asserts all three.
 
-Deliberately **not** `symmetria-fm`, which is the Qt build's. The two run side by
-side until parity and the operator uses the Qt one daily.
-
 ## The Hyprland fragment
 
 **Already applied**, in `~/.dotfiles/.config/hypr/`, following the pattern the
@@ -62,10 +59,9 @@ windowrule = workspace name:files silent, match:class ^(symmetria-fm-electron)$,
 # launch a second copy, which the socket would then refuse. Review caught it
 # against the live config before it was applied.
 #
-# Super+E stays with the Qt build, which is still the daily driver. The Electron
-# one keeps the secondary binding until the operator moves it deliberately.
-bind = Super+Shift, E,       exec, $hyprScripts/switch_workspace.sh name:files
-bind = Super+Shift+Ctrl, E,  movetoworkspace,       name:files
+# Super+E summons the Electron file manager on its normal workspace.
+bind = Super, E, exec, $hyprScripts/summon_file_manager.sh
+bind = Super+Ctrl, E, movetoworkspace, name:files
 ```
 
 The launcher that old bind pointed at is now `bin/symmetria-fm-electron` in this

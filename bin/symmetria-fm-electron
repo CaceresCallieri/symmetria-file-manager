@@ -1,10 +1,8 @@
 #!/bin/sh
 # Symmetria File Manager — the Electron build.
 #
-# What `symmetria-fm-electron.service` runs, and what a keybinding runs. A
-# separate application from the Qt one, which keeps `Super+E`, its own daemon
-# and its own socket; the two are meant to run side by side until the rewrite
-# reaches parity.
+# The systemd service and compositor bindings use this launcher.
+# It resolves its checkout and runs the built Electron host.
 #
 # ── Why this file is in the repository ──────────────────────────────────────
 # It used to be a hand-written file in ~/.local/bin, tracked by nothing, with

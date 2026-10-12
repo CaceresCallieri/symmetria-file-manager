@@ -34,8 +34,7 @@ instruction. Do not reintroduce a decorative hue.
 
 ## Principles
 
-1. **Neutral ladder.** Every neutral is achromatic (`r = g = b`), the same rule
-   the Qt palette follows (commit `1e6bb30`).
+1. **Neutral ladder.** Every neutral is achromatic (`r = g = b`).
 2. **Colour means something, or it is absent.**
    - Blue `oklch(66% 0.16 258)` (Mesura Code's accent) = selection (marked
      rows, Select mode), focus (focused overview card, focused field), search,
@@ -281,8 +280,8 @@ A row can hold several states at once; each has its own signal.
 | hidden, ignored | faint foreground; ignored also halves the icon |
 | git | 18px rounded badge: `M` amber, `A` green, `U` blue, each on a 13% tint of itself |
 
-No row carries a `transition`, `gradient`-on-change or animation: the Qt build
-measured stutter on fast `j`/`k` (see `FileRow.tsx`). The cursor gradient is a
+No row carries a `transition`, `gradient`-on-change or animation. Earlier
+measurements showed stutter on fast `j`/`k` (see `FileRow.tsx`). The cursor gradient is a
 static fill, not an animated one.
 
 ## Overlays

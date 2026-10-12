@@ -29,8 +29,8 @@ afterEach(async () => {
 });
 
 describe("where the file lives", () => {
-  it("defaults under the config directory, using the Qt build's name", () => {
-    // The same path the Qt build uses, so the two can share a file on a machine
+  it("defaults under the config directory, using the earlier implementation's name", () => {
+    // The same path the earlier implementation uses, so the two can share a file on a machine
     // that runs both while the rewrite is being compared against the original.
     expect(bookmarksFilePath({ home: "/home/jc" })).toBe(
       "/home/jc/.config/symmetria-fm/bookmarks.json",

@@ -9,7 +9,7 @@ export interface PathBarProps {
 /**
  * The location, as segments.
  *
- * A breadcrumb, not an editable field. The Qt version's path bar was read-only
+ * A breadcrumb, not an editable field. The earlier implementation's path bar was read-only
  * too; the PRD promised editing and it was never built, so this is parity with
  * what exists rather than with what was written down. Clicking a crumb is
  * navigation, which is a different thing from editing the path.
