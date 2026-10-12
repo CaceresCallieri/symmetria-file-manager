@@ -62,9 +62,8 @@ describe("claiming the socket", () => {
   });
 
   it("refuses to take a socket a live daemon is behind", async () => {
-    // The earlier implementation gets this wrong: `server.cpp` unlinks unconditionally
-    // before listening, so a second daemon started by accident silently steals
-    // the socket from a running one.
+    // Unlinking unconditionally before listening lets a second daemon
+    // silently steal the socket from a running one.
     const path = join(dir, "d.sock");
     const first = await claimSocket(path, accepted);
     expect(first.ok).toBe(true);

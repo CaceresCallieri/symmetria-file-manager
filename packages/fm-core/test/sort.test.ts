@@ -23,10 +23,8 @@ const order = (entries: FsEntry[], mode: SortMode, descending = false) =>
   sortEntries(entries, mode, descending).map((e) => e.name);
 
 describe("directories sort before files, in every mode", () => {
-  // The earlier implementation's tree walk depended on this and so will the columns:
-  // `compareEntries` in filesystemmodel.cpp put directories first regardless of
-  // the active sort. Asserted per mode rather than once, because a mode added
-  // later is exactly where this gets forgotten.
+  // The columns require directories first regardless of the active sort.
+  // Assert each mode so adding a mode cannot silently break that contract.
   const mixed = [file("a-file"), dir("z-dir"), file("b-file"), dir("y-dir")];
   const modes: SortMode[] = ["alphabetical", "modified", "size", "extension", "natural"];
 

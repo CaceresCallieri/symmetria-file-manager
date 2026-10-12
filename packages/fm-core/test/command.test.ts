@@ -113,8 +113,7 @@ describe("createPicker", () => {
   });
 
   it("takes the picker defaults for every option the caller leaves out", () => {
-    // The defaults are `FileManagerService.qml`'s, so a portal request that
-    // omits an option gets the same dialog from either build.
+    // A portal request that omits an option must receive the picker defaults.
     const out = decodeDaemonCommand({ cmd: "createPicker", fifo: VALID_FIFO });
 
     expect(isFailure(out)).toBe(false);

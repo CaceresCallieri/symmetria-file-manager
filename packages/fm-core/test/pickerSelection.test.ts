@@ -194,9 +194,7 @@ describe("the Accept button's label", () => {
   });
 
   it("says Select otherwise", () => {
-    // The earlier implementation's word, and parity is the point of the phase. The plan said
-    // "Open"; `StatusBar.qml` says "Select", and matching the application the
-    // operator uses every day beats matching my own paraphrase of it.
+    // Keep the operator's established action label, "Select".
     expect(pickerAcceptLabel({ ...BASE, cursorEntry: FILE }, "")).toBe("Select");
   });
 });
