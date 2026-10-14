@@ -1,5 +1,6 @@
 import type { FsEntry } from "@symmetria/fm-core/entry";
 import { humanDate, humanSize } from "@symmetria/fm-core/format";
+import { joinPath } from "@symmetria/fm-core/pane";
 
 import { FileIcon } from "@symmetria/fm-search/ui";
 import { ClipboardIndicator } from "./ClipboardIndicator.tsx";
@@ -139,6 +140,7 @@ export function FileRow({
       data-flash={flashStateOf(flashActive, dimmed)}
       className={rowClassName({ isCursor, isMarked, isMatch, dimmed, clickable })}
       data-kind={entry.kind}
+      data-path={directory === undefined ? undefined : joinPath(directory, entry.name)}
       onMouseDown={clickable ? (event) => event.preventDefault() : undefined}
       onClick={onSelect}
       onDoubleClick={onActivate}

@@ -21,6 +21,7 @@ function recorder(): Recorder {
     };
 
   const actions: KeyActions = {
+    openActions: log("openActions"),
     openMachines: log("openMachines"),
     moveDown: log("moveDown"),
     moveUp: log("moveUp"),

@@ -7,6 +7,7 @@ import {
 } from "@symmetria/fm-core/command";
 import { failure, isFailure } from "@symmetria/fm-core/contract";
 import { homeQuery, pickerQuery } from "@symmetria/fm-core/windowUrl";
+import { fileActionService } from "@symmetria/fm-main/fileActions";
 import { PUSH_CHANNELS, REQUEST_CHANNELS } from "@symmetria/fm-main/ipc/channels";
 import type { ElectronTransport } from "@symmetria/fm-main/ipc/electronSurface";
 import { electronIpcSurface } from "@symmetria/fm-main/ipc/electronSurface";
@@ -882,7 +883,13 @@ app.whenReady().then(async () => {
     // The host owns its own origin, so it is the host that turns a preview
     // token into a URL. The registry used to import this and that import was
     // the last line tying the privileged half to one particular application.
-    { previewUrlFor, operations, clipboard: hostClipboard, searchPool },
+    {
+      previewUrlFor,
+      operations,
+      clipboard: hostClipboard,
+      searchPool,
+      fileActions: fileActionService(),
+    },
   );
 
   // `dispose` was written and never called, which meant every filesystem watch

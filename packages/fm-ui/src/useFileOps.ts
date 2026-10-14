@@ -19,6 +19,7 @@ export interface FileOps {
   readonly clipboard: Clipboard | null;
   readonly progress: ReturnType<typeof useTransfers>["progress"];
   readonly message: string | null;
+  captureTarget(): OperationTarget;
   closeModal(): void;
   clearMessage(): void;
   yank(target?: OperationTarget): void;
@@ -67,6 +68,7 @@ export function useFileOps(tabs: Tabs, viewKey = "miller"): FileOps {
     source.clearMarks();
   };
   return {
+    captureTarget: () => target,
     modal: dialogs.modal,
     clipboard: transfers.clipboard,
     progress: transfers.progress,

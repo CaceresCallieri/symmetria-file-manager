@@ -52,6 +52,7 @@
     "./overview/viewport": "./src/overview/viewport.ts",
     "./flash": "./src/flash.ts",
     "./scrollbar": "./src/scrollbar.ts",
-    "./format": "./src/format.ts"
+    "./format": "./src/format.ts",
+    "./fileActions": "./src/fileActions.ts"
   }
 }

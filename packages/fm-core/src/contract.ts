@@ -337,6 +337,8 @@ export interface TransferProgress {
  * the channels whose whole answer is "it worked".
  */
 export type IpcReply =
+  | Result<import("./fileActions.ts").ActionInspection>
+  | Result<import("./fileActions.ts").ActionReply>
   | Result<readonly import("./machines.ts").MachineInfo[]>
   | Result<{ readonly id: string }>
   | Result<import("./overview/contract.ts").OverviewReply>

@@ -803,6 +803,7 @@ kbd {
 }
 .overlay__panel,
 .ops-dialog,
+.file-actions,
 .which-key {
   border: 0;
   border-radius: 24px;
@@ -812,6 +813,18 @@ kbd {
     inset 0 0 0 1px var(--atmo-edge-2),
     var(--atmo-shine),
     0 30px 90px rgb(0 0 0 / 50%);
+}
+.file-actions {
+  border-radius: var(--radius-sm);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .overlay__panel,
+  .ops-dialog,
+  .file-actions,
+  .which-key {
+    background: var(--glass-surface);
+    backdrop-filter: none;
+  }
 }
 .which-key {
   border-radius: 18px;

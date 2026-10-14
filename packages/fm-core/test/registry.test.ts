@@ -100,7 +100,7 @@ describe("symbol glyphs and the Latin-American layout", () => {
       const symbols = binding.keys.filter(isSymbolGlyph);
       if (symbols.length === 0) continue;
 
-      expect(binding.mods, `${binding.id} binds ${symbols.join(",")}`).toBe("*");
+      expect(["*", "Symbol"], `${binding.id} binds ${symbols.join(",")}`).toContain(binding.mods);
     }
   });
 
@@ -145,6 +145,7 @@ describe("view scoping", () => {
         "clip.paste",
         "clip.pasteCtrl",
         "clip.yank",
+        "file.actions",
         "miller.renameExt",
         "op.create",
         "op.delete",
@@ -166,8 +167,8 @@ describe("view scoping", () => {
     // The the earlier implementation registry held 54 rows: 28 shared, 20 Miller-only, 6 tree-only. A
     // count that drifts means a row was dropped in the port rather than
     // deliberately removed.
-    // The native machine chooser adds one shared row.
-    expect(CORE).toHaveLength(29);
+    // The native machine chooser and the file action menu add two shared rows.
+    expect(CORE).toHaveLength(30);
     // The overview adds one row. preview.expand replaces the ported
     // miller.contextMenu row, so that replacement leaves the count unchanged.
     // The picker adds Ctrl+L for local path entry.

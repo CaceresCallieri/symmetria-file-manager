@@ -42,6 +42,7 @@ import { decodeOverviewRequest } from "@symmetria/fm-core/overview/contract";
 import { sortEntries } from "@symmetria/fm-core/sort";
 import type { IndexPool } from "@symmetria/fm-search/main/pool";
 import { defaultBookmarksPath, readOrSeedBookmarks, saveBookmarks } from "../bookmarks.ts";
+import type { FileActionService } from "../fileActions/service.ts";
 import { mimeTables } from "../fs/mimeTables.ts";
 import { readOverviewDirectory } from "../fs/overview.ts";
 import { kindOf, scanDirectory } from "../fs/scan.ts";
@@ -57,6 +58,7 @@ import { frecentDirectories } from "../ops/zoxide.ts";
 import { authorisePreview, authorisePreviewDirectory } from "../previewTokens.ts";
 import { userPlaces } from "../xdg.ts";
 import { CHANNELS, REQUEST_CHANNELS } from "./channels.ts";
+import { registerFileActions } from "./fileActions.ts";
 
 /**
  * How much of a file's head the content sniff needs.
@@ -204,6 +206,7 @@ interface ReadDependencies {
 /** A full host must supply every desktop capability at compile time. */
 export interface FullDependencies extends ReadDependencies {
   readonly readOnly?: false;
+  readonly fileActions?: FileActionService;
   readonly operations: Operations;
   readonly clipboard: Pick<typeof HostClipboard, "copyText" | "copyImage">;
   readonly searchPool: () => IndexPool;
@@ -214,6 +217,7 @@ export interface FullDependencies extends ReadDependencies {
  */
 interface ReadOnlyDependencies extends ReadDependencies {
   readonly readOnly: true;
+  readonly fileActions?: never;
   readonly operations?: never;
   readonly clipboard?: never;
   readonly searchPool?: never;
@@ -777,8 +781,11 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
     held.watchQueue.clear();
   }
 
+  const fileActions = registerFileActions(ipc, deps.fileActions);
+
   return {
     dispose() {
+      fileActions.dispose();
       // Every request channel, including any this registry never handled.
       // `hideWindow` is registered by the HOST rather than here, and
       // `removeHandler` on an unregistered channel is a no-op — so this loop
@@ -793,6 +800,7 @@ export function createRegistry(ipc: IpcSurface, deps: Dependencies): Registry {
     },
 
     disposeSender(from) {
+      fileActions.disposeSender(from);
       const held = windows.get(from);
       if (held === undefined) return;
       releaseWindow(held);

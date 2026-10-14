@@ -33,7 +33,7 @@ function startPath(): string {
 export function MachinePanel({ rowHeight }: { readonly rowHeight: number }) {
   const host = window[BRIDGE_KEY];
   if (!host?.forMachine || pickerFromSearch(window.location.search))
-    return <App chrome="atmosphere" rowHeight={rowHeight} />;
+    return <App chrome="atmosphere" rowHeight={rowHeight} actionMenu />;
   return <ConnectedMachines host={host} rowHeight={rowHeight} />;
 }
 function ConnectedMachines({
@@ -131,6 +131,7 @@ function ConnectedMachines({
         key={connection.generation}
         bridge={connection.bridge}
         chrome="atmosphere"
+        actionMenu
         rowHeight={rowHeight}
         startPath={machine.startPath}
         homePath={machine.homePath}

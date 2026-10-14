@@ -37,6 +37,13 @@ import {
   type TransferReply,
   type TransferRequest,
 } from "@symmetria/fm-core/contract";
+import {
+  type ActionInspection,
+  type ActionReply,
+  type ActionRequest,
+  decodeActionInspection,
+  decodeActionReply,
+} from "@symmetria/fm-core/fileActions";
 import type { ListingOptions } from "@symmetria/fm-core/listingOptions";
 import { decodeOverviewReply, type OverviewReply } from "@symmetria/fm-core/overview/contract";
 import { parentOf } from "@symmetria/fm-core/pane";
@@ -544,7 +551,40 @@ function fileManagerIo(getBridge: () => Bridge | null) {
     void getBridge()?.cancel({ streamId: requestId });
   }
 
+  async function inspectFileActions(paths: readonly string[]): Promise<Result<ActionInspection>> {
+    try {
+      const bridge = getBridge();
+      if (!bridge?.fileActionInspect)
+        return failure("read_failed", "This host does not provide desktop actions.");
+      const reply = await bridge.fileActionInspect({ paths });
+      return reply.ok ? decodeActionInspection(reply.value) : reply;
+    } catch (cause) {
+      return failure("read_failed", String(cause));
+    }
+  }
+  async function executeFileAction(request: ActionRequest): Promise<Result<ActionReply>> {
+    try {
+      const bridge = getBridge();
+      if (!bridge?.fileActionExecute)
+        return failure("write_failed", "This host does not provide desktop actions.");
+      const reply = await bridge.fileActionExecute(request);
+      return reply.ok ? decodeActionReply(reply.value) : reply;
+    } catch (cause) {
+      return failure("write_failed", String(cause));
+    }
+  }
+  async function cancelFileAction(id: string): Promise<void> {
+    try {
+      await getBridge()?.fileActionCancel?.({ id });
+    } catch {
+      /* The pending action reports its result. */
+    }
+  }
+
   return {
+    inspectFileActions,
+    executeFileAction,
+    cancelFileAction,
     listDirectory,
     describeEntry,
     previewUrl,

@@ -31,7 +31,7 @@ function keepDialogFocus(event: KeyboardEvent<HTMLDivElement>): void {
   // The panel and entry list keep focus inside after a click. Tab from the
   // panel enters at the first control; Shift+Tab enters at the last control.
   const controls = event.currentTarget.querySelectorAll<HTMLElement>(
-    'input:not(:disabled), button:not(:disabled), [tabindex="0"]',
+    'input:not(:disabled), select:not(:disabled), button:not(:disabled), [tabindex="0"]',
   );
   const first = controls[0];
   const last = controls[controls.length - 1];
@@ -46,13 +46,15 @@ function keepDialogFocus(event: KeyboardEvent<HTMLDivElement>): void {
 }
 
 /** A dialog shell: a title, whatever it asks, and its own keyboard handling. */
-function Dialog({
+export function Dialog({
   title,
   confirmLabel,
   testId,
   onCancel,
   onConfirm,
   focusConfirm = true,
+  confirmDisabled = false,
+  busy = false,
   describedBy,
   children,
 }: {
@@ -62,15 +64,30 @@ function Dialog({
   onCancel(): void;
   onConfirm(): void;
   readonly focusConfirm?: boolean;
+  readonly confirmDisabled?: boolean;
+  readonly busy?: boolean;
   readonly describedBy?: string;
   readonly children?: React.ReactNode;
 }) {
   useOverlayCloseKeys(onCancel, isEscape);
   const titleId = useId();
   const confirmButton = useRef<HTMLButtonElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const wasBusy = useRef(false);
   useEffect(() => {
-    if (focusConfirm) confirmButton.current?.focus();
-  }, [focusConfirm]);
+    // Disabling the focused Confirm button during dispatch drops browser focus.
+    // Keep Cancel focused while busy, then focus Confirm for the result.
+    if (!focusConfirm) return;
+    const active = document.activeElement;
+    // Form validity must not move focus away from the permission checkbox.
+    // Otherwise a second Space activates Confirm instead of undoing consent.
+    if (active?.closest(".ops-dialog") && active !== confirmButton.current) return;
+    (confirmDisabled ? cancelButton : confirmButton).current?.focus();
+  }, [focusConfirm, confirmDisabled]);
+  useEffect(() => {
+    if (wasBusy.current && !busy) confirmButton.current?.focus();
+    wasBusy.current = busy;
+  }, [busy]);
 
   return (
     <div className="overlay" data-testid={testId}>
@@ -86,11 +103,17 @@ function Dialog({
         <h2 id={titleId}>{title}</h2>
         <div className="dialog__body">{children}</div>
         <div className="dialog__actions">
-          <button className="dialog__button dialog__cancel" type="button" onClick={onCancel}>
+          <button
+            ref={cancelButton}
+            className="dialog__button dialog__cancel"
+            type="button"
+            onClick={onCancel}
+          >
             Cancel
           </button>
           <button
             ref={confirmButton}
+            disabled={confirmDisabled}
             type="button"
             className="dialog__button dialog__confirm"
             data-testid="dialog-confirm"

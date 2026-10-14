@@ -229,3 +229,29 @@ it("rejects writes at the service itself and reports a dropped connection", asyn
   });
   client.dispose();
 });
+
+it("rejects well-formed desktop actions through the read-only policy", async () => {
+  const paths = [join(fixture, "hello π.txt")];
+  const requests = [
+    { channel: REQUEST_CHANNELS.fileActionInspect, payload: { paths } },
+    { channel: REQUEST_CHANNELS.fileActionCancel, payload: { id: "remote-action" } },
+    {
+      channel: REQUEST_CHANNELS.fileActionExecute,
+      payload: {
+        id: "remote-action",
+        paths,
+        action: "run",
+        choice: "",
+        destination: "",
+        format: "zip",
+        makeExecutable: false,
+        prefix: "",
+      },
+    },
+  ];
+  for (const { channel, payload } of requests)
+    expect(await remote(channel, payload)).toMatchObject({
+      ok: false,
+      error: { message: "Home server is read-only; this operation is unavailable" },
+    });
+});

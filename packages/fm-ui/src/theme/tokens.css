@@ -231,7 +231,7 @@
   --font-mono: "CaskaydiaCove NF", ui-monospace, monospace;
 }
 
-/* Both glass consumers honor the same transparency preference. */
+/* Glass surfaces honor the same transparency preference. */
 @media (prefers-reduced-transparency: reduce) {
   :root {
     --glass-background: var(--glass-surface);

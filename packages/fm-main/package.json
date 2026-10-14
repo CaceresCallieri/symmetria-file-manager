@@ -26,7 +26,8 @@
     "./ops/zoxide": "./src/ops/zoxide.ts",
     "./listingOptions": "./src/listingOptions.ts",
     "./jsonStore": "./src/jsonStore.ts",
-    "./search": "./src/search.ts"
+    "./search": "./src/search.ts",
+    "./fileActions": "./src/fileActions/service.ts"
   },
   "dependencies": {
     "@symmetria/fm-search": "workspace:*",
