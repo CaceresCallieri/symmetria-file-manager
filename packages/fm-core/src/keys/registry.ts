@@ -42,6 +42,17 @@ const MACHINE_BINDING: Binding = {
 
 export const CORE: readonly Binding[] = [
   MACHINE_BINDING,
+  {
+    id: "file.actions",
+    keys: [";"],
+    mods: "Symbol",
+    keycap: ";",
+    label: "File actions…",
+    icon: "more_horiz",
+    group: "File",
+    when: (ctx) => ctx.actions.openActions !== undefined && !ctx.state.picker.active,
+    run: (ctx) => ctx.actions.openActions?.(),
+  },
   // Navigation
   {
     id: "nav.down",
@@ -811,6 +822,7 @@ function isRenderable(ctx: KeyContext): boolean {
 }
 
 const TREE_SHARED = new Set([
+  "file.actions",
   "machine.choose",
   "op.create",
   "op.delete",

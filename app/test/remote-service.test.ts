@@ -106,6 +106,9 @@ it("runs without Electron, authenticates, and reports both machines", async () =
 });
 it("rejects mutation requests independently of the renderer and keeps local routing", async () => {
   for (const channel of [
+    REQUEST_CHANNELS.fileActionInspect,
+    REQUEST_CHANNELS.fileActionExecute,
+    REQUEST_CHANNELS.fileActionCancel,
     REQUEST_CHANNELS.create,
     REQUEST_CHANNELS.rename,
     REQUEST_CHANNELS.trash,

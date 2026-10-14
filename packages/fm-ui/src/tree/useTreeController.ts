@@ -19,6 +19,7 @@ export function useTreeController(
       port.connect({
         command: (name) => controller.current.command(name),
         reveal: (path) => controller.current.reveal(path),
+        activatePath: (path) => controller.current.activatePath?.(path),
         cancel: () => controller.current.cancel(),
         toggleMark: () => controller.current.toggleMark?.(),
         clearMarks: (paths) => controller.current.clearMarks?.(paths),

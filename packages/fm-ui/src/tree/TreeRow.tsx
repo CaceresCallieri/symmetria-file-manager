@@ -38,6 +38,7 @@ export function TreeRow({
       aria-expanded={directory ? row.expanded : undefined}
       aria-selected={selected}
       data-path={row.path}
+      data-kind={row.kind}
       data-marked={marked || undefined}
       data-search-match={matched}
       data-coverage={row.status}

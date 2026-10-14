@@ -119,6 +119,10 @@ export function FileTree({
     {
       command,
       reveal: state.reveal,
+      activatePath: (path) => {
+        const index = rows.findIndex((row) => row.path === path);
+        if (index >= 0) activate(index);
+      },
       cancel: reset,
       // During refresh the displayed fallback can differ from shape.selected.
       // Mark the published row so Space cannot mark a removed, invisible path.

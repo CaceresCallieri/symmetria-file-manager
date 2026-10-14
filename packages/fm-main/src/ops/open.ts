@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-
 import { shell } from "electron";
+import { parseMainSection } from "../desktopEntry.ts";
+import { launchDesktopFile } from "../fileActions/applications.ts";
+import { actionProcesses } from "../fileActions/process.ts";
 
 import { dataDirectories } from "../xdg.ts";
 
@@ -12,8 +14,8 @@ import { dataDirectories } from "../xdg.ts";
  * `shell.openPath` covers almost all of it. The exception is the reason this
  * module exists at all: a desktop entry may declare `Terminal=true`, meaning
  * its command is a text-mode program that must be given a terminal to run in.
- * Electron cannot express that, so the entry is read and those are routed to a
- * terminal — the same probe the earlier implementation does.
+ * Electron cannot express that, so GIO launches the exact desktop entry through
+ * the same adapter that Open With uses. GIO owns Exec quoting and field codes.
  *
  * ── WARNING: this is the one operation that is NOT confined by the test
  * environment ──────────────────────────────────────────────────────────────
@@ -40,27 +42,10 @@ function applicationDirectories(): string[] {
  * with its own keys, and reading the whole file flat would let an action's
  * `Terminal=true` decide how the main command runs.
  */
-function parseMainSection(text: string): Map<string, string> {
-  const keys = new Map<string, string>();
-  let inMainSection = false;
 
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith("[")) {
-      inMainSection = trimmed === "[Desktop Entry]";
-      continue;
-    }
-    if (!inMainSection) continue;
-
-    const separator = trimmed.indexOf("=");
-    if (separator > 0) {
-      keys.set(trimmed.slice(0, separator).trim(), trimmed.slice(separator + 1).trim());
-    }
-  }
-  return keys;
-}
-
-async function desktopEntryKeys(id: string): Promise<Map<string, string>> {
+async function desktopEntry(
+  id: string,
+): Promise<{ keys: Map<string, string>; path: string } | null> {
   for (const dir of applicationDirectories()) {
     const text = await readFile(join(dir, id), "utf8").catch(() => null);
     if (text === null) continue;
@@ -68,10 +53,14 @@ async function desktopEntryKeys(id: string): Promise<Map<string, string>> {
     // Most-specific directory wins: the user's own copy of an entry overrides
     // the system's, and reading further would let the system's win instead.
     const keys = parseMainSection(text);
-    if (keys.size > 0) return keys;
+    if (keys.size > 0) return { keys, path: join(dir, id) };
   }
 
-  return new Map();
+  return null;
+}
+
+async function desktopEntryKeys(id: string): Promise<Map<string, string>> {
+  return (await desktopEntry(id))?.keys ?? new Map();
 }
 
 /** Which application the desktop says handles this file. */
@@ -103,11 +92,6 @@ async function defaultApplication(path: string): Promise<string | null> {
   });
 }
 
-/** The terminal to run a text-mode program in. */
-function terminalCommand(): string {
-  return process.env["TERMINAL"] ?? "xdg-terminal-exec";
-}
-
 /**
  * Open one entry.
  *
@@ -116,20 +100,9 @@ function terminalCommand(): string {
  */
 export async function openEntry(path: string): Promise<"terminal" | "desktop"> {
   const id = await defaultApplication(path);
-  const keys = id === null ? new Map<string, string>() : await desktopEntryKeys(id);
-
-  if (keys.get("Terminal") === "true") {
-    const exec = keys.get("Exec") ?? "";
-    // The field codes a desktop entry may carry — `%f`, `%U` and the rest —
-    // are substituted by the launcher, and a terminal does not substitute
-    // them. Stripping them leaves the command, and the path is appended.
-    const command = exec.replace(/%[a-zA-Z]/g, "").trim();
-
-    spawn(terminalCommand(), ["--", ...command.split(/\s+/).filter(Boolean), path], {
-      detached: true,
-      stdio: "ignore",
-    }).unref();
-
+  const entry = id === null ? null : await desktopEntry(id);
+  if (entry?.keys.get("Terminal") === "true") {
+    await launchDesktopFile(actionProcesses, entry.path, path);
     return "terminal";
   }
 

@@ -22,6 +22,7 @@ function targetIsTextInput(target: EventTarget | null): boolean {
 
 export interface KeyDispatchOptions {
   readonly mode: CascadeMode;
+  onActionMenuKey?: (event: KeyboardEvent) => boolean;
   readonly context: KeyContext;
   /** Called for a key the flash handler owns. */
   onFlashKey?: (event: KeyboardEvent) => boolean;
@@ -69,18 +70,24 @@ function targetScrolls(event: KeyboardEvent): boolean {
  */
 export type PressKey = (key: KeyEvent) => boolean;
 
-export function useKeyDispatch({ mode, context, onFlashKey }: KeyDispatchOptions): PressKey {
+export function useKeyDispatch({
+  mode,
+  context,
+  onFlashKey,
+  onActionMenuKey,
+}: KeyDispatchOptions): PressKey {
   // The listener is attached once and reads through a ref.
   //
   // Re-attaching on every state change would be correct but wasteful, and it
   // would also drop a key that arrived mid-swap. The ref keeps one listener
   // looking at fresh state.
-  const latest = useRef({ mode, context, onFlashKey });
-  latest.current = { mode, context, onFlashKey };
+  const latest = useRef({ mode, context, onFlashKey, onActionMenuKey });
+  latest.current = { mode, context, onFlashKey, onActionMenuKey };
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (ignoredKeyEvent(event)) return;
+      if (latest.current.onActionMenuKey?.(event)) return;
       const { mode: currentMode, context: ctx, onFlashKey: flash } = latest.current;
 
       // Focus wins over everything, and it is decided by the DOM rather than by

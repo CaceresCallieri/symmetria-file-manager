@@ -10,6 +10,9 @@ import {
 } from "@symmetria/fm-core/windowUrl";
 import { FinderOverlay } from "@symmetria/fm-search/ui";
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
+import { ActionMenu } from "./actionMenu/ActionMenu.tsx";
+import { menuTarget } from "./actionMenu/target.ts";
+import { useActionMenu } from "./actionMenu/useActionMenu.ts";
 import { createFileManagerIo, defaultFileManagerIo } from "./bridge.ts";
 import { AtmosphereHeader, AtmosphereRail } from "./components/AtmosphereChrome.tsx";
 import { BrowsingView } from "./components/BrowsingView.tsx";
@@ -178,6 +181,8 @@ function flashHostFor(tabs: Tabs, preview: Preview, cursorPath: string | null): 
 }
 
 export interface AppProps {
+  /** Opt-in menu for hosts that expose local filesystem operations. */
+  readonly actionMenu?: boolean;
   readonly initialTabs?: TabsState;
   readonly initialExternalOpen?: ExternalOpen | null;
   readonly onTabsChange?: (tabs: TabsState) => void;
@@ -445,11 +450,16 @@ function FileManagerPanel(props: AppProps) {
     [modes, ops.modal.kind, search.active, flash.active],
   );
 
-  const press = useKeyDispatch({
+  const { menu, press, menuContext } = usePanelKeyDispatch(
+    props,
+    tabs,
+    tree,
+    overview.model,
+    ops,
     mode,
     context,
-    onFlashKey: flash.onKey,
-  });
+    flash.onKey,
+  );
 
   const { rowHeight = DEFAULT_ROW_HEIGHT } = props;
   const onOpenFile = fileOpenFor(props, ops, context);
@@ -545,6 +555,7 @@ function FileManagerPanel(props: AppProps) {
             />
           </main>
         </AtmosphereWindow>
+        <ActionMenu menu={menu} />
         <OverviewLayer
           root={overview.root}
           model={overview.model}
@@ -555,7 +566,7 @@ function FileManagerPanel(props: AppProps) {
         />
         <Overlays
           modes={modes}
-          context={context}
+          context={menuContext}
           bookmarks={browsingBookmarks(context, bookmarks.byLetter)}
           directory={tabs.pane.path}
           renderDocuments={tabs.renderDocuments}
@@ -707,6 +718,20 @@ function AtmosphereWindow({
 /** The reader and overview each own pointer interaction while visible. */
 function columnsAreInert(overviewRoot: string | null, readerOpen: boolean): boolean {
   return overviewRoot !== null || readerOpen;
+}
+
+function actionsBlocked(mode: CascadeMode, context: KeyContext): boolean {
+  return [
+    mode.modalOpen,
+    mode.flashActive,
+    mode.textInputFocused,
+    context.state.searchActive,
+    Boolean(mode.chordPrefix),
+    mode.bookmarkSubMode !== null,
+    context.state.picker.active,
+    context.state.readOnly,
+    context.view === "overview",
+  ].some(Boolean);
 }
 
 /** Only one surface mounts a preview; the reader never shows a stale path. */
@@ -905,4 +930,75 @@ function useBrowsingModeTransitions(
 ): void {
   useBrowsingTransitions(tree.id, reset, cancelSearch, tree.cancel, clearFlash);
   useBrowsingTransitions(view, clearFlash);
+}
+
+function actionMenuContext(
+  context: KeyContext,
+  enabled: boolean | undefined,
+  open: () => void,
+): KeyContext {
+  return { ...context, actions: { ...context.actions, openActions: enabled ? open : undefined } };
+}
+function actionMenuMode(mode: CascadeMode, menu: ReturnType<typeof useActionMenu>): CascadeMode {
+  return {
+    ...mode,
+    modalOpen: mode.modalOpen || menu.snapshot !== null || menu.desktop.dialog !== null,
+  };
+}
+function usePanelActionMenu(
+  props: AppProps,
+  tabs: Tabs,
+  tree: ReturnType<typeof useTreeMode>,
+  model: ReturnType<typeof useOverviewMode>["model"],
+  ops: FileOps,
+  mode: CascadeMode,
+  context: KeyContext,
+) {
+  return useActionMenu({
+    enabled: props.actionMenu === true,
+    blocked: actionsBlocked(mode, context),
+    captureTarget: (clicked) => {
+      const source = tree.root === null ? ops.captureTarget() : tree.operationTarget(model);
+      if (!source) return null;
+      return menuTarget(
+        source,
+        clicked,
+        (path) => {
+          const entries =
+            tree.root === null ? tabs.pane.entries : model.folders.get(parentOf(path))?.entries;
+          return entries?.find((entry) => entry.name === path.slice(path.lastIndexOf("/") + 1));
+        },
+        tree.root !== null,
+      );
+    },
+    ops,
+    openPath: (target) => {
+      const path = target.paths[0];
+      if (!path) return;
+      if (tree.root !== null) tree.activatePath(path);
+      else if (target.cursor?.isDirectory) tabs.navigate(path);
+      else fileOpenFor(props, ops, context)(path);
+    },
+  });
+}
+
+function usePanelKeyDispatch(
+  props: AppProps,
+  tabs: Tabs,
+  tree: ReturnType<typeof useTreeMode>,
+  model: ReturnType<typeof useOverviewMode>["model"],
+  ops: FileOps,
+  mode: CascadeMode,
+  context: KeyContext,
+  onFlashKey: (event: KeyboardEvent) => boolean,
+) {
+  const menu = usePanelActionMenu(props, tabs, tree, model, ops, mode, context);
+  const menuContext = actionMenuContext(context, props.actionMenu, menu.open);
+  const press = useKeyDispatch({
+    mode: actionMenuMode(mode, menu),
+    context: menuContext,
+    onActionMenuKey: menu.onKey,
+    onFlashKey,
+  });
+  return { menu, press, menuContext };
 }

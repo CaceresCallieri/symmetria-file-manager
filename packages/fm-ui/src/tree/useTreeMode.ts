@@ -31,6 +31,7 @@ export type TreeCommand =
 export interface TreeController {
   command(command: TreeCommand): void;
   reveal(path: string): void;
+  activatePath?(path: string): void;
   cancel(): void;
   toggleMark?(): void;
   clearMarks?(paths?: readonly string[]): void;
@@ -133,6 +134,7 @@ export function useTreeMode(tabs: Tabs) {
       });
     },
     cancel: () => handler.current?.cancel(),
+    activatePath: (path: string) => handler.current?.activatePath?.(path),
     command: (command: TreeCommand) => handler.current?.command(command),
   };
 }

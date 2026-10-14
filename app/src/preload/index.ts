@@ -35,6 +35,9 @@ interface BridgeTransport {
 function buildBridge(transport: BridgeTransport): Bridge {
   return {
     version: process.versions.electron ?? "unknown",
+    fileActionInspect: (request) => transport.invoke(REQUEST_CHANNELS.fileActionInspect, request),
+    fileActionExecute: (request) => transport.invoke(REQUEST_CHANNELS.fileActionExecute, request),
+    fileActionCancel: (request) => transport.invoke(REQUEST_CHANNELS.fileActionCancel, request),
     overview: (request) => transport.invoke(REQUEST_CHANNELS.overview, request),
     list: (request) => transport.invoke(REQUEST_CHANNELS.list, request),
     watch: (request) => transport.invoke(REQUEST_CHANNELS.watch, request),

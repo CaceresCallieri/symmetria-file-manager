@@ -110,6 +110,7 @@ export type CopyTarget = "path" | "filename" | "nameWithoutExtension" | "directo
  * the operation does — that split is what keeps the table readable.
  */
 export interface KeyActions {
+  openActions?: (() => void) | undefined;
   openMachines?: (() => void) | undefined;
   // Navigation
   moveDown(): void;

@@ -76,6 +76,10 @@ export interface Bridge {
    * `user-dirs.dirs`. OPTIONAL for the reason `diskUsage` is.
    */
   places?(request: unknown): Promise<Result<unknown>>;
+  /** Optional local desktop actions. Embedding hosts can omit these capabilities. */
+  fileActionInspect?(request: unknown): Promise<Result<unknown>>;
+  fileActionExecute?(request: unknown): Promise<Result<unknown>>;
+  fileActionCancel?(request: unknown): Promise<Result<unknown>>;
   /** Read the bookmark store, seeding it on a first run. */
   bookmarksRead(request: unknown): Promise<Result<unknown>>;
   /** Replace the bookmark store. */

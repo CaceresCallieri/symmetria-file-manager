@@ -12,6 +12,9 @@
 
 /** Renderer asks, main process replies. Each one has exactly one handler. */
 export const REQUEST_CHANNELS = {
+  fileActionInspect: "symmetria-fm:file-action-inspect",
+  fileActionExecute: "symmetria-fm:file-action-execute",
+  fileActionCancel: "symmetria-fm:file-action-cancel",
   overview: "symmetria-fm:overview",
   /** List a directory. */
   list: "symmetria-fm:list",

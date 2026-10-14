@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>File actions · Symmetria prototype</title>
+    <link rel="stylesheet" href="../shared/fonts.css" />
+    <link rel="stylesheet" href="menu.css" />
+  </head>
+  <body>
+    <main class="prototype">
+      <header class="intro">
+        <div><span class="eyebrow">SYMMETRIA / INTERACTION STUDY</span><h1>A menu at your fingertips.</h1></div>
+        <span class="prototype-badge">Prototype · sample files</span>
+      </header>
+      <p class="instructions">Choose a file. Press <kbd>;</kbd> or right-click to see its actions. Then press a letter.</p>
+      <section class="window" aria-label="Sample file manager">
+        <header class="window-header"><span class="brand">◈ <strong>Symmetria</strong></span><span class="window-tab">Downloads</span><span class="window-detail">Local</span></header>
+        <div class="workspace">
+          <aside class="sidebar" aria-label="Location"><span class="sidebar-label">PLACES</span><div>Home</div><div class="place-active">Downloads <span>8</span></div><div>Documents</div><div>Projects</div><span class="sidebar-label machine-label">MACHINE</span><div>Local <span class="online">●</span></div></aside>
+          <section class="files" aria-label="Files">
+            <div class="path"><span>Home <span class="path-separator">/</span> <strong>Downloads</strong></span><button id="actions-button" type="button" aria-haspopup="menu" aria-controls="action-menu" aria-expanded="false">Actions <kbd>;</kbd></button></div>
+            <div class="column-labels"><span>Name</span><span>Size</span></div>
+            <div id="file-list" role="listbox" aria-label="Sample files" aria-multiselectable="true"></div>
+            <div class="file-space"><span id="selection-status">8 items</span></div>
+          </section>
+          <aside id="preview" class="preview" aria-label="File preview"></aside>
+        </div>
+        <footer class="status"><span id="mode">NORMAL</span><span><kbd>j</kbd><kbd>k</kbd> move <span class="status-extra">· <kbd>Space</kbd> select</span></span><span><kbd>;</kbd> actions</span></footer>
+      </section>
+      <div class="study-note"><span class="study-note-text">Try <strong>deploy.sh</strong>, <strong>assets.zip</strong>, and <strong>Game.exe</strong>.</span><span class="study-note-text">File operations and launches are simulated.</span></div>
+      <div id="notice" class="notice" role="status" aria-live="polite"></div>
+    </main>
+    <div id="action-menu" class="action-menu" role="menu" aria-label="File actions" hidden></div>
+    <dialog id="action-dialog" aria-labelledby="dialog-title"></dialog>
+    <script type="module" src="menu.js"></script>
+  </body>
+</html>
