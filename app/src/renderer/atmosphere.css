@@ -818,7 +818,10 @@ kbd {
   border-radius: var(--radius-sm);
 }
 @media (prefers-reduced-transparency: reduce) {
-  .file-actions {
+  .overlay__panel,
+  .ops-dialog,
+  .file-actions,
+  .which-key {
     background: var(--glass-surface);
     backdrop-filter: none;
   }

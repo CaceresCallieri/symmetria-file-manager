@@ -2,7 +2,11 @@ import { constants } from "node:fs";
 import { access, chmod, lstat, open, readlink, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { isRecord } from "@symmetria/fm-core/contract";
-import type { ActionRequest, FileMetadata } from "@symmetria/fm-core/fileActions";
+import {
+  type ActionRequest,
+  type FileMetadata,
+  isWindowsProgram,
+} from "@symmetria/fm-core/fileActions";
 import { launchApplication } from "./applications.ts";
 import { type ActionProcesses, requireTool } from "./process.ts";
 
@@ -175,7 +179,7 @@ async function runWindows(
   cwd: string,
   signal: AbortSignal,
 ) {
-  if (!/\.(exe|msi)$/i.test(path)) throw new Error("Select a Windows .exe or .msi file.");
+  if (!isWindowsProgram(path)) throw new Error("Select a Windows .exe or .msi file.");
   if (request.action === "bottles") {
     await launchBottle(processes, request, path, cwd, signal);
     return;

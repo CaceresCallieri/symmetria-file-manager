@@ -1,7 +1,6 @@
 import {
   access,
   chmod,
-  link,
   lstat,
   mkdtemp,
   readdir,
@@ -34,6 +33,17 @@ async function inspectTree(root: string, validate: boolean): Promise<void> {
     if (directory) directories.push(...(await inspectDirectory(directory, root, validate, totals)));
   }
 }
+function inspectContent<T>(inspection: Promise<T>, validate: true): Promise<T>;
+function inspectContent<T>(inspection: Promise<T>, validate: boolean): Promise<T | null>;
+async function inspectContent<T>(inspection: Promise<T>, validate: boolean): Promise<T | null> {
+  try {
+    return await inspection;
+  } catch (cause) {
+    if (validate)
+      throw new Error("Archive contains content that cannot be inspected safely.", { cause });
+    return null;
+  }
+}
 async function inspectDirectory(
   directory: string,
   root: string,
@@ -41,9 +51,13 @@ async function inspectDirectory(
   totals: { entries: number; bytes: number },
 ): Promise<string[]> {
   const children: string[] = [];
-  for (const name of await readdir(directory).catch(() => [])) {
+  // Only the live quota monitor tolerates entries changing during extraction.
+  // Final validation must fail on unreadable folders; treating them as empty
+  // published escaping links hidden behind mode 0300 or 0400 directories.
+  const names = (await inspectContent(readdir(directory), validate)) ?? [];
+  for (const name of names) {
     const path = join(directory, name);
-    const info = await lstat(path).catch(() => null);
+    const info = await inspectContent(lstat(path), validate);
     if (!info) continue;
     totals.entries += 1;
     totals.bytes += info.size;
@@ -94,17 +108,27 @@ async function advanceLink(root: string, component: string, walk: LinkWalk): Pro
   if (component === "" || component === ".") return;
   const candidate = component === ".." ? dirname(walk.location) : join(walk.location, component);
   requireWithin(root, candidate);
-  const info = await lstat(candidate).catch((cause: NodeJS.ErrnoException) => {
-    if (cause.code === "ENOENT") return null;
-    throw cause;
-  });
-  if (info?.isSymbolicLink()) followLink(root, await readlink(candidate), walk);
+  const info = await inspectContent(
+    lstat(candidate).catch((cause: NodeJS.ErrnoException) => {
+      // A file in a target's directory position also creates an internal
+      // dangling link. Rejecting ENOTDIR refused harmless archive entries.
+      if (cause.code === "ENOENT" || cause.code === "ENOTDIR") return null;
+      throw cause;
+    }),
+    true,
+  );
+  if (info?.isSymbolicLink())
+    followLink(root, await inspectContent(readlink(candidate), true), walk);
   else walk.location = candidate;
 }
 async function validateLink(path: string, root: string): Promise<void> {
-  const canonicalRoot = await realpath(root);
-  const walk: LinkWalk = { location: await realpath(dirname(path)), remaining: [], depth: 0 };
-  followLink(canonicalRoot, await readlink(path), walk);
+  const canonicalRoot = await inspectContent(realpath(root), true);
+  const walk: LinkWalk = {
+    location: await inspectContent(realpath(dirname(path)), true),
+    remaining: [],
+    depth: 0,
+  };
+  followLink(canonicalRoot, await inspectContent(readlink(path), true), walk);
   // Kernel resolution applies .. after following the preceding symlink.
   // Text-only normalization accepted s -> . plus l -> s/../outside.
   while (walk.remaining.length) {
@@ -154,7 +178,7 @@ async function boundedArchive(
     clearInterval(timer);
   }
 }
-async function publishDirectory(
+async function publishStaged(
   processes: ActionProcesses,
   stage: string,
   destination: string,
@@ -163,11 +187,17 @@ async function publishDirectory(
   signal.throwIfAborted();
   // rename() replaces empty directories. GNU mv uses a no-clobber rename and
   // refuses cross-filesystem copies, so a collision cannot replace user data.
-  await processes.run(
-    await requireTool(processes, "mv"),
-    ["--no-copy", "--no-clobber", "-T", "--", stage, destination],
-    { signal },
-  );
+  try {
+    await processes.run(
+      await requireTool(processes, "mv"),
+      ["--no-copy", "--no-clobber", "-T", "--", stage, destination],
+      { signal },
+    );
+  } catch (cause) {
+    // Older coreutils reports a no-clobber collision as a command failure.
+    await requireAbsent(destination);
+    throw cause;
+  }
   if (
     await access(stage).then(
       () => true,
@@ -175,6 +205,24 @@ async function publishDirectory(
     )
   )
     throw new Error(`Destination already exists: ${destination}`);
+}
+async function removeStage(root: string): Promise<void> {
+  const directories = [root];
+  while (directories.length) {
+    const directory = directories.pop();
+    if (!directory) continue;
+    const info = await lstat(directory).catch((cause: NodeJS.ErrnoException) => {
+      if (cause.code === "ENOENT") return null;
+      throw cause;
+    });
+    if (!info?.isDirectory()) continue;
+    // Rejected archive modes can prevent recursive removal. Restore access only
+    // inside the unpublished private stage, and never follow symbolic links.
+    if ((info.mode & 0o700) !== 0o700) await chmod(directory, info.mode | 0o700);
+    for (const entry of await readdir(directory, { withFileTypes: true }))
+      if (entry.isDirectory()) directories.push(join(directory, entry.name));
+  }
+  await rm(root, { recursive: true, force: true });
 }
 async function extractOne(
   processes: ActionProcesses,
@@ -203,10 +251,10 @@ async function extractOne(
       signal,
     );
     await chmod(workspace, 0o777 & ~process.umask());
-    await publishDirectory(processes, workspace, destination, signal);
+    await publishStaged(processes, workspace, destination, signal);
     return destination;
   } finally {
-    await rm(workspace, { recursive: true, force: true });
+    await removeStage(workspace);
   }
 }
 function compressionOptions(format: ActionRequest["format"]): string[] {
@@ -247,12 +295,10 @@ async function compress(
       workspace,
       signal,
     );
-    signal.throwIfAborted();
-    // link() atomically refuses an existing destination, including dangling links.
-    await link(temporary, realDestination);
+    await publishStaged(processes, temporary, realDestination, signal);
     return realDestination;
   } finally {
-    await rm(workspace, { recursive: true, force: true });
+    await removeStage(workspace);
   }
 }
 export async function archiveAction(

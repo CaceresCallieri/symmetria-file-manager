@@ -1,3 +1,7 @@
+/**
+ * Read only the `[Desktop Entry]` section. Action groups have their own keys;
+ * merging them let an action's Terminal=true override the main command.
+ */
 export function parseMainSection(text: string): Map<string, string> {
   const keys = new Map<string, string>();
   let inMainSection = false;

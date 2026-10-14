@@ -21,10 +21,7 @@ async function desktopFiles(
   }
   return files;
 }
-export async function installedApplications(
-  processes: ActionProcesses,
-  path: string,
-): Promise<DesktopApplication[]> {
+async function associationFor(processes: ActionProcesses, path: string) {
   const mimeTool = await processes.find("xdg-mime");
   const mime =
     mimeTool === null
@@ -34,15 +31,42 @@ export async function installedApplications(
     mimeTool === null || mime === ""
       ? ""
       : (await processes.run(mimeTool, ["query", "default", mime]).catch(() => "")).trim();
+  return { mime, defaultId };
+}
+async function uniqueDesktopFiles(): Promise<{ id: string; path: string }[]> {
   const seen = new Set<string>();
-  const applications: DesktopApplication[] = [];
+  const files: { id: string; path: string }[] = [];
   for (const directory of dataDirectories())
     for (const file of await desktopFiles(join(directory, "applications"))) {
+      // A user entry overrides the same desktop ID in system directories.
       if (seen.has(file.id)) continue;
       seen.add(file.id);
-      const application = await desktopApplication(processes, file, mime, defaultId);
-      if (application) applications.push(application);
+      files.push(file);
     }
+  return files;
+}
+export async function desktopEntryFor(
+  id: string,
+): Promise<{ keys: Map<string, string>; path: string } | null> {
+  const file = (await uniqueDesktopFiles()).find((entry) => entry.id === id);
+  if (!file) return null;
+  const keys = parseMainSection(await readFile(file.path, "utf8").catch(() => ""));
+  return keys.size > 0 ? { keys, path: file.path } : null;
+}
+export async function defaultDesktopEntry(processes: ActionProcesses, path: string) {
+  const { defaultId } = await associationFor(processes, path);
+  return defaultId === "" ? null : desktopEntryFor(defaultId);
+}
+export async function installedApplications(
+  processes: ActionProcesses,
+  path: string,
+): Promise<DesktopApplication[]> {
+  const { mime, defaultId } = await associationFor(processes, path);
+  const applications: DesktopApplication[] = [];
+  for (const file of await uniqueDesktopFiles()) {
+    const application = await desktopApplication(processes, file, mime, defaultId);
+    if (application) applications.push(application);
+  }
   return applications.sort(
     (a, b) => Number(b.recommended) - Number(a.recommended) || a.name.localeCompare(b.name),
   );

@@ -106,9 +106,6 @@ it("runs without Electron, authenticates, and reports both machines", async () =
 });
 it("rejects mutation requests independently of the renderer and keeps local routing", async () => {
   for (const channel of [
-    REQUEST_CHANNELS.fileActionInspect,
-    REQUEST_CHANNELS.fileActionExecute,
-    REQUEST_CHANNELS.fileActionCancel,
     REQUEST_CHANNELS.create,
     REQUEST_CHANNELS.rename,
     REQUEST_CHANNELS.trash,
@@ -231,4 +228,30 @@ it("rejects writes at the service itself and reports a dropped connection", asyn
     ok: false,
   });
   client.dispose();
+});
+
+it("rejects well-formed desktop actions through the read-only policy", async () => {
+  const paths = [join(fixture, "hello π.txt")];
+  const requests = [
+    { channel: REQUEST_CHANNELS.fileActionInspect, payload: { paths } },
+    { channel: REQUEST_CHANNELS.fileActionCancel, payload: { id: "remote-action" } },
+    {
+      channel: REQUEST_CHANNELS.fileActionExecute,
+      payload: {
+        id: "remote-action",
+        paths,
+        action: "run",
+        choice: "",
+        destination: "",
+        format: "zip",
+        makeExecutable: false,
+        prefix: "",
+      },
+    },
+  ];
+  for (const { channel, payload } of requests)
+    expect(await remote(channel, payload)).toMatchObject({
+      ok: false,
+      error: { message: "Home server is read-only; this operation is unavailable" },
+    });
 });

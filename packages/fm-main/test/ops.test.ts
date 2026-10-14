@@ -13,9 +13,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
+import { desktopEntryFor } from "../src/fileActions/applications.ts";
 import { createEntry, renameEntry, transfer } from "../src/ops/mutate.ts";
-import { desktopEntryKeys } from "../src/ops/open.ts";
 
 /**
  * The mutations, against a real filesystem.
@@ -578,9 +577,9 @@ describe("desktop entries", () => {
     process.env["XDG_DATA_HOME"] = root;
     process.env["XDG_DATA_DIRS"] = "";
     try {
-      const keys = await desktopEntryKeys("thing.desktop");
-      expect(keys.get("Terminal")).toBe("false");
-      expect(keys.get("Exec")).toBe("thing %f");
+      const keys = (await desktopEntryFor("thing.desktop"))?.keys;
+      expect(keys?.get("Terminal")).toBe("false");
+      expect(keys?.get("Exec")).toBe("thing %f");
     } finally {
       if (before === undefined) delete process.env["XDG_DATA_HOME"];
       else process.env["XDG_DATA_HOME"] = before;
@@ -588,6 +587,6 @@ describe("desktop entries", () => {
   });
 
   it("returns nothing for an entry that does not exist", async () => {
-    expect((await desktopEntryKeys("nothing-here.desktop")).size).toBe(0);
+    expect(await desktopEntryFor("nothing-here.desktop")).toBeNull();
   });
 });

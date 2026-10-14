@@ -1,4 +1,9 @@
-import type { ActionInspection, ActionReply, ActionRequest } from "@symmetria/fm-core/fileActions";
+import {
+  type ActionInspection,
+  type ActionReply,
+  type ActionRequest,
+  isWindowsProgram,
+} from "@symmetria/fm-core/fileActions";
 import { installedApplications } from "./applications.ts";
 import { archiveAction } from "./archives.ts";
 import { bottleNames, bottlesCommand, fileMetadata, launch, terminalFor } from "./launch.ts";
@@ -72,7 +77,7 @@ function isSingleFile(entries: ActionInspection["entries"]): boolean {
   return entries.length === 1 && entries[0]?.kind === "file";
 }
 function isWindowsTarget(paths: readonly string[]): boolean {
-  return paths.length === 1 && /\.(exe|msi)$/i.test(paths[0] ?? "");
+  return paths.length === 1 && isWindowsProgram(paths[0] ?? "");
 }
 export function fileActionService(processes: ActionProcesses = actionProcesses): FileActionService {
   const toolsFor = cachedQuery((kind) => inspectTools(processes, kind === "windows"), 2);

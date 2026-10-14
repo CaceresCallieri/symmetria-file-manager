@@ -14,7 +14,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ActionRequest, ARCHIVE_FORMATS } from "@symmetria/fm-core/fileActions";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { launchDesktopFile } from "../src/fileActions/applications.ts";
+import {
+  defaultDesktopEntry,
+  installedApplications,
+  launchDesktopFile,
+} from "../src/fileActions/applications.ts";
 import { archiveAction } from "../src/fileActions/archives.ts";
 import { launch } from "../src/fileActions/launch.ts";
 import {
@@ -67,6 +71,41 @@ function recordingProcesses(available: readonly string[]) {
   return { processes, calls };
 }
 describe("desktop execution", () => {
+  it("resolves a nested default Terminal entry with user precedence and literal MIME arguments", async () => {
+    const userData = join(root, "user");
+    const systemData = join(root, "system");
+    for (const data of [userData, systemData])
+      await mkdir(join(data, "applications", "kde"), { recursive: true });
+    vi.stubEnv("XDG_DATA_HOME", userData);
+    vi.stubEnv("XDG_DATA_DIRS", systemData);
+    const desktop = join(userData, "applications", "kde", "editor.desktop");
+    await writeFile(
+      desktop,
+      "[Desktop Entry]\nType=Application\nName=Editor\nExec=editor %f\nTerminal=true\nNoDisplay=true\n",
+    );
+    await writeFile(
+      join(systemData, "applications", "kde", "editor.desktop"),
+      "[Desktop Entry]\nType=Application\nName=System editor\nExec=editor %f\nTerminal=false\n",
+    );
+    const file = join(root, "document $(touch BAD).txt");
+    const { processes, calls } = recordingProcesses(["xdg-mime"]);
+    const associations: ActionProcesses = {
+      ...processes,
+      run: async (command, args, options) => {
+        await processes.run(command, args, options);
+        return args[1] === "filetype" ? "text/plain\n" : "kde-editor.desktop\n";
+      },
+    };
+    const entry = await defaultDesktopEntry(associations, file);
+    expect(entry?.path).toBe(desktop);
+    expect(entry?.keys.get("Terminal")).toBe("true");
+    expect(calls.map((call) => call.args)).toEqual([
+      ["query", "filetype", file],
+      ["query", "default", "text/plain"],
+    ]);
+    // NoDisplay can be the configured default, but must stay out of Open With.
+    expect(await installedApplications(associations, file)).toEqual([]);
+  });
   it("reports an actionable error for a broken desktop executable", async () => {
     const desktop = join(root, "broken.desktop");
     await writeFile(
@@ -256,6 +295,69 @@ describe("desktop execution", () => {
   });
 });
 describe("real archive operations", () => {
+  it.each([
+    { mode: 0o300, rootLink: false },
+    { mode: 0o400, rootLink: false },
+    { mode: 0o400, rootLink: true },
+    { mode: 0o600, rootLink: true },
+  ])(
+    "rejects unreadable mode $mode with rootLink=$rootLink and removes the private stage",
+    async ({ mode, rootLink }) => {
+      const source = join(root, "source");
+      await mkdir(join(source, "d"), { recursive: true });
+      await symlink("/etc", join(source, "d", "escape"));
+      const archive = join(root, "unreadable.tar");
+      if (rootLink) await symlink("d/escape", join(source, "a"));
+      await actionProcesses.run("bsdtar", [
+        "--format=ustar",
+        "-cf",
+        archive,
+        "-C",
+        source,
+        "d",
+        ...(rootLink ? ["a"] : []),
+      ]);
+      const bytes = await readFile(archive);
+      expect(bytes.subarray(0, 2).toString()).toBe("d/");
+      // Store unreadable final modes without denying the fixture creator access.
+      bytes.write(`${mode.toString(8).padStart(7, "0")}\0`, 100, 8, "ascii");
+      bytes.fill(32, 148, 156);
+      const checksum = bytes.subarray(0, 512).reduce((sum, byte) => sum + byte, 0);
+      bytes.write(`${checksum.toString(8).padStart(6, "0")}\0 `, 148, 8, "ascii");
+      await writeFile(archive, bytes);
+      await expect(
+        archiveAction(actionProcesses, request("extract", [archive]), new AbortController().signal),
+      ).rejects.toThrow("cannot be inspected safely");
+      expect(await readdir(root)).not.toContain("unreadable");
+      expect((await readdir(root)).filter((name) => name.startsWith(".symmetria"))).toEqual([]);
+    },
+  );
+  it("preserves an archive destination created during compression publication", async () => {
+    const file = join(root, "file.txt");
+    const destination = join(root, "collision.zip");
+    await writeFile(file, "archive source");
+    let published = false;
+    const processes: ActionProcesses = {
+      ...actionProcesses,
+      run: async (command, args, options) => {
+        if (args.includes("--no-clobber")) {
+          published = true;
+          await writeFile(destination, "concurrent user data", { flag: "wx" });
+        }
+        return actionProcesses.run(command, args, options);
+      },
+    };
+    await expect(
+      archiveAction(
+        processes,
+        request("compress", [file], { destination }),
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("already exists");
+    expect(published).toBe(true);
+    expect(await readFile(destination, "utf8")).toBe("concurrent user data");
+    expect((await readdir(root)).filter((name) => name.startsWith(".symmetria"))).toEqual([]);
+  });
   it("rejects a symlink chain that escapes after kernel resolution of dot-dot", async () => {
     const source = join(root, "source");
     await mkdir(source);
@@ -298,19 +400,23 @@ describe("real archive operations", () => {
       expect((await stat(outputs[0] ?? "")).mode & 0o777).toBe(0o777 & ~process.umask());
     },
   );
-  it("extracts an internal dangling symlink without following it", async () => {
-    const source = join(root, "source");
-    await mkdir(source);
-    await symlink("missing", join(source, "link"));
-    const archive = join(root, "dangling.tar");
-    await actionProcesses.run("bsdtar", ["-cf", archive, "-C", source, "link"]);
-    const outputs = await archiveAction(
-      actionProcesses,
-      request("extract", [archive]),
-      new AbortController().signal,
-    );
-    expect(await readlink(join(outputs[0] ?? "", "link"))).toBe("missing");
-  });
+  it.each(["missing", "file/child"])(
+    "extracts an internal dangling symlink to %s",
+    async (target) => {
+      const source = join(root, "source");
+      await mkdir(source);
+      await writeFile(join(source, "file"), "regular file");
+      await symlink(target, join(source, "link"));
+      const archive = join(root, "dangling.tar");
+      await actionProcesses.run("bsdtar", ["-cf", archive, "-C", source, "file", "link"]);
+      const outputs = await archiveAction(
+        actionProcesses,
+        request("extract", [archive]),
+        new AbortController().signal,
+      );
+      expect(await readlink(join(outputs[0] ?? "", "link"))).toBe(target);
+    },
+  );
   it("preserves existing archive files, folders and dangling links", async () => {
     const file = join(root, "file.txt");
     await writeFile(file, "contents");

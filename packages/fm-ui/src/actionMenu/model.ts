@@ -1,4 +1,4 @@
-import type { ActionInspection } from "@symmetria/fm-core/fileActions";
+import { type ActionInspection, isWindowsProgram } from "@symmetria/fm-core/fileActions";
 import { basename } from "@symmetria/fm-core/pane";
 import type { OperationTarget } from "../fileOps/targets.ts";
 
@@ -118,7 +118,7 @@ function openingActions(
     return opening;
   }
   opening.push(action("open-with", "Open With…", "o", "open"));
-  if (/\.(exe|msi)$/i.test(path)) {
+  if (isWindowsProgram(path)) {
     opening.push(action("run-with", "Run With…", "w", "open"));
     return opening;
   }

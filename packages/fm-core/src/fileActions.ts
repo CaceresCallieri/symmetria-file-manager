@@ -260,3 +260,7 @@ export function mutationPaths(paths: readonly string[]): readonly string[] {
     (path) => !unique.some((parent) => parent !== path && isAncestorPath(parent, path)),
   );
 }
+
+export function isWindowsProgram(path: string): boolean {
+  return /\.(exe|msi)$/i.test(path);
+}
