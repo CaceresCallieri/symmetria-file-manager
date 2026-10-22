@@ -1,16 +1,15 @@
-import type { MachineInfo } from "@symmetria/fm-core/machines";
 import { useEffect, useRef } from "react";
 
 /** Waits between probes of an offline machine. The last value repeats. */
 const RECONNECT_DELAYS_MS: readonly number[] = [2_000, 5_000, 10_000, 30_000];
 
 /**
- * Re-probe while any machine is offline, with growing waits, and at once when
- * the network returns. A laptop that sleeps or changes networks, and a Home
- * service that restarts, then recover without a manual selection.
+ * Re-probe while `active`, with growing waits, and at once when the network
+ * returns. A laptop that sleeps or changes networks, and a Home service that
+ * restarts, then recover without a manual selection.
  */
-export function useOfflineMachineProbe(
-  machines: readonly MachineInfo[],
+export function useReconnectProbe(
+  active: boolean,
   probe: () => Promise<void>,
   delaysMs: readonly number[] = RECONNECT_DELAYS_MS,
 ): void {
@@ -18,9 +17,8 @@ export function useOfflineMachineProbe(
   useEffect(() => {
     latestProbe.current = probe;
   });
-  const offline = machines.some((machine) => machine.error !== null);
   useEffect(() => {
-    if (!offline) return;
+    if (!active) return;
     let attempt = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let stopped = false;
@@ -51,5 +49,5 @@ export function useOfflineMachineProbe(
       clearTimeout(timer);
       window.removeEventListener("online", onOnline);
     };
-  }, [offline, delaysMs]);
+  }, [active, delaysMs]);
 }

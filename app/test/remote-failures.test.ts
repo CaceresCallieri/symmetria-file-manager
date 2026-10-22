@@ -253,3 +253,17 @@ it("describes network causes and keeps other messages", async () => {
     "Remote events answered 401",
   );
 });
+it("names the machine when the event stream accepts but never answers", async () => {
+  const server = createServer(() => {});
+  const config = await listening(server);
+  const client = new RemoteClient(config, { send: () => {} }, 15_000, 100);
+  try {
+    expect(await client.invoke(REQUEST_CHANNELS.list, { path: "/" })).toMatchObject({
+      ok: false,
+      error: { message: "Home did not answer in time" },
+    });
+  } finally {
+    client.dispose();
+    await stop(server);
+  }
+});

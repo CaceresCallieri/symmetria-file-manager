@@ -8,7 +8,8 @@ import { observeDiskUsage } from "@symmetria/fm-ui/diskUsage";
 import { MachineChooser, MachineDock, type MachineStorage } from "@symmetria/fm-ui/machines";
 import { createTabs, type TabsState } from "@symmetria/fm-ui/state/tabs";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useOfflineMachineProbe } from "./useOfflineMachineProbe.ts";
+import { boundBridge, useLiveConnection } from "./useLiveConnection.ts";
+import { useReconnectProbe } from "./useReconnectProbe.ts";
 
 const LOCAL: MachineInfo = {
   id: "local",
@@ -18,12 +19,6 @@ const LOCAL: MachineInfo = {
   readOnly: false,
   error: null,
 };
-interface Connection {
-  readonly machine: MachineInfo;
-  readonly bridge: Bridge;
-  readonly generation: number;
-  readonly externalOpen: ExternalOpen | null;
-}
 function startPath(): string {
   try {
     return decodeURIComponent(window.location.hash.slice(1)) || LOCAL.startPath;
@@ -50,16 +45,11 @@ function ConnectedMachines({
   reconnectDelaysMs,
 }: PanelOptions & { readonly host: Bridge }) {
   const [machines, setMachines] = useState<readonly MachineInfo[]>([LOCAL]);
-  const [connection, setConnection] = useState<Connection>(() => ({
-    machine: LOCAL,
-    bridge: boundBridge(host, "local"),
-    generation: 0,
-    externalOpen: null,
-  }));
   const [choosing, setChoosing] = useState(false);
   const saved = useRef(new Map<MachineId, TabsState>([["local", createTabs(startPath())]]));
   const view = useRef<ViewKind>("miller");
-  const selectionRequest = useRef(0);
+  const live = useLiveConnection(host, LOCAL, saved, setMachines);
+  const { connection, selectionRequest, switchTo } = live;
   const storage = useMachineStorage(host, machines);
   const refresh = async () => {
     const reply = await host.machinesRead?.();
@@ -82,24 +72,14 @@ function ConnectedMachines({
       current = false;
     };
   }, [host]);
-  const switchTo = (machine: MachineInfo, externalOpen: ExternalOpen | null = null) => {
-    if (machine.error === null && !saved.current.has(machine.id))
-      saved.current.set(machine.id, createTabs(machine.startPath));
-    connection.bridge.dispose?.();
-    setConnection({
-      machine,
-      bridge: boundBridge(host, machine.id),
-      generation: connection.generation + 1,
-      externalOpen,
-    });
-  };
   const choose = async (id: MachineId) => {
     const machine = machines.find((candidate) => candidate.id === id);
     if (!machine) return;
     setChoosing(false);
     const request = ++selectionRequest.current;
-    if (id === connection.machine.id && id === "local") return;
-    if (machine.error === null && id !== connection.machine.id) {
+    const current = live.current().machine.id;
+    if (id === current && id === "local") return;
+    if (machine.error === null && id !== current) {
       switchTo(machine);
       return;
     }
@@ -108,32 +88,21 @@ function ConnectedMachines({
     switchTo(updated?.find((candidate) => candidate.id === id) ?? machine);
   };
   // A lost connection stays dead in the main process. Recovery opens a new
-  // one through the same path as a manual selection of the machine.
+  // one through the same path as a manual selection of the machine. A switch
+  // during the probe wins; the next probe judges the connection it left.
   const reconnectWhenOnline = async () => {
     const request = selectionRequest.current;
-    const current = connection.machine.id;
-    const wasOffline = machines.some((machine) => machine.id === current && machine.error !== null);
     const updated = await refresh();
-    if (!wasOffline || request !== selectionRequest.current) return;
+    if (request !== selectionRequest.current || !live.isDead()) return;
+    const current = live.current().machine.id;
     const recovered = updated?.find((candidate) => candidate.id === current);
     if (recovered?.error === null) switchTo(recovered);
   };
-  useOfflineMachineProbe(machines, reconnectWhenOnline, reconnectDelaysMs);
+  const machinesOffline = machines.some((machine) => machine.error !== null);
+  useReconnectProbe(machinesOffline || live.reconnecting, reconnectWhenOnline, reconnectDelaysMs);
   useLocalOpenRedirect(host, connection.machine.id, (request) => {
-    ++selectionRequest.current;
     switchTo(machines.find((candidate) => candidate.id === "local") ?? LOCAL, request);
   });
-  useEffect(
-    () =>
-      connection.bridge.onConnectionLost?.((message) => {
-        setMachines((previous) =>
-          previous.map((machine) =>
-            machine.id === connection.machine.id ? { ...machine, error: message } : machine,
-          ),
-        );
-      }),
-    [connection],
-  );
   const machine = connection.machine;
   const initialTabs = saved.current.get(machine.id) ?? createTabs(machine.startPath);
   const open = () => setChoosing(true);
@@ -176,9 +145,6 @@ function ConnectedMachines({
 }
 function sameMachines(left: readonly MachineInfo[], right: readonly MachineInfo[]): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
-}
-function boundBridge(host: Bridge, machine: MachineId): Bridge {
-  return host.forMachine?.(machine) ?? host;
 }
 function useMachineStorage(host: Bridge, machines: readonly MachineInfo[]): MachineStorage {
   const [storage, setStorage] = useState<MachineStorage>({});
