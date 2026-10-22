@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 
-export interface Connection {
+interface Connection {
   readonly machine: MachineInfo;
   readonly bridge: Bridge;
   readonly generation: number;
