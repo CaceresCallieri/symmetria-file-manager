@@ -4,6 +4,11 @@ import { MACHINE_LOST_CHANNEL } from "@symmetria/fm-core/machines";
 import { PUSH_CHANNELS, REQUEST_CHANNELS } from "@symmetria/fm-main/ipc/channels";
 import type { SenderHandle } from "@symmetria/fm-main/ipc/register";
 import type { RemoteConfig } from "./config.ts";
+import {
+  answerTimeoutMessage,
+  describeConnectionFailure,
+  errorMessage,
+} from "./connectionFailure.ts";
 import { consumeEvents } from "./events.ts";
 import { decodeRemoteReply, decodeRemoteRequest, type RemoteRequest } from "./policy.ts";
 
@@ -17,10 +22,11 @@ export class RemoteClient {
     readonly config: RemoteConfig,
     private readonly sender: SenderHandle,
     private readonly requestTimeoutMs = 15_000,
+    private readonly connectTimeoutMs = 10_000,
   ) {
     this.ready = new Promise((resolve, reject) => {
       void this.follow(resolve).catch((cause: unknown) => {
-        const message = errorMessage(cause);
+        const message = describeConnectionFailure(cause, config.name);
         this.markLost(message);
         reject(new Error(message));
       });
@@ -34,7 +40,7 @@ export class RemoteClient {
     for (const subscriptionId of this.watches)
       this.emit(PUSH_CHANNELS.changed, {
         subscriptionId,
-        error: `${message}; select Home to reconnect`,
+        error: `${message}; reconnecting`,
       });
     this.watches.clear();
     this.controller.abort();
@@ -58,7 +64,7 @@ export class RemoteClient {
   }
   private async connected(): Promise<Result<null>> {
     try {
-      await Promise.race([this.ready, connectionTimeout()]);
+      await Promise.race([this.ready, connectionTimeout(this.config.name, this.connectTimeoutMs)]);
       return success(null);
     } catch (cause) {
       const message = errorMessage(cause);
@@ -86,7 +92,7 @@ export class RemoteClient {
       if (reply.ok) this.rememberWatch(channel, payload);
       return reply;
     } catch (cause) {
-      const message = errorMessage(cause);
+      const message = describeConnectionFailure(cause, this.config.name);
       // Timeout and JSON errors affect this request. A network TypeError affects
       // the connection; SSE liveness and expired sessions cover the other losses.
       if (cause instanceof TypeError) this.markLost(message);
@@ -104,14 +110,11 @@ export class RemoteClient {
     this.watches.clear();
   }
 }
-function connectionTimeout(): Promise<never> {
+function connectionTimeout(machineName: string, timeoutMs: number): Promise<never> {
   return new Promise((_, reject) => {
-    const timer = setTimeout(() => reject(new Error("Vigilia Home did not connect")), 10_000);
+    const timer = setTimeout(() => reject(new Error(answerTimeoutMessage(machineName))), timeoutMs);
     timer.unref();
   });
-}
-export function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
 }
 export function remoteFetch(
   config: RemoteConfig,

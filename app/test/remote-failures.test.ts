@@ -9,6 +9,7 @@ import { TOKEN_PREFIX } from "@symmetria/fm-main/previewTokens";
 import { expect, it } from "vitest";
 import { RemoteClient } from "../src/main/remote/client.ts";
 import { loadOptionalRemoteConfig, type RemoteConfig } from "../src/main/remote/config.ts";
+import { describeConnectionFailure } from "../src/main/remote/connectionFailure.ts";
 import { consumeEvents } from "../src/main/remote/events.ts";
 import { remotePreviewUrl, serveRemotePreview } from "../src/main/remote/previews.ts";
 
@@ -203,6 +204,66 @@ it.each(["timeout", "malformed"])("keeps the connection after a %s RPC failure",
   } finally {
     client.dispose();
     events?.destroy();
+    await stop(server);
+  }
+});
+async function closedPort(): Promise<RemoteConfig> {
+  const server = createServer();
+  const config = await listening(server);
+  await stop(server);
+  return config;
+}
+it("names a refused connection instead of reporting a bare fetch failure", async () => {
+  const config = await closedPort();
+  const pushes: { channel: string; payload: unknown }[] = [];
+  const client = new RemoteClient(config, {
+    send: (channel, payload) => pushes.push({ channel, payload }),
+  });
+  try {
+    const reply = await client.invoke(REQUEST_CHANNELS.list, { path: "/" });
+    expect(reply).toMatchObject({
+      ok: false,
+      error: { message: "Home refused the connection; is its file service running?" },
+    });
+    expect(pushes).toContainEqual({
+      channel: MACHINE_LOST_CHANNEL,
+      payload: "Home refused the connection; is its file service running?",
+    });
+  } finally {
+    client.dispose();
+  }
+});
+it("describes network causes and keeps other messages", async () => {
+  const config = await closedPort();
+  const refused = await fetch(config.url).catch((cause: unknown) => cause);
+  expect(describeConnectionFailure(refused, "Home")).toBe(
+    "Home refused the connection; is its file service running?",
+  );
+  const silent = createServer(() => {});
+  const silentConfig = await listening(silent);
+  try {
+    const timeout = await fetch(silentConfig.url, { signal: AbortSignal.timeout(50) }).catch(
+      (cause: unknown) => cause,
+    );
+    expect(describeConnectionFailure(timeout, "Home")).toBe("Home did not answer in time");
+  } finally {
+    await stop(silent);
+  }
+  expect(describeConnectionFailure(new Error("Remote events answered 401"), "Home")).toBe(
+    "Remote events answered 401",
+  );
+});
+it("names the machine when the event stream accepts but never answers", async () => {
+  const server = createServer(() => {});
+  const config = await listening(server);
+  const client = new RemoteClient(config, { send: () => {} }, 15_000, 100);
+  try {
+    expect(await client.invoke(REQUEST_CHANNELS.list, { path: "/" })).toMatchObject({
+      ok: false,
+      error: { message: "Home did not answer in time" },
+    });
+  } finally {
+    client.dispose();
     await stop(server);
   }
 });
