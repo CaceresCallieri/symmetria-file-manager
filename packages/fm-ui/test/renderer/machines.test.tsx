@@ -351,7 +351,9 @@ it("reconnects a lost Home connection without a manual selection", async () => {
         online
           ? machines
           : machines.map((machine) =>
-              machine.id === "home" ? { ...machine, error: "Home refused the connection" } : machine,
+              machine.id === "home"
+                ? { ...machine, error: "Home refused the connection" }
+                : machine,
             ),
       );
     },

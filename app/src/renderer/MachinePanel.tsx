@@ -34,18 +34,14 @@ function startPath(): string {
 interface PanelOptions {
   readonly rowHeight: number;
   /** Waits between automatic reconnect probes. Tests shorten them. */
-  readonly reconnectDelaysMs?: readonly number[];
+  readonly reconnectDelaysMs?: readonly number[] | undefined;
 }
 export function MachinePanel({ rowHeight, reconnectDelaysMs }: PanelOptions) {
   const host = window[BRIDGE_KEY];
   if (!host?.forMachine || pickerFromSearch(window.location.search))
     return <App chrome="atmosphere" rowHeight={rowHeight} actionMenu />;
   return (
-    <ConnectedMachines
-      host={host}
-      rowHeight={rowHeight}
-      reconnectDelaysMs={reconnectDelaysMs}
-    />
+    <ConnectedMachines host={host} rowHeight={rowHeight} reconnectDelaysMs={reconnectDelaysMs} />
   );
 }
 function ConnectedMachines({

@@ -2,7 +2,7 @@ import type { MachineInfo } from "@symmetria/fm-core/machines";
 import { useEffect, useRef } from "react";
 
 /** Waits between probes of an offline machine. The last value repeats. */
-export const RECONNECT_DELAYS_MS: readonly number[] = [2_000, 5_000, 10_000, 30_000];
+const RECONNECT_DELAYS_MS: readonly number[] = [2_000, 5_000, 10_000, 30_000];
 
 /**
  * Re-probe while any machine is offline, with growing waits, and at once when

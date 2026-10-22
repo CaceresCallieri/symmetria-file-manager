@@ -22,7 +22,8 @@ const NETWORK_FAILURES: ReadonlyMap<string, string> = new Map([
  * message tells the operator nothing about which side failed.
  */
 export function describeConnectionFailure(cause: unknown, machineName: string): string {
-  if (isRecord(cause) && cause.name === "TimeoutError") return `${machineName} did not answer in time`;
+  if (isRecord(cause) && cause.name === "TimeoutError")
+    return `${machineName} did not answer in time`;
   const code = networkErrorCode(cause);
   const explanation = code === null ? undefined : NETWORK_FAILURES.get(code);
   return explanation === undefined ? errorMessage(cause) : `${machineName} ${explanation}`;
