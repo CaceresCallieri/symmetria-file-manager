@@ -44,7 +44,7 @@ function storageText(usage: DiskUsageReply | undefined): string {
     : "Storage unavailable";
 }
 function status(machine: MachineInfo): string {
-  if (machine.error !== null) return "Offline · select to reconnect";
+  if (machine.error !== null) return "Offline · reconnecting";
   return machine.readOnly ? "Read-only" : "This laptop";
 }
 export function MachineDock({ machines, current, storage, choose }: Controls) {

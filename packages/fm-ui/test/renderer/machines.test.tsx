@@ -207,6 +207,7 @@ function installMachines(
   overrides: Partial<Bridge> = {},
   factory: (id: MachineId) => Bridge = machineBridge,
   catalog = async () => success(machines),
+  reconnectDelaysMs?: readonly number[],
 ) {
   const bridges: Bridge[] = [];
   const listeners = new Set<(payload: unknown) => void>();
@@ -226,7 +227,7 @@ function installMachines(
       },
     },
   });
-  render(<MachinePanel rowHeight={31} />);
+  render(<MachinePanel rowHeight={31} reconnectDelaysMs={reconnectDelaysMs} />);
   return { bridges, listeners };
 }
 async function selectHome() {
@@ -317,7 +318,7 @@ it.each(["Tree", "Overview"])(
     expect(screen.queryByRole("textbox")).toBeNull();
   },
 );
-it("shows a connection loss in the dock and offers selection to reconnect", async () => {
+it("shows a connection loss in the dock and still reconnects on selection", async () => {
   const callbacks = new Set<(message: string) => void>();
   installMachines({
     onConnectionLost: (listener) => {
@@ -327,9 +328,73 @@ it("shows a connection loss in the dock and offers selection to reconnect", asyn
   });
   await selectHome();
   for (const notify of callbacks) notify("Home disconnected");
-  await waitFor(() => expect(currentMachine()).toContain("Offline · select to reconnect"));
+  await waitFor(() => expect(currentMachine()).toContain("Offline · reconnecting"));
   fireEvent.click(screen.getByRole("button", { name: "Browse Vigilia Home" }));
   await waitFor(() => expect(currentMachine()).toContain("Read-only"));
+});
+const FAST_RECONNECT_MS: readonly number[] = [50];
+it("reconnects a lost Home connection without a manual selection", async () => {
+  const callbacks = new Set<(message: string) => void>();
+  let online = true;
+  let probes = 0;
+  const { bridges } = installMachines(
+    {
+      onConnectionLost: (listener) => {
+        callbacks.add(listener);
+        return () => callbacks.delete(listener);
+      },
+    },
+    machineBridge,
+    async () => {
+      probes++;
+      return success(
+        online
+          ? machines
+          : machines.map((machine) =>
+              machine.id === "home" ? { ...machine, error: "Home refused the connection" } : machine,
+            ),
+      );
+    },
+    FAST_RECONNECT_MS,
+  );
+  await selectHome();
+  online = false;
+  const before = probes;
+  for (const notify of [...callbacks]) notify("Home disconnected");
+  await waitFor(() => expect(currentMachine()).toContain("Offline · reconnecting"));
+  await waitFor(() => expect(probes).toBeGreaterThan(before + 1));
+  expect(currentMachine()).toContain("Offline · reconnecting");
+  const bridgesWhileOffline = bridges.length;
+  online = true;
+  await waitFor(() => expect(currentMachine()).toContain("Read-only"));
+  expect(bridges.length).toBeGreaterThan(bridgesWhileOffline);
+  await waitFor(() =>
+    expect(within(screen.getByTestId("column-current")).getByText("home.txt")).toBeTruthy(),
+  );
+  const settled = probes;
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  expect(probes).toBe(settled);
+});
+it("does not switch to Home when a probe finds it while Local is current", async () => {
+  let online = false;
+  installMachines(
+    {},
+    machineBridge,
+    async () =>
+      success(
+        online
+          ? machines
+          : machines.map((machine) =>
+              machine.id === "home" ? { ...machine, error: "offline" } : machine,
+            ),
+      ),
+    FAST_RECONNECT_MS,
+  );
+  const homeButton = await screen.findByRole("button", { name: "Browse Vigilia Home" });
+  await waitFor(() => expect(homeButton.textContent).toContain("Offline · reconnecting"));
+  online = true;
+  await waitFor(() => expect(homeButton.textContent).toContain("Read-only"));
+  expect(currentMachine()).toContain("Local");
 });
 it("does not retain the offline placeholder folder on the first successful connection", async () => {
   let online = false;

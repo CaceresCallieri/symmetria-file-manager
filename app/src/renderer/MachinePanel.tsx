@@ -8,6 +8,7 @@ import { observeDiskUsage } from "@symmetria/fm-ui/diskUsage";
 import { MachineChooser, MachineDock, type MachineStorage } from "@symmetria/fm-ui/machines";
 import { createTabs, type TabsState } from "@symmetria/fm-ui/state/tabs";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useOfflineMachineProbe } from "./useOfflineMachineProbe.ts";
 
 const LOCAL: MachineInfo = {
   id: "local",
@@ -30,19 +31,28 @@ function startPath(): string {
     return LOCAL.startPath;
   }
 }
-export function MachinePanel({ rowHeight }: { readonly rowHeight: number }) {
+interface PanelOptions {
+  readonly rowHeight: number;
+  /** Waits between automatic reconnect probes. Tests shorten them. */
+  readonly reconnectDelaysMs?: readonly number[];
+}
+export function MachinePanel({ rowHeight, reconnectDelaysMs }: PanelOptions) {
   const host = window[BRIDGE_KEY];
   if (!host?.forMachine || pickerFromSearch(window.location.search))
     return <App chrome="atmosphere" rowHeight={rowHeight} actionMenu />;
-  return <ConnectedMachines host={host} rowHeight={rowHeight} />;
+  return (
+    <ConnectedMachines
+      host={host}
+      rowHeight={rowHeight}
+      reconnectDelaysMs={reconnectDelaysMs}
+    />
+  );
 }
 function ConnectedMachines({
   host,
   rowHeight,
-}: {
-  readonly host: Bridge;
-  readonly rowHeight: number;
-}) {
+  reconnectDelaysMs,
+}: PanelOptions & { readonly host: Bridge }) {
   const [machines, setMachines] = useState<readonly MachineInfo[]>([LOCAL]);
   const [connection, setConnection] = useState<Connection>(() => ({
     machine: LOCAL,
@@ -60,7 +70,9 @@ function ConnectedMachines({
     if (!reply?.ok) return null;
     const decoded = decodeMachines(reply.value);
     if (!decoded.ok) return null;
-    setMachines(decoded.value);
+    // An unchanged catalog keeps its identity, so a probe that finds Home
+    // still offline does not reopen every storage meter.
+    setMachines((previous) => (sameMachines(previous, decoded.value) ? previous : decoded.value));
     return decoded.value;
   };
   useEffect(() => {
@@ -99,6 +111,18 @@ function ConnectedMachines({
     if (request !== selectionRequest.current) return;
     switchTo(updated?.find((candidate) => candidate.id === id) ?? machine);
   };
+  // A lost connection stays dead in the main process. Recovery opens a new
+  // one through the same path as a manual selection of the machine.
+  const reconnectWhenOnline = async () => {
+    const request = selectionRequest.current;
+    const current = connection.machine.id;
+    const wasOffline = machines.some((machine) => machine.id === current && machine.error !== null);
+    const updated = await refresh();
+    if (!wasOffline || request !== selectionRequest.current) return;
+    const recovered = updated?.find((candidate) => candidate.id === current);
+    if (recovered?.error === null) switchTo(recovered);
+  };
+  useOfflineMachineProbe(machines, reconnectWhenOnline, reconnectDelaysMs);
   useLocalOpenRedirect(host, connection.machine.id, (request) => {
     ++selectionRequest.current;
     switchTo(machines.find((candidate) => candidate.id === "local") ?? LOCAL, request);
@@ -153,6 +177,9 @@ function ConnectedMachines({
       {choosing ? <MachineChooser {...controls} close={() => setChoosing(false)} /> : null}
     </>
   );
+}
+function sameMachines(left: readonly MachineInfo[], right: readonly MachineInfo[]): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 function boundBridge(host: Bridge, machine: MachineId): Bridge {
   return host.forMachine?.(machine) ?? host;

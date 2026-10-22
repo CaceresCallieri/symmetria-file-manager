@@ -21,8 +21,9 @@ import type {
   Registry,
   SenderHandle,
 } from "@symmetria/fm-main/ipc/register";
-import { errorMessage, RemoteClient, remoteFetch } from "./client.ts";
+import { RemoteClient, remoteFetch } from "./client.ts";
 import type { RemoteConfig } from "./config.ts";
+import { describeConnectionFailure } from "./connectionFailure.ts";
 import { RemotePreferences } from "./preferences.ts";
 import { remotePreviewUrl } from "./previews.ts";
 import { decodeReadReply } from "./readReply.ts";
@@ -155,7 +156,7 @@ export class MachineHost {
           homePath: "/",
           startPath: "/",
           readOnly: true,
-          error: errorMessage(cause),
+          error: describeConnectionFailure(cause, this.config.name),
         },
       ];
     }
