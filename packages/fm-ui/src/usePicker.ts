@@ -1,6 +1,7 @@
 import type { Result } from "@symmetria/fm-core/contract";
+import type { FsEntry } from "@symmetria/fm-core/entry";
 import type { PickerState } from "@symmetria/fm-core/keys/types";
-import { cursorEntry, isDirectoryEntry, joinPath } from "@symmetria/fm-core/pane";
+import { cursorEntry, entryAt, isDirectoryEntry, joinPath } from "@symmetria/fm-core/pane";
 import {
   type PickerSelectionContext,
   pickerAcceptEnabled,
@@ -62,6 +63,8 @@ export interface Picker {
   confirmIfActive(): void;
   /** Copy the resolved picker answer before confirming, never the browsing cursor. */
   confirmCopyingPath(): Promise<Result<null>>;
+  /** Confirm a clicked row without waiting for React to update the browsing cursor. */
+  confirmAt(index: number): void;
 }
 
 /** Every flag off. The browse window's answer, and the shape the registry expects. */
@@ -72,6 +75,12 @@ const INERT: PickerState = {
   multiple: false,
   directory: false,
 };
+
+function selectionEntry(directory: string, entry: FsEntry | null) {
+  return entry === null
+    ? null
+    : { path: joinPath(directory, entry.name), isDirectory: isDirectoryEntry(entry) };
+}
 
 export function usePicker(request: PickerWindowRequest | null, tabs: Tabs, home: string): Picker {
   const pathEntry = usePickerPath(tabs, home);
@@ -103,21 +112,29 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs, home:
       currentPath: tabs.pane.path,
       suggestedName: saveName,
       selected,
-      cursorEntry:
-        entry === null
-          ? null
-          : {
-              path: joinPath(tabs.pane.path, entry.name),
-              isDirectory: isDirectoryEntry(entry),
-            },
+      cursorEntry: selectionEntry(tabs.pane.path, entry),
     };
   }, [request, tabs.pane, saveName, selected]);
 
   const {
     confirmIfActive,
     confirmCopyingPath,
+    confirmSelection,
     cancelIfActive: cancel,
   } = usePickerAnswer(request?.fifo ?? null, context, pathEntry.editing);
+  const confirmAt = useCallback(
+    (index: number) => {
+      if (context === null) return;
+      // A double-click names its own row. The cursor update is still pending,
+      // and existing marks must not replace the clicked file with another answer.
+      confirmSelection({
+        ...context,
+        selected: [],
+        cursorEntry: selectionEntry(tabs.pane.path, entryAt(tabs.pane, index)),
+      });
+    },
+    [context, tabs.pane, confirmSelection],
+  );
 
   const state = useMemo<PickerState>(
     () =>
@@ -171,7 +188,18 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs, home:
       cancelIfActive: cancel,
       confirmIfActive,
       confirmCopyingPath,
+      confirmAt,
     }),
-    [state, chrome, request, pathEntry, focusSaveName, cancel, confirmIfActive, confirmCopyingPath],
+    [
+      state,
+      chrome,
+      request,
+      pathEntry,
+      focusSaveName,
+      cancel,
+      confirmIfActive,
+      confirmCopyingPath,
+      confirmAt,
+    ],
   );
 }

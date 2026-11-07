@@ -22,6 +22,7 @@ import {
   installBridge,
   installFilePreview,
   namesIn,
+  rowNamed,
 } from "./support.ts";
 
 let log: BridgeLog;
@@ -191,6 +192,20 @@ describe("Shift+Enter copies the picker answer", () => {
     expect(log.ops.filter((each) => each.startsWith("open "))).toEqual([]);
   });
 
+  it("copies and confirms an edited filename while its field has focus", async () => {
+    await openPicker({ saveMode: true, suggestedName: "video.mp4" });
+    fireEvent.keyDown(window, { key: "r", ctrlKey: true });
+    const field = screen.getByTestId("picker-save-name");
+    expect(document.activeElement).toBe(field);
+    fireEvent.change(field, { target: { value: "edited video.mp4" } });
+
+    expect(fireEvent.keyDown(field, { key: "Enter", shiftKey: true })).toBe(false);
+    await act(async () => undefined);
+
+    expect(log.ops).toContain("clipboard text /home/jc/edited video.mp4");
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/edited video.mp4"]);
+  });
+
   it("copies the edited filename in the navigated directory despite marked entries", async () => {
     await openPicker({ saveMode: true, multiple: true, suggestedName: "old.mp4" });
     fireEvent.keyDown(window, { key: "Enter" });
@@ -305,6 +320,41 @@ describe("Shift+Enter copies the picker answer", () => {
     expect(log.ops.filter((each) => each.startsWith("open "))).toHaveLength(1);
     expect(log.ops.filter((each) => each.startsWith("clipboard "))).toEqual([]);
     expect(log.pickerConfirms).toEqual([]);
+  });
+});
+
+describe("double-clicking inside a picker", () => {
+  it.each([
+    { options: {}, paths: ["/home/jc/notes.txt"] },
+    { options: { saveMode: true, suggestedName: "new.mp4" }, paths: ["/home/jc/new.mp4"] },
+    { options: { directory: true }, paths: [] },
+  ])("uses picker rules for $options instead of desktop open", async ({ options, paths }) => {
+    await openPicker(options);
+    fireEvent.doubleClick(rowNamed("column-current", "notes.txt"));
+    await act(async () => undefined);
+
+    expect(log.pickerConfirms.flatMap((answer) => answer.paths)).toEqual(paths);
+    expect(log.ops).toEqual([]);
+  });
+
+  it("chooses the clicked file instead of existing marks in a multiple-file picker", async () => {
+    await openPicker({ multiple: true });
+    await moveToFirstFile();
+    fireEvent.keyDown(window, { key: " " });
+    fireEvent.doubleClick(rowNamed("column-current", "todo.txt"));
+    await act(async () => undefined);
+
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/todo.txt"]);
+    expect(log.ops).toEqual([]);
+  });
+
+  it("still enters a directory without confirming or opening an application", async () => {
+    await openPicker();
+    fireEvent.doubleClick(rowNamed("column-current", "projects"));
+    await waitFor(() => expect(screen.getByTestId("crumb-current").textContent).toBe("projects"));
+
+    expect(log.pickerConfirms).toEqual([]);
+    expect(log.ops).toEqual([]);
   });
 });
 

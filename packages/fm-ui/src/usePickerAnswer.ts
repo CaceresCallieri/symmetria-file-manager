@@ -4,7 +4,7 @@ import {
   type PickerSelectionContext,
   resolvePickerSelection,
 } from "@symmetria/fm-core/pickerSelection";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useFileManagerIo } from "./IoContext.tsx";
 
 function resolveAnswer(
@@ -26,7 +26,6 @@ export function usePickerAnswer(
   editing: boolean,
 ) {
   const { pickerCancel, pickerConfirm, copyToClipboard } = useFileManagerIo();
-  const answer = useMemo(() => resolveAnswer(fifo, context, editing), [fifo, context, editing]);
   const answering = useRef(false);
   const cancelled = useRef(false);
   useEffect(() => {
@@ -37,7 +36,8 @@ export function usePickerAnswer(
   }, []);
 
   const confirm = useCallback(
-    async (copyPath: boolean): Promise<Result<null>> => {
+    async (copyPath: boolean, selection = context): Promise<Result<null>> => {
+      const answer = resolveAnswer(fifo, selection, editing);
       if (answer === null || answering.current || cancelled.current) return success(null);
       answering.current = true;
       try {
@@ -57,16 +57,20 @@ export function usePickerAnswer(
         answering.current = false;
       }
     },
-    [answer, pickerConfirm, copyToClipboard],
+    [fifo, context, editing, pickerConfirm, copyToClipboard],
   );
 
   const confirmIfActive = useCallback(() => void confirm(false), [confirm]);
   const confirmCopyingPath = useCallback(() => confirm(true), [confirm]);
+  const confirmSelection = useCallback(
+    (selection: PickerSelectionContext) => void confirm(false, selection),
+    [confirm],
+  );
   const cancelIfActive = useCallback(() => {
     if (fifo === null) return;
     cancelled.current = true;
     void pickerCancel({ fifo });
   }, [fifo, pickerCancel]);
 
-  return { confirmIfActive, confirmCopyingPath, cancelIfActive };
+  return { confirmIfActive, confirmCopyingPath, confirmSelection, cancelIfActive };
 }

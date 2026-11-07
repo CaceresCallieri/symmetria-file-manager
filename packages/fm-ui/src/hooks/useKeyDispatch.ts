@@ -12,12 +12,21 @@ import { useCallback, useEffect, useRef } from "react";
  */
 
 /** True when the key landed in a field the user is typing into. */
-function targetIsTextInput(target: EventTarget | null): boolean {
+function targetIsTextInput(target: EventTarget | null): target is HTMLElement {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
 
   const tag = target.tagName.toLowerCase();
   return tag === "input" || tag === "textarea" || tag === "select";
+}
+
+function inputOwnsKey(target: EventTarget | null, key: KeyEvent, context: KeyContext): boolean {
+  if (!targetIsTextInput(target)) return false;
+  // The save filename field previously swallowed Shift+Enter after an edit.
+  // Only its copy-and-confirm binding leaves text input routing; the cascade
+  // still applies modal and chord precedence to that binding.
+  if (!context.state.picker.saveMode || !target.matches(".status-bar__save-name")) return true;
+  return matchBinding(key, context)?.id !== "miller.shiftEnter";
 }
 
 export interface KeyDispatchOptions {
@@ -90,13 +99,6 @@ export function useKeyDispatch({
       if (latest.current.onActionMenuKey?.(event)) return;
       const { mode: currentMode, context: ctx, onFlashKey: flash } = latest.current;
 
-      // Focus wins over everything, and it is decided by the DOM rather than by
-      // the cascade — which is exactly what the corrected Escape order says.
-      const effective: CascadeMode = {
-        ...currentMode,
-        textInputFocused: currentMode.textInputFocused || targetIsTextInput(event.target),
-      };
-
       const key = {
         key: event.key,
         ctrl: event.ctrlKey,
@@ -104,6 +106,12 @@ export function useKeyDispatch({
         alt: event.altKey,
         meta: event.metaKey,
         altGraph: event.getModifierState("AltGraph"),
+      };
+      // Text inputs keep their keys except for the save field's explicit
+      // copy-and-confirm binding. Other cascade modes retain their precedence.
+      const effective: CascadeMode = {
+        ...currentMode,
+        textInputFocused: currentMode.textInputFocused || inputOwnsKey(event.target, key, ctx),
       };
       const outcome = routeKey(event, key, effective, ctx, flash);
       // `notOurs` and `unhandled` are the two that must NOT be swallowed: one
