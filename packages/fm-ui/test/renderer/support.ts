@@ -956,6 +956,15 @@ export function installFilePreview(path: string, mime: string, contents = ""): v
   });
 }
 
+/** One row of a column, by the name it shows. */
+export function rowNamed(testId: string, name: string): HTMLElement {
+  const found = within(screen.getByTestId(testId))
+    .getAllByTestId("row")
+    .find((row) => row.textContent?.includes(name));
+  if (found === undefined) throw new Error(`no row named ${name} in ${testId}`);
+  return found;
+}
+
 /** The names visible in one column, in order. */
 export function namesIn(testId: string): string[] {
   return within(screen.getByTestId(testId))

@@ -42,7 +42,7 @@ import { useExternalOpen } from "./useExternalOpen.ts";
 import { type FileOps, useFileOps } from "./useFileOps.ts";
 import { type FlashHost, type PreviewedDirectory, useFlash } from "./useFlash.ts";
 import { type KeyWiring, useKeyActions } from "./useKeyActions.ts";
-import { usePicker } from "./usePicker.ts";
+import { type Picker, usePicker } from "./usePicker.ts";
 import { type Preview, usePreviewPane } from "./usePreview.ts";
 import { type Search, useSearch } from "./useSearch.ts";
 import { type Tabs, useTabs } from "./useTabs.ts";
@@ -280,9 +280,10 @@ function cascadeModeFor(
  * about a symlinked directory, which the scan reports as `directory`
  * precisely so it can be entered.
  */
-function activateAt(tabs: Tabs, ops: FileOps, index: number): void {
+function activateAt(tabs: Tabs, ops: FileOps, picker: Picker, index: number): void {
   tabs.moveTo(index);
   if (isDirectoryEntry(entryAt(tabs.pane, index))) tabs.enter();
+  else if (picker.state.active) picker.confirmAt(index);
   else ops.openAt(index);
 }
 
@@ -514,7 +515,7 @@ function FileManagerPanel(props: AppProps) {
               flashLabels={millerFlash.labels}
               flashActive={millerFlash.active}
               onVisibleRange={millerFlash.reportVisibleRange}
-              onActivate={pointerActivationFor(tabs, ops, context)}
+              onActivate={pointerActivationFor(tabs, ops, picker, context)}
               onLeaveTo={leaveTo}
             />
             <WhichKeyOverlay
@@ -882,6 +883,7 @@ function fileOpenFor(props: AppProps, ops: FileOps, context: KeyContext): (path:
 function pointerActivationFor(
   tabs: Tabs,
   ops: FileOps,
+  picker: Picker,
   context: KeyContext,
 ): (index: number) => void {
   return (index) => {
@@ -889,7 +891,7 @@ function pointerActivationFor(
     if (context.state.readOnly && entry?.kind === "file") {
       tabs.moveTo(index);
       context.actions.expandPreview();
-    } else activateAt(tabs, ops, index);
+    } else activateAt(tabs, ops, picker, index);
   };
 }
 

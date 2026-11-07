@@ -9,17 +9,20 @@
  * happens to be on, and that the suppression ported with the keyboard registry
  * — inert since the phase that introduced it — is finally live.
  */
-import { BRIDGE_KEY } from "@symmetria/fm-core/bridge";
+import { BRIDGE_KEY, type Bridge } from "@symmetria/fm-core/bridge";
+import { failure, success } from "@symmetria/fm-core/contract";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { App } from "../../src/App.tsx";
+import { deferred } from "./deferred.ts";
 import {
   type BridgeLog,
   inertBridge,
   installBridge,
   installFilePreview,
   namesIn,
+  rowNamed,
 } from "./support.ts";
 
 let log: BridgeLog;
@@ -165,6 +168,193 @@ describe("confirming a picker", () => {
     await moveToFirstFile();
 
     expect((screen.getByTestId("picker-accept") as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("Shift+Enter copies the picker answer", () => {
+  function replaceClipboard(clipboard: Bridge["clipboard"]): void {
+    const connection = window[BRIDGE_KEY];
+    if (!connection) throw new Error("No picker connection");
+    Object.defineProperty(window, BRIDGE_KEY, {
+      configurable: true,
+      value: { ...connection, clipboard },
+    });
+  }
+
+  it("copies the download filename instead of the highlighted directory", async () => {
+    await openPicker({ saveMode: true, suggestedName: "WhatsApp Video.mp4" });
+
+    fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    await act(async () => undefined);
+
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/WhatsApp Video.mp4"]);
+    expect(log.ops).toContain("clipboard text /home/jc/WhatsApp Video.mp4");
+    expect(log.ops.filter((each) => each.startsWith("open "))).toEqual([]);
+  });
+
+  it("copies and confirms an edited filename while its field has focus", async () => {
+    await openPicker({ saveMode: true, suggestedName: "video.mp4" });
+    fireEvent.keyDown(window, { key: "r", ctrlKey: true });
+    const field = screen.getByTestId("picker-save-name");
+    expect(document.activeElement).toBe(field);
+    fireEvent.change(field, { target: { value: "edited video.mp4" } });
+
+    expect(fireEvent.keyDown(field, { key: "Enter", shiftKey: true })).toBe(false);
+    await act(async () => undefined);
+
+    expect(log.ops).toContain("clipboard text /home/jc/edited video.mp4");
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/edited video.mp4"]);
+  });
+
+  it("copies the edited filename in the navigated directory despite marked entries", async () => {
+    await openPicker({ saveMode: true, multiple: true, suggestedName: "old.mp4" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    await waitFor(() => expect(screen.getByTestId("crumb-current").textContent).toBe("projects"));
+    fireEvent.keyDown(window, { key: " " });
+    fireEvent.change(screen.getByTestId("picker-save-name"), {
+      target: { value: "new video.mp4" },
+    });
+    fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    await act(async () => undefined);
+
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/projects/new video.mp4"]);
+    expect(log.ops).toContain("clipboard text /home/jc/projects/new video.mp4");
+  });
+
+  it("copies only valid file selections in a multiple-file dialog", async () => {
+    await openPicker({ multiple: true });
+    fireEvent.keyDown(window, { key: " " });
+    fireEvent.keyDown(window, { key: " " });
+    fireEvent.keyDown(window, { key: " " });
+    fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    await act(async () => undefined);
+
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/notes.txt", "/home/jc/todo.txt"]);
+    expect(log.ops).toContain("clipboard text /home/jc/notes.txt\n/home/jc/todo.txt");
+  });
+
+  it("copies a new filename in an empty directory without a cursor entry", async () => {
+    render(
+      <App
+        startPath="/home/jc/empty"
+        homePath="/home/jc"
+        picker={requestFor({ saveMode: true, suggestedName: "video.mp4" })}
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId("crumb-current").textContent).toBe("empty"));
+    fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    await act(async () => undefined);
+
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/empty/video.mp4"]);
+    expect(log.ops).toContain("clipboard text /home/jc/empty/video.mp4");
+  });
+
+  it("preserves the clipboard when the picker refuses the highlighted entry", async () => {
+    await openPicker();
+    fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    await act(async () => undefined);
+
+    expect(log.pickerConfirms).toEqual([]);
+    expect(log.ops).toEqual([]);
+  });
+
+  it("waits for clipboard success and ignores repeated confirmation", async () => {
+    const held = deferred();
+    let copies = 0;
+    replaceClipboard(async () => {
+      copies++;
+      await held.promise;
+      return success(null);
+    });
+    await openPicker({ saveMode: true, suggestedName: "video.mp4" });
+    fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    fireEvent.click(screen.getByTestId("picker-accept"));
+    await act(async () => undefined);
+    expect(copies).toBe(1);
+    expect(log.pickerConfirms).toEqual([]);
+
+    held.resolve();
+    await waitFor(() => expect(log.pickerConfirms).toHaveLength(1));
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/video.mp4"]);
+  });
+
+  it("keeps the dialog open on clipboard failure and permits a retry", async () => {
+    let copies = 0;
+    replaceClipboard(async () =>
+      ++copies === 1 ? failure("write_failed", "Clipboard unavailable") : success(null),
+    );
+    await openPicker({ saveMode: true, suggestedName: "video.mp4" });
+    fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    await waitFor(() =>
+      expect(screen.getByTestId("pane-message").textContent).toBe("Clipboard unavailable"),
+    );
+    expect(log.pickerConfirms).toEqual([]);
+
+    fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    await waitFor(() => expect(log.pickerConfirms).toHaveLength(1));
+  });
+
+  it("does not confirm after cancellation while copying is pending", async () => {
+    const held = deferred();
+    replaceClipboard(async () => {
+      await held.promise;
+      return success(null);
+    });
+    await openPicker({ saveMode: true, suggestedName: "video.mp4" });
+    fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    fireEvent.click(screen.getByTestId("picker-cancel"));
+    held.resolve();
+    await act(async () => undefined);
+
+    expect(log.pickerCancels).toEqual([FIFO]);
+    expect(log.pickerConfirms).toEqual([]);
+  });
+
+  it("keeps Shift+Enter as an ordinary open in a browse window", async () => {
+    await openBrowser();
+    await moveToFirstFile();
+    fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    await act(async () => undefined);
+
+    expect(log.ops.filter((each) => each.startsWith("open "))).toHaveLength(1);
+    expect(log.ops.filter((each) => each.startsWith("clipboard "))).toEqual([]);
+    expect(log.pickerConfirms).toEqual([]);
+  });
+});
+
+describe("double-clicking inside a picker", () => {
+  it.each([
+    { options: {}, paths: ["/home/jc/notes.txt"] },
+    { options: { saveMode: true, suggestedName: "new.mp4" }, paths: ["/home/jc/new.mp4"] },
+    { options: { directory: true }, paths: [] },
+  ])("uses picker rules for $options instead of desktop open", async ({ options, paths }) => {
+    await openPicker(options);
+    fireEvent.doubleClick(rowNamed("column-current", "notes.txt"));
+    await act(async () => undefined);
+
+    expect(log.pickerConfirms.flatMap((answer) => answer.paths)).toEqual(paths);
+    expect(log.ops).toEqual([]);
+  });
+
+  it("chooses the clicked file instead of existing marks in a multiple-file picker", async () => {
+    await openPicker({ multiple: true });
+    await moveToFirstFile();
+    fireEvent.keyDown(window, { key: " " });
+    fireEvent.doubleClick(rowNamed("column-current", "todo.txt"));
+    await act(async () => undefined);
+
+    expect(log.pickerConfirms[0]?.paths).toEqual(["/home/jc/todo.txt"]);
+    expect(log.ops).toEqual([]);
+  });
+
+  it("still enters a directory without confirming or opening an application", async () => {
+    await openPicker();
+    fireEvent.doubleClick(rowNamed("column-current", "projects"));
+    await waitFor(() => expect(screen.getByTestId("crumb-current").textContent).toBe("projects"));
+
+    expect(log.pickerConfirms).toEqual([]);
+    expect(log.ops).toEqual([]);
   });
 });
 

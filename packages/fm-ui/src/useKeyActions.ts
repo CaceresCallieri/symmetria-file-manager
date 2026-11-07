@@ -1,4 +1,5 @@
 import { isReservedLetter, labelFor } from "@symmetria/fm-core/bookmarks";
+import { isFailure } from "@symmetria/fm-core/contract";
 import type { BookmarkSubMode, KeyActions, KeyState } from "@symmetria/fm-core/keys/types";
 import { boundaryIndex, cursorEntry, isDirectoryEntry, joinPath } from "@symmetria/fm-core/pane";
 import { useCallback, useMemo, useState } from "react";
@@ -247,7 +248,7 @@ export function useKeyActions(
       toggleHidden: () => tabs.toggleHidden(),
       toggleDocumentRender: () => tabs.toggleRenderDocuments(),
       expandPreview: openReader,
-      openCopyingPath: () => {
+      openCopyingPath: async () => {
         // **The same hole as plain Enter, one key over.** Review found it right
         // after the Enter fix landed: this handed the cursor entry to the
         // desktop's default application unconditionally, including from inside
@@ -261,8 +262,8 @@ export function useKeyActions(
           ops.open();
           return;
         }
-        ops.copyToClipboard("path");
-        picker.confirmIfActive();
+        const reply = await picker.confirmCopyingPath();
+        if (isFailure(reply)) setMessage(reply.error.message);
       },
 
       tabNew: () => tabs.open(),

@@ -13,7 +13,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { App } from "../../src/App.tsx";
-import { type BridgeLog, cursorIn, installBridge, namesIn } from "./support.ts";
+import { type BridgeLog, cursorIn, installBridge, namesIn, rowNamed } from "./support.ts";
 
 let log: BridgeLog;
 
@@ -25,15 +25,6 @@ afterEach(cleanup);
 async function opened(): Promise<void> {
   render(<App startPath="/home/jc" />);
   await waitFor(() => expect(namesIn("column-current")).toContain("projects"));
-}
-
-/** One row of a column, by the name it shows. */
-function rowNamed(testId: string, name: string): HTMLElement {
-  const found = within(screen.getByTestId(testId))
-    .getAllByTestId("row")
-    .find((row) => row.textContent?.includes(name));
-  if (found === undefined) throw new Error(`no row named ${name} in ${testId}`);
-  return found;
 }
 
 describe("clicking in the current column", () => {

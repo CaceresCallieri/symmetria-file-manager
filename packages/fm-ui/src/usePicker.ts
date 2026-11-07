@@ -1,15 +1,16 @@
+import type { Result } from "@symmetria/fm-core/contract";
+import type { FsEntry } from "@symmetria/fm-core/entry";
 import type { PickerState } from "@symmetria/fm-core/keys/types";
-import { cursorEntry, isDirectoryEntry, joinPath } from "@symmetria/fm-core/pane";
+import { cursorEntry, entryAt, isDirectoryEntry, joinPath } from "@symmetria/fm-core/pane";
 import {
   type PickerSelectionContext,
   pickerAcceptEnabled,
   pickerAcceptLabel,
-  resolvePickerSelection,
 } from "@symmetria/fm-core/pickerSelection";
 import type { PickerWindowRequest } from "@symmetria/fm-core/windowUrl";
 import { useCallback, useMemo, useRef, useState } from "react";
 
-import { useFileManagerIo } from "./IoContext.tsx";
+import { usePickerAnswer } from "./usePickerAnswer.ts";
 import { usePickerPath } from "./usePickerPath.ts";
 import type { Tabs } from "./useTabs.ts";
 
@@ -60,6 +61,10 @@ export interface Picker {
    * operator's own session that window would have appeared on their desktop.
    */
   confirmIfActive(): void;
+  /** Copy the resolved picker answer before confirming, never the browsing cursor. */
+  confirmCopyingPath(): Promise<Result<null>>;
+  /** Confirm a clicked row without waiting for React to update the browsing cursor. */
+  confirmAt(index: number): void;
 }
 
 /** Every flag off. The browse window's answer, and the shape the registry expects. */
@@ -71,8 +76,13 @@ const INERT: PickerState = {
   directory: false,
 };
 
+function selectionEntry(directory: string, entry: FsEntry | null) {
+  return entry === null
+    ? null
+    : { path: joinPath(directory, entry.name), isDirectory: isDirectoryEntry(entry) };
+}
+
 export function usePicker(request: PickerWindowRequest | null, tabs: Tabs, home: string): Picker {
-  const { pickerCancel, pickerConfirm } = useFileManagerIo();
   const pathEntry = usePickerPath(tabs, home);
   // Seeded from the request and then owned here, because the user edits it.
   const [saveName, setSaveName] = useState(request?.options.suggestedName ?? "");
@@ -102,32 +112,29 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs, home:
       currentPath: tabs.pane.path,
       suggestedName: saveName,
       selected,
-      cursorEntry:
-        entry === null
-          ? null
-          : {
-              path: joinPath(tabs.pane.path, entry.name),
-              isDirectory: isDirectoryEntry(entry),
-            },
+      cursorEntry: selectionEntry(tabs.pane.path, entry),
     };
   }, [request, tabs.pane, saveName, selected]);
 
-  const fifo = request?.fifo ?? null;
-
-  const confirm = useCallback(() => {
-    if (fifo === null || context === null || pathEntry.editing) return;
-    const resolved = resolvePickerSelection(context);
-    // A refusal is silent on purpose: the button is disabled in the same
-    // situation, and both come from this one function so they cannot disagree.
-    // Answering with nothing would read to the portal as a confirmed selection.
-    if (resolved.kind !== "paths") return;
-    void pickerConfirm({ fifo, paths: resolved.paths });
-  }, [fifo, context, pathEntry.editing, pickerConfirm]);
-
-  const cancel = useCallback(() => {
-    if (fifo === null) return;
-    void pickerCancel({ fifo });
-  }, [fifo, pickerCancel]);
+  const {
+    confirmIfActive,
+    confirmCopyingPath,
+    confirmSelection,
+    cancelIfActive: cancel,
+  } = usePickerAnswer(request?.fifo ?? null, context, pathEntry.editing);
+  const confirmAt = useCallback(
+    (index: number) => {
+      if (context === null) return;
+      // A double-click names its own row. The cursor update is still pending,
+      // and existing marks must not replace the clicked file with another answer.
+      confirmSelection({
+        ...context,
+        selected: [],
+        cursorEntry: selectionEntry(tabs.pane.path, entryAt(tabs.pane, index)),
+      });
+    },
+    [context, tabs.pane, confirmSelection],
+  );
 
   const state = useMemo<PickerState>(
     () =>
@@ -156,10 +163,10 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs, home:
             saveName,
             setSaveName,
             saveNameRef,
-            confirm,
+            confirm: confirmIfActive,
             cancel,
           },
-    [request, context, saveName, confirm, cancel, pathEntry.editing],
+    [request, context, saveName, confirmIfActive, cancel, pathEntry.editing],
   );
 
   // Stable, because `useKeyActions` memoises its action table on them. A fresh
@@ -179,8 +186,20 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs, home:
       focusPath: pathEntry.focus,
       focusSaveName,
       cancelIfActive: cancel,
-      confirmIfActive: confirm,
+      confirmIfActive,
+      confirmCopyingPath,
+      confirmAt,
     }),
-    [state, chrome, request, pathEntry, focusSaveName, cancel, confirm],
+    [
+      state,
+      chrome,
+      request,
+      pathEntry,
+      focusSaveName,
+      cancel,
+      confirmIfActive,
+      confirmCopyingPath,
+      confirmAt,
+    ],
   );
 }
