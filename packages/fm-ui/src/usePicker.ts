@@ -1,17 +1,15 @@
-import { clipboardText } from "@symmetria/fm-core/clipboard";
-import { isFailure, type Result, success } from "@symmetria/fm-core/contract";
+import type { Result } from "@symmetria/fm-core/contract";
 import type { PickerState } from "@symmetria/fm-core/keys/types";
 import { cursorEntry, isDirectoryEntry, joinPath } from "@symmetria/fm-core/pane";
 import {
   type PickerSelectionContext,
   pickerAcceptEnabled,
   pickerAcceptLabel,
-  resolvePickerSelection,
 } from "@symmetria/fm-core/pickerSelection";
 import type { PickerWindowRequest } from "@symmetria/fm-core/windowUrl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
-import { useFileManagerIo } from "./IoContext.tsx";
+import { usePickerAnswer } from "./usePickerAnswer.ts";
 import { usePickerPath } from "./usePickerPath.ts";
 import type { Tabs } from "./useTabs.ts";
 
@@ -76,19 +74,10 @@ const INERT: PickerState = {
 };
 
 export function usePicker(request: PickerWindowRequest | null, tabs: Tabs, home: string): Picker {
-  const { pickerCancel, pickerConfirm, copyToClipboard } = useFileManagerIo();
   const pathEntry = usePickerPath(tabs, home);
   // Seeded from the request and then owned here, because the user edits it.
   const [saveName, setSaveName] = useState(request?.options.suggestedName ?? "");
   const saveNameRef = useRef<HTMLInputElement | null>(null);
-  const answering = useRef(false);
-  const cancelled = useRef(false);
-  useEffect(() => {
-    cancelled.current = false;
-    return () => {
-      cancelled.current = true;
-    };
-  }, []);
 
   const selected = useMemo(
     // The selection is a set of NAMES — a file deleted underfoot must not leave
@@ -124,44 +113,11 @@ export function usePicker(request: PickerWindowRequest | null, tabs: Tabs, home:
     };
   }, [request, tabs.pane, saveName, selected]);
 
-  const fifo = request?.fifo ?? null;
-
-  const confirm = useCallback(
-    async (copyPath: boolean): Promise<Result<null>> => {
-      if (fifo === null || context === null || pathEntry.editing || answering.current)
-        return success(null);
-      const resolved = resolvePickerSelection(context);
-      // A refusal is silent: the Accept button uses the same resolution.
-      if (resolved.kind !== "paths" || cancelled.current) return success(null);
-      answering.current = true;
-      try {
-        if (copyPath) {
-          // Copying the browsing target here copied an unrelated highlighted
-          // entry in save dialogs. Use the exact answer, including the edited
-          // filename, and finish copying before confirmation closes the window.
-          const copied = await copyToClipboard({
-            kind: "text",
-            text: clipboardText("path", resolved.paths, context.currentPath),
-          });
-          if (isFailure(copied)) return copied;
-        }
-        if (!cancelled.current) await pickerConfirm({ fifo, paths: resolved.paths });
-        return success(null);
-      } finally {
-        answering.current = false;
-      }
-    },
-    [fifo, context, pathEntry.editing, pickerConfirm, copyToClipboard],
-  );
-
-  const confirmIfActive = useCallback(() => void confirm(false), [confirm]);
-  const confirmCopyingPath = useCallback(() => confirm(true), [confirm]);
-
-  const cancel = useCallback(() => {
-    if (fifo === null) return;
-    cancelled.current = true;
-    void pickerCancel({ fifo });
-  }, [fifo, pickerCancel]);
+  const {
+    confirmIfActive,
+    confirmCopyingPath,
+    cancelIfActive: cancel,
+  } = usePickerAnswer(request?.fifo ?? null, context, pathEntry.editing);
 
   const state = useMemo<PickerState>(
     () =>
